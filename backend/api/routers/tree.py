@@ -18,6 +18,7 @@ class TreeNode(BaseModel):
     name: str
     path: str
     is_dir: bool
+    note_id: str = ""
     note_type: str = ""
     tag_count: int = 0
     modified: str = ""
@@ -45,6 +46,7 @@ def _build_tree(dir_path: Path, threads_root: Path) -> TreeNode:
     if dir_path.is_file() and dir_path.suffix == ".md":
         try:
             meta = parse_note_meta(dir_path)
+            node.note_id = meta.id
             node.note_type = meta.type
             node.tag_count = len(meta.tags)
             node.modified = meta.modified

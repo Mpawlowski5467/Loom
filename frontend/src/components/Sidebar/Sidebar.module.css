@@ -1,0 +1,457 @@
+.sidebar {
+  width: 0;
+  min-width: 0;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--bg-elevated);
+  overflow: hidden;
+  transition: width 0.25s ease, min-width 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebarOpen {
+  width: 340px;
+  min-width: 340px;
+}
+
+.sidebarEdit {
+  width: 420px;
+  min-width: 420px;
+}
+
+/* -- Header ----------------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.title {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text-primary);
+}
+
+.titleInput {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
+  border-radius: 4px;
+  padding: 4px 8px;
+  color: var(--text-primary);
+  outline: none;
+}
+
+.titleInput:focus {
+  border-color: var(--accent-amber);
+}
+
+.headerBtn {
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-elevated);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+  white-space: nowrap;
+}
+
+.headerBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.headerBtnAmber {
+  border-color: var(--accent-amber);
+  color: var(--accent-amber);
+}
+
+.headerBtnAmber:hover {
+  background: rgba(245, 158, 11, 0.12);
+}
+
+.closeBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.closeBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.editBadge {
+  font-size: 10px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+  letter-spacing: 0.03em;
+}
+
+/* -- Body scroll area ------------------------------------------------------- */
+
+.body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+/* -- Meta section ----------------------------------------------------------- */
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.typeBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: #fff;
+}
+
+.tagChip {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.tagChipRemovable {
+  cursor: pointer;
+}
+
+.tagChipRemovable:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* -- Markdown body ---------------------------------------------------------- */
+
+.markdownBody {
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--text-primary);
+}
+
+.markdownBody h1 {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  color: var(--text-primary);
+}
+
+.markdownBody h2 {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 14px 0 6px;
+  color: var(--text-primary);
+}
+
+.markdownBody h3 {
+  font-size: 13.5px;
+  font-weight: 600;
+  margin: 12px 0 4px;
+  color: var(--text-primary);
+}
+
+.markdownBody p {
+  margin: 0 0 8px;
+}
+
+.markdownBody ul,
+.markdownBody ol {
+  margin: 0 0 8px;
+  padding-left: 20px;
+}
+
+.markdownBody li {
+  margin-bottom: 2px;
+}
+
+.markdownBody code {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: var(--bg-elevated);
+  padding: 1px 5px;
+  border-radius: 3px;
+}
+
+.markdownBody pre {
+  background: var(--bg-base);
+  border: 1px solid var(--bg-elevated);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+  overflow-x: auto;
+}
+
+.markdownBody pre code {
+  background: none;
+  padding: 0;
+  font-size: 12px;
+}
+
+.markdownBody strong {
+  font-weight: 600;
+}
+
+/* -- Wikilink --------------------------------------------------------------- */
+
+.wikilink {
+  color: var(--accent-purple);
+  cursor: pointer;
+  border-bottom: 1px dotted var(--accent-purple);
+  transition: opacity 0.12s;
+}
+
+.wikilink:hover {
+  opacity: 0.8;
+}
+
+/* -- Backlinks section ------------------------------------------------------ */
+
+.section {
+  margin-top: 20px;
+  padding-top: 14px;
+  border-top: 1px solid var(--bg-elevated);
+}
+
+.sectionTitle {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.backlinkItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  cursor: pointer;
+  color: var(--accent-purple);
+  font-size: 12.5px;
+  transition: opacity 0.12s;
+}
+
+.backlinkItem:hover {
+  opacity: 0.8;
+}
+
+.backlinkDot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-purple);
+  flex-shrink: 0;
+}
+
+/* -- History section -------------------------------------------------------- */
+
+.historyItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+}
+
+.historyDot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.historyText {
+  color: var(--text-secondary);
+  flex: 1;
+}
+
+.historyTime {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--text-secondary);
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+/* -- Editor toolbar --------------------------------------------------------- */
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--bg-elevated);
+  flex-shrink: 0;
+}
+
+.toolBtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+
+.toolBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.toolBtnWikilink {
+  width: auto;
+  padding: 0 8px;
+  font-size: 11px;
+  color: var(--accent-purple);
+  font-weight: 500;
+}
+
+.toolDivider {
+  width: 1px;
+  height: 20px;
+  background: var(--bg-elevated);
+  margin: 4px 4px;
+  align-self: center;
+}
+
+/* -- Editor textarea -------------------------------------------------------- */
+
+.editorArea {
+  flex: 1;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.editorTextarea {
+  width: 100%;
+  min-height: 300px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  resize: none;
+  outline: none;
+}
+
+/* -- Editor meta fields ----------------------------------------------------- */
+
+.metaField {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.metaLabel {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  width: 40px;
+  flex-shrink: 0;
+}
+
+.metaSelect {
+  font-size: 12px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-elevated);
+  background: var(--bg-base);
+  color: var(--text-primary);
+  outline: none;
+}
+
+.metaSelect:focus {
+  border-color: var(--accent-amber);
+}
+
+.tagsWrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+  flex: 1;
+}
+
+.addTagInput {
+  width: 70px;
+  font-size: 11px;
+  padding: 2px 6px;
+  border-radius: 10px;
+  border: 1px dashed var(--bg-elevated);
+  background: transparent;
+  color: var(--text-secondary);
+  outline: none;
+}
+
+.addTagInput::placeholder {
+  color: var(--text-secondary);
+  opacity: 0.6;
+}
+
+.addTagInput:focus {
+  border-color: var(--accent-amber);
+}
+
+/* -- Footer for editor ------------------------------------------------------ */
+
+.footer {
+  display: flex;
+  gap: 8px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--bg-elevated);
+  flex-shrink: 0;
+  justify-content: flex-end;
+}
+
+/* -- Loading ---------------------------------------------------------------- */
+
+.loadingMsg {
+  padding: 20px 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}

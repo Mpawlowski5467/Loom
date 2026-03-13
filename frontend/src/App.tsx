@@ -1,10 +1,12 @@
-import { useCallback, useState } from "react";
+import { useEffect, useRef } from "react";
 import "./styles/variables.css";
 import "./App.css";
 import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { FileTree } from "./components/FileTree/FileTree";
 import { SearchDropdown } from "./components/SearchDropdown/SearchDropdown";
 import { Sidebar } from "./components/Sidebar/Sidebar";
+import { ToastContainer } from "./components/Toast/Toast";
+import { useApp } from "./lib/context/useApp";
 import { BoardView } from "./views/BoardView/BoardView";
 import { GraphView } from "./views/GraphView/GraphView";
 import { InboxView } from "./views/InboxView/InboxView";
@@ -18,21 +20,54 @@ const TABS: { id: View; label: string }[] = [
 ];
 
 function App() {
-  const [activeView, setActiveView] = useState<View>("graph");
-  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
-  const [showCreateModal, setShowCreateModal] = useState(false);
+  const {
+    activeView,
+    setActiveView,
+    activeNote,
+    selectNote,
+    closeSidebar,
+    sidebarMode,
+    setSidebarMode,
+    showCreateModal,
+    hideCreateModal,
+    isCreateModalOpen,
+    addToast,
+  } = useApp();
 
-  const handleSelectNote = useCallback((noteId: string) => {
-    setActiveNoteId(noteId);
-  }, []);
+  const searchRef = useRef<HTMLInputElement>(null);
 
-  const handleCloseSidebar = useCallback(() => {
-    setActiveNoteId(null);
-  }, []);
+  // -- Keyboard shortcuts ---------------------------------------------------
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey;
 
-  const handleNavigate = useCallback((noteId: string) => {
-    setActiveNoteId(noteId);
-  }, []);
+      // Escape → close sidebar
+      if (e.key === "Escape") {
+        if (isCreateModalOpen) {
+          hideCreateModal();
+        } else if (activeNote) {
+          closeSidebar();
+        }
+        return;
+      }
+
+      // Cmd/Ctrl+K → focus search
+      if (mod && e.key === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+        return;
+      }
+
+      // Cmd/Ctrl+N → create note
+      if (mod && e.key === "n") {
+        e.preventDefault();
+        showCreateModal();
+      }
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [activeNote, isCreateModalOpen, closeSidebar, hideCreateModal, showCreateModal]);
 
   return (
     <div className="app">
@@ -56,7 +91,7 @@ function App() {
 
         <div className="nav-spacer" />
 
-        <SearchDropdown onSelect={handleSelectNote} />
+        <SearchDropdown onSelect={selectNote} inputRef={searchRef} />
 
         <button className="nav-settings" title="Settings">
           &#9881;
@@ -65,9 +100,9 @@ function App() {
 
       <div className="app-body">
         <FileTree
-          activeFile={activeNoteId}
-          onFileSelect={handleSelectNote}
-          onCreateNote={() => setShowCreateModal(true)}
+          activeFile={activeNote}
+          onFileSelect={selectNote}
+          onCreateNote={showCreateModal}
         />
 
         <main
@@ -75,32 +110,38 @@ function App() {
         >
           {activeView === "graph" && (
             <GraphView
-              activeFile={activeNoteId}
-              onFileSelect={handleSelectNote}
+              activeFile={activeNote}
+              onFileSelect={selectNote}
             />
           )}
           {activeView === "board" && <BoardView />}
           {activeView === "inbox" && (
-            <InboxView onSelectCapture={handleSelectNote} />
+            <InboxView onSelectCapture={selectNote} />
           )}
         </main>
 
         <Sidebar
-          noteId={activeNoteId}
-          onClose={handleCloseSidebar}
-          onNavigate={handleNavigate}
+          noteId={activeNote}
+          onClose={closeSidebar}
+          onNavigate={selectNote}
+          mode={sidebarMode}
+          onModeChange={setSidebarMode}
+          onToast={addToast}
         />
       </div>
 
-      {showCreateModal && (
+      {isCreateModalOpen && (
         <CreateNoteModal
           onCreated={(note) => {
-            setShowCreateModal(false);
-            setActiveNoteId(note.id);
+            hideCreateModal();
+            selectNote(note.id);
+            addToast(`Note "${note.title}" created`);
           }}
-          onClose={() => setShowCreateModal(false)}
+          onClose={hideCreateModal}
         />
       )}
+
+      <ToastContainer />
     </div>
   );
 }

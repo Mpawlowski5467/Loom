@@ -114,6 +114,28 @@ export function createNote(data: {
   });
 }
 
+// -- Search types -------------------------------------------------------------
+
+export interface SearchResult {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  snippet: string;
+  score: number;
+}
+
+export interface SearchResponse {
+  query: string;
+  results: SearchResult[];
+}
+
+export function searchNotes(q: string): Promise<SearchResponse> {
+  return request<SearchResponse>(
+    `/api/search?q=${encodeURIComponent(q)}`,
+  );
+}
+
 export function archiveNote(id: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/notes/${encodeURIComponent(id)}`, {
     method: "DELETE",

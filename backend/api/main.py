@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers.graph import router as graph_router
 from api.routers.notes import router as notes_router
+from api.routers.search import router as search_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import router as vaults_router
 from core.config import settings
@@ -36,6 +37,7 @@ app.include_router(vaults_router)
 app.include_router(notes_router)
 app.include_router(tree_router)
 app.include_router(graph_router)
+app.include_router(search_router)
 
 
 @app.get("/api/health")

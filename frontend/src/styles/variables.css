@@ -27,4 +27,8 @@
   /* Fonts */
   --font-ui: "Sora", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
+
+  /* Layout */
+  --nav-height: 48px;
+  --tree-width: 220px;
 }

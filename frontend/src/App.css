@@ -125,6 +125,11 @@
   padding: 24px;
 }
 
+.app-main--flush {
+  padding: 0;
+  overflow: hidden;
+}
+
 /* -- View placeholders ------------------------------------------------------ */
 
 .view-placeholder {

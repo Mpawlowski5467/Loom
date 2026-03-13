@@ -2,6 +2,7 @@ import { useState } from "react";
 import "./styles/variables.css";
 import "./App.css";
 import { FileTree } from "./components/FileTree/FileTree";
+import { GraphView } from "./views/GraphView/GraphView";
 
 type View = "graph" | "board" | "inbox";
 
@@ -51,9 +52,9 @@ function App() {
       <div className="app-body">
         <FileTree activeFile={activeFile} onFileSelect={setActiveFile} />
 
-        <main className="app-main">
+        <main className={`app-main${activeView === "graph" ? " app-main--flush" : ""}`}>
           {activeView === "graph" && (
-            <div className="view-placeholder">Graph View</div>
+            <GraphView activeFile={activeFile} onFileSelect={setActiveFile} />
           )}
           {activeView === "board" && (
             <div className="view-placeholder">Board View</div>

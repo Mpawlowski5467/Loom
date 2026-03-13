@@ -57,8 +57,7 @@ AI-powered indexing and semantic search. All five Loom Layer agents running with
 **v2 — "Connect and Grow"**
 GitHub, calendar, and email integrations. Plugin architecture for community integrations. Custom user-defined Shuttle agents. Full documentation and open-source launch.
 
-**Future**
-Multi-file support (images, PDFs, spreadsheets), light theme, team vaults with sync, web clipper extension, mobile app, Obsidian import.
+
 
 ### Stack
 

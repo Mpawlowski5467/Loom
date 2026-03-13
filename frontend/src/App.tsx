@@ -5,7 +5,9 @@ import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { FileTree } from "./components/FileTree/FileTree";
 import { SearchDropdown } from "./components/SearchDropdown/SearchDropdown";
 import { Sidebar } from "./components/Sidebar/Sidebar";
+import { BoardView } from "./views/BoardView/BoardView";
 import { GraphView } from "./views/GraphView/GraphView";
+import { InboxView } from "./views/InboxView/InboxView";
 
 type View = "graph" | "board" | "inbox";
 
@@ -77,11 +79,9 @@ function App() {
               onFileSelect={handleSelectNote}
             />
           )}
-          {activeView === "board" && (
-            <div className="view-placeholder">Board View</div>
-          )}
+          {activeView === "board" && <BoardView />}
           {activeView === "inbox" && (
-            <div className="view-placeholder">Inbox View</div>
+            <InboxView onSelectCapture={handleSelectNote} />
           )}
         </main>
 

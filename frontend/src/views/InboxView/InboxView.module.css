@@ -1,0 +1,290 @@
+.inbox {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 900px;
+}
+
+/* -- Header ---------------------------------------------------------------- */
+
+.header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.headerLeft {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: 13px;
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.headerActions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.sortBtn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--bg-elevated);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.sortBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.processAllBtn {
+  padding: 6px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--accent-purple);
+  color: var(--bg-base);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.processAllBtn:hover {
+  opacity: 0.85;
+}
+
+/* -- Filter tabs ----------------------------------------------------------- */
+
+.filterRow {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.filterTab {
+  padding: 5px 12px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.filterTab:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.filterTabActive {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--accent-amber);
+}
+
+/* -- Capture list ---------------------------------------------------------- */
+
+.captureList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.empty {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--text-secondary);
+  font-size: 14px;
+  line-height: 1.6;
+  background: var(--bg-surface);
+  border: 1px solid var(--bg-elevated);
+  border-radius: 8px;
+}
+
+/* -- Capture card ---------------------------------------------------------- */
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--bg-elevated);
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  cursor: pointer;
+  transition: border-color 0.15s;
+  border-left: 3px solid transparent;
+}
+
+.card:hover {
+  border-color: var(--bg-elevated);
+  border-left-color: var(--accent-amber);
+}
+
+.borderPending {
+  border-left-color: var(--accent-amber);
+}
+
+.borderProcessing {
+  border-left-color: var(--accent-purple);
+}
+
+.borderDone {
+  border-left-color: var(--success);
+}
+
+.cardTop {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.cardSourceIcon {
+  font-size: 20px;
+  line-height: 1;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.cardIdent {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cardTitle {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardPreview {
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.cardMeta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.cardTime {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.statusBadge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+
+.statusPending {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--accent-amber);
+}
+
+.statusProcessing {
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--accent-purple);
+  animation: pulse 2s infinite;
+}
+
+.statusDone {
+  background: rgba(52, 211, 153, 0.15);
+  color: var(--success);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+/* -- Card action buttons --------------------------------------------------- */
+
+.cardActions {
+  display: flex;
+  gap: 8px;
+  padding-top: 6px;
+}
+
+.actionProcess {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: none;
+  background: rgba(167, 139, 250, 0.15);
+  color: var(--accent-purple);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.actionProcess:hover {
+  background: rgba(167, 139, 250, 0.25);
+}
+
+.actionPreview {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-elevated);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.actionPreview:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.actionArchive {
+  padding: 4px 12px;
+  border-radius: 4px;
+  border: 1px solid var(--bg-elevated);
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.actionArchive:hover {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--danger);
+}

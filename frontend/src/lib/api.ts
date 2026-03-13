@@ -23,8 +23,39 @@ export interface TreeNode {
   children: TreeNode[];
 }
 
+// -- Graph types --------------------------------------------------------------
+
+export interface GraphNode {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  link_count: number;
+}
+
+export interface GraphEdge {
+  source: string;
+  target: string;
+}
+
+export interface VaultGraph {
+  nodes: GraphNode[];
+  edges: GraphEdge[];
+}
+
 // -- API calls ----------------------------------------------------------------
 
 export function fetchTree(): Promise<TreeNode> {
   return request<TreeNode>("/api/tree");
+}
+
+export function fetchGraph(params?: {
+  type?: string;
+  tag?: string;
+}): Promise<VaultGraph> {
+  const query = new URLSearchParams();
+  if (params?.type) query.set("type", params.type);
+  if (params?.tag) query.set("tag", params.tag);
+  const qs = query.toString();
+  return request<VaultGraph>(`/api/graph${qs ? `?${qs}` : ""}`);
 }

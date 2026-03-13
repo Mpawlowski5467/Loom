@@ -114,6 +114,26 @@ export function createNote(data: {
   });
 }
 
+// -- Capture types ------------------------------------------------------------
+
+export interface CaptureItem {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  created: string;
+  modified: string;
+  author: string;
+  source: string;
+  status: string;
+  preview: string;
+  file_path: string;
+}
+
+export function fetchCaptures(): Promise<CaptureItem[]> {
+  return request<CaptureItem[]>("/api/captures");
+}
+
 // -- Search types -------------------------------------------------------------
 
 export interface SearchResult {

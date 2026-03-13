@@ -3,6 +3,7 @@ import "./styles/variables.css";
 import "./App.css";
 import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { FileTree } from "./components/FileTree/FileTree";
+import { SearchDropdown } from "./components/SearchDropdown/SearchDropdown";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { GraphView } from "./views/GraphView/GraphView";
 
@@ -53,11 +54,7 @@ function App() {
 
         <div className="nav-spacer" />
 
-        <input
-          className="nav-search"
-          type="text"
-          placeholder="Search vault..."
-        />
+        <SearchDropdown onSelect={handleSelectNote} />
 
         <button className="nav-settings" title="Settings">
           &#9881;

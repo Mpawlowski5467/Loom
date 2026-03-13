@@ -1,0 +1,30 @@
+:root {
+  /* Backgrounds */
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
+
+  /* Text */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+
+  /* Accents */
+  --accent-amber: #f59e0b;
+  --accent-purple: #a78bfa;
+
+  /* Node types */
+  --node-project: #60a5fa;
+  --node-topic: #4ade80;
+  --node-person: #c084fc;
+  --node-daily: #94a3b8;
+  --node-capture: #fbbf24;
+  --node-custom: #2dd4bf;
+
+  /* Status */
+  --danger: #f87171;
+  --success: #34d399;
+
+  /* Fonts */
+  --font-ui: "Sora", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}

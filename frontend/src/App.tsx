@@ -1,7 +1,9 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import "./styles/variables.css";
 import "./App.css";
+import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { FileTree } from "./components/FileTree/FileTree";
+import { Sidebar } from "./components/Sidebar/Sidebar";
 import { GraphView } from "./views/GraphView/GraphView";
 
 type View = "graph" | "board" | "inbox";
@@ -14,7 +16,20 @@ const TABS: { id: View; label: string }[] = [
 
 function App() {
   const [activeView, setActiveView] = useState<View>("graph");
-  const [activeFile, setActiveFile] = useState<string | null>(null);
+  const [activeNoteId, setActiveNoteId] = useState<string | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
+
+  const handleSelectNote = useCallback((noteId: string) => {
+    setActiveNoteId(noteId);
+  }, []);
+
+  const handleCloseSidebar = useCallback(() => {
+    setActiveNoteId(null);
+  }, []);
+
+  const handleNavigate = useCallback((noteId: string) => {
+    setActiveNoteId(noteId);
+  }, []);
 
   return (
     <div className="app">
@@ -50,11 +65,20 @@ function App() {
       </nav>
 
       <div className="app-body">
-        <FileTree activeFile={activeFile} onFileSelect={setActiveFile} />
+        <FileTree
+          activeFile={activeNoteId}
+          onFileSelect={handleSelectNote}
+          onCreateNote={() => setShowCreateModal(true)}
+        />
 
-        <main className={`app-main${activeView === "graph" ? " app-main--flush" : ""}`}>
+        <main
+          className={`app-main${activeView === "graph" ? " app-main--flush" : ""}`}
+        >
           {activeView === "graph" && (
-            <GraphView activeFile={activeFile} onFileSelect={setActiveFile} />
+            <GraphView
+              activeFile={activeNoteId}
+              onFileSelect={handleSelectNote}
+            />
           )}
           {activeView === "board" && (
             <div className="view-placeholder">Board View</div>
@@ -63,7 +87,23 @@ function App() {
             <div className="view-placeholder">Inbox View</div>
           )}
         </main>
+
+        <Sidebar
+          noteId={activeNoteId}
+          onClose={handleCloseSidebar}
+          onNavigate={handleNavigate}
+        />
       </div>
+
+      {showCreateModal && (
+        <CreateNoteModal
+          onCreated={(note) => {
+            setShowCreateModal(false);
+            setActiveNoteId(note.id);
+          }}
+          onClose={() => setShowCreateModal(false)}
+        />
+      )}
     </div>
   );
 }

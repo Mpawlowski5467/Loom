@@ -5,7 +5,8 @@ import styles from "./FileTree.module.css";
 
 interface FileTreeProps {
   activeFile: string | null;
-  onFileSelect: (path: string) => void;
+  onFileSelect: (noteId: string) => void;
+  onCreateNote?: () => void;
 }
 
 const NOTE_TYPE_COLORS: Record<string, string> = {
@@ -35,7 +36,7 @@ interface TreeRowProps {
   activeFile: string | null;
   expanded: Record<string, boolean>;
   onToggle: (path: string) => void;
-  onFileSelect: (path: string) => void;
+  onFileSelect: (noteId: string) => void;
 }
 
 function TreeRow({
@@ -82,14 +83,16 @@ function TreeRow({
     );
   }
 
-  const isActive = activeFile === node.path;
+  // Use note_id for active check and selection
+  const noteId = node.note_id;
+  const isActive = activeFile === noteId;
   const label = node.name.replace(/\.md$/, "");
 
   return (
     <div
       className={`${styles.row}${isActive ? ` ${styles.rowActive}` : ""}`}
       style={{ paddingLeft: paddingLeft + 16 }}
-      onClick={() => onFileSelect(node.path)}
+      onClick={() => noteId && onFileSelect(noteId)}
     >
       <span
         className={styles.dot}
@@ -103,7 +106,11 @@ function TreeRow({
   );
 }
 
-export function FileTree({ activeFile, onFileSelect }: FileTreeProps) {
+export function FileTree({
+  activeFile,
+  onFileSelect,
+  onCreateNote,
+}: FileTreeProps) {
   const [tree, setTree] = useState<TreeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -128,6 +135,16 @@ export function FileTree({ activeFile, onFileSelect }: FileTreeProps) {
     <aside className={styles.sidebar}>
       <div className={styles.header}>
         <span className={styles.vaultBadge}>{vaultName}</span>
+        <span className={styles.headerSpacer} />
+        {onCreateNote && (
+          <button
+            className={styles.addBtn}
+            title="Create note"
+            onClick={onCreateNote}
+          >
+            +
+          </button>
+        )}
       </div>
 
       <div className={styles.filterWrap}>

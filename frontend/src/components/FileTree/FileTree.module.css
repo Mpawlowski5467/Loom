@@ -28,6 +28,30 @@
   letter-spacing: 0.02em;
 }
 
+.headerSpacer {
+  flex: 1;
+}
+
+.addBtn {
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.1s, color 0.1s;
+}
+
+.addBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--accent-amber);
+}
+
 /* -- Filter ----------------------------------------------------------------- */
 
 .filterWrap {

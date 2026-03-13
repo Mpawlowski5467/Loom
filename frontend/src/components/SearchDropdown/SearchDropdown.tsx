@@ -16,9 +16,10 @@ const DEBOUNCE_MS = 300;
 
 interface SearchDropdownProps {
   onSelect: (noteId: string) => void;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
 }
 
-export function SearchDropdown({ onSelect }: SearchDropdownProps) {
+export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -86,9 +87,10 @@ export function SearchDropdown({ onSelect }: SearchDropdownProps) {
   return (
     <div className={styles.wrap} ref={wrapRef}>
       <input
+        ref={inputRef}
         className="nav-search"
         type="text"
-        placeholder="Search vault..."
+        placeholder="Search vault... (Ctrl+K)"
         value={query}
         onChange={handleChange}
         onKeyDown={handleKeyDown}

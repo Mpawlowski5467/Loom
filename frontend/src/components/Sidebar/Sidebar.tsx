@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Note, VaultGraph } from "../../lib/api";
-import { fetchGraph, fetchNote } from "../../lib/api";
+import { archiveNote, fetchGraph, fetchNote } from "../../lib/api";
 import { NoteEditor } from "./NoteEditor";
 import styles from "./Sidebar.module.css";
 import { ThreadView } from "./ThreadView";
@@ -9,12 +9,21 @@ interface SidebarProps {
   noteId: string | null;
   onClose: () => void;
   onNavigate: (noteId: string) => void;
+  mode: "view" | "edit";
+  onModeChange: (mode: "view" | "edit") => void;
+  onToast: (message: string, variant?: "success" | "info" | "danger") => void;
 }
 
-export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
+export function Sidebar({
+  noteId,
+  onClose,
+  onNavigate,
+  mode,
+  onModeChange,
+  onToast,
+}: SidebarProps) {
   const [note, setNote] = useState<Note | null>(null);
   const [graph, setGraph] = useState<VaultGraph | null>(null);
-  const [mode, setMode] = useState<"view" | "edit">("view");
   const [loading, setLoading] = useState(false);
   const fetchIdRef = useRef(0);
 
@@ -24,7 +33,7 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
     setPrevNoteId(noteId);
     if (!noteId) {
       setNote(null);
-      setMode("view");
+      onModeChange("view");
       setLoading(false);
     } else {
       setLoading(true);
@@ -41,7 +50,7 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
         if (id !== fetchIdRef.current) return;
         setNote(n);
         setGraph(g);
-        setMode("view");
+        onModeChange("view");
         setLoading(false);
       })
       .catch((err) => {
@@ -49,25 +58,36 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
         console.error("Failed to load note:", err);
         setLoading(false);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [noteId]);
 
-  const handleNavigate = useCallback(
-    (title: string) => {
-      if (!graph) return;
-      const target = graph.nodes.find(
-        (n) => n.title.toLowerCase() === title.toLowerCase(),
-      );
-      if (target) {
-        onNavigate(target.id);
-      }
-    },
-    [graph, onNavigate],
-  );
+  function handleNavigate(title: string) {
+    if (!graph) return;
+    const target = graph.nodes.find(
+      (n) => n.title.toLowerCase() === title.toLowerCase(),
+    );
+    if (target) {
+      onNavigate(target.id);
+    }
+  }
 
-  const handleSaved = useCallback((updated: Note) => {
+  function handleSaved(updated: Note) {
     setNote(updated);
-    setMode("view");
-  }, []);
+    onModeChange("view");
+    onToast(`Note "${updated.title}" saved`);
+  }
+
+  async function handleArchive() {
+    if (!note) return;
+    try {
+      await archiveNote(note.id);
+      onToast(`Note "${note.title}" archived`);
+      onClose();
+    } catch (err) {
+      console.error("Archive failed:", err);
+      onToast("Failed to archive note", "danger");
+    }
+  }
 
   const isOpen = noteId !== null;
 
@@ -84,13 +104,22 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
             )}
             <span className={styles.title}>{note?.title ?? ""}</span>
 
-            {mode === "view" && (
-              <button
-                className={`${styles.headerBtn} ${styles.headerBtnAmber}`}
-                onClick={() => setMode("edit")}
-              >
-                Edit
-              </button>
+            {mode === "view" && note && (
+              <>
+                <button
+                  className={`${styles.headerBtn} ${styles.headerBtnAmber}`}
+                  onClick={() => onModeChange("edit")}
+                >
+                  Edit
+                </button>
+                <button
+                  className={`${styles.headerBtn} ${styles.headerBtnDanger}`}
+                  onClick={handleArchive}
+                  title="Archive note"
+                >
+                  Archive
+                </button>
+              </>
             )}
 
             <button className={styles.closeBtn} onClick={onClose}>
@@ -98,9 +127,17 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
             </button>
           </div>
 
-          {/* Content */}
+          {/* Loading skeleton */}
           {loading && (
-            <div className={styles.loadingMsg}>Loading note...</div>
+            <div className={styles.body}>
+              <div className={styles.skeleton}>
+                <div className={styles.skeletonLine} style={{ width: "40%" }} />
+                <div className={styles.skeletonLine} style={{ width: "60%" }} />
+                <div className={styles.skeletonBlock} />
+                <div className={styles.skeletonLine} style={{ width: "80%" }} />
+                <div className={styles.skeletonLine} style={{ width: "50%" }} />
+              </div>
+            </div>
           )}
 
           {!loading && note && mode === "view" && (
@@ -117,7 +154,7 @@ export function Sidebar({ noteId, onClose, onNavigate }: SidebarProps) {
             <NoteEditor
               note={note}
               onSaved={handleSaved}
-              onCancel={() => setMode("view")}
+              onCancel={() => onModeChange("view")}
             />
           )}
         </>

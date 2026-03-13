@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { TreeNode } from "../../lib/api";
 import { fetchTree } from "../../lib/api";
 import styles from "./FileTree.module.css";
@@ -48,6 +48,16 @@ function TreeRow({
   onToggle,
   onFileSelect,
 }: TreeRowProps) {
+  const noteId = node.note_id;
+  const isActive = !node.is_dir && activeFile === noteId;
+  const rowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isActive && rowRef.current) {
+      rowRef.current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    }
+  }, [isActive]);
+
   if (filter && !matchesFilter(node, filter)) return null;
 
   const isOpen = expanded[node.path] ?? true;
@@ -83,13 +93,11 @@ function TreeRow({
     );
   }
 
-  // Use note_id for active check and selection
-  const noteId = node.note_id;
-  const isActive = activeFile === noteId;
   const label = node.name.replace(/\.md$/, "");
 
   return (
     <div
+      ref={rowRef}
       className={`${styles.row}${isActive ? ` ${styles.rowActive}` : ""}`}
       style={{ paddingLeft: paddingLeft + 16 }}
       onClick={() => noteId && onFileSelect(noteId)}
@@ -117,9 +125,24 @@ export function FileTree({
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
-    fetchTree()
-      .then(setTree)
-      .catch((e: Error) => setError(e.message));
+    let cancelled = false;
+
+    const load = () => {
+      fetchTree()
+        .then((data) => {
+          if (!cancelled) setTree(data);
+        })
+        .catch((e: Error) => {
+          if (!cancelled) setError(e.message);
+        });
+    };
+
+    load();
+    const interval = setInterval(load, 10_000);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, []);
 
   const vaultName = useMemo(() => {

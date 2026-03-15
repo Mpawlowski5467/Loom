@@ -53,3 +53,15 @@ class ProviderError(LoomError):
     def __init__(self, provider: str, message: str) -> None:
         super().__init__(f"[{provider}] {message}")
         self.provider = provider
+
+
+class ReadChainError(LoomError):
+    """Raised when the read-before-write chain fails for an untrusted agent."""
+
+    def __init__(self, agent_name: str, failed_steps: list[str]) -> None:
+        steps = ", ".join(failed_steps)
+        super().__init__(
+            f"Read chain failed for agent '{agent_name}': missing required context [{steps}]"
+        )
+        self.agent_name = agent_name
+        self.failed_steps = failed_steps

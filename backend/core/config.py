@@ -60,6 +60,8 @@ class GlobalConfig(BaseModel):
 
     active_vault: str = "default"
     providers: dict[str, ProviderConfig] = {}
+    embed_provider: str | None = None
+    chat_provider: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> Self:

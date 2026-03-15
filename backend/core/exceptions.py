@@ -38,3 +38,18 @@ class NoteNotFoundError(LoomError):
     def __init__(self, note_id: str) -> None:
         super().__init__(f"Note '{note_id}' not found")
         self.note_id = note_id
+
+
+class ProviderConfigError(LoomError):
+    """Raised when provider configuration is missing or invalid."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class ProviderError(LoomError):
+    """Raised when a provider call fails."""
+
+    def __init__(self, provider: str, message: str) -> None:
+        super().__init__(f"[{provider}] {message}")
+        self.provider = provider

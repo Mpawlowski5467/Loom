@@ -64,7 +64,7 @@ def _list_captures(captures_dir: Path) -> list[CaptureItem]:
 
 
 @router.get("")
-async def get_captures(
+def get_captures(
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> list[CaptureItem]:
     """Return all capture files with metadata and preview text."""

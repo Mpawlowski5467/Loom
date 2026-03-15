@@ -4,27 +4,8 @@ import Sigma from "sigma";
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { VaultGraph } from "../../lib/api";
 import { fetchGraph } from "../../lib/api";
+import { NODE_COLORS_HEX, TYPE_LABELS } from "../../lib/constants";
 import styles from "./GraphView.module.css";
-
-// -- Constants ----------------------------------------------------------------
-
-const NODE_COLORS: Record<string, string> = {
-  project: "#60a5fa",
-  topic: "#4ade80",
-  person: "#c084fc",
-  daily: "#94a3b8",
-  capture: "#fbbf24",
-  custom: "#2dd4bf",
-};
-
-const TYPE_LABELS: { id: string; label: string; color: string }[] = [
-  { id: "all", label: "All", color: "" },
-  { id: "project", label: "Projects", color: "#60a5fa" },
-  { id: "topic", label: "Topics", color: "#4ade80" },
-  { id: "person", label: "People", color: "#c084fc" },
-  { id: "daily", label: "Daily", color: "#94a3b8" },
-  { id: "capture", label: "Captures", color: "#fbbf24" },
-];
 
 const BASE_NODE_SIZE = 6;
 const SIZE_SCALE = 2.5;
@@ -72,7 +53,7 @@ export function GraphView({ onFileSelect }: GraphViewProps) {
         x: Math.random() * 100,
         y: Math.random() * 100,
         size: BASE_NODE_SIZE + n.link_count * SIZE_SCALE,
-        color: NODE_COLORS[n.type] ?? "#94a3b8",
+        color: NODE_COLORS_HEX[n.type] ?? "#94a3b8",
         noteType: n.type,
         pinned: false,
       });
@@ -124,7 +105,7 @@ export function GraphView({ onFileSelect }: GraphViewProps) {
             x: Math.random() * 100,
             y: Math.random() * 100,
             size: BASE_NODE_SIZE + n.link_count * SIZE_SCALE,
-            color: NODE_COLORS[n.type] ?? "#94a3b8",
+            color: NODE_COLORS_HEX[n.type] ?? "#94a3b8",
             noteType: n.type,
             pinned: false,
           });
@@ -135,7 +116,7 @@ export function GraphView({ onFileSelect }: GraphViewProps) {
           existing.mergeNodeAttributes(n.id, {
             label: n.title,
             size: BASE_NODE_SIZE + n.link_count * SIZE_SCALE,
-            color: NODE_COLORS[n.type] ?? "#94a3b8",
+            color: NODE_COLORS_HEX[n.type] ?? "#94a3b8",
             noteType: n.type,
             pinned: cur.pinned,
           });

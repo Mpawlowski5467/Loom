@@ -9,6 +9,7 @@ interface NoteEditorProps {
   note: Note;
   onSaved: (updated: Note) => void;
   onCancel: () => void;
+  onToast: (message: string, variant?: "success" | "info" | "danger") => void;
 }
 
 function insertMarkdown(
@@ -32,7 +33,7 @@ function insertMarkdown(
   });
 }
 
-export function NoteEditor({ note, onSaved, onCancel }: NoteEditorProps) {
+export function NoteEditor({ note, onSaved, onCancel, onToast }: NoteEditorProps) {
   const [body, setBody] = useState(note.body);
   const [tags, setTags] = useState<string[]>(note.tags);
   const [noteType, setNoteType] = useState(note.type);
@@ -71,6 +72,8 @@ export function NoteEditor({ note, onSaved, onCancel }: NoteEditorProps) {
       onSaved(updated);
     } catch (err) {
       console.error("Save failed:", err);
+      const msg = err instanceof Error ? err.message : "Save failed";
+      onToast(msg, "danger");
     } finally {
       setSaving(false);
     }

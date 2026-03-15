@@ -1,16 +1,8 @@
 import { useMemo } from "react";
 import Markdown from "react-markdown";
 import type { Note, VaultGraph } from "../../lib/api";
+import { NODE_COLORS_CSS, formatTime } from "../../lib/constants";
 import styles from "./Sidebar.module.css";
-
-const NODE_COLORS: Record<string, string> = {
-  project: "#60a5fa",
-  topic: "#4ade80",
-  person: "#c084fc",
-  daily: "#94a3b8",
-  capture: "#fbbf24",
-  custom: "#2dd4bf",
-};
 
 interface ThreadViewProps {
   note: Note;
@@ -43,21 +35,6 @@ function renderBodyWithWikilinks(
   });
 }
 
-function formatTime(iso: string): string {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 export function ThreadView({ note, graph, onNavigate }: ThreadViewProps) {
   // Compute backlinks from graph data
   const backlinks = useMemo(() => {
@@ -78,7 +55,7 @@ export function ThreadView({ note, graph, onNavigate }: ThreadViewProps) {
       <div className={styles.meta}>
         <span
           className={styles.typeBadge}
-          style={{ backgroundColor: NODE_COLORS[note.type] ?? "#94a3b8" }}
+          style={{ backgroundColor: NODE_COLORS_CSS[note.type] ?? "#94a3b8" }}
         >
           {note.type}
         </span>

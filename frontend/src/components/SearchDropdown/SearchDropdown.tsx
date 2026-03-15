@@ -1,16 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SearchResult } from "../../lib/api";
 import { searchNotes } from "../../lib/api";
+import { NODE_COLORS_CSS } from "../../lib/constants";
 import styles from "./SearchDropdown.module.css";
-
-const NODE_COLORS: Record<string, string> = {
-  project: "#60a5fa",
-  topic: "#4ade80",
-  person: "#c084fc",
-  daily: "#94a3b8",
-  capture: "#fbbf24",
-  custom: "#2dd4bf",
-};
 
 const DEBOUNCE_MS = 300;
 
@@ -114,7 +106,7 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
                 <span
                   className={styles.dot}
                   style={{
-                    backgroundColor: NODE_COLORS[r.type] ?? "#94a3b8",
+                    backgroundColor: NODE_COLORS_CSS[r.type] ?? "#94a3b8",
                   }}
                 />
                 <span className={styles.itemTitle}>{r.title}</span>

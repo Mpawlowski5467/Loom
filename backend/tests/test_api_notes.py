@@ -5,59 +5,49 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from core.notes import note_to_file_content
+from tests.conftest import _seed_notes
+
+_NOTES = [
+    ("topics", "python.md", {
+        "id": "thr_aaa111",
+        "title": "Python",
+        "type": "topic",
+        "tags": ["lang"],
+        "created": "2026-01-01T00:00:00+00:00",
+        "modified": "2026-01-01T00:00:00+00:00",
+        "author": "user",
+        "status": "active",
+        "history": [],
+    }, "## About\n\nSee also [[FastAPI]].\n"),
+    ("topics", "fastapi.md", {
+        "id": "thr_bbb222",
+        "title": "FastAPI",
+        "type": "topic",
+        "tags": ["web"],
+        "created": "2026-01-01T00:00:00+00:00",
+        "modified": "2026-01-01T00:00:00+00:00",
+        "author": "user",
+        "status": "active",
+        "history": [],
+    }, "## About\n\nBuilt on [[Python]].\n"),
+    ("projects", "loom.md", {
+        "id": "thr_ccc333",
+        "title": "Loom",
+        "type": "project",
+        "tags": ["ai"],
+        "created": "2026-01-01T00:00:00+00:00",
+        "modified": "2026-01-01T00:00:00+00:00",
+        "author": "user",
+        "status": "active",
+        "history": [],
+    }, "## About\n\nUses [[Python]] and [[FastAPI]].\n"),
+]
 
 
 @pytest.fixture()
-def seeded_vault(vault_manager):
+def seeded_vault(vault_manager, note_index):
     """Create a vault with a few test notes."""
-    vault_manager.init_vault("test")
-    vault_manager.set_active_vault("test")
-    root = vault_manager._settings.vaults_dir / "test"
-    threads = root / "threads"
-
-    notes = [
-        ("topics", "python.md", {
-            "id": "thr_aaa111",
-            "title": "Python",
-            "type": "topic",
-            "tags": ["lang"],
-            "created": "2026-01-01T00:00:00+00:00",
-            "modified": "2026-01-01T00:00:00+00:00",
-            "author": "user",
-            "status": "active",
-            "history": [],
-        }, "## About\n\nSee also [[FastAPI]].\n"),
-        ("topics", "fastapi.md", {
-            "id": "thr_bbb222",
-            "title": "FastAPI",
-            "type": "topic",
-            "tags": ["web"],
-            "created": "2026-01-01T00:00:00+00:00",
-            "modified": "2026-01-01T00:00:00+00:00",
-            "author": "user",
-            "status": "active",
-            "history": [],
-        }, "## About\n\nBuilt on [[Python]].\n"),
-        ("projects", "loom.md", {
-            "id": "thr_ccc333",
-            "title": "Loom",
-            "type": "project",
-            "tags": ["ai"],
-            "created": "2026-01-01T00:00:00+00:00",
-            "modified": "2026-01-01T00:00:00+00:00",
-            "author": "user",
-            "status": "active",
-            "history": [],
-        }, "## About\n\nUses [[Python]] and [[FastAPI]].\n"),
-    ]
-
-    for folder, filename, meta, body in notes:
-        d = threads / folder
-        d.mkdir(parents=True, exist_ok=True)
-        (d / filename).write_text(note_to_file_content(meta, body))
-
-    return root
+    return _seed_notes(vault_manager, note_index, _NOTES)
 
 
 # -- Notes endpoints ----------------------------------------------------------

@@ -9,7 +9,7 @@ router = APIRouter(prefix="/api/graph", tags=["graph"])
 
 
 @router.get("")
-async def get_graph(
+def get_graph(
     note_type: str | None = Query(None, alias="type", description="Filter by note type"),
     tag: str | None = Query(None, description="Filter by tag"),
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008

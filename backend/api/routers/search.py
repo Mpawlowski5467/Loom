@@ -3,8 +3,8 @@
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel, Field
 
+from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
-from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -48,59 +48,58 @@ def _snippet(body: str, query: str) -> str:
 
 
 @router.get("")
-async def search_notes(
+def search_notes(
     q: str = Query(..., min_length=1, description="Search query"),
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> SearchResponse:
-    """Search notes by keyword across title, tags, and body."""
-    tdir = vm.active_threads_dir()
-    if not tdir.exists():
-        return SearchResponse(query=q, results=[])
+    """Search notes by keyword across title, tags, and body.
 
+    Uses the in-memory index for title/tag matching. Only reads note
+    bodies from disk when needed for body-text search and snippets.
+    """
     query_lower = q.lower()
     scored: list[SearchResult] = []
 
-    for md in tdir.rglob("*.md"):
-        if ".archive" in md.parts:
-            continue
-        try:
-            note = parse_note(md)
-        except Exception:  # noqa: BLE001
-            continue
-
-        if not note.id:
-            continue
-
+    for entry in index.all_entries():
         score = 0
+        body_text: str | None = None
 
         # Title match (highest weight)
-        if query_lower in note.title.lower():
+        if query_lower in entry.title.lower():
             score += 10
-            # Exact title match bonus
-            if note.title.lower() == query_lower:
+            if entry.title.lower() == query_lower:
                 score += 5
 
         # Tag match
-        for tag in note.tags:
+        for tag in entry.tags:
             if query_lower in tag.lower():
                 score += 5
 
-        # Body match
-        if query_lower in note.body.lower():
+        # Body match — only read from disk if title/tag didn't match,
+        # or always read for snippet extraction if we already have a hit
+        if entry.file_path.exists():
+            try:
+                note = parse_note(entry.file_path)
+                body_text = note.body
+            except Exception:  # noqa: BLE001
+                body_text = None
+
+        if body_text and query_lower in body_text.lower():
             score += 2
-            # Count occurrences for density bonus (capped)
-            count = note.body.lower().count(query_lower)
+            count = body_text.lower().count(query_lower)
             score += min(count, 3)
 
         if score == 0:
             continue
 
+        snippet = _snippet(body_text, q) if body_text else ""
+
         scored.append(SearchResult(
-            id=note.id,
-            title=note.title,
-            type=note.type,
-            tags=note.tags,
-            snippet=_snippet(note.body, q),
+            id=entry.id,
+            title=entry.title,
+            type=entry.type,
+            tags=entry.tags,
+            snippet=snippet,
             score=score,
         ))
 

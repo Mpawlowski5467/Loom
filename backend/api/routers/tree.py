@@ -60,7 +60,7 @@ def _build_tree(dir_path: Path, threads_root: Path) -> TreeNode:
 
 
 @router.get("")
-async def get_tree(
+def get_tree(
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> TreeNode:
     """Return the full file tree of the active vault's threads/ folder."""

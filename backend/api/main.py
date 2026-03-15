@@ -48,12 +48,35 @@ def _init_vector_index(vault_dir) -> None:
         )
 
 
+def _init_weaver(vault_dir) -> None:
+    """Try to initialize the Weaver agent.
+
+    Non-fatal: if no chat provider is configured, Weaver runs without LLM
+    (heuristic classification, raw content passthrough).
+    """
+    try:
+        from agents.loom.weaver import init_weaver
+        from core.providers import get_registry
+
+        try:
+            registry = get_registry()
+            chat_provider = registry.get_chat_provider()
+        except Exception:  # noqa: BLE001
+            chat_provider = None
+
+        init_weaver(vault_dir, chat_provider)
+        logger.info("Weaver agent initialized (chat_provider=%s)", chat_provider is not None)
+    except Exception:  # noqa: BLE001
+        logger.warning("Weaver agent initialization failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-    """Start file watcher on startup, stop on shutdown."""
+    """Start file watcher and agents on startup, stop on shutdown."""
     vault_dir = settings.active_vault_dir
     if vault_dir.exists():
         _init_vector_index(vault_dir)
+        _init_weaver(vault_dir)
         start_watcher(vault_dir)
     yield
     stop_watcher()

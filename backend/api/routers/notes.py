@@ -94,14 +94,36 @@ def get_note(
 
 
 @router.post("", status_code=201)
-def create_note(
+async def create_note(
     body: CreateNoteRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
-    """Create a new note with generated id and frontmatter."""
-    tdir = vm.active_threads_dir()
+    """Create a new note via Weaver agent (or direct write as fallback)."""
+    from agents.loom.weaver import get_weaver
+
     folder = body.folder or _TYPE_TO_FOLDER.get(body.type, "topics")
+
+    weaver = get_weaver()
+    if weaver is not None:
+        try:
+            note = await weaver.create_from_modal(
+                title=body.title,
+                note_type=body.type,
+                tags=body.tags,
+                folder=folder,
+                content=body.content,
+            )
+            # Eagerly update the index
+            from pathlib import Path
+
+            index.refresh_file(Path(note.file_path))
+            return note
+        except Exception:  # noqa: BLE001
+            pass  # Fall through to direct creation
+
+    # Direct creation fallback (no Weaver or Weaver failed)
+    tdir = vm.active_threads_dir()
     target_dir = tdir / folder
     target_dir.mkdir(parents=True, exist_ok=True)
 

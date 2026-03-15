@@ -17,6 +17,8 @@ dependencies = [
     "openai>=1.0",
     "anthropic>=0.39",
     "httpx>=0.27",
+    "lancedb>=0.15",
+    "pyarrow>=17.0",
 ]
 
 [project.optional-dependencies]

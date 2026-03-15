@@ -167,12 +167,37 @@ export interface SearchResult {
 export interface SearchResponse {
   query: string;
   results: SearchResult[];
+  mode: "semantic" | "keyword";
 }
 
-export function searchNotes(q: string): Promise<SearchResponse> {
-  return request<SearchResponse>(
-    `/api/search?q=${encodeURIComponent(q)}`,
-  );
+export function searchNotes(
+  q: string,
+  params?: { type?: string; tags?: string; context?: string },
+): Promise<SearchResponse> {
+  const query = new URLSearchParams({ q });
+  if (params?.type) query.set("type", params.type);
+  if (params?.tags) query.set("tags", params.tags);
+  if (params?.context) query.set("context", params.context);
+  return request<SearchResponse>(`/api/search?${query.toString()}`);
+}
+
+// -- Index types --------------------------------------------------------------
+
+export interface IndexStatus {
+  ready: boolean;
+  message: string;
+}
+
+export interface ReindexResult {
+  chunks_indexed: number;
+}
+
+export function fetchIndexStatus(): Promise<IndexStatus> {
+  return request<IndexStatus>("/api/index/status");
+}
+
+export function reindexVault(): Promise<ReindexResult> {
+  return request<ReindexResult>("/api/index/reindex", { method: "POST" });
 }
 
 export function archiveNote(id: string): Promise<{ status: string }> {

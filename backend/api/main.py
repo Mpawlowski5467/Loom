@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
@@ -48,26 +49,51 @@ def _init_vector_index(vault_dir) -> None:
         )
 
 
-def _init_weaver(vault_dir) -> None:
-    """Try to initialize the Weaver agent.
-
-    Non-fatal: if no chat provider is configured, Weaver runs without LLM
-    (heuristic classification, raw content passthrough).
-    """
+def _get_chat_provider():
+    """Try to get the chat provider, return None if unavailable."""
     try:
-        from agents.loom.weaver import init_weaver
         from core.providers import get_registry
 
-        try:
-            registry = get_registry()
-            chat_provider = registry.get_chat_provider()
-        except Exception:  # noqa: BLE001
-            chat_provider = None
-
-        init_weaver(vault_dir, chat_provider)
-        logger.info("Weaver agent initialized (chat_provider=%s)", chat_provider is not None)
+        return get_registry().get_chat_provider()
     except Exception:  # noqa: BLE001
-        logger.warning("Weaver agent initialization failed", exc_info=True)
+        return None
+
+
+def _init_agents(vault_dir) -> None:
+    """Initialize all Loom-layer agents and the runner.
+
+    Non-fatal: each agent is initialized independently. If one fails,
+    the others still start.
+    """
+    chat = _get_chat_provider()
+
+    agent_inits = [
+        ("weaver", "agents.loom.weaver", "init_weaver"),
+        ("spider", "agents.loom.spider", "init_spider"),
+        ("archivist", "agents.loom.archivist", "init_archivist"),
+        ("scribe", "agents.loom.scribe", "init_scribe"),
+        ("sentinel", "agents.loom.sentinel", "init_sentinel"),
+    ]
+
+    for name, module_path, fn_name in agent_inits:
+        try:
+            import importlib
+
+            mod = importlib.import_module(module_path)
+            init_fn = getattr(mod, fn_name)
+            init_fn(vault_dir, chat)
+            logger.info("Agent '%s' initialized", name)
+        except Exception:  # noqa: BLE001
+            logger.warning("Agent '%s' initialization failed", name, exc_info=True)
+
+    # Initialize the runner
+    try:
+        from agents.runner import init_runner
+
+        init_runner(vault_dir)
+        logger.info("AgentRunner initialized")
+    except Exception:  # noqa: BLE001
+        logger.warning("AgentRunner initialization failed", exc_info=True)
 
 
 @asynccontextmanager
@@ -76,7 +102,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     vault_dir = settings.active_vault_dir
     if vault_dir.exists():
         _init_vector_index(vault_dir)
-        _init_weaver(vault_dir)
+        _init_agents(vault_dir)
         start_watcher(vault_dir)
     yield
     stop_watcher()
@@ -99,6 +125,7 @@ app.include_router(graph_router)
 app.include_router(search_router)
 app.include_router(captures_router)
 app.include_router(index_router)
+app.include_router(agents_router)
 
 
 @app.get("/api/health")

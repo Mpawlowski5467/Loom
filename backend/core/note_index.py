@@ -105,6 +105,11 @@ class NoteIndex:
         entry = self.get_by_id(note_id)
         return entry.file_path if entry else None
 
+    def get_by_path(self, path: Path) -> IndexEntry | None:
+        """Lookup by file path."""
+        with self._lock:
+            return self._by_path.get(path)
+
     def all_entries(self) -> list[IndexEntry]:
         """Return a snapshot of all index entries."""
         with self._lock:

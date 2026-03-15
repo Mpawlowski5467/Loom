@@ -15,9 +15,14 @@ venv/
 node_modules/
 .next/
 
-# Environment
+# Environment / secrets
 .env
 .env.*
+*.pem
+*.key
+
+# Loom vault data (user data, not source code)
+.loom/
 
 # OS
 .DS_Store

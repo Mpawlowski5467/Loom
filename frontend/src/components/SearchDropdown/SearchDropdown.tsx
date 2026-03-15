@@ -80,7 +80,7 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
     <div className={styles.wrap} ref={wrapRef}>
       <input
         ref={inputRef}
-        className="nav-search"
+        className={styles.input}
         type="text"
         placeholder="Search vault... (Ctrl+K)"
         value={query}

@@ -1,8 +1,9 @@
+/* ── Create Note Modal — classic dialog box ───────────────────────────── */
+
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.7);
-  backdrop-filter: blur(4px);
+  background: rgba(15, 23, 42, 0.75);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -11,140 +12,155 @@
 
 .modal {
   background: var(--bg-surface);
-  border: 1px solid var(--bg-elevated);
-  border-radius: 10px;
+  border: 1px solid var(--border);
   width: 420px;
   max-width: 90vw;
-  padding: 20px;
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  box-shadow: var(--shadow-modal);
 }
 
+/* ── Title bar ───────────────────────────────────────────────────────── */
+
 .modalTitle {
-  font-size: 16px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
+  padding: var(--sp-2) var(--sp-3);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
 }
+
+/* ── Fields ──────────────────────────────────────────────────────────── */
 
 .field {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: var(--sp-1);
+  padding: var(--sp-2) var(--sp-3) 0;
 }
 
 .label {
-  font-size: 11px;
-  font-weight: 500;
+  font-size: var(--text-xs);
+  font-weight: 600;
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
 
 .input {
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--bg-elevated);
-  background: var(--bg-base);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
+  box-shadow: var(--shadow-inset);
 }
 
 .input:focus {
-  border-color: var(--accent-amber);
+  border-color: var(--border-focus);
 }
 
 .select {
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--bg-elevated);
-  background: var(--bg-base);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
   color: var(--text-primary);
-  font-size: 13px;
+  font-size: var(--text-base);
   outline: none;
+  box-shadow: var(--shadow-inset);
 }
 
 .select:focus {
-  border-color: var(--accent-amber);
+  border-color: var(--border-focus);
 }
 
 .textarea {
-  padding: 7px 10px;
-  border-radius: 6px;
-  border: 1px solid var(--bg-elevated);
-  background: var(--bg-base);
+  padding: var(--sp-1) var(--sp-2);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
   color: var(--text-primary);
   font-family: var(--font-mono);
-  font-size: 13px;
+  font-size: var(--text-base);
   min-height: 80px;
   resize: vertical;
   outline: none;
+  box-shadow: var(--shadow-inset);
 }
 
 .textarea:focus {
-  border-color: var(--accent-amber);
+  border-color: var(--border-focus);
 }
+
+/* ── Tags ────────────────────────────────────────────────────────────── */
 
 .tagsWrap {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--sp-1);
   align-items: center;
 }
 
 .tagChip {
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
+  font-size: var(--text-xs);
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border-light);
   background: var(--bg-elevated);
   color: var(--text-secondary);
   cursor: pointer;
 }
 
 .tagChip:hover {
-  background: var(--danger);
-  color: #fff;
+  border-color: var(--danger);
+  background: var(--danger-muted);
+  color: var(--danger);
 }
 
 .tagInput {
   width: 90px;
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 10px;
-  border: 1px dashed var(--bg-elevated);
+  font-size: var(--text-sm);
+  padding: 1px var(--sp-1);
+  border: 1px dashed var(--border);
   background: transparent;
   color: var(--text-secondary);
   outline: none;
 }
 
 .tagInput:focus {
-  border-color: var(--accent-amber);
+  border-color: var(--border-focus);
+  border-style: solid;
 }
 
+/* ── Hint ────────────────────────────────────────────────────────────── */
+
 .hint {
-  font-size: 11px;
+  font-size: var(--text-xs);
   color: var(--text-secondary);
   line-height: 1.4;
+  padding: var(--sp-2) var(--sp-3);
 }
+
+/* ── Footer — dialog buttons ─────────────────────────────────────────── */
 
 .footer {
   display: flex;
   justify-content: flex-end;
-  gap: 8px;
-  padding-top: 4px;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
 }
 
 .btn {
-  padding: 6px 14px;
-  border-radius: 6px;
-  border: 1px solid var(--bg-elevated);
-  background: transparent;
+  padding: 3px var(--sp-3);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
   color: var(--text-secondary);
-  font-size: 12.5px;
+  font-size: var(--text-sm);
   font-weight: 500;
-  cursor: pointer;
-  transition: background 0.12s, color 0.12s;
+  transition: background var(--transition-fast), color var(--transition-fast);
+  box-shadow: var(--shadow-raised);
 }
 
 .btn:hover {
@@ -158,5 +174,5 @@
 }
 
 .btnPrimary:hover {
-  background: rgba(245, 158, 11, 0.12);
+  background: var(--accent-amber-muted);
 }

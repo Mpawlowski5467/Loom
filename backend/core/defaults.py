@@ -355,4 +355,6 @@ def agent_config_yaml(name: str) -> str:
 # Agent: {name}
 name: {name}
 enabled: true
+trust_level: standard
+memory_threshold: 20
 """

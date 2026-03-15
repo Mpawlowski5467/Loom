@@ -1,22 +1,24 @@
+/* ── Error Boundary — classic error dialog ────────────────────────────── */
+
 .wrap {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 32px;
+  gap: var(--sp-3);
+  padding: var(--sp-8);
   height: 100%;
   color: var(--text-secondary);
   text-align: center;
 }
 
 .icon {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: rgba(248, 113, 113, 0.15);
+  width: 36px;
+  height: 36px;
+  border: 1px solid var(--danger);
+  background: var(--danger-muted);
   color: var(--danger);
-  font-size: 20px;
+  font-size: var(--text-xl);
   font-weight: 700;
   display: flex;
   align-items: center;
@@ -24,13 +26,13 @@
 }
 
 .message {
-  font-size: 14px;
+  font-size: var(--text-md);
   font-weight: 600;
   color: var(--text-primary);
 }
 
 .detail {
-  font-size: 12px;
+  font-size: var(--text-sm);
   font-family: var(--font-mono);
   color: var(--text-secondary);
   max-width: 400px;
@@ -38,15 +40,14 @@
 }
 
 .retry {
-  margin-top: 8px;
-  padding: 6px 16px;
-  border: 1px solid var(--bg-elevated);
-  border-radius: 6px;
-  background: transparent;
+  margin-top: var(--sp-2);
+  padding: 3px var(--sp-4);
+  border: 1px solid var(--border);
+  background: var(--bg-raised);
   color: var(--text-primary);
-  font-size: 12px;
-  cursor: pointer;
-  transition: background 0.15s;
+  font-size: var(--text-sm);
+  box-shadow: var(--shadow-raised);
+  transition: background var(--transition-base);
 }
 
 .retry:hover {

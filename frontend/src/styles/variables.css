@@ -1,18 +1,32 @@
 :root {
-  /* Backgrounds */
+  /* ── Backgrounds ──────────────────────────────────────────────────────── */
   --bg-base: #0f172a;
   --bg-surface: #1e293b;
   --bg-elevated: #334155;
+  --bg-inset: #0b1120;          /* sunken panels, input fields */
+  --bg-raised: #263348;         /* toolbar, raised surfaces */
 
-  /* Text */
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border: #3e4f68;            /* standard panel/component border */
+  --border-light: #2d3d54;      /* subtle inner dividers */
+  --border-focus: var(--accent-amber);
+
+  /* ── Text ──────────────────────────────────────────────────────────────── */
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
+  --text-disabled: #5a6a82;
 
-  /* Accents */
+  /* ── Accents ──────────────────────────────────────────────────────────── */
   --accent-amber: #f59e0b;
   --accent-purple: #a78bfa;
 
-  /* Node types */
+  /* muted variants for backgrounds */
+  --accent-amber-muted: rgba(245, 158, 11, 0.12);
+  --accent-purple-muted: rgba(167, 139, 250, 0.12);
+  --danger-muted: rgba(248, 113, 113, 0.12);
+  --success-muted: rgba(52, 211, 153, 0.12);
+
+  /* ── Node types ───────────────────────────────────────────────────────── */
   --node-project: #60a5fa;
   --node-topic: #4ade80;
   --node-person: #c084fc;
@@ -20,15 +34,48 @@
   --node-capture: #fbbf24;
   --node-custom: #2dd4bf;
 
-  /* Status */
+  /* ── Status ───────────────────────────────────────────────────────────── */
   --danger: #f87171;
   --success: #34d399;
 
-  /* Fonts */
+  /* ── Typography ───────────────────────────────────────────────────────── */
   --font-ui: "Sora", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
-  /* Layout */
-  --nav-height: 48px;
-  --tree-width: 220px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  /* ── Spacing (4px base unit) ──────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ── Radii — classic desktop: sharp or barely rounded ─────────────────── */
+  --radius-sm: 2px;
+  --radius-md: 3px;
+  --radius-lg: 4px;
+
+  /* ── Shadows — subtle inset/outset for depth ──────────────────────────── */
+  --shadow-inset: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast: 0.1s ease;
+  --transition-base: 0.15s ease;
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  --nav-height: 36px;
+  --status-height: 24px;
+  --tree-width: 240px;
 }

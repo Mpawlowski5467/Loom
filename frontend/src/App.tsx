@@ -72,17 +72,20 @@ function App() {
 
   return (
     <div className="app">
-      <nav className="nav">
-        <div className="nav-logo">
-          <div className="nav-logo-icon" />
-          <span className="nav-logo-text">LOOM</span>
+      {/* ── Toolbar ────────────────────────────────────────────────── */}
+      <div className="toolbar">
+        <div className="toolbar-logo">
+          <div className="toolbar-logo-icon" />
+          <span className="toolbar-logo-text">LOOM</span>
         </div>
 
-        <div className="nav-tabs">
+        <div className="toolbar-sep" />
+
+        <div className="toolbar-tabs">
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              className={`nav-tab${activeView === tab.id ? " nav-tab--active" : ""}`}
+              className={`toolbar-tab${activeView === tab.id ? " toolbar-tab--active" : ""}`}
               onClick={() => setActiveView(tab.id)}
             >
               {tab.label}
@@ -90,15 +93,18 @@ function App() {
           ))}
         </div>
 
-        <div className="nav-spacer" />
+        <div className="toolbar-spacer" />
 
         <SearchDropdown onSelect={selectNote} inputRef={searchRef} />
 
-        <button className="nav-settings" title="Settings">
+        <div className="toolbar-sep" />
+
+        <button className="toolbar-btn" title="Settings">
           &#9881;
         </button>
-      </nav>
+      </div>
 
+      {/* ── Body ──────────────────────────────────────────────────── */}
       <div className="app-body">
         <FileTree
           activeFile={activeNote}
@@ -131,6 +137,24 @@ function App() {
           onModeChange={setSidebarMode}
           onToast={addToast}
         />
+      </div>
+
+      {/* ── Status bar ────────────────────────────────────────────── */}
+      <div className="statusbar">
+        <div className="statusbar-item">
+          <span className="statusbar-dot" />
+          <span>Ready</span>
+        </div>
+        <div className="statusbar-spacer" />
+        <div className="statusbar-right">
+          <span>{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</span>
+          {activeNote && (
+            <>
+              <span>|</span>
+              <span>{activeNote}</span>
+            </>
+          )}
+        </div>
       </div>
 
       {isCreateModalOpen && (

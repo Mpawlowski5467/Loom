@@ -1,11 +1,11 @@
 """Notes CRUD API routes."""
 
 import shutil
-from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
+from core.note_index import NoteIndex, get_note_index
 from core.notes import (
     Note,
     NoteMeta,
@@ -13,7 +13,6 @@ from core.notes import (
     note_to_file_content,
     now_iso,
     parse_note,
-    parse_note_meta,
 )
 from core.vault import VaultManager, get_vault_manager
 
@@ -60,25 +59,6 @@ _TYPE_TO_FOLDER = {
 }
 
 
-def _find_note_path(note_id: str, tdir: Path) -> Path | None:
-    """Find the .md file for a given note id by scanning threads/."""
-    if not tdir.exists():
-        return None
-    for md in tdir.rglob("*.md"):
-        if ".archive" in md.parts:
-            continue
-        try:
-            text = md.read_text(encoding="utf-8")
-        except OSError:
-            continue
-        # Quick check before full parse
-        if note_id in text[:500]:
-            note = parse_note(md)
-            if note.id == note_id:
-                return md
-    return None
-
-
 def _to_kebab(title: str) -> str:
     """Convert a title to a kebab-case filename stem."""
     cleaned = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
@@ -89,46 +69,35 @@ def _to_kebab(title: str) -> str:
 
 
 @router.get("")
-async def list_notes(
+def list_notes(
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> NoteListResponse:
     """List all notes (frontmatter only) with pagination."""
-    tdir = vm.active_threads_dir()
-    if not tdir.exists():
-        return NoteListResponse(notes=[], total=0, offset=offset, limit=limit)
-
-    all_metas: list[NoteMeta] = []
-    for md in sorted(tdir.rglob("*.md")):
-        if ".archive" in md.parts:
-            continue
-        try:
-            all_metas.append(parse_note_meta(md))
-        except Exception:  # noqa: BLE001
-            continue
-
+    all_metas = sorted(index.all_metas(), key=lambda m: m.title.lower())
     total = len(all_metas)
     page = all_metas[offset : offset + limit]
     return NoteListResponse(notes=page, total=total, offset=offset, limit=limit)
 
 
 @router.get("/{note_id}")
-async def get_note(
+def get_note(
     note_id: str,
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
     """Get a full note by id."""
-    path = _find_note_path(note_id, vm.active_threads_dir())
-    if path is None:
+    path = index.get_path_by_id(note_id)
+    if path is None or not path.exists():
         raise HTTPException(status_code=404, detail=f"Note '{note_id}' not found")
     return parse_note(path)
 
 
 @router.post("", status_code=201)
-async def create_note(
+def create_note(
     body: CreateNoteRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
     """Create a new note with generated id and frontmatter."""
     tdir = vm.active_threads_dir()
@@ -158,18 +127,22 @@ async def create_note(
 
     file_path = target_dir / f"{stem}.md"
     file_path.write_text(note_to_file_content(meta, body.content), encoding="utf-8")
+
+    # Eagerly update the index so the new note is immediately findable
+    index.refresh_file(file_path)
+
     return parse_note(file_path)
 
 
 @router.put("/{note_id}")
-async def update_note(
+def update_note(
     note_id: str,
     body: UpdateNoteRequest,
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
     """Update a note's body, tags, or type."""
-    path = _find_note_path(note_id, vm.active_threads_dir())
-    if path is None:
+    path = index.get_path_by_id(note_id)
+    if path is None or not path.exists():
         raise HTTPException(status_code=404, detail=f"Note '{note_id}' not found")
 
     note = parse_note(path)
@@ -190,18 +163,23 @@ async def update_note(
 
     new_body = body.body if body.body is not None else note.body
     path.write_text(note_to_file_content(meta, new_body), encoding="utf-8")
+
+    # Update index with new metadata
+    index.refresh_file(path)
+
     return parse_note(path)
 
 
 @router.delete("/{note_id}")
-async def archive_note(
+def archive_note(
     note_id: str,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> dict[str, str]:
     """Archive a note by moving it to .archive/."""
     tdir = vm.active_threads_dir()
-    path = _find_note_path(note_id, tdir)
-    if path is None:
+    path = index.get_path_by_id(note_id)
+    if path is None or not path.exists():
         raise HTTPException(status_code=404, detail=f"Note '{note_id}' not found")
 
     archive_dir = tdir / ".archive"
@@ -220,4 +198,8 @@ async def archive_note(
 
     dest = archive_dir / path.name
     shutil.move(str(path), str(dest))
+
+    # Remove from index (archived notes are excluded)
+    index.remove_file(path)
+
     return {"status": "archived", "path": str(dest)}

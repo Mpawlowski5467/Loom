@@ -155,6 +155,7 @@ export function Sidebar({
               note={note}
               onSaved={handleSaved}
               onCancel={() => onModeChange("view")}
+              onToast={onToast}
             />
           )}
         </>

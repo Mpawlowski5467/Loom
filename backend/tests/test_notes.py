@@ -3,7 +3,6 @@
 from pathlib import Path
 
 from core.notes import (
-    build_frontmatter,
     generate_id,
     note_to_file_content,
     parse_note,

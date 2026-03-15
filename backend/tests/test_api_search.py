@@ -5,44 +5,34 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from core.notes import note_to_file_content
+from tests.conftest import _seed_notes
+
+_NOTES = [
+    ("topics", "rust.md", {
+        "id": "thr_aaa111",
+        "title": "Rust Language",
+        "type": "topic",
+        "tags": ["programming", "systems"],
+    }, "## Overview\n\nA memory-safe systems language.\n"),
+    ("topics", "python.md", {
+        "id": "thr_bbb222",
+        "title": "Python",
+        "type": "topic",
+        "tags": ["programming", "scripting"],
+    }, "## Overview\n\nA dynamic language for everything.\n"),
+    ("projects", "loom.md", {
+        "id": "thr_ccc333",
+        "title": "Loom Project",
+        "type": "project",
+        "tags": ["ai", "rust"],
+    }, "## About\n\nUses Rust and Python together.\n"),
+]
 
 
 @pytest.fixture()
-def seeded_vault(vault_manager):
+def seeded_vault(vault_manager, note_index):
     """Create a vault with test notes for searching."""
-    vault_manager.init_vault("test")
-    vault_manager.set_active_vault("test")
-    root = vault_manager._settings.vaults_dir / "test"
-    threads = root / "threads"
-
-    notes = [
-        ("topics", "rust.md", {
-            "id": "thr_aaa111",
-            "title": "Rust Language",
-            "type": "topic",
-            "tags": ["programming", "systems"],
-        }, "## Overview\n\nA memory-safe systems language.\n"),
-        ("topics", "python.md", {
-            "id": "thr_bbb222",
-            "title": "Python",
-            "type": "topic",
-            "tags": ["programming", "scripting"],
-        }, "## Overview\n\nA dynamic language for everything.\n"),
-        ("projects", "loom.md", {
-            "id": "thr_ccc333",
-            "title": "Loom Project",
-            "type": "project",
-            "tags": ["ai", "rust"],
-        }, "## About\n\nUses Rust and Python together.\n"),
-    ]
-
-    for folder, filename, meta, body in notes:
-        d = threads / folder
-        d.mkdir(parents=True, exist_ok=True)
-        (d / filename).write_text(note_to_file_content(meta, body))
-
-    return root
+    return _seed_notes(vault_manager, note_index, _NOTES)
 
 
 def test_search_by_title(client: TestClient, seeded_vault: Path) -> None:

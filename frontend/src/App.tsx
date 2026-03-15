@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import "./styles/variables.css";
 import "./App.css";
 import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
+import { ErrorBoundary } from "./components/ErrorBoundary/ErrorBoundary";
 import { FileTree } from "./components/FileTree/FileTree";
 import { SearchDropdown } from "./components/SearchDropdown/SearchDropdown";
 import { Sidebar } from "./components/Sidebar/Sidebar";
@@ -108,16 +109,18 @@ function App() {
         <main
           className={`app-main${activeView === "graph" ? " app-main--flush" : ""}`}
         >
-          {activeView === "graph" && (
-            <GraphView
-              activeFile={activeNote}
-              onFileSelect={selectNote}
-            />
-          )}
-          {activeView === "board" && <BoardView />}
-          {activeView === "inbox" && (
-            <InboxView onSelectCapture={selectNote} />
-          )}
+          <ErrorBoundary fallbackMessage="This view encountered an error">
+            {activeView === "graph" && (
+              <GraphView
+                activeFile={activeNote}
+                onFileSelect={selectNote}
+              />
+            )}
+            {activeView === "board" && <BoardView />}
+            {activeView === "inbox" && (
+              <InboxView onSelectCapture={selectNote} />
+            )}
+          </ErrorBoundary>
         </main>
 
         <Sidebar

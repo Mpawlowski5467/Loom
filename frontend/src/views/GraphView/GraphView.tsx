@@ -143,12 +143,14 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
         // Start layout with convergence detection
         supervisorRef.current = startLayout(graph);
 
-        // Zoom to fit after a short delay (let layout settle)
-        setTimeout(() => {
+        // Zoom to fit after layout settles, then start breathing
+        const breathingDelay = setTimeout(() => {
           if (!cancelled && sigmaRef.current && graphRef.current) {
             zoomToFit(sigmaRef.current, graphRef.current);
+            // Only start breathing after layout has had time to converge
+            stopBreathingRef.current = startBreathing(graph, renderer);
           }
-        }, 1200);
+        }, 2000);
 
         // Wire events
         const cleanupEvents = setupEvents({
@@ -162,8 +164,8 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
           onFileSelect: onFileSelectRef,
         });
 
-        // Start breathing animation
-        stopBreathingRef.current = startBreathing(graph, renderer);
+        // Store delay timer for cleanup
+        (renderer as unknown as Record<string, unknown>).__breathingDelay = breathingDelay;
 
         // Store event cleanup for teardown
         (renderer as unknown as Record<string, unknown>).__cleanupEvents = cleanupEvents;
@@ -186,6 +188,8 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
       if (renderer) {
         const cleanup = (renderer as unknown as Record<string, unknown>).__cleanupEvents as (() => void) | undefined;
         cleanup?.();
+        const breathDelay = (renderer as unknown as Record<string, unknown>).__breathingDelay;
+        if (breathDelay) clearTimeout(breathDelay as number);
       }
       killLayout(supervisorRef.current);
       supervisorRef.current = null;

@@ -22,6 +22,7 @@ class SearchResult(BaseModel):
     tags: list[str] = Field(default_factory=list)
     snippet: str = ""
     score: float = 0
+    heading: str = ""
 
 
 class SearchResponse(BaseModel):
@@ -166,6 +167,7 @@ async def search_notes(
                             tags=sr.tags,
                             snippet=sr.snippet,
                             score=sr.score,
+                            heading=sr.heading,
                         )
                     )
                 return SearchResponse(query=q, results=results, mode="semantic")

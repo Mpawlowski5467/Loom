@@ -385,11 +385,13 @@ export function GraphView({ onFileSelect }: GraphViewProps) {
         const data = await fetchGraph();
         const prev = dataRef.current;
 
-        // Quick equality check
+        // Quick equality check — compare counts + IDs, much cheaper than JSON.stringify
         if (
           prev &&
-          JSON.stringify(prev.nodes) === JSON.stringify(data.nodes) &&
-          JSON.stringify(prev.edges) === JSON.stringify(data.edges)
+          prev.nodes.length === data.nodes.length &&
+          prev.edges.length === data.edges.length &&
+          prev.nodes.every((n, i) => n.id === data.nodes[i]?.id && n.link_count === data.nodes[i]?.link_count) &&
+          prev.edges.every((e, i) => e.source === data.edges[i]?.source && e.target === data.edges[i]?.target)
         ) {
           return;
         }

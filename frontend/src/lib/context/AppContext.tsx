@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
+import { useTheme } from "../useTheme";
 import { AppContext } from "./appContextValue";
 import type { Toast } from "./appContextValue";
 
@@ -9,6 +10,7 @@ type SidebarMode = "view" | "edit";
 let toastCounter = 0;
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  const { theme, setTheme } = useTheme();
   const [activeView, setActiveView] = useState<View>("graph");
   const [activeNote, setActiveNote] = useState<string | null>(null);
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>("view");
@@ -48,6 +50,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeNote,
       sidebarMode,
       toasts,
+      theme,
+      setTheme,
       setActiveView,
       selectNote,
       closeSidebar,
@@ -63,6 +67,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
       activeNote,
       sidebarMode,
       toasts,
+      theme,
+      setTheme,
       selectNote,
       closeSidebar,
       showCreateModal,

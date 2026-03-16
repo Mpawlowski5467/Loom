@@ -71,7 +71,7 @@ def list_vaults(
     vaults = [
         VaultResponse(
             name=n,
-            path=str(vm._vault_root(n)),
+            path=str(vm.vault_path(n)),
             is_active=(n == active),
         )
         for n in names

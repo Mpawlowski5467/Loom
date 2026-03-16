@@ -2,8 +2,9 @@ import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
@@ -15,6 +16,16 @@ from api.routers.search import router as search_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import router as vaults_router
 from core.config import settings
+from core.exceptions import (
+    InvalidVaultNameError,
+    LoomError,
+    NoteNotFoundError,
+    ProviderConfigError,
+    ProviderError,
+    ReadChainError,
+    VaultExistsError,
+    VaultNotFoundError,
+)
 from core.watcher import start_watcher, stop_watcher
 
 logger = logging.getLogger(__name__)
@@ -113,14 +124,24 @@ def _init_chat(vault_dir) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
+    import asyncio
+
     vault_dir = settings.active_vault_dir
     if vault_dir.exists():
         _init_vector_index(vault_dir)
         _init_agents(vault_dir)
         _init_chat(vault_dir)
-        start_watcher(vault_dir)
+        loop = asyncio.get_running_loop()
+        start_watcher(vault_dir, loop=loop)
     yield
     stop_watcher()
+    # Clean up provider resources (e.g. httpx clients)
+    try:
+        from core.providers import get_registry
+
+        await get_registry().close()
+    except Exception:  # noqa: BLE001
+        pass
 
 
 app = FastAPI(title="Loom", version="0.1.0", lifespan=lifespan)
@@ -132,6 +153,56 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# -- Global exception handlers ------------------------------------------------
+
+
+@app.exception_handler(VaultNotFoundError)
+async def vault_not_found_handler(request: Request, exc: VaultNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"error": str(exc), "type": "VaultNotFoundError"})
+
+
+@app.exception_handler(NoteNotFoundError)
+async def note_not_found_handler(request: Request, exc: NoteNotFoundError) -> JSONResponse:
+    return JSONResponse(status_code=404, content={"error": str(exc), "type": "NoteNotFoundError"})
+
+
+@app.exception_handler(VaultExistsError)
+async def vault_exists_handler(request: Request, exc: VaultExistsError) -> JSONResponse:
+    return JSONResponse(status_code=409, content={"error": str(exc), "type": "VaultExistsError"})
+
+
+@app.exception_handler(InvalidVaultNameError)
+async def invalid_vault_name_handler(request: Request, exc: InvalidVaultNameError) -> JSONResponse:
+    return JSONResponse(
+        status_code=422, content={"error": str(exc), "type": "InvalidVaultNameError"}
+    )
+
+
+@app.exception_handler(ProviderConfigError)
+async def provider_config_handler(request: Request, exc: ProviderConfigError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503, content={"error": str(exc), "type": "ProviderConfigError"}
+    )
+
+
+@app.exception_handler(ReadChainError)
+async def read_chain_handler(request: Request, exc: ReadChainError) -> JSONResponse:
+    return JSONResponse(status_code=403, content={"error": str(exc), "type": "ReadChainError"})
+
+
+@app.exception_handler(ProviderError)
+async def provider_error_handler(request: Request, exc: ProviderError) -> JSONResponse:
+    return JSONResponse(status_code=502, content={"error": str(exc), "type": "ProviderError"})
+
+
+@app.exception_handler(LoomError)
+async def loom_error_handler(request: Request, exc: LoomError) -> JSONResponse:
+    return JSONResponse(
+        status_code=500, content={"error": str(exc), "type": exc.__class__.__name__}
+    )
+
 
 app.include_router(vaults_router)
 app.include_router(notes_router)

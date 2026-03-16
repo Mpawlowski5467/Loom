@@ -12,6 +12,7 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from core.note_index import get_note_index
 from core.notes import parse_note, parse_note_meta
 
 if TYPE_CHECKING:
@@ -251,6 +252,10 @@ class Archivist(BaseAgent):
     @staticmethod
     def _build_title_set(threads_dir: Path) -> set[str]:
         """Build a set of lowercase note titles for link validation."""
+        index = get_note_index()
+        if index.size > 0:
+            return index.get_title_set()
+        # Fallback to disk scan
         titles: set[str] = set()
         if not threads_dir.exists():
             return titles

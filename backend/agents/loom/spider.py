@@ -9,6 +9,7 @@ import re
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from core.note_index import get_note_index
 from core.notes import Note, now_iso, parse_note, parse_note_meta
 
 if TYPE_CHECKING:
@@ -206,6 +207,14 @@ class Spider(BaseAgent):
 
     def _list_vault_notes(self, threads_dir: Path, exclude_id: str = "") -> list[dict]:
         """List all vault notes as dicts with title and tags."""
+        index = get_note_index()
+        if index.size > 0:
+            return [
+                {"title": e.title, "tags": e.tags, "id": e.id}
+                for e in index.all_entries()
+                if e.id != exclude_id
+            ]
+        # Fallback to disk scan if index is empty
         notes: list[dict] = []
         if not threads_dir.exists():
             return notes
@@ -222,7 +231,11 @@ class Spider(BaseAgent):
 
     @staticmethod
     def _build_title_map(threads_dir: Path) -> dict[str, Path]:
-        """Build lowercase-title → path map."""
+        """Build lowercase-title → path map, preferring the cached NoteIndex."""
+        index = get_note_index()
+        if index.size > 0:
+            return index.get_title_map()
+        # Fallback to disk scan
         title_map: dict[str, Path] = {}
         for md in threads_dir.rglob("*.md"):
             if ".archive" in md.parts:

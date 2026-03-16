@@ -1,4 +1,5 @@
 import { createContext } from "react";
+import type { Theme } from "../useTheme";
 
 type View = "graph" | "board" | "inbox";
 type SidebarMode = "view" | "edit";
@@ -14,6 +15,8 @@ export interface AppContextValue {
   activeNote: string | null;
   sidebarMode: SidebarMode;
   toasts: Toast[];
+  theme: Theme;
+  setTheme: (theme: Theme) => void;
   setActiveView: (view: View) => void;
   selectNote: (noteId: string | null) => void;
   closeSidebar: () => void;

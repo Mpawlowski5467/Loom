@@ -102,6 +102,10 @@ class VaultManager:
         """Return the .loom/ directory of the active vault."""
         return self.active_vault_dir() / ".loom"
 
+    def vault_path(self, name: str) -> Path:
+        """Return the root path for a vault by name."""
+        return self._settings.vaults_dir / name
+
     # -- Private helpers ------------------------------------------------------
 
     def _vault_root(self, name: str) -> Path:

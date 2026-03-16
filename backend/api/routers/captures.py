@@ -2,11 +2,12 @@
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
+from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api/captures", tags=["captures"])
@@ -99,7 +100,9 @@ def get_captures(
 
 
 @router.post("/process")
+@limiter.limit(WRITE_LIMIT)
 async def process_capture(
+    request: Request,  # noqa: ARG001 — required by slowapi
     body: ProcessCaptureRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
@@ -142,7 +145,9 @@ async def process_capture(
 
 
 @router.post("/process-all")
+@limiter.limit(WRITE_LIMIT)
 async def process_all_captures(
+    request: Request,  # noqa: ARG001 — required by slowapi
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> ProcessAllResult:

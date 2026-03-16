@@ -33,7 +33,9 @@
   font-size: var(--text-xs);
   font-weight: 500;
   cursor: pointer;
-  transition: background var(--transition-base), color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
   user-select: none;
 }
 
@@ -94,7 +96,9 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: background var(--transition-base), color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
   user-select: none;
 }
 

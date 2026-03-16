@@ -8,24 +8,39 @@ from starlette.testclient import TestClient
 from tests.conftest import _seed_notes
 
 _NOTES = [
-    ("topics", "rust.md", {
-        "id": "thr_aaa111",
-        "title": "Rust Language",
-        "type": "topic",
-        "tags": ["programming", "systems"],
-    }, "## Overview\n\nA memory-safe systems language.\n"),
-    ("topics", "python.md", {
-        "id": "thr_bbb222",
-        "title": "Python",
-        "type": "topic",
-        "tags": ["programming", "scripting"],
-    }, "## Overview\n\nA dynamic language for everything.\n"),
-    ("projects", "loom.md", {
-        "id": "thr_ccc333",
-        "title": "Loom Project",
-        "type": "project",
-        "tags": ["ai", "rust"],
-    }, "## About\n\nUses Rust and Python together.\n"),
+    (
+        "topics",
+        "rust.md",
+        {
+            "id": "thr_aaa111",
+            "title": "Rust Language",
+            "type": "topic",
+            "tags": ["programming", "systems"],
+        },
+        "## Overview\n\nA memory-safe systems language.\n",
+    ),
+    (
+        "topics",
+        "python.md",
+        {
+            "id": "thr_bbb222",
+            "title": "Python",
+            "type": "topic",
+            "tags": ["programming", "scripting"],
+        },
+        "## Overview\n\nA dynamic language for everything.\n",
+    ),
+    (
+        "projects",
+        "loom.md",
+        {
+            "id": "thr_ccc333",
+            "title": "Loom Project",
+            "type": "project",
+            "tags": ["ai", "rust"],
+        },
+        "## About\n\nUses Rust and Python together.\n",
+    ),
 ]
 
 

@@ -66,15 +66,9 @@ function TreeRow({
   if (node.is_dir) {
     return (
       <>
-        <div
-          className={styles.row}
-          style={{ paddingLeft }}
-          onClick={() => onToggle(node.path)}
-        >
+        <div className={styles.row} style={{ paddingLeft }} onClick={() => onToggle(node.path)}>
           <span className={styles.arrow}>{isOpen ? "\u25BE" : "\u25B8"}</span>
-          <span className={`${styles.name} ${styles.folderName}`}>
-            {node.name}
-          </span>
+          <span className={`${styles.name} ${styles.folderName}`}>{node.name}</span>
         </div>
         {isOpen &&
           node.children.map((child) => (
@@ -102,23 +96,14 @@ function TreeRow({
       style={{ paddingLeft: paddingLeft + 16 }}
       onClick={() => noteId && onFileSelect(noteId)}
     >
-      <span
-        className={styles.dot}
-        style={{ backgroundColor: dotColor(node.note_type) }}
-      />
+      <span className={styles.dot} style={{ backgroundColor: dotColor(node.note_type) }} />
       <span className={styles.name}>{label}</span>
-      {node.tag_count > 0 && (
-        <span className={styles.count}>{node.tag_count}</span>
-      )}
+      {node.tag_count > 0 && <span className={styles.count}>{node.tag_count}</span>}
     </div>
   );
 }
 
-export function FileTree({
-  activeFile,
-  onFileSelect,
-  onCreateNote,
-}: FileTreeProps) {
+export function FileTree({ activeFile, onFileSelect, onCreateNote }: FileTreeProps) {
   const [tree, setTree] = useState<TreeNode | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState("");
@@ -160,11 +145,7 @@ export function FileTree({
         <span className={styles.vaultBadge}>{vaultName}</span>
         <span className={styles.headerSpacer} />
         {onCreateNote && (
-          <button
-            className={styles.addBtn}
-            title="Create note"
-            onClick={onCreateNote}
-          >
+          <button className={styles.addBtn} title="Create note" onClick={onCreateNote}>
             +
           </button>
         )}

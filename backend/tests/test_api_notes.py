@@ -8,39 +8,54 @@ from starlette.testclient import TestClient
 from tests.conftest import _seed_notes
 
 _NOTES = [
-    ("topics", "python.md", {
-        "id": "thr_aaa111",
-        "title": "Python",
-        "type": "topic",
-        "tags": ["lang"],
-        "created": "2026-01-01T00:00:00+00:00",
-        "modified": "2026-01-01T00:00:00+00:00",
-        "author": "user",
-        "status": "active",
-        "history": [],
-    }, "## About\n\nSee also [[FastAPI]].\n"),
-    ("topics", "fastapi.md", {
-        "id": "thr_bbb222",
-        "title": "FastAPI",
-        "type": "topic",
-        "tags": ["web"],
-        "created": "2026-01-01T00:00:00+00:00",
-        "modified": "2026-01-01T00:00:00+00:00",
-        "author": "user",
-        "status": "active",
-        "history": [],
-    }, "## About\n\nBuilt on [[Python]].\n"),
-    ("projects", "loom.md", {
-        "id": "thr_ccc333",
-        "title": "Loom",
-        "type": "project",
-        "tags": ["ai"],
-        "created": "2026-01-01T00:00:00+00:00",
-        "modified": "2026-01-01T00:00:00+00:00",
-        "author": "user",
-        "status": "active",
-        "history": [],
-    }, "## About\n\nUses [[Python]] and [[FastAPI]].\n"),
+    (
+        "topics",
+        "python.md",
+        {
+            "id": "thr_aaa111",
+            "title": "Python",
+            "type": "topic",
+            "tags": ["lang"],
+            "created": "2026-01-01T00:00:00+00:00",
+            "modified": "2026-01-01T00:00:00+00:00",
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## About\n\nSee also [[FastAPI]].\n",
+    ),
+    (
+        "topics",
+        "fastapi.md",
+        {
+            "id": "thr_bbb222",
+            "title": "FastAPI",
+            "type": "topic",
+            "tags": ["web"],
+            "created": "2026-01-01T00:00:00+00:00",
+            "modified": "2026-01-01T00:00:00+00:00",
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## About\n\nBuilt on [[Python]].\n",
+    ),
+    (
+        "projects",
+        "loom.md",
+        {
+            "id": "thr_ccc333",
+            "title": "Loom",
+            "type": "project",
+            "tags": ["ai"],
+            "created": "2026-01-01T00:00:00+00:00",
+            "modified": "2026-01-01T00:00:00+00:00",
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## About\n\nUses [[Python]] and [[FastAPI]].\n",
+    ),
 ]
 
 
@@ -84,12 +99,15 @@ def test_get_note_not_found(client: TestClient, seeded_vault: Path) -> None:
 
 
 def test_create_note(client: TestClient, seeded_vault: Path) -> None:
-    resp = client.post("/api/notes", json={
-        "title": "New Topic",
-        "type": "topic",
-        "tags": ["test"],
-        "content": "## Hello\n\nWorld.\n",
-    })
+    resp = client.post(
+        "/api/notes",
+        json={
+            "title": "New Topic",
+            "type": "topic",
+            "tags": ["test"],
+            "content": "## Hello\n\nWorld.\n",
+        },
+    )
     assert resp.status_code == 201
     data = resp.json()
     assert data["title"] == "New Topic"
@@ -98,10 +116,13 @@ def test_create_note(client: TestClient, seeded_vault: Path) -> None:
 
 
 def test_update_note(client: TestClient, seeded_vault: Path) -> None:
-    resp = client.put("/api/notes/thr_aaa111", json={
-        "body": "## Updated\n\nNew content.\n",
-        "tags": ["lang", "updated"],
-    })
+    resp = client.put(
+        "/api/notes/thr_aaa111",
+        json={
+            "body": "## Updated\n\nNew content.\n",
+            "tags": ["lang", "updated"],
+        },
+    )
     assert resp.status_code == 200
     data = resp.json()
     assert data["tags"] == ["lang", "updated"]

@@ -73,19 +73,13 @@ class PromptCompiler:
             total token count, version hash, and compilation statistics.
         """
         items_provided = len(context_items)
-        tokens_before = sum(
-            ci.token_count or count_tokens(ci.content) for ci in context_items
-        )
+        tokens_before = sum(ci.token_count or count_tokens(ci.content) for ci in context_items)
 
         # 1. Load and render the template
-        system_prompt = load_template(
-            self._vault_root, agent_name, template_name, variables
-        )
+        system_prompt = load_template(self._vault_root, agent_name, template_name, variables)
 
         # 2. Prune and rank context items
-        ranked = prune_and_rank(
-            context_items, system_prompt, threshold=DEFAULT_PRUNE_THRESHOLD
-        )
+        ranked = prune_and_rank(context_items, system_prompt, threshold=DEFAULT_PRUNE_THRESHOLD)
         items_pruned = items_provided - len(ranked)
 
         # 3. Compress long items (if compression is enabled)
@@ -113,8 +107,7 @@ class PromptCompiler:
         )
 
         logger.info(
-            "Compiled prompt for %s/%s: %d items -> %d kept, %d compressed, "
-            "%d tokens -> %d tokens",
+            "Compiled prompt for %s/%s: %d items -> %d kept, %d compressed, %d tokens -> %d tokens",
             agent_name,
             template_name,
             items_provided,
@@ -166,9 +159,7 @@ class PromptCompiler:
         """
         return self._config.token_budgets.get(agent_name, DEFAULT_TOKEN_BUDGET)
 
-    async def _compress_items(
-        self, items: list[ContextItem]
-    ) -> tuple[list[ContextItem], int]:
+    async def _compress_items(self, items: list[ContextItem]) -> tuple[list[ContextItem], int]:
         """Compress items that exceed the threshold.
 
         Args:
@@ -192,9 +183,7 @@ class PromptCompiler:
 
         return result, compressed_count
 
-    def _truncate_to_budget(
-        self, items: list[ContextItem], budget: int
-    ) -> list[ContextItem]:
+    def _truncate_to_budget(self, items: list[ContextItem], budget: int) -> list[ContextItem]:
         """Keep items in order until the token budget is exhausted.
 
         Args:
@@ -230,9 +219,7 @@ class PromptCompiler:
         if not items:
             return ""
 
-        sections = [
-            f"### Context: {item.source}\n\n{item.content}" for item in items
-        ]
+        sections = [f"### Context: {item.source}\n\n{item.content}" for item in items]
         return "\n\n---\n\n".join(sections)
 
     def _compute_version(self, system: str, user: str) -> str:

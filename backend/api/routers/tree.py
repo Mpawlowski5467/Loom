@@ -52,9 +52,9 @@ def _build_tree(dir_path: Path, threads_root: Path) -> TreeNode:
             node.modified = meta.modified
         except Exception:  # noqa: BLE001
             stat = dir_path.stat()
-            node.modified = datetime.fromtimestamp(
-                stat.st_mtime, tz=UTC
-            ).isoformat(timespec="seconds")
+            node.modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(
+                timespec="seconds"
+            )
 
     return node
 

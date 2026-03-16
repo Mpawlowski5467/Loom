@@ -89,10 +89,16 @@ export function BoardView() {
     // Fetch recent activity from all agent changelogs
     try {
       const entries: ActivityEntry[] = [];
-      const agentNames = ["weaver", "spider", "archivist", "scribe", "sentinel", "researcher", "standup"];
-      const results = await Promise.allSettled(
-        agentNames.map((name) => fetchChangelog(name)),
-      );
+      const agentNames = [
+        "weaver",
+        "spider",
+        "archivist",
+        "scribe",
+        "sentinel",
+        "researcher",
+        "standup",
+      ];
+      const results = await Promise.allSettled(agentNames.map((name) => fetchChangelog(name)));
 
       for (const r of results) {
         if (r.status === "fulfilled" && r.value.content) {
@@ -195,9 +201,7 @@ export function BoardView() {
     <div className={styles.board}>
       <div className={styles.header}>
         <h1 className={styles.title}>Agent Board</h1>
-        <p className={styles.subtitle}>
-          {agents.length} agents configured
-        </p>
+        <p className={styles.subtitle}>{agents.length} agents configured</p>
       </div>
 
       {/* Loom Layer */}
@@ -226,9 +230,7 @@ export function BoardView() {
         </div>
         <div className={styles.chatBody}>
           {councilMessages.length === 0 ? (
-            <p className={styles.chatEmpty}>
-              Ask the Loom Council a question about your vault.
-            </p>
+            <p className={styles.chatEmpty}>Ask the Loom Council a question about your vault.</p>
           ) : (
             <div className={styles.chatMessages}>
               {councilMessages.map((m, i) => (
@@ -236,7 +238,9 @@ export function BoardView() {
                   key={i}
                   className={`${styles.chatMsg} ${m.role === "user" ? styles.chatMsgUser : styles.chatMsgAgent}`}
                 >
-                  <span className={styles.chatMsgRole}>{m.role === "user" ? "You" : "Council"}</span>
+                  <span className={styles.chatMsgRole}>
+                    {m.role === "user" ? "You" : "Council"}
+                  </span>
                   <span className={styles.chatMsgText}>{m.content}</span>
                 </div>
               ))}
@@ -253,11 +257,7 @@ export function BoardView() {
             onKeyDown={(e) => e.key === "Enter" && handleCouncilSend()}
             disabled={councilSending}
           />
-          <button
-            className={styles.chatSend}
-            onClick={handleCouncilSend}
-            disabled={councilSending}
-          >
+          <button className={styles.chatSend} onClick={handleCouncilSend} disabled={councilSending}>
             {councilSending ? "..." : "Send"}
           </button>
         </div>
@@ -299,9 +299,7 @@ export function BoardView() {
         </div>
         <div className={styles.chatBody}>
           {(shuttleMessages[shuttleTab] || []).length === 0 ? (
-            <p className={styles.chatEmpty}>
-              Chat with {shuttleTab} directly.
-            </p>
+            <p className={styles.chatEmpty}>Chat with {shuttleTab} directly.</p>
           ) : (
             <div className={styles.chatMessages}>
               {(shuttleMessages[shuttleTab] || []).map((m, i) => (
@@ -309,7 +307,9 @@ export function BoardView() {
                   key={i}
                   className={`${styles.chatMsg} ${m.role === "user" ? styles.chatMsgUser : styles.chatMsgAgent}`}
                 >
-                  <span className={styles.chatMsgRole}>{m.role === "user" ? "You" : shuttleTab}</span>
+                  <span className={styles.chatMsgRole}>
+                    {m.role === "user" ? "You" : shuttleTab}
+                  </span>
                   <span className={styles.chatMsgText}>{m.content}</span>
                 </div>
               ))}
@@ -326,11 +326,7 @@ export function BoardView() {
             onKeyDown={(e) => e.key === "Enter" && handleShuttleSend()}
             disabled={shuttleSending}
           />
-          <button
-            className={styles.chatSend}
-            onClick={handleShuttleSend}
-            disabled={shuttleSending}
-          >
+          <button className={styles.chatSend} onClick={handleShuttleSend} disabled={shuttleSending}>
             {shuttleSending ? "..." : "Send"}
           </button>
         </div>
@@ -352,9 +348,7 @@ export function BoardView() {
             activity.map((entry, i) => (
               <div key={i} className={styles.activityRow}>
                 <span className={styles.activityTime}>{formatTime(entry.time)}</span>
-                <span className={styles.activityAgent}>
-                  {entry.agent}
-                </span>
+                <span className={styles.activityAgent}>{entry.agent}</span>
                 <span className={styles.activityAction}>{entry.details || entry.action}</span>
                 <span className={styles.activityStatus}>
                   <span className={styles.statusDot} />

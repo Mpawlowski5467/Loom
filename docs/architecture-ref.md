@@ -123,10 +123,10 @@ Templates live in `prompts/` as `.md` files. Per-agent budgets in `_compiler.yam
 
 - Fixed width panels, not resizable
 - File tree: VS Code style, filter bar, drag-to-move, colored dots per type
-- Graph: Sigma.js, force-directed, drag/zoom/pan/hover-highlight/pin/filter
+- Graph: react-force-graph-2d, force-directed, drag/zoom/pan/hover-highlight/pin/filter
 - Nodes: dots + labels, size by connections, color by type, glow on hover
 - Edges: thickness by density, muted purple
-- Editor: Plate (Slate.js) WYSIWYG, toolbar, meta fields, [[wikilink]] insert
+- Editor: Markdown textarea with toolbar, react-markdown preview, meta fields, [[wikilink]] insert
 - Create note: modal → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
 - Auto-refresh: 5-10s interval

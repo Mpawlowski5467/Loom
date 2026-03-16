@@ -4,9 +4,10 @@ from __future__ import annotations
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api", tags=["agents"])
@@ -45,7 +46,6 @@ class ResearchRequest(BaseModel):
     """Request body for Researcher query."""
 
     question: str
-    search_web: bool = False
 
 
 class ResearchResponse(BaseModel):
@@ -88,7 +88,9 @@ def list_agents() -> list[AgentStatus]:
 
 
 @router.post("/agents/{agent_name}/run")
+@limiter.limit(WRITE_LIMIT)
 async def run_agent(
+    request: Request,  # noqa: ARG001 — required by slowapi
     agent_name: str,
 ) -> RunResult:
     """Manually trigger a scheduled agent run."""
@@ -125,7 +127,8 @@ def get_changelog(
 
 
 @router.post("/agents/researcher/query")
-async def researcher_query(body: ResearchRequest) -> ResearchResponse:
+@limiter.limit(WRITE_LIMIT)
+async def researcher_query(request: Request, body: ResearchRequest) -> ResearchResponse:  # noqa: ARG001
     """Ask the Researcher agent a question."""
     from agents.shuttle.researcher import get_researcher
 
@@ -133,7 +136,7 @@ async def researcher_query(body: ResearchRequest) -> ResearchResponse:
     if researcher is None:
         raise HTTPException(status_code=503, detail="Researcher agent not initialized")
 
-    result = await researcher.query(body.question, search_web=body.search_web)
+    result = await researcher.query(body.question)
     return ResearchResponse(
         answer=result.answer,
         referenced_notes=result.referenced_notes,
@@ -143,7 +146,8 @@ async def researcher_query(body: ResearchRequest) -> ResearchResponse:
 
 
 @router.post("/agents/standup/generate")
-async def standup_generate(body: StandupRequest) -> StandupResponse:
+@limiter.limit(WRITE_LIMIT)
+async def standup_generate(request: Request, body: StandupRequest) -> StandupResponse:  # noqa: ARG001
     """Generate a daily standup recap."""
     from agents.shuttle.standup import get_standup
 

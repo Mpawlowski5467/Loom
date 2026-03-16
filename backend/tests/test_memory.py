@@ -46,9 +46,7 @@ class TestSummarizeMemory:
     async def test_summarizes_and_writes_memory(self, tmp_path: Path):
         root = _setup_agent(tmp_path)
         chat_mock = AsyncMock()
-        chat_mock.chat = AsyncMock(
-            return_value="## Patterns\n\nFrequently creates topic notes.\n"
-        )
+        chat_mock.chat = AsyncMock(return_value="## Patterns\n\nFrequently creates topic notes.\n")
 
         result = await summarize_memory(root, "weaver", chat_mock)
 

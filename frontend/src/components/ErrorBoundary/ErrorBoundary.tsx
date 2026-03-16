@@ -12,10 +12,7 @@ interface ErrorBoundaryState {
   error: Error | null;
 }
 
-export class ErrorBoundary extends Component<
-  ErrorBoundaryProps,
-  ErrorBoundaryState
-> {
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props);
     this.state = { hasError: false, error: null };
@@ -41,9 +38,7 @@ export class ErrorBoundary extends Component<
           <div className={styles.message}>
             {this.props.fallbackMessage ?? "Something went wrong"}
           </div>
-          {this.state.error && (
-            <div className={styles.detail}>{this.state.error.message}</div>
-          )}
+          {this.state.error && <div className={styles.detail}>{this.state.error.message}</div>}
           <button className={styles.retry} onClick={this.handleReset}>
             Try again
           </button>

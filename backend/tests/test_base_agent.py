@@ -19,9 +19,7 @@ def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
     root.mkdir()
 
     # vault.yaml
-    (root / "vault.yaml").write_text(
-        yaml.safe_dump({"name": "test"}), encoding="utf-8"
-    )
+    (root / "vault.yaml").write_text(yaml.safe_dump({"name": "test"}), encoding="utf-8")
 
     # rules/prime.md
     rules = root / "rules"
@@ -32,12 +30,14 @@ def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
     agent_dir = root / "agents" / "testbot"
     agent_dir.mkdir(parents=True)
     (agent_dir / "config.yaml").write_text(
-        yaml.safe_dump({
-            "name": "testbot",
-            "enabled": True,
-            "trust_level": trust_level,
-            "memory_threshold": 3,  # Low threshold for testing
-        }),
+        yaml.safe_dump(
+            {
+                "name": "testbot",
+                "enabled": True,
+                "trust_level": trust_level,
+                "memory_threshold": 3,  # Low threshold for testing
+            }
+        ),
         encoding="utf-8",
     )
     (agent_dir / "memory.md").write_text("# Memory\n\nEmpty.\n", encoding="utf-8")
@@ -52,7 +52,13 @@ def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
     # threads/
     topics = root / "threads" / "topics"
     topics.mkdir(parents=True)
-    meta = {"id": "thr_test00", "title": "Test Note", "type": "topic", "tags": [], "status": "active"}
+    meta = {
+        "id": "thr_test00",
+        "title": "Test Note",
+        "type": "topic",
+        "tags": [],
+        "status": "active",
+    }
     (topics / "test-note.md").write_text(
         build_frontmatter(meta) + "\nTest content.\n", encoding="utf-8"
     )
@@ -226,6 +232,7 @@ class TestBaseAgent:
 
         # memory_threshold is 3, so after 3 actions, memory should be summarized
         for i in range(3):
+
             async def action(chain_result: ReadChainResult, idx=i) -> dict:
                 return {"action": "created", "details": f"Action {idx}"}
 
@@ -247,6 +254,7 @@ class TestBaseAgent:
         target = root / "threads" / "topics" / "test-note.md"
 
         for i in range(3):
+
             async def action(chain_result: ReadChainResult, idx=i) -> dict:
                 return {"action": "created", "details": f"Action {idx}"}
 

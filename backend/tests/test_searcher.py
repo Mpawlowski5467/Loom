@@ -40,8 +40,15 @@ def fake_embed():
     return provider
 
 
-def _write_note(base: Path, filename: str, title: str, body: str, note_type: str = "topic",
-                tags: list[str] | None = None, note_id: str | None = None) -> Path:
+def _write_note(
+    base: Path,
+    filename: str,
+    title: str,
+    body: str,
+    note_type: str = "topic",
+    tags: list[str] | None = None,
+    note_id: str | None = None,
+) -> Path:
     nid = note_id or f"thr_{filename[:6]}"
     meta = {
         "id": nid,
@@ -91,10 +98,22 @@ class TestVectorSearcher:
 
     @pytest.mark.asyncio
     async def test_type_filter(self, tmp_vault, fake_embed):
-        _write_note(tmp_vault, "proj.md", "Project X", "Project details.",
-                     note_type="project", note_id="thr_proj00")
-        _write_note(tmp_vault, "topic.md", "Topic Y", "Topic details.",
-                     note_type="topic", note_id="thr_topic0")
+        _write_note(
+            tmp_vault,
+            "proj.md",
+            "Project X",
+            "Project details.",
+            note_type="project",
+            note_id="thr_proj00",
+        )
+        _write_note(
+            tmp_vault,
+            "topic.md",
+            "Topic Y",
+            "Topic details.",
+            note_type="topic",
+            note_id="thr_topic0",
+        )
 
         indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
         await indexer.reindex_vault(tmp_vault / "threads")
@@ -105,10 +124,17 @@ class TestVectorSearcher:
 
     @pytest.mark.asyncio
     async def test_tag_filter(self, tmp_vault, fake_embed):
-        _write_note(tmp_vault, "tagged.md", "Tagged Note", "Content.",
-                     tags=["python", "api"], note_id="thr_tagged")
-        _write_note(tmp_vault, "other.md", "Other Note", "Content.",
-                     tags=["rust"], note_id="thr_other0")
+        _write_note(
+            tmp_vault,
+            "tagged.md",
+            "Tagged Note",
+            "Content.",
+            tags=["python", "api"],
+            note_id="thr_tagged",
+        )
+        _write_note(
+            tmp_vault, "other.md", "Other Note", "Content.", tags=["rust"], note_id="thr_other0"
+        )
 
         indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
         await indexer.reindex_vault(tmp_vault / "threads")
@@ -119,14 +145,10 @@ class TestVectorSearcher:
 
     @pytest.mark.asyncio
     async def test_graph_boost(self, tmp_vault, fake_embed, sample_graph):
-        _write_note(tmp_vault, "hub.md", "Hub", "Central note.",
-                     note_id="thr_hub000")
-        _write_note(tmp_vault, "spoke1.md", "Spoke 1", "Connected note.",
-                     note_id="thr_spoke1")
-        _write_note(tmp_vault, "spoke2.md", "Spoke 2", "Connected note.",
-                     note_id="thr_spoke2")
-        _write_note(tmp_vault, "island.md", "Island", "Isolated note.",
-                     note_id="thr_island")
+        _write_note(tmp_vault, "hub.md", "Hub", "Central note.", note_id="thr_hub000")
+        _write_note(tmp_vault, "spoke1.md", "Spoke 1", "Connected note.", note_id="thr_spoke1")
+        _write_note(tmp_vault, "spoke2.md", "Spoke 2", "Connected note.", note_id="thr_spoke2")
+        _write_note(tmp_vault, "island.md", "Island", "Isolated note.", note_id="thr_island")
 
         indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
         await indexer.reindex_vault(tmp_vault / "threads")
@@ -137,9 +159,7 @@ class TestVectorSearcher:
         results_no_ctx = await searcher.search("note")
 
         # With hub as context — spoke1 and spoke2 should be boosted
-        results_with_ctx = await searcher.search(
-            "note", context_note_ids=["thr_hub000"]
-        )
+        results_with_ctx = await searcher.search("note", context_note_ids=["thr_hub000"])
 
         # Find spoke scores in both result sets
         def _score_for(results, note_id):
@@ -163,7 +183,9 @@ class TestVectorSearcher:
     async def test_deduplication_by_note(self, tmp_vault, fake_embed):
         """Multi-chunk notes should only appear once in results."""
         _write_note(
-            tmp_vault, "multi.md", "Multi Section",
+            tmp_vault,
+            "multi.md",
+            "Multi Section",
             "## Part A\n\nSame keyword.\n\n## Part B\n\nSame keyword.",
             note_id="thr_multi0",
         )

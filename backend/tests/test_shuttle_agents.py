@@ -30,12 +30,14 @@ def _setup_vault(tmp_path: Path) -> Path:
         agent_dir = root / "agents" / agent_name
         agent_dir.mkdir(parents=True)
         (agent_dir / "config.yaml").write_text(
-            yaml.safe_dump({
-                "name": agent_name,
-                "enabled": True,
-                "trust_level": "standard",
-                "memory_threshold": 100,
-            }),
+            yaml.safe_dump(
+                {
+                    "name": agent_name,
+                    "enabled": True,
+                    "trust_level": "standard",
+                    "memory_threshold": 100,
+                }
+            ),
             encoding="utf-8",
         )
         (agent_dir / "memory.md").write_text("# Memory\n\nEmpty.\n", encoding="utf-8")
@@ -51,17 +53,41 @@ def _setup_vault(tmp_path: Path) -> Path:
 
     # Create test notes the researcher can find
     ts = now_iso()
-    _write_note(root, "topics", "caching-strategies.md", {
-        "id": "thr_cache0", "title": "Caching Strategies", "type": "topic",
-        "tags": ["caching", "performance"], "created": ts, "modified": ts,
-        "author": "user", "status": "active", "history": [],
-    }, "## Summary\n\nOverview of caching techniques.\n\n## Details\n\nRedis, Memcached, CDN caching.\n")
+    _write_note(
+        root,
+        "topics",
+        "caching-strategies.md",
+        {
+            "id": "thr_cache0",
+            "title": "Caching Strategies",
+            "type": "topic",
+            "tags": ["caching", "performance"],
+            "created": ts,
+            "modified": ts,
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## Summary\n\nOverview of caching techniques.\n\n## Details\n\nRedis, Memcached, CDN caching.\n",
+    )
 
-    _write_note(root, "topics", "database-indexing.md", {
-        "id": "thr_dbidx0", "title": "Database Indexing", "type": "topic",
-        "tags": ["database", "performance"], "created": ts, "modified": ts,
-        "author": "user", "status": "active", "history": [],
-    }, "## Summary\n\nHow to index databases.\n\n## Details\n\nB-tree, hash, GIN indexes.\n")
+    _write_note(
+        root,
+        "topics",
+        "database-indexing.md",
+        {
+            "id": "thr_dbidx0",
+            "title": "Database Indexing",
+            "type": "topic",
+            "tags": ["database", "performance"],
+            "created": ts,
+            "modified": ts,
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## Summary\n\nHow to index databases.\n\n## Details\n\nB-tree, hash, GIN indexes.\n",
+    )
 
     return root
 

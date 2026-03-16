@@ -75,9 +75,7 @@ def vault_root(tmp_path: Path) -> Path:
     # Create a tiny-budget agent template for truncation tests
     tiny_prompts = prompts / "tiny"
     tiny_prompts.mkdir()
-    (tiny_prompts / "create.md").write_text(
-        "Short prompt for {{note_type}} titled {{title}}.\n"
-    )
+    (tiny_prompts / "create.md").write_text("Short prompt for {{note_type}} titled {{title}}.\n")
 
     return root
 
@@ -144,7 +142,9 @@ class TestTemplates:
     def test_load_template_with_frontmatter(self, vault_root: Path) -> None:
         """Template with YAML frontmatter should strip it and substitute vars."""
         result = load_template(
-            vault_root, "weaver", "create",
+            vault_root,
+            "weaver",
+            "create",
             {"note_type": "topic", "title": "Machine Learning"},
         )
         assert "---" not in result
@@ -155,7 +155,9 @@ class TestTemplates:
     def test_load_template_without_frontmatter(self, vault_root: Path) -> None:
         """Template without frontmatter should still substitute vars."""
         result = load_template(
-            vault_root, "spider", "link",
+            vault_root,
+            "spider",
+            "link",
             {"topic": "distributed systems"},
         )
         assert "distributed systems" in result
@@ -274,9 +276,7 @@ class TestCompressor:
         mock_provider.chat.assert_not_called()
 
     @pytest.mark.asyncio()
-    async def test_compress_above_threshold_calls_provider(
-        self, mock_provider: AsyncMock
-    ) -> None:
+    async def test_compress_above_threshold_calls_provider(self, mock_provider: AsyncMock) -> None:
         """Item above threshold triggers provider compression."""
         long_content = "word " * 3000  # Well above 2000 tokens
         item = ContextItem(content=long_content, source="long.md")
@@ -291,9 +291,7 @@ class TestCompressor:
     async def test_compress_preserves_wikilinks(self, mock_provider: AsyncMock) -> None:
         """Wikilinks from the original are restored if dropped by compression."""
         original = "Content about [[ProjectA]] and [[TopicB]] " + "padding " * 500
-        mock_provider.chat = AsyncMock(
-            return_value="Compressed content about [[ProjectA]]."
-        )
+        mock_provider.chat = AsyncMock(return_value="Compressed content about [[ProjectA]].")
         item = ContextItem(content=original, source="test.md")
         result = await compress_item(item, mock_provider, threshold=100)
 
@@ -323,9 +321,7 @@ class TestPromptCompiler:
     """Tests for the full PromptCompiler pipeline."""
 
     @pytest.mark.asyncio()
-    async def test_compile_basic(
-        self, vault_root: Path, mock_provider: AsyncMock
-    ) -> None:
+    async def test_compile_basic(self, vault_root: Path, mock_provider: AsyncMock) -> None:
         """Full pipeline produces a CompiledPrompt with expected fields."""
         compiler = PromptCompiler(vault_root, mock_provider)
         context = [
@@ -430,9 +426,7 @@ class TestPromptCompiler:
         assert result.token_count <= budget + count_tokens(result.system) + 50
 
     @pytest.mark.asyncio()
-    async def test_compile_empty_context(
-        self, vault_root: Path, mock_provider: AsyncMock
-    ) -> None:
+    async def test_compile_empty_context(self, vault_root: Path, mock_provider: AsyncMock) -> None:
         """Compiling with zero context items still produces a valid prompt."""
         compiler = PromptCompiler(vault_root, mock_provider)
 
@@ -478,3 +472,215 @@ class TestPromptCompiler:
         """Agent not in token_budgets config gets the default budget."""
         compiler = PromptCompiler(vault_root, mock_provider)
         assert compiler._get_budget("unknown_agent") == DEFAULT_TOKEN_BUDGET
+
+
+# ---------------------------------------------------------------------------
+# End-to-end pipeline with template + context
+# ---------------------------------------------------------------------------
+
+
+class TestCompilerEndToEnd:
+    """Integration tests that exercise the full compile pipeline
+    with on-disk templates and mock providers."""
+
+    @pytest.fixture()
+    def e2e_vault(self, tmp_path: Path) -> Path:
+        """Create a vault with templates and compiler config for e2e tests."""
+        root = tmp_path / "e2e_vault"
+        root.mkdir()
+
+        # prompts/_compiler.yaml
+        prompts = root / "prompts"
+        prompts.mkdir()
+        (prompts / "_compiler.yaml").write_text(
+            "token_budgets:\n"
+            "  weaver: 4000\n"
+            "  scribe: 2000\n"
+            "\n"
+            "compression:\n"
+            "  enabled: true\n"
+            "  threshold_tokens: 500\n"
+            "  strategy: summarize\n"
+            "\n"
+            "output_format:\n"
+            "  version_tag: true\n"
+            "  include_metadata: true\n"
+        )
+
+        # weaver/create.md template
+        weaver_dir = prompts / "weaver"
+        weaver_dir.mkdir()
+        (weaver_dir / "create.md").write_text(
+            "---\n"
+            "name: create\n"
+            "description: Create a note from capture\n"
+            "---\n"
+            "You are the Weaver. Create a {{note_type}} note titled {{title}}.\n"
+            "\n"
+            "Use [[wikilinks]] for all references.\n"
+        )
+
+        # scribe/summarize.md template
+        scribe_dir = prompts / "scribe"
+        scribe_dir.mkdir()
+        (scribe_dir / "summarize.md").write_text(
+            "---\n"
+            "name: summarize\n"
+            "description: Summarize vault content\n"
+            "---\n"
+            "You are the Scribe. Summarize the following content about {{topic}}.\n"
+            "\n"
+            "Be concise. Preserve all [[wikilinks]].\n"
+        )
+
+        return root
+
+    @pytest.mark.asyncio()
+    async def test_full_pipeline_with_context(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """Template + multiple context items produces a structured CompiledPrompt."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+        context = [
+            ContextItem(
+                content="Weaver creates new notes using atomic note methodology.",
+                source="agents/weaver/memory.md",
+            ),
+            ContextItem(
+                content="Projects should follow the milestone template in schemas/.",
+                source="rules/schemas/project.md",
+            ),
+        ]
+
+        result = await compiler.compile(
+            agent_name="weaver",
+            template_name="create",
+            variables={"note_type": "project", "title": "Alpha Launch"},
+            context_items=context,
+        )
+
+        # System prompt from template
+        assert "Weaver" in result.system
+        assert "project" in result.system
+        assert "Alpha Launch" in result.system
+
+        # User prompt has context sections
+        assert "agents/weaver/memory.md" in result.user
+        assert result.token_count > 0
+        assert result.stats.items_provided == 2
+        assert result.stats.tokens_before > 0
+        assert result.stats.tokens_after > 0
+
+    @pytest.mark.asyncio()
+    async def test_compression_triggered_for_large_items(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """Items above compression threshold trigger the provider."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+
+        # threshold_tokens is 500 in the e2e config
+        large_content = "wikilinks vault note topic weaver scribe " * 200
+        context = [
+            ContextItem(content=large_content, source="large-doc.md"),
+            ContextItem(
+                content="Short relevant context about wikilinks.",
+                source="short.md",
+            ),
+        ]
+
+        result = await compiler.compile(
+            agent_name="weaver",
+            template_name="create",
+            variables={"note_type": "topic", "title": "Test"},
+            context_items=context,
+        )
+
+        # The large item should have been compressed (provider called)
+        assert mock_provider.chat.called
+        assert result.stats.items_compressed >= 1
+
+    @pytest.mark.asyncio()
+    async def test_different_agents_get_different_budgets(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """weaver has 4000 budget, scribe has 2000."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+
+        assert compiler._get_budget("weaver") == 4000
+        assert compiler._get_budget("scribe") == 2000
+        assert compiler._get_budget("sentinel") == DEFAULT_TOKEN_BUDGET
+
+    @pytest.mark.asyncio()
+    async def test_user_prompt_has_context_headers(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """Each context item in the user prompt has a source header."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+        context = [
+            ContextItem(
+                content="Content about note vault wikilinks creation",
+                source="topics/creation.md",
+            ),
+            ContextItem(
+                content="Content about note vault linking references",
+                source="topics/linking.md",
+            ),
+        ]
+
+        result = await compiler.compile(
+            agent_name="weaver",
+            template_name="create",
+            variables={"note_type": "topic", "title": "Linking"},
+            context_items=context,
+        )
+
+        assert "### Context: topics/creation.md" in result.user
+        assert "### Context: topics/linking.md" in result.user
+
+    @pytest.mark.asyncio()
+    async def test_version_changes_with_different_variables(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """Different template variables produce different version hashes."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+
+        r1 = await compiler.compile(
+            agent_name="weaver",
+            template_name="create",
+            variables={"note_type": "topic", "title": "Alpha"},
+            context_items=[],
+        )
+        r2 = await compiler.compile(
+            agent_name="weaver",
+            template_name="create",
+            variables={"note_type": "project", "title": "Beta"},
+            context_items=[],
+        )
+
+        assert r1.version != r2.version
+        assert len(r1.version) == 64
+        assert len(r2.version) == 64
+
+    @pytest.mark.asyncio()
+    async def test_scribe_template_compiles(
+        self, e2e_vault: Path, mock_provider: AsyncMock
+    ) -> None:
+        """A different agent/template pair compiles correctly."""
+        compiler = PromptCompiler(e2e_vault, mock_provider)
+
+        result = await compiler.compile(
+            agent_name="scribe",
+            template_name="summarize",
+            variables={"topic": "distributed systems"},
+            context_items=[
+                ContextItem(
+                    content="CRDTs enable conflict-free replication in distributed databases.",
+                    source="topics/crdts.md",
+                ),
+            ],
+        )
+
+        assert "Scribe" in result.system
+        assert "distributed systems" in result.system
+        assert "wikilinks" in result.system.lower()
+        assert result.stats.items_provided == 1

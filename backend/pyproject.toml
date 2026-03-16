@@ -20,6 +20,7 @@ dependencies = [
     "lancedb>=0.15",
     "pyarrow>=17.0",
     "tiktoken>=0.7",
+    "slowapi>=0.1.9",
 ]
 
 [project.optional-dependencies]

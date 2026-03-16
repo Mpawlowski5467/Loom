@@ -4,7 +4,7 @@
   flex-direction: column;
 }
 
-/* ── Toolbar (not "nav" — this is a classic toolbar) ─────────────────── */
+/* ── Toolbar ──────────────────────────────────────────────────────── */
 
 .toolbar {
   height: var(--nav-height);
@@ -17,7 +17,7 @@
   flex-shrink: 0;
 }
 
-.toolbar-logo {
+.toolbarLogo {
   display: flex;
   align-items: center;
   gap: var(--sp-2);
@@ -25,23 +25,21 @@
   flex-shrink: 0;
 }
 
-.toolbar-logo-icon {
+.toolbarLogoIcon {
   width: 18px;
   height: 18px;
   border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--accent-amber), var(--accent-purple));
 }
 
-.toolbar-logo-text {
+.toolbarLogoText {
   font-size: var(--text-sm);
-  font-weight: 700;
+  font-weight: var(--weight-bold);
   letter-spacing: 0.1em;
   color: var(--text-primary);
 }
 
-/* ── Toolbar separator ─────────────────────────────────────────────── */
-
-.toolbar-sep {
+.toolbarSep {
   width: 1px;
   height: 18px;
   background: var(--border);
@@ -49,65 +47,39 @@
   flex-shrink: 0;
 }
 
-/* ── Toolbar buttons — real buttons, not ghost text ────────────────── */
-
-.toolbar-tabs {
+.toolbarTabs {
   display: flex;
   gap: 1px;
 }
 
-.toolbar-tab {
+.toolbarTab {
   padding: 3px 12px;
   border: 1px solid transparent;
   background: transparent;
   color: var(--text-secondary);
   font-size: var(--text-sm);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.toolbar-tab:hover {
+.toolbarTab:hover {
   background: var(--bg-elevated);
   color: var(--text-primary);
 }
 
-.toolbar-tab--active {
+.toolbarTabActive {
   background: var(--bg-surface);
   border-color: var(--border);
   border-bottom-color: var(--bg-surface);
   color: var(--accent-amber);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
 }
 
-.toolbar-spacer {
+.toolbarSpacer {
   flex: 1;
 }
 
-/* ── Toolbar search ──────────────────────────────────────────────── */
-
-.toolbar-search {
-  width: 200px;
-  height: 22px;
-  padding: 0 var(--sp-2);
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-  color: var(--text-primary);
-  font-size: var(--text-sm);
-  outline: none;
-  box-shadow: var(--shadow-inset);
-}
-
-.toolbar-search::placeholder {
-  color: var(--text-disabled);
-}
-
-.toolbar-search:focus {
-  border-color: var(--border-focus);
-}
-
-/* ── Toolbar icon buttons ────────────────────────────────────────── */
-
-.toolbar-btn {
+.toolbarBtn {
   width: 26px;
   height: 26px;
   border: 1px solid transparent;
@@ -120,7 +92,7 @@
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 
-.toolbar-btn:hover {
+.toolbarBtn:hover {
   background: var(--bg-elevated);
   border-color: var(--border);
   color: var(--text-primary);
@@ -128,14 +100,14 @@
 
 /* ── Body layout ─────────────────────────────────────────────────── */
 
-.app-body {
+.appBody {
   display: flex;
   flex: 1;
   overflow: hidden;
   height: calc(100vh - var(--nav-height) - var(--status-height));
 }
 
-.app-main {
+.appMain {
   flex: 1;
   overflow: auto;
   padding: var(--sp-4);
@@ -143,7 +115,7 @@
   border-left: 1px solid var(--border);
 }
 
-.app-main--flush {
+.appMainFlush {
   padding: 0;
   overflow: hidden;
   border-left: 1px solid var(--border);
@@ -164,24 +136,24 @@
   color: var(--text-secondary);
 }
 
-.statusbar-item {
+.statusbarItem {
   display: flex;
   align-items: center;
   gap: var(--sp-1);
 }
 
-.statusbar-dot {
-  width: 6px;
-  height: 6px;
+.statusbarDot {
+  width: var(--dot-size-sm);
+  height: var(--dot-size-sm);
   border-radius: 50%;
   background: var(--success);
 }
 
-.statusbar-spacer {
+.statusbarSpacer {
   flex: 1;
 }
 
-.statusbar-right {
+.statusbarRight {
   display: flex;
   align-items: center;
   gap: var(--sp-3);

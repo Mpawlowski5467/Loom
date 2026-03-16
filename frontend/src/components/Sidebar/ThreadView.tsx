@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import Markdown from "react-markdown";
 import type { Note, VaultGraph } from "../../lib/api";
 import { NODE_COLORS_CSS, formatTime } from "../../lib/constants";
-import styles from "./Sidebar.module.css";
+import styles from "./ThreadView.module.css";
 
 interface ThreadViewProps {
   note: Note;

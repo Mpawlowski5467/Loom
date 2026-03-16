@@ -69,8 +69,8 @@
 }
 
 .processAllBtn:hover:not(:disabled) {
-  background: #9678e8;
-  border-color: #9678e8;
+  background: var(--accent-purple-hover);
+  border-color: var(--accent-purple-hover);
 }
 
 .processAllBtn:disabled {
@@ -276,7 +276,7 @@
 }
 
 .actionProcess:hover:not(:disabled) {
-  background: rgba(167, 139, 250, 0.25);
+  background: var(--accent-purple-muted-hover);
 }
 
 .actionProcess:disabled {

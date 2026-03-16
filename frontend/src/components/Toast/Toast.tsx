@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../lib/context/useApp";
 import styles from "./Toast.module.css";
@@ -58,7 +59,7 @@ function ToastItem({
     >
       <span className={styles.message}>{message}</span>
       <button className={styles.close} onClick={() => onDismiss(id)}>
-        &times;
+        <X size={14} />
       </button>
     </div>
   );

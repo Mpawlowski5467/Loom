@@ -33,8 +33,15 @@
   overflow-y: auto;
   background: var(--bg-surface);
   border: 1px solid var(--border);
+  border-radius: var(--radius-md);
   box-shadow: var(--shadow-dropdown);
   z-index: 50;
+  animation: dropdownIn 200ms ease-out;
+}
+
+@keyframes dropdownIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .item {
@@ -62,8 +69,8 @@
 }
 
 .dot {
-  width: 7px;
-  height: 7px;
+  width: var(--dot-size-sm);
+  height: var(--dot-size-sm);
   border-radius: 50%;
   flex-shrink: 0;
 }
@@ -90,7 +97,7 @@
 }
 
 .score {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   font-family: var(--font-mono);
   color: var(--text-secondary);
   flex-shrink: 0;
@@ -105,7 +112,7 @@
 }
 
 .tag {
-  font-size: 10px;
+  font-size: var(--text-2xs);
   padding: 0 var(--sp-1);
   border: 1px solid var(--border-light);
   background: var(--bg-elevated);

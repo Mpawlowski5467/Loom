@@ -3,21 +3,34 @@
 .overlay {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.75);
+  background: var(--overlay);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 100;
+  animation: fadeIn 200ms ease-out;
 }
 
 .modal {
   background: var(--bg-surface);
   border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   width: 420px;
   max-width: 90vw;
   display: flex;
   flex-direction: column;
   box-shadow: var(--shadow-modal);
+  animation: slideUp 250ms ease-out;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 /* ── Title bar ───────────────────────────────────────────────────────── */

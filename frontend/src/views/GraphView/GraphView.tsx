@@ -193,6 +193,8 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
       sigmaRef.current = null;
       graphRef.current = null;
     };
+    // Sigma/Graphology are imperative — init once on mount, clean up on unmount.
+    // All mutable state lives in refs; no reactive deps needed.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

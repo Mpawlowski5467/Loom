@@ -5,6 +5,7 @@
   --bg-elevated: #334155;
   --bg-inset: #0b1120;          /* sunken panels, input fields */
   --bg-raised: #263348;         /* toolbar, raised surfaces */
+  --overlay: rgba(15, 23, 42, 0.75);
 
   /* ── Borders ──────────────────────────────────────────────────────────── */
   --border: #3e4f68;            /* standard panel/component border */
@@ -15,14 +16,21 @@
   --text-primary: #e2e8f0;
   --text-secondary: #94a3b8;
   --text-disabled: #5a6a82;
+  --text-on-accent: #0f172a;    /* text on accent-colored backgrounds */
 
   /* ── Accents ──────────────────────────────────────────────────────────── */
   --accent-amber: #f59e0b;
+  --accent-amber-hover: #d97706;
+  --accent-amber-active: #b45309;
   --accent-purple: #a78bfa;
+  --accent-purple-hover: #8b6ce0;
+  --accent-purple-active: #7452c9;
 
   /* muted variants for backgrounds */
   --accent-amber-muted: rgba(245, 158, 11, 0.12);
+  --accent-amber-muted-hover: rgba(245, 158, 11, 0.18);
   --accent-purple-muted: rgba(167, 139, 250, 0.12);
+  --accent-purple-muted-hover: rgba(167, 139, 250, 0.18);
   --danger-muted: rgba(248, 113, 113, 0.12);
   --success-muted: rgba(52, 211, 153, 0.12);
 
@@ -42,6 +50,7 @@
   --font-ui: "Sora", sans-serif;
   --font-mono: "JetBrains Mono", monospace;
 
+  --text-2xs: 10px;
   --text-xs: 11px;
   --text-sm: 12px;
   --text-base: 13px;
@@ -49,6 +58,15 @@
   --text-lg: 16px;
   --text-xl: 18px;
   --text-2xl: 22px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
 
   /* ── Spacing (4px base unit) ──────────────────────────────────────────── */
   --sp-1: 4px;
@@ -59,10 +77,11 @@
   --sp-6: 24px;
   --sp-8: 32px;
 
-  /* ── Radii — classic desktop: sharp or barely rounded ─────────────────── */
-  --radius-sm: 2px;
-  --radius-md: 3px;
-  --radius-lg: 4px;
+  /* ── Radii ──────────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
 
   /* ── Shadows — subtle inset/outset for depth ──────────────────────────── */
   --shadow-inset: inset 0 1px 3px rgba(0, 0, 0, 0.4);
@@ -78,4 +97,10 @@
   --nav-height: 36px;
   --status-height: 24px;
   --tree-width: 240px;
+  --sidebar-width: 340px;
+  --sidebar-width-edit: 420px;
+
+  /* ── Dot sizes ─────────────────────────────────────────────────────── */
+  --dot-size-sm: 6px;
+  --dot-size-md: 8px;
 }

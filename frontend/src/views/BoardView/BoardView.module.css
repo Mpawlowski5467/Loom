@@ -188,7 +188,7 @@
 }
 
 .runBtn:hover:not(:disabled) {
-  background: rgba(167, 139, 250, 0.25);
+  background: var(--accent-purple-muted-hover);
 }
 
 .runBtn:disabled {
@@ -334,8 +334,8 @@
 }
 
 .chatSend:hover {
-  background: #e09000;
-  border-color: #e09000;
+  background: var(--accent-amber-hover);
+  border-color: var(--accent-amber-hover);
 }
 
 /* ── Activity log — classic data table ───────────────────────────────── */
@@ -422,8 +422,8 @@
 }
 
 .statusDot {
-  width: 6px;
-  height: 6px;
+  width: var(--dot-size-sm);
+  height: var(--dot-size-sm);
   border-radius: 50%;
   background: var(--success);
 }

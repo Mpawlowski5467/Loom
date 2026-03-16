@@ -1,6 +1,7 @@
+import { Settings } from "lucide-react";
 import { useEffect, useRef } from "react";
 import "./styles/variables.css";
-import "./App.css";
+import styles from "./App.module.css";
 import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { ErrorBoundary } from "./components/ErrorBoundary/ErrorBoundary";
 import { FileTree } from "./components/FileTree/FileTree";
@@ -71,21 +72,21 @@ function App() {
   }, [activeNote, isCreateModalOpen, closeSidebar, hideCreateModal, showCreateModal]);
 
   return (
-    <div className="app">
+    <div className={styles.app}>
       {/* ── Toolbar ────────────────────────────────────────────────── */}
-      <div className="toolbar">
-        <div className="toolbar-logo">
-          <div className="toolbar-logo-icon" />
-          <span className="toolbar-logo-text">LOOM</span>
+      <div className={styles.toolbar}>
+        <div className={styles.toolbarLogo}>
+          <div className={styles.toolbarLogoIcon} />
+          <span className={styles.toolbarLogoText}>LOOM</span>
         </div>
 
-        <div className="toolbar-sep" />
+        <div className={styles.toolbarSep} />
 
-        <div className="toolbar-tabs">
+        <div className={styles.toolbarTabs}>
           {TABS.map((tab) => (
             <button
               key={tab.id}
-              className={`toolbar-tab${activeView === tab.id ? " toolbar-tab--active" : ""}`}
+              className={`${styles.toolbarTab}${activeView === tab.id ? ` ${styles.toolbarTabActive}` : ""}`}
               onClick={() => setActiveView(tab.id)}
             >
               {tab.label}
@@ -93,19 +94,19 @@ function App() {
           ))}
         </div>
 
-        <div className="toolbar-spacer" />
+        <div className={styles.toolbarSpacer} />
 
         <SearchDropdown onSelect={selectNote} inputRef={searchRef} />
 
-        <div className="toolbar-sep" />
+        <div className={styles.toolbarSep} />
 
-        <button className="toolbar-btn" title="Settings">
-          &#9881;
+        <button className={styles.toolbarBtn} title="Settings">
+          <Settings size={16} />
         </button>
       </div>
 
       {/* ── Body ──────────────────────────────────────────────────── */}
-      <div className="app-body">
+      <div className={styles.appBody}>
         <FileTree
           activeFile={activeNote}
           onFileSelect={selectNote}
@@ -113,7 +114,7 @@ function App() {
         />
 
         <main
-          className={`app-main${activeView === "graph" ? " app-main--flush" : ""}`}
+          className={`${styles.appMain}${activeView === "graph" ? ` ${styles.appMainFlush}` : ""}`}
         >
           <ErrorBoundary fallbackMessage="This view encountered an error">
             {activeView === "graph" && (
@@ -140,13 +141,13 @@ function App() {
       </div>
 
       {/* ── Status bar ────────────────────────────────────────────── */}
-      <div className="statusbar">
-        <div className="statusbar-item">
-          <span className="statusbar-dot" />
+      <div className={styles.statusbar}>
+        <div className={styles.statusbarItem}>
+          <span className={styles.statusbarDot} />
           <span>Ready</span>
         </div>
-        <div className="statusbar-spacer" />
-        <div className="statusbar-right">
+        <div className={styles.statusbarSpacer} />
+        <div className={styles.statusbarRight}>
           <span>{activeView.charAt(0).toUpperCase() + activeView.slice(1)}</span>
           {activeNote && (
             <>

@@ -1,4 +1,4 @@
-/* ── Sidebar — classic detail/property panel ──────────────────────────── */
+/* ── Sidebar — container, header, open/close ──────────────────────────── */
 
 .sidebar {
   width: 0;
@@ -12,13 +12,13 @@
 }
 
 .sidebarOpen {
-  width: 340px;
-  min-width: 340px;
+  width: var(--sidebar-width);
+  min-width: var(--sidebar-width);
 }
 
 .sidebarEdit {
-  width: 420px;
-  min-width: 420px;
+  width: var(--sidebar-width-edit);
+  min-width: var(--sidebar-width-edit);
 }
 
 /* ── Header — toolbar-style bar ──────────────────────────────────────── */
@@ -37,27 +37,11 @@
 .title {
   flex: 1;
   font-size: var(--text-md);
-  font-weight: 600;
+  font-weight: var(--weight-semibold);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-primary);
-}
-
-.titleInput {
-  flex: 1;
-  font-size: var(--text-md);
-  font-weight: 600;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  padding: 2px var(--sp-2);
-  color: var(--text-primary);
-  outline: none;
-  box-shadow: var(--shadow-inset);
-}
-
-.titleInput:focus {
-  border-color: var(--border-focus);
 }
 
 .headerBtn {
@@ -66,7 +50,7 @@
   background: var(--bg-raised);
   color: var(--text-secondary);
   font-size: var(--text-xs);
-  font-weight: 500;
+  font-weight: var(--weight-medium);
   transition: background var(--transition-fast), color var(--transition-fast);
   white-space: nowrap;
   box-shadow: var(--shadow-raised);
@@ -84,6 +68,15 @@
 
 .headerBtnAmber:hover {
   background: var(--accent-amber-muted);
+}
+
+.headerBtnDanger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.headerBtnDanger:hover {
+  background: var(--danger-muted);
 }
 
 .closeBtn {
@@ -106,8 +99,8 @@
 }
 
 .editBadge {
-  font-size: 10px;
-  font-weight: 600;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-semibold);
   padding: 0 var(--sp-1);
   border: 1px solid var(--accent-amber);
   background: var(--accent-amber-muted);
@@ -121,351 +114,6 @@
   flex: 1;
   overflow-y: auto;
   padding: var(--sp-3);
-}
-
-/* ── Meta section — property sheet style ─────────────────────────────── */
-
-.meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  margin-bottom: var(--sp-3);
-}
-
-.typeBadge {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  padding: 0 var(--sp-2);
-  color: var(--text-primary);
-  border: 1px solid;
-}
-
-.tagChip {
-  font-size: var(--text-xs);
-  padding: 0 var(--sp-2);
-  border: 1px solid var(--border-light);
-  background: var(--bg-elevated);
-  color: var(--text-secondary);
-}
-
-.tagChipRemovable {
-  cursor: pointer;
-}
-
-.tagChipRemovable:hover {
-  border-color: var(--danger);
-  background: var(--danger-muted);
-  color: var(--danger);
-}
-
-/* ── Markdown body ───────────────────────────────────────────────────── */
-
-.markdownBody {
-  font-size: var(--text-base);
-  line-height: 1.65;
-  color: var(--text-primary);
-}
-
-.markdownBody h1 {
-  font-size: var(--text-xl);
-  font-weight: 700;
-  margin: var(--sp-4) 0 var(--sp-2);
-  color: var(--text-primary);
-  border-bottom: 1px solid var(--border-light);
-  padding-bottom: var(--sp-1);
-}
-
-.markdownBody h2 {
-  font-size: var(--text-lg);
-  font-weight: 600;
-  margin: var(--sp-3) 0 var(--sp-1);
-  color: var(--text-primary);
-}
-
-.markdownBody h3 {
-  font-size: var(--text-md);
-  font-weight: 600;
-  margin: var(--sp-3) 0 var(--sp-1);
-  color: var(--text-primary);
-}
-
-.markdownBody p {
-  margin: 0 0 var(--sp-2);
-}
-
-.markdownBody ul,
-.markdownBody ol {
-  margin: 0 0 var(--sp-2);
-  padding-left: var(--sp-5);
-}
-
-.markdownBody li {
-  margin-bottom: 2px;
-}
-
-.markdownBody code {
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  background: var(--bg-inset);
-  border: 1px solid var(--border-light);
-  padding: 0 var(--sp-1);
-}
-
-.markdownBody pre {
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  padding: var(--sp-2) var(--sp-3);
-  margin: var(--sp-2) 0;
-  overflow-x: auto;
-  box-shadow: var(--shadow-inset);
-}
-
-.markdownBody pre code {
-  background: none;
-  border: none;
-  padding: 0;
-  font-size: var(--text-sm);
-}
-
-.markdownBody strong {
-  font-weight: 600;
-}
-
-/* ── Wikilink ────────────────────────────────────────────────────────── */
-
-.wikilink {
-  color: var(--accent-purple);
-  cursor: pointer;
-  border-bottom: 1px dotted var(--accent-purple);
-  transition: color var(--transition-fast);
-}
-
-.wikilink:hover {
-  color: var(--text-primary);
-  border-bottom-color: var(--text-primary);
-}
-
-/* ── Backlinks section ───────────────────────────────────────────────── */
-
-.section {
-  margin-top: var(--sp-4);
-  padding-top: var(--sp-3);
-  border-top: 1px solid var(--border);
-}
-
-.sectionTitle {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  color: var(--text-secondary);
-  margin-bottom: var(--sp-2);
-  border-bottom: 1px solid var(--border-light);
-  padding-bottom: var(--sp-1);
-}
-
-.backlinkItem {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-1);
-  padding: 2px 0;
-  cursor: pointer;
-  color: var(--accent-purple);
-  font-size: var(--text-sm);
-  transition: color var(--transition-fast);
-}
-
-.backlinkItem:hover {
-  color: var(--text-primary);
-}
-
-.backlinkDot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent-purple);
-  flex-shrink: 0;
-}
-
-/* ── History section ─────────────────────────────────────────────────── */
-
-.historyItem {
-  display: flex;
-  align-items: flex-start;
-  gap: var(--sp-2);
-  padding: 2px 0;
-  font-size: var(--text-sm);
-}
-
-.historyDot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  margin-top: 5px;
-}
-
-.historyText {
-  color: var(--text-secondary);
-  flex: 1;
-}
-
-.historyTime {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--text-disabled);
-  flex-shrink: 0;
-}
-
-/* ── Editor toolbar — classic button bar ─────────────────────────────── */
-
-.toolbar {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1px;
-  padding: var(--sp-1) var(--sp-2);
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg-raised);
-}
-
-.toolBtn {
-  width: 26px;
-  height: 24px;
-  border: 1px solid var(--border);
-  background: var(--bg-raised);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 600;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: background var(--transition-fast), color var(--transition-fast);
-  box-shadow: var(--shadow-raised);
-}
-
-.toolBtn:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.toolBtnWikilink {
-  width: auto;
-  padding: 0 var(--sp-2);
-  font-size: var(--text-xs);
-  color: var(--accent-purple);
-  font-weight: 500;
-}
-
-.toolDivider {
-  width: 1px;
-  height: 18px;
-  background: var(--border);
-  margin: 3px var(--sp-1);
-  align-self: center;
-}
-
-/* ── Editor textarea ─────────────────────────────────────────────────── */
-
-.editorArea {
-  flex: 1;
-  overflow-y: auto;
-  padding: var(--sp-3);
-}
-
-.editorTextarea {
-  width: 100%;
-  min-height: 300px;
-  background: transparent;
-  border: none;
-  color: var(--text-primary);
-  font-family: var(--font-mono);
-  font-size: var(--text-base);
-  line-height: 1.6;
-  resize: none;
-  outline: none;
-}
-
-/* ── Editor meta fields — property sheet ─────────────────────────────── */
-
-.metaField {
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-bottom: var(--sp-2);
-}
-
-.metaLabel {
-  font-size: var(--text-xs);
-  font-weight: 600;
-  color: var(--text-secondary);
-  width: 40px;
-  flex-shrink: 0;
-  text-transform: uppercase;
-}
-
-.metaSelect {
-  font-size: var(--text-sm);
-  padding: 1px var(--sp-2);
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-  color: var(--text-primary);
-  outline: none;
-  box-shadow: var(--shadow-inset);
-}
-
-.metaSelect:focus {
-  border-color: var(--border-focus);
-}
-
-.tagsWrap {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--sp-1);
-  align-items: center;
-  flex: 1;
-}
-
-.addTagInput {
-  width: 70px;
-  font-size: var(--text-xs);
-  padding: 1px var(--sp-1);
-  border: 1px dashed var(--border);
-  background: transparent;
-  color: var(--text-secondary);
-  outline: none;
-}
-
-.addTagInput::placeholder {
-  color: var(--text-disabled);
-}
-
-.addTagInput:focus {
-  border-color: var(--border-focus);
-  border-style: solid;
-}
-
-/* ── Footer ──────────────────────────────────────────────────────────── */
-
-.footer {
-  display: flex;
-  gap: var(--sp-2);
-  padding: var(--sp-2) var(--sp-3);
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-  justify-content: flex-end;
-  background: var(--bg-raised);
-}
-
-/* ── Archive button ──────────────────────────────────────────────────── */
-
-.headerBtnDanger {
-  border-color: var(--danger);
-  color: var(--danger);
-}
-
-.headerBtnDanger:hover {
-  background: var(--danger-muted);
 }
 
 /* ── Loading skeleton ────────────────────────────────────────────────── */

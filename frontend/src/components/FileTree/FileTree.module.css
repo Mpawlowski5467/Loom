@@ -114,7 +114,7 @@
 }
 
 .rowActive:hover {
-  background: rgba(245, 158, 11, 0.18);
+  background: var(--accent-amber-muted-hover);
 }
 
 .arrow {
@@ -126,8 +126,8 @@
 }
 
 .dot {
-  width: 7px;
-  height: 7px;
+  width: var(--dot-size-md);
+  height: var(--dot-size-md);
   border-radius: 50%;
   flex-shrink: 0;
   margin-right: var(--sp-1);
@@ -152,7 +152,7 @@
 
 .count {
   font-family: var(--font-mono);
-  font-size: 10px;
+  font-size: var(--text-2xs);
   color: var(--text-disabled);
   margin-left: var(--sp-1);
   flex-shrink: 0;

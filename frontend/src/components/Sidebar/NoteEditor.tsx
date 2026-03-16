@@ -1,7 +1,8 @@
+import { CheckSquare, X } from "lucide-react";
 import { useRef, useState } from "react";
 import type { Note } from "../../lib/api";
 import { updateNote } from "../../lib/api";
-import styles from "./Sidebar.module.css";
+import styles from "./NoteEditor.module.css";
 
 const NOTE_TYPES = ["topic", "project", "person", "daily", "capture"];
 
@@ -159,7 +160,7 @@ export function NoteEditor({ note, onSaved, onCancel, onToast }: NoteEditorProps
           title="Checkbox"
           onClick={() => handleToolbar("- [ ] ", "")}
         >
-          &#9744;
+          <CheckSquare size={14} />
         </button>
 
         <span className={styles.toolDivider} />
@@ -199,7 +200,7 @@ export function NoteEditor({ note, onSaved, onCancel, onToast }: NoteEditorProps
                 className={`${styles.tagChip} ${styles.tagChipRemovable}`}
                 onClick={() => handleRemoveTag(tag)}
               >
-                {tag} &times;
+                {tag} <X size={10} />
               </span>
             ))}
             <input
@@ -224,11 +225,11 @@ export function NoteEditor({ note, onSaved, onCancel, onToast }: NoteEditorProps
 
       {/* Footer */}
       <div className={styles.footer}>
-        <button className={styles.headerBtn} onClick={onCancel}>
+        <button className={styles.footerBtn} onClick={onCancel}>
           Cancel
         </button>
         <button
-          className={`${styles.headerBtn} ${styles.headerBtnAmber}`}
+          className={`${styles.footerBtn} ${styles.footerBtnAmber}`}
           onClick={handleSave}
           disabled={saving}
         >

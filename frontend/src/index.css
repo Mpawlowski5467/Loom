@@ -19,8 +19,14 @@ body {
 /* ── Focus — keyboard users need to see where they are ─────────────────── */
 
 *:focus-visible {
-  outline: 1px solid var(--accent-amber);
-  outline-offset: -1px;
+  outline: 2px solid var(--accent-amber);
+  outline-offset: 2px;
+}
+
+/* ── Active press feedback — makes clicks feel responsive ────────────── */
+
+button:active:not(:disabled) {
+  transform: scale(0.97);
 }
 
 /* ── Scrollbars — visible, classic, not auto-hiding ────────────────────── */

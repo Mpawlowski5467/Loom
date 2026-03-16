@@ -49,8 +49,8 @@
 }
 
 .chipDot {
-  width: 6px;
-  height: 6px;
+  width: var(--dot-size-sm);
+  height: var(--dot-size-sm);
   border-radius: 50%;
   flex-shrink: 0;
 }

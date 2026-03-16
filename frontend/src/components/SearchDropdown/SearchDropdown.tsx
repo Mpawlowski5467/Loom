@@ -110,13 +110,19 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
                   }}
                 />
                 <span className={styles.itemTitle}>{r.title}</span>
-                <div className={styles.itemTags}>
-                  {r.tags.slice(0, 3).map((t) => (
-                    <span key={t} className={styles.tag}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
+                {r.heading && (
+                  <span className={styles.heading}>## {r.heading}</span>
+                )}
+                <span className={styles.score}>
+                  {Math.round(r.score * 100)}%
+                </span>
+              </div>
+              <div className={styles.itemTags}>
+                {r.tags.slice(0, 3).map((t) => (
+                  <span key={t} className={styles.tag}>
+                    {t}
+                  </span>
+                ))}
               </div>
               {r.snippet && <div className={styles.snippet}>{r.snippet}</div>}
             </div>

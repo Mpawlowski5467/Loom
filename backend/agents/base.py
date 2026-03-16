@@ -157,6 +157,19 @@ class BaseAgent(ABC):
         Raises:
             ReadChainError: If the chain fails for an untrusted agent.
         """
+        # Guard: agents cannot modify prime.md
+        if self._is_prime_path(target_path):
+            logger.error("Agent %s attempted to modify prime.md — BLOCKED", self.name)
+            log_action(
+                self._vault_root,
+                self.name,
+                "blocked",
+                str(target_path),
+                details="Attempted to modify prime.md (immutable)",
+                chain_status="fail",
+            )
+            raise ReadChainError(self.name, ["prime.md is immutable to agents"])
+
         # Run the read chain
         chain_result = self._chain.execute(self.name, target_path)
 
@@ -191,7 +204,19 @@ class BaseAgent(ABC):
             chain_status = "pass"
 
         # Execute the action
-        action_result = await action_fn(chain_result)
+        try:
+            action_result = await action_fn(chain_result)
+        except Exception as exc:
+            logger.error("Agent %s action failed: %s", self.name, exc, exc_info=True)
+            log_action(
+                self._vault_root,
+                self.name,
+                "error",
+                str(target_path),
+                details=f"Action failed: {exc}",
+                chain_status=chain_status,
+            )
+            raise
 
         # Log the action
         action_name = action_result.get("action", "unknown")
@@ -230,3 +255,12 @@ class BaseAgent(ABC):
                 )
 
         return action_result
+
+    def _is_prime_path(self, target_path: Path) -> bool:
+        """Check if the target is the immutable prime.md constitution."""
+        try:
+            resolved = target_path.resolve()
+            prime = (self._vault_root / "rules" / "prime.md").resolve()
+            return resolved == prime
+        except Exception:  # noqa: BLE001
+            return False

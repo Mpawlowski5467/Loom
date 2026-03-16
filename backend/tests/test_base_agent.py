@@ -274,3 +274,40 @@ class TestBaseAgent:
         )
         assert reloaded["action_count"] == 2
         assert reloaded["last_action"] is not None
+
+    @pytest.mark.asyncio
+    async def test_prime_md_immutability(self, tmp_path: Path):
+        """Agents cannot target prime.md for modification."""
+        root = _setup_vault(tmp_path)
+        agent = _StubAgent(root)
+        target = root / "rules" / "prime.md"
+
+        async def action(chain_result: ReadChainResult) -> dict:
+            return {"action": "edited", "details": "Should not reach here"}
+
+        with pytest.raises(ReadChainError) as exc_info:
+            await agent.execute_with_chain(target, action)
+
+        assert "immutable" in str(exc_info.value).lower() or "prime" in str(exc_info.value).lower()
+        # Action count should NOT increment
+        assert agent.state.action_count == 0
+
+    @pytest.mark.asyncio
+    async def test_action_fn_error_logged(self, tmp_path: Path):
+        """If action_fn raises, the error is logged and re-raised."""
+        root = _setup_vault(tmp_path)
+        agent = _StubAgent(root)
+        target = root / "threads" / "topics" / "test-note.md"
+
+        async def failing_action(chain_result: ReadChainResult) -> dict:
+            raise ValueError("Something went wrong")
+
+        with pytest.raises(ValueError, match="Something went wrong"):
+            await agent.execute_with_chain(target, failing_action)
+
+        # Error should be logged in changelog
+        changelog_dir = root / ".loom" / "changelog" / "testbot"
+        files = list(changelog_dir.glob("*.md"))
+        assert len(files) >= 1
+        content = files[0].read_text(encoding="utf-8")
+        assert "**Action:** error" in content

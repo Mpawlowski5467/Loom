@@ -231,6 +231,7 @@ export interface SearchResult {
   tags: string[];
   snippet: string;
   score: number;
+  heading: string;
 }
 
 export interface SearchResponse {

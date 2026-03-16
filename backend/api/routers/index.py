@@ -40,6 +40,17 @@ def index_status() -> IndexStatus:
 @router.post("/reindex")
 async def reindex_vault() -> ReindexResult:
     """Trigger a full reindex of the vault."""
+    return await _do_reindex()
+
+
+@router.post("/rebuild")
+async def rebuild_index() -> ReindexResult:
+    """Rebuild the index from scratch (alias for reindex)."""
+    return await _do_reindex()
+
+
+async def _do_reindex() -> ReindexResult:
+    """Shared reindex logic."""
     indexer = get_indexer()
     if indexer is None:
         raise HTTPException(

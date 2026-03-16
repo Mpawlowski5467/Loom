@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
+from api.routers.chat import router as chat_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
@@ -60,7 +61,7 @@ def _get_chat_provider():
 
 
 def _init_agents(vault_dir) -> None:
-    """Initialize all Loom-layer agents and the runner.
+    """Initialize all agents (Loom + Shuttle) and the runner.
 
     Non-fatal: each agent is initialized independently. If one fails,
     the others still start.
@@ -73,6 +74,8 @@ def _init_agents(vault_dir) -> None:
         ("archivist", "agents.loom.archivist", "init_archivist"),
         ("scribe", "agents.loom.scribe", "init_scribe"),
         ("sentinel", "agents.loom.sentinel", "init_sentinel"),
+        ("researcher", "agents.shuttle.researcher", "init_researcher"),
+        ("standup", "agents.shuttle.standup", "init_standup"),
     ]
 
     for name, module_path, fn_name in agent_inits:
@@ -96,6 +99,17 @@ def _init_agents(vault_dir) -> None:
         logger.warning("AgentRunner initialization failed", exc_info=True)
 
 
+def _init_chat(vault_dir) -> None:
+    """Initialize the chat persistence layer."""
+    try:
+        from agents.chat import init_chat_history
+
+        init_chat_history(vault_dir)
+        logger.info("Chat history initialized")
+    except Exception:  # noqa: BLE001
+        logger.warning("Chat history initialization failed", exc_info=True)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
@@ -103,6 +117,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if vault_dir.exists():
         _init_vector_index(vault_dir)
         _init_agents(vault_dir)
+        _init_chat(vault_dir)
         start_watcher(vault_dir)
     yield
     stop_watcher()
@@ -126,6 +141,7 @@ app.include_router(search_router)
 app.include_router(captures_router)
 app.include_router(index_router)
 app.include_router(agents_router)
+app.include_router(chat_router)
 
 
 @app.get("/api/health")

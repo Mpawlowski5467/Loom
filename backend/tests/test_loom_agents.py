@@ -265,11 +265,14 @@ class TestScribe:
         log_action(root, "spider", "linked", "thr_aaa111", details="Linked notes")
 
         scribe = Scribe(root, chat_provider=None)
-        today = date.today()
-        content = await scribe.generate_daily_log(today)
+        # Use UTC date to match changelog timestamps
+        from core.notes import now_iso
+
+        utc_today = date.fromisoformat(now_iso()[:10])
+        content = await scribe.generate_daily_log(utc_today)
 
         assert content  # Non-empty
-        daily_path = root / "threads" / "daily" / f"{today.isoformat()}.md"
+        daily_path = root / "threads" / "daily" / f"{utc_today.isoformat()}.md"
         assert daily_path.exists()
 
         daily = parse_note(daily_path)

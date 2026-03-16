@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { Note, VaultGraph } from "../../lib/api";
 import { archiveNote, fetchGraph, fetchNote } from "../../lib/api";
@@ -123,7 +124,7 @@ export function Sidebar({
             )}
 
             <button className={styles.closeBtn} onClick={onClose}>
-              &#10005;
+              <X size={16} />
             </button>
           </div>
 

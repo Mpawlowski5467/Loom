@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import type { Note } from "../../lib/api";
 import { createNote } from "../../lib/api";
@@ -106,7 +107,7 @@ export function CreateNoteModal({ onCreated, onClose }: CreateNoteModalProps) {
                 className={styles.tagChip}
                 onClick={() => setTags(tags.filter((t) => t !== tag))}
               >
-                {tag} &times;
+                {tag} <X size={10} />
               </span>
             ))}
             <input

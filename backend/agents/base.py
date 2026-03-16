@@ -84,6 +84,14 @@ class AgentState:
     def last_action(self, value: str | None) -> None:
         self._data["last_action"] = value
 
+    @property
+    def actions_since_summary(self) -> int:
+        return self._data.get("actions_since_summary", 0)
+
+    @actions_since_summary.setter
+    def actions_since_summary(self, value: int) -> None:
+        self._data["actions_since_summary"] = value
+
     def save(self) -> None:
         """Persist state to disk."""
         self._path.write_text(json.dumps(self._data, indent=2) + "\n", encoding="utf-8")
@@ -116,6 +124,7 @@ class BaseAgent(ABC):
         self._config = AgentConfig.load(self._agent_dir / "config.yaml")
         self._state = AgentState(self._agent_dir / "state.json")
         self._chain = ReadChain(vault_root, note_index=get_note_index())
+        self._memory_cadence = self._load_memory_cadence()
 
     @property
     @abstractmethod
@@ -233,21 +242,24 @@ class BaseAgent(ABC):
 
         # Update state
         self._state.action_count += 1
+        self._state.actions_since_summary += 1
         self._state.last_action = now_iso()
         self._state.save()
 
         # Check memory threshold
         if (
-            self._state.action_count % self._config.memory_threshold == 0
+            self._state.actions_since_summary >= self._memory_cadence
             and self._chat_provider is not None
         ):
             logger.info(
-                "Agent %s hit memory threshold (%d actions) — summarizing",
+                "Agent %s hit memory threshold (%d actions since last summary) — summarizing",
                 self.name,
-                self._state.action_count,
+                self._state.actions_since_summary,
             )
             try:
                 await summarize_memory(self._vault_root, self.name, self._chat_provider)
+                self._state.actions_since_summary = 0
+                self._state.save()
             except Exception:  # noqa: BLE001
                 logger.warning(
                     "Memory summarization failed for agent %s",
@@ -256,6 +268,19 @@ class BaseAgent(ABC):
                 )
 
         return action_result
+
+    def _load_memory_cadence(self) -> int:
+        """Load memory summarization cadence from vault.yaml, falling back to config."""
+        vault_yaml = self._vault_root / "vault.yaml"
+        if vault_yaml.exists():
+            try:
+                data = yaml.safe_load(vault_yaml.read_text(encoding="utf-8")) or {}
+                cadence = data.get("memory_summarize_cadence")
+                if cadence is not None:
+                    return int(cadence)
+            except Exception:  # noqa: BLE001
+                pass
+        return self._config.memory_threshold
 
     def _is_prime_path(self, target_path: Path) -> bool:
         """Check if the target is the immutable prime.md constitution."""

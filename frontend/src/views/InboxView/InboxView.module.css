@@ -68,9 +68,14 @@
   font-weight: 600;
 }
 
-.processAllBtn:hover {
+.processAllBtn:hover:not(:disabled) {
   background: #9678e8;
   border-color: #9678e8;
+}
+
+.processAllBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ── Filter tabs — tabstrip style ────────────────────────────────────── */
@@ -249,6 +254,18 @@
   padding-top: var(--sp-1);
 }
 
+.filedInfo {
+  display: flex;
+  gap: var(--sp-2);
+  font-size: var(--text-xs);
+  color: var(--success);
+  padding-left: calc(var(--sp-3) + 24px);
+}
+
+.filedLabel {
+  font-family: var(--font-mono);
+}
+
 .actionProcess {
   padding: 2px var(--sp-3);
   border: 1px solid var(--accent-purple);
@@ -258,8 +275,13 @@
   font-weight: 500;
 }
 
-.actionProcess:hover {
+.actionProcess:hover:not(:disabled) {
   background: rgba(167, 139, 250, 0.25);
+}
+
+.actionProcess:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .actionPreview {

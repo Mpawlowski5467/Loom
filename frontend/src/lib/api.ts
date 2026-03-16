@@ -133,6 +133,47 @@ export function createNote(data: {
   });
 }
 
+// -- Agent types --------------------------------------------------------------
+
+export interface AgentStatus {
+  name: string;
+  role: string;
+  enabled: boolean;
+  trust_level: string;
+  action_count: number;
+  last_action: string | null;
+}
+
+export interface ChangelogEntry {
+  agent: string;
+  date: string;
+  content: string;
+}
+
+export interface RunResult {
+  agent: string;
+  result: Record<string, unknown>;
+}
+
+export function fetchAgents(): Promise<AgentStatus[]> {
+  return request<AgentStatus[]>("/api/agents");
+}
+
+export function runAgent(name: string): Promise<RunResult> {
+  return request<RunResult>(`/api/agents/${encodeURIComponent(name)}/run`, {
+    method: "POST",
+  });
+}
+
+export function fetchChangelog(
+  agent: string,
+  date?: string,
+): Promise<ChangelogEntry> {
+  const query = new URLSearchParams({ agent });
+  if (date) query.set("date", date);
+  return request<ChangelogEntry>(`/api/changelog?${query.toString()}`);
+}
+
 // -- Capture types ------------------------------------------------------------
 
 export interface CaptureItem {
@@ -151,6 +192,34 @@ export interface CaptureItem {
 
 export function fetchCaptures(): Promise<CaptureItem[]> {
   return request<CaptureItem[]>("/api/captures");
+}
+
+export interface ProcessResult {
+  processed: boolean;
+  note_id: string;
+  note_title: string;
+  note_type: string;
+  target_path: string;
+  error: string;
+}
+
+export interface ProcessAllResult {
+  total: number;
+  processed: number;
+  results: ProcessResult[];
+}
+
+export function processCapture(capturePath: string): Promise<ProcessResult> {
+  return request<ProcessResult>("/api/captures/process", {
+    method: "POST",
+    body: JSON.stringify({ capture_path: capturePath }),
+  });
+}
+
+export function processAllCaptures(): Promise<ProcessAllResult> {
+  return request<ProcessAllResult>("/api/captures/process-all", {
+    method: "POST",
+  });
 }
 
 // -- Search types -------------------------------------------------------------
@@ -199,6 +268,68 @@ export function fetchIndexStatus(): Promise<IndexStatus> {
 export function reindexVault(): Promise<ReindexResult> {
   return request<ReindexResult>("/api/index/reindex", { method: "POST" });
 }
+
+// -- Chat types ---------------------------------------------------------------
+
+export interface ChatMessage {
+  role: string;
+  content: string;
+  timestamp: string;
+  agent: string;
+}
+
+export interface SendMessageResponse {
+  user_message: ChatMessage;
+  assistant_message: ChatMessage;
+}
+
+export interface ChatHistoryResponse {
+  agent: string;
+  messages: ChatMessage[];
+}
+
+export interface ChatSessionList {
+  agent: string;
+  sessions: string[];
+}
+
+export function sendChatMessage(
+  message: string,
+  agent: string = "_council",
+): Promise<SendMessageResponse> {
+  return request<SendMessageResponse>("/api/chat/send", {
+    method: "POST",
+    body: JSON.stringify({ message, agent }),
+  });
+}
+
+export function fetchChatHistory(
+  agent: string = "_council",
+  limit: number = 20,
+): Promise<ChatHistoryResponse> {
+  const query = new URLSearchParams({ agent, limit: String(limit) });
+  return request<ChatHistoryResponse>(`/api/chat/history?${query.toString()}`);
+}
+
+export function fetchChatHistoryByDate(
+  dateStr: string,
+  agent: string = "_council",
+): Promise<ChatHistoryResponse> {
+  const query = new URLSearchParams({ agent });
+  return request<ChatHistoryResponse>(
+    `/api/chat/history/${encodeURIComponent(dateStr)}?${query.toString()}`,
+  );
+}
+
+export function fetchChatSessions(
+  agent: string = "_council",
+): Promise<ChatSessionList> {
+  return request<ChatSessionList>(
+    `/api/chat/sessions?agent=${encodeURIComponent(agent)}`,
+  );
+}
+
+// -- Archive ------------------------------------------------------------------
 
 export function archiveNote(id: string): Promise<{ status: string }> {
   return request<{ status: string }>(`/api/notes/${encodeURIComponent(id)}`, {

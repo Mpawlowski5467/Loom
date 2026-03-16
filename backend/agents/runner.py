@@ -10,6 +10,8 @@ from agents.loom.scribe import get_scribe
 from agents.loom.sentinel import get_sentinel
 from agents.loom.spider import get_spider
 from agents.loom.weaver import get_weaver
+from agents.shuttle.researcher import get_researcher
+from agents.shuttle.standup import get_standup
 
 if TYPE_CHECKING:
     from datetime import date
@@ -62,6 +64,8 @@ class AgentRunner:
             (get_archivist, "organizer"),
             (get_scribe, "summarizer"),
             (get_sentinel, "reviewer"),
+            (get_researcher, "research"),
+            (get_standup, "daily recap"),
         ]:
             agent = getter()
             if agent is not None:
@@ -176,7 +180,9 @@ class AgentRunner:
             if target_date is None:
                 from datetime import date as date_cls
 
-                target_date = date_cls.today()
+                from core.notes import now_iso
+
+                target_date = date_cls.fromisoformat(now_iso()[:10])
             content = await scribe.generate_daily_log(target_date)
             return {"date": target_date.isoformat(), "content": content}
 
@@ -186,6 +192,15 @@ class AgentRunner:
                 return {"error": "Spider not initialized"}
             total = await spider.scan_vault()
             return {"links_added": total}
+
+        if agent_name == "standup":
+            standup = get_standup()
+            if standup is None:
+                return {"error": "Standup not initialized"}
+            target_date: date = kwargs.get("date")  # type: ignore[assignment]
+            # standup.generate(None) defaults to UTC date internally
+            result = await standup.generate(target_date)
+            return result.to_dict()
 
         return {"error": f"Unknown agent or not schedulable: {agent_name}"}
 

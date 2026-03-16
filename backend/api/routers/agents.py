@@ -41,6 +41,38 @@ class ChangelogEntry(BaseModel):
     content: str
 
 
+class ResearchRequest(BaseModel):
+    """Request body for Researcher query."""
+
+    question: str
+    search_web: bool = False
+
+
+class ResearchResponse(BaseModel):
+    """Response from Researcher query."""
+
+    answer: str
+    referenced_notes: list[dict]
+    capture_id: str
+    capture_path: str
+
+
+class StandupRequest(BaseModel):
+    """Request body for Standup generation."""
+
+    date: str = ""  # YYYY-MM-DD, defaults to today
+
+
+class StandupResponse(BaseModel):
+    """Response from Standup generation."""
+
+    recap: str
+    date: str
+    notes_modified: int
+    capture_id: str
+    capture_path: str
+
+
 # -- Endpoints -----------------------------------------------------------------
 
 
@@ -91,6 +123,47 @@ def get_changelog(
 
     content = changelog_path.read_text(encoding="utf-8")
     return ChangelogEntry(agent=agent, date=date, content=content)
+
+
+@router.post("/agents/researcher/query")
+async def researcher_query(body: ResearchRequest) -> ResearchResponse:
+    """Ask the Researcher agent a question."""
+    from agents.shuttle.researcher import get_researcher
+
+    researcher = get_researcher()
+    if researcher is None:
+        raise HTTPException(status_code=503, detail="Researcher agent not initialized")
+
+    result = await researcher.query(body.question, search_web=body.search_web)
+    return ResearchResponse(
+        answer=result.answer,
+        referenced_notes=result.referenced_notes,
+        capture_id=result.capture_id,
+        capture_path=result.capture_path,
+    )
+
+
+@router.post("/agents/standup/generate")
+async def standup_generate(body: StandupRequest) -> StandupResponse:
+    """Generate a daily standup recap."""
+    from agents.shuttle.standup import get_standup
+
+    standup = get_standup()
+    if standup is None:
+        raise HTTPException(status_code=503, detail="Standup agent not initialized")
+
+    target_date = None
+    if body.date:
+        target_date = date.fromisoformat(body.date)
+
+    result = await standup.generate(target_date)
+    return StandupResponse(
+        recap=result.recap,
+        date=result.date,
+        notes_modified=result.notes_modified,
+        capture_id=result.capture_id,
+        capture_path=result.capture_path,
+    )
 
 
 def _today_str() -> str:

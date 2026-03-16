@@ -190,8 +190,8 @@ class AgentRunner:
             spider = get_spider()
             if spider is None:
                 return {"error": "Spider not initialized"}
-            total = await spider.scan_vault()
-            return {"links_added": total}
+            vault_report = await spider.scan_vault_report()
+            return vault_report.to_dict()
 
         if agent_name == "standup":
             standup = get_standup()

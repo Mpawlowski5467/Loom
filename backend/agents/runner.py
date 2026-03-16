@@ -176,15 +176,15 @@ class AgentRunner:
             scribe = get_scribe()
             if scribe is None:
                 return {"error": "Scribe not initialized"}
-            target_date: date = kwargs.get("date")  # type: ignore[assignment]
-            if target_date is None:
+            scribe_date: date | None = kwargs.get("date")  # type: ignore[assignment]
+            if scribe_date is None:
                 from datetime import date as date_cls
 
                 from core.notes import now_iso
 
-                target_date = date_cls.fromisoformat(now_iso()[:10])
-            content = await scribe.generate_daily_log(target_date)
-            return {"date": target_date.isoformat(), "content": content}
+                scribe_date = date_cls.fromisoformat(now_iso()[:10])
+            content = await scribe.generate_daily_log(scribe_date)
+            return {"date": scribe_date.isoformat(), "content": content}
 
         if agent_name == "spider":
             spider = get_spider()
@@ -197,9 +197,9 @@ class AgentRunner:
             standup = get_standup()
             if standup is None:
                 return {"error": "Standup not initialized"}
-            target_date: date = kwargs.get("date")  # type: ignore[assignment]
+            standup_date: date | None = kwargs.get("date")  # type: ignore[assignment]
             # standup.generate(None) defaults to UTC date internally
-            result = await standup.generate(target_date)
+            result = await standup.generate(standup_date)
             return result.to_dict()
 
         return {"error": f"Unknown agent or not schedulable: {agent_name}"}

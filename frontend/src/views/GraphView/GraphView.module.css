@@ -71,6 +71,44 @@
   pointer-events: none;
 }
 
+/* ── Zoom controls ──────────────────────────────────────────────────── */
+
+.controls {
+  position: absolute;
+  bottom: var(--sp-2);
+  left: var(--sp-2);
+  display: flex;
+  gap: 1px;
+  z-index: 2;
+}
+
+.controlBtn {
+  width: 32px;
+  height: 26px;
+  border: 1px solid var(--border);
+  background: var(--bg-surface);
+  color: var(--text-secondary);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background var(--transition-base), color var(--transition-base);
+  user-select: none;
+}
+
+.controlBtn:first-child {
+  width: auto;
+  padding: 0 var(--sp-2);
+  font-size: var(--text-xs);
+}
+
+.controlBtn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
 /* ── Loading / Error ─────────────────────────────────────────────────── */
 
 .loading {

@@ -116,6 +116,36 @@
   padding: var(--sp-3);
 }
 
+/* ── Error state ─────────────────────────────────────────────────────── */
+
+.errorState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-6) var(--sp-4);
+  text-align: center;
+}
+
+.errorText {
+  font-size: var(--text-sm);
+  color: var(--danger);
+  line-height: 1.5;
+}
+
+.errorRetry {
+  padding: 3px var(--sp-3);
+  border: 1px solid var(--accent-amber);
+  background: var(--accent-amber-muted);
+  color: var(--accent-amber);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.errorRetry:hover {
+  background: var(--accent-amber-muted-hover);
+}
+
 /* ── Loading skeleton ────────────────────────────────────────────────── */
 
 .skeleton {

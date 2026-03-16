@@ -1,11 +1,12 @@
 import { Settings } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./styles/variables.css";
 import styles from "./App.module.css";
 import { CreateNoteModal } from "./components/CreateNoteModal/CreateNoteModal";
 import { ErrorBoundary } from "./components/ErrorBoundary/ErrorBoundary";
 import { FileTree } from "./components/FileTree/FileTree";
 import { SearchDropdown } from "./components/SearchDropdown/SearchDropdown";
+import { SettingsModal } from "./components/SettingsModal/SettingsModal";
 import { Sidebar } from "./components/Sidebar/Sidebar";
 import { ToastContainer } from "./components/Toast/Toast";
 import { useApp } from "./lib/context/useApp";
@@ -37,15 +38,18 @@ function App() {
   } = useApp();
 
   const searchRef = useRef<HTMLInputElement>(null);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // -- Keyboard shortcuts ---------------------------------------------------
   useEffect(() => {
     function handleKeyDown(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
 
-      // Escape → close sidebar
+      // Escape → close modals/sidebar
       if (e.key === "Escape") {
-        if (isCreateModalOpen) {
+        if (isSettingsOpen) {
+          setIsSettingsOpen(false);
+        } else if (isCreateModalOpen) {
           hideCreateModal();
         } else if (activeNote) {
           closeSidebar();
@@ -69,7 +73,7 @@ function App() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeNote, isCreateModalOpen, closeSidebar, hideCreateModal, showCreateModal]);
+  }, [activeNote, isCreateModalOpen, isSettingsOpen, closeSidebar, hideCreateModal, showCreateModal]);
 
   return (
     <div className={styles.app}>
@@ -100,7 +104,11 @@ function App() {
 
         <div className={styles.toolbarSep} />
 
-        <button className={styles.toolbarBtn} title="Settings">
+        <button
+          className={styles.toolbarBtn}
+          title="Settings"
+          onClick={() => setIsSettingsOpen(true)}
+        >
           <Settings size={16} />
         </button>
       </div>
@@ -167,6 +175,10 @@ function App() {
           }}
           onClose={hideCreateModal}
         />
+      )}
+
+      {isSettingsOpen && (
+        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
       )}
 
       <ToastContainer />

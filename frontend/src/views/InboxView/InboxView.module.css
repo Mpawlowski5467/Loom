@@ -170,11 +170,19 @@
   gap: var(--sp-3);
 }
 
-.cardSourceIcon {
-  font-size: var(--text-xl);
-  line-height: 1;
+.cardSourceLabel {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  font-family: var(--font-mono);
+  background: var(--accent-amber-muted);
+  border: 1px solid var(--accent-amber);
+  color: var(--accent-amber);
   flex-shrink: 0;
-  margin-top: 2px;
 }
 
 .cardIdent {

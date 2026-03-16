@@ -348,7 +348,29 @@ class Weaver(BaseAgent):
     ) -> Note:
         """Write a note file to the vault and return the parsed Note."""
         threads_dir = self._vault_root / "threads"
-        target_dir = threads_dir / folder
+
+        # Validate folder: reject path traversal, absolute paths, separators
+        if (
+            ".." in folder
+            or folder.startswith("/")
+            or "/" in folder.strip("/")
+            or "\\" in folder
+        ):
+            logger.warning(
+                "Weaver: suspicious folder '%s' from classification — falling back to captures/",
+                folder,
+            )
+            folder = "captures"
+
+        target_dir = (threads_dir / folder).resolve()
+        if not str(target_dir).startswith(str(threads_dir.resolve())):
+            logger.warning(
+                "Weaver: folder '%s' escapes threads/ — falling back to captures/",
+                folder,
+            )
+            folder = "captures"
+            target_dir = threads_dir / folder
+
         target_dir.mkdir(parents=True, exist_ok=True)
 
         note_id = generate_id()

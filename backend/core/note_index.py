@@ -126,6 +126,25 @@ class NoteIndex:
         with self._lock:
             return len(self._by_id)
 
+    def get_title_map(self) -> dict[str, Path]:
+        """Return a {lowercase_title: file_path} map from cached data.
+
+        Used by ReadChain and Spider to avoid redundant rglob scans.
+        """
+        with self._lock:
+            return {
+                title: entry.file_path
+                for title, entry in self._by_title.items()
+            }
+
+    def get_title_set(self) -> set[str]:
+        """Return a set of lowercase note titles from cached data.
+
+        Used by Archivist to avoid redundant rglob scans.
+        """
+        with self._lock:
+            return set(self._by_title.keys())
+
     # -- Internal helpers -----------------------------------------------------
 
     def _parse_entry(self, path: Path) -> IndexEntry | None:

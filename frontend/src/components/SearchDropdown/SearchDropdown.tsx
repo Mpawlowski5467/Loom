@@ -93,15 +93,9 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
 
       {open && (
         <div className={styles.dropdown}>
-          {results.length === 0 && searched && (
-            <div className={styles.empty}>No results found</div>
-          )}
+          {results.length === 0 && searched && <div className={styles.empty}>No results found</div>}
           {results.map((r) => (
-            <div
-              key={r.id}
-              className={styles.item}
-              onClick={() => handleSelect(r.id)}
-            >
+            <div key={r.id} className={styles.item} onClick={() => handleSelect(r.id)}>
               <div className={styles.itemTop}>
                 <span
                   className={styles.dot}
@@ -110,12 +104,8 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
                   }}
                 />
                 <span className={styles.itemTitle}>{r.title}</span>
-                {r.heading && (
-                  <span className={styles.heading}>## {r.heading}</span>
-                )}
-                <span className={styles.score}>
-                  {Math.round(r.score * 100)}%
-                </span>
+                {r.heading && <span className={styles.heading}>## {r.heading}</span>}
+                <span className={styles.score}>{Math.round(r.score * 100)}%</span>
               </div>
               <div className={styles.itemTags}>
                 {r.tags.slice(0, 3).map((t) => (

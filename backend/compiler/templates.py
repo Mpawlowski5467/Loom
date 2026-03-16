@@ -22,10 +22,7 @@ class TemplateNotFoundError(LoomError):
     """Raised when a prompt template file cannot be found."""
 
     def __init__(self, agent_name: str, template_name: str, path: Path) -> None:
-        super().__init__(
-            f"Template '{template_name}' for agent '{agent_name}' "
-            f"not found at {path}"
-        )
+        super().__init__(f"Template '{template_name}' for agent '{agent_name}' not found at {path}")
         self.agent_name = agent_name
         self.template_name = template_name
 
@@ -75,7 +72,7 @@ def strip_frontmatter(text: str) -> str:
     """
     match = _FRONTMATTER_RE.match(text)
     if match:
-        return text[match.end():]
+        return text[match.end() :]
     return text
 
 

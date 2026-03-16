@@ -68,9 +68,7 @@ class VaultManager:
         if not vaults_dir.exists():
             return []
         return sorted(
-            d.name
-            for d in vaults_dir.iterdir()
-            if d.is_dir() and (d / "vault.yaml").exists()
+            d.name for d in vaults_dir.iterdir() if d.is_dir() and (d / "vault.yaml").exists()
         )
 
     def get_active_vault(self) -> str:
@@ -126,9 +124,7 @@ class VaultManager:
             self._create_agent_dir(root / "agents" / agent, agent, has_chat=True)
         (root / "agents" / "_council" / "chat").mkdir(parents=True)
 
-    def _create_agent_dir(
-        self, agent_dir: Path, name: str, *, has_chat: bool
-    ) -> None:
+    def _create_agent_dir(self, agent_dir: Path, name: str, *, has_chat: bool) -> None:
         agent_dir.mkdir(parents=True)
         (agent_dir / "config.yaml").write_text(agent_config_yaml(name))
         (agent_dir / "memory.md").write_text(AGENT_MEMORY_MD)

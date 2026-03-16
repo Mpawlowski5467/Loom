@@ -6,7 +6,9 @@
   background: var(--bg-surface);
   border-left: 1px solid var(--border);
   overflow: hidden;
-  transition: width 0.2s ease, min-width 0.2s ease;
+  transition:
+    width 0.2s ease,
+    min-width 0.2s ease;
   display: flex;
   flex-direction: column;
 }
@@ -51,7 +53,9 @@
   color: var(--text-secondary);
   font-size: var(--text-xs);
   font-weight: var(--weight-medium);
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
   white-space: nowrap;
   box-shadow: var(--shadow-raised);
 }
@@ -169,7 +173,13 @@
 }
 
 @keyframes shimmer {
-  0% { opacity: 0.4; }
-  50% { opacity: 0.7; }
-  100% { opacity: 0.4; }
+  0% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
+  100% {
+    opacity: 0.4;
+  }
 }

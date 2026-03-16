@@ -65,9 +65,12 @@ def _coerce_meta(meta: dict) -> dict:
             out[k] = str(v) if v is not None else ""
         elif k == "history" and isinstance(v, list):
             out[k] = [
-                {hk: str(hv) if hk == "at" and not isinstance(hv, str) else hv
-                 for hk, hv in entry.items()}
-                if isinstance(entry, dict) else entry
+                {
+                    hk: str(hv) if hk == "at" and not isinstance(hv, str) else hv
+                    for hk, hv in entry.items()
+                }
+                if isinstance(entry, dict)
+                else entry
                 for entry in v
             ]
         else:
@@ -85,7 +88,7 @@ def parse_note(path: Path) -> Note:
     if fm_match:
         meta = yaml.safe_load(fm_match.group(1)) or {}
         meta = _coerce_meta(meta)
-        body = text[fm_match.end():]
+        body = text[fm_match.end() :]
 
     wikilinks = _WIKILINK_RE.findall(body)
 

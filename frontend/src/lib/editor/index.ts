@@ -1,0 +1,1 @@
+export { LoomPlateEditor } from "./PlateEditor";

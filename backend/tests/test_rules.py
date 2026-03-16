@@ -158,29 +158,21 @@ class TestParseWorkflow:
     """Tests for parse_workflow against default workflow files."""
 
     def test_capture_to_thread_name(self, rules_dir: Path) -> None:
-        wf = parse_workflow(
-            rules_dir / "rules" / "workflows" / "capture-to-thread.md"
-        )
+        wf = parse_workflow(rules_dir / "rules" / "workflows" / "capture-to-thread.md")
         assert wf.name == "Capture to Thread"
 
     def test_capture_to_thread_steps(self, rules_dir: Path) -> None:
-        wf = parse_workflow(
-            rules_dir / "rules" / "workflows" / "capture-to-thread.md"
-        )
+        wf = parse_workflow(rules_dir / "rules" / "workflows" / "capture-to-thread.md")
         assert len(wf.steps) == 5
         agents = [s.agent for s in wf.steps]
         assert agents == ["sentinel", "weaver", "spider", "scribe", "archivist"]
 
     def test_capture_to_thread_trigger(self, rules_dir: Path) -> None:
-        wf = parse_workflow(
-            rules_dir / "rules" / "workflows" / "capture-to-thread.md"
-        )
+        wf = parse_workflow(rules_dir / "rules" / "workflows" / "capture-to-thread.md")
         assert "captures" in wf.trigger.lower()
 
     def test_daily_standup_steps(self, rules_dir: Path) -> None:
-        wf = parse_workflow(
-            rules_dir / "rules" / "workflows" / "daily-standup.md"
-        )
+        wf = parse_workflow(rules_dir / "rules" / "workflows" / "daily-standup.md")
         assert len(wf.steps) == 5
         agents = [s.agent for s in wf.steps]
         assert "standup" in agents
@@ -188,9 +180,7 @@ class TestParseWorkflow:
         assert "spider" in agents
 
     def test_workflow_step_input_from_chains(self, rules_dir: Path) -> None:
-        wf = parse_workflow(
-            rules_dir / "rules" / "workflows" / "capture-to-thread.md"
-        )
+        wf = parse_workflow(rules_dir / "rules" / "workflows" / "capture-to-thread.md")
         assert wf.steps[0].input_from is None
         assert wf.steps[1].input_from == "sentinel"
         assert wf.steps[2].input_from == "weaver"

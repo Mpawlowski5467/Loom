@@ -80,7 +80,9 @@ class TestSaveMessage:
         root = _setup_vault(tmp_path)
         chat = ChatHistory(root)
 
-        chat.save_message("researcher", "user", "Test content", timestamp="2026-03-15T10:30:00+00:00")
+        chat.save_message(
+            "researcher", "user", "Test content", timestamp="2026-03-15T10:30:00+00:00"
+        )
 
         chat_dir = root / "agents" / "researcher" / "chat"
         content = list(chat_dir.glob("*.md"))[0].read_text(encoding="utf-8")
@@ -94,7 +96,9 @@ class TestLoadRecent:
         chat = ChatHistory(root)
 
         chat.save_message("researcher", "user", "Message 1", timestamp="2026-03-15T10:00:00+00:00")
-        chat.save_message("researcher", "assistant", "Reply 1", timestamp="2026-03-15T10:00:05+00:00")
+        chat.save_message(
+            "researcher", "assistant", "Reply 1", timestamp="2026-03-15T10:00:05+00:00"
+        )
         chat.save_message("researcher", "user", "Message 2", timestamp="2026-03-15T10:01:00+00:00")
 
         messages = chat.load_recent("researcher", limit=20)
@@ -110,7 +114,9 @@ class TestLoadRecent:
         chat = ChatHistory(root)
 
         for i in range(10):
-            chat.save_message("researcher", "user", f"Msg {i}", timestamp=f"2026-03-15T10:{i:02d}:00+00:00")
+            chat.save_message(
+                "researcher", "user", f"Msg {i}", timestamp=f"2026-03-15T10:{i:02d}:00+00:00"
+            )
 
         messages = chat.load_recent("researcher", limit=3)
         assert len(messages) == 3
@@ -204,7 +210,9 @@ class TestToLlmMessage:
         assert msg.to_llm_message() == {"role": "assistant", "content": "Hi"}
 
     def test_agent_message_maps_to_assistant(self):
-        msg = ChatMessage(role="agent:weaver", content="Done", timestamp="2026-03-15T10:00:00+00:00")
+        msg = ChatMessage(
+            role="agent:weaver", content="Done", timestamp="2026-03-15T10:00:00+00:00"
+        )
         assert msg.to_llm_message() == {"role": "assistant", "content": "Done"}
 
 
@@ -214,9 +222,12 @@ class TestParseRoundTrip:
         root = _setup_vault(tmp_path)
         chat = ChatHistory(root)
 
-        chat.save_message("researcher", "user", "What are CRDTs?", timestamp="2026-03-15T10:00:00+00:00")
         chat.save_message(
-            "researcher", "assistant",
+            "researcher", "user", "What are CRDTs?", timestamp="2026-03-15T10:00:00+00:00"
+        )
+        chat.save_message(
+            "researcher",
+            "assistant",
             "CRDTs are Conflict-free Replicated Data Types.\n\nThey enable distributed consistency.",
             timestamp="2026-03-15T10:00:05+00:00",
         )

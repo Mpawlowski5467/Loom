@@ -32,13 +32,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const showCreateModal = useCallback(() => setCreateModalOpen(true), []);
   const hideCreateModal = useCallback(() => setCreateModalOpen(false), []);
 
-  const addToast = useCallback(
-    (message: string, variant: Toast["variant"] = "success") => {
-      const id = ++toastCounter;
-      setToasts((prev) => [...prev, { id, message, variant }]);
-    },
-    [],
-  );
+  const addToast = useCallback((message: string, variant: Toast["variant"] = "success") => {
+    const id = ++toastCounter;
+    setToasts((prev) => [...prev, { id, message, variant }]);
+  }, []);
 
   const removeToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));

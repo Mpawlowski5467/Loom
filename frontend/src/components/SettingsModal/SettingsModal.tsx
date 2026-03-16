@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
 import { useState } from "react";
-import type { Theme } from "../../lib/useTheme";
 import { useApp } from "../../lib/context/useApp";
+import { saveProviderSettings } from "../../lib/api";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "providers" | "general";
@@ -50,13 +50,8 @@ interface SettingsModalProps {
   onClose: () => void;
 }
 
-const THEME_OPTIONS: { value: Theme; label: string }[] = [
-  { value: "dark", label: "Dark" },
-  { value: "light", label: "Light" },
-];
-
 export function SettingsModal({ onClose }: SettingsModalProps) {
-  const { theme, setTheme } = useApp();
+  useApp();
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [providers, setProviders] = useState<ProviderConfig[]>(DEFAULT_PROVIDERS);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -70,7 +65,11 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     isDefault: false,
   });
 
-  function handleUpdateProvider(index: number, field: keyof ProviderConfig, value: string | boolean) {
+  function handleUpdateProvider(
+    index: number,
+    field: keyof ProviderConfig,
+    value: string | boolean,
+  ) {
     setProviders((prev) => {
       const next = [...prev];
       next[index] = { ...next[index], [field]: value };
@@ -89,7 +88,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   function handleAddProvider() {
     if (!newProvider.name.trim()) return;
-    setProviders((prev) => [...prev, { ...newProvider, name: newProvider.name.trim().toLowerCase() }]);
+    setProviders((prev) => [
+      ...prev,
+      { ...newProvider, name: newProvider.name.trim().toLowerCase() },
+    ]);
     setNewProvider({
       name: "",
       type: "cloud",
@@ -102,9 +104,20 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
     setShowAddForm(false);
   }
 
-  function handleSave() {
-    // TODO: POST to /api/settings/providers
-    onClose();
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  async function handleSave() {
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await saveProviderSettings(providers);
+      onClose();
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : "Failed to save settings");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -138,8 +151,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>Configured Providers</div>
                 <p className={styles.sectionHint}>
-                  Add cloud APIs (OpenAI, Anthropic, xAI) or local models (Ollama, LM Studio).
-                  Chat and embedding models are independent -- mix and match across providers.
+                  Add cloud APIs (OpenAI, Anthropic, xAI) or local models (Ollama, LM Studio). Chat
+                  and embedding models are independent -- mix and match across providers.
                 </p>
               </div>
 
@@ -148,7 +161,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                   <div key={`${provider.name}-${i}`} className={styles.providerCard}>
                     <div className={styles.providerHeader}>
                       <span className={styles.providerName}>{provider.name}</span>
-                      <span className={`${styles.providerType} ${provider.type === "cloud" ? styles.providerTypeCloud : styles.providerTypeLocal}`}>
+                      <span
+                        className={`${styles.providerType} ${provider.type === "cloud" ? styles.providerTypeCloud : styles.providerTypeLocal}`}
+                      >
                         {provider.type}
                       </span>
                       {provider.isDefault && (
@@ -249,7 +264,12 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       <select
                         className={styles.fieldSelect}
                         value={newProvider.type}
-                        onChange={(e) => setNewProvider({ ...newProvider, type: e.target.value as "cloud" | "local" })}
+                        onChange={(e) =>
+                          setNewProvider({
+                            ...newProvider,
+                            type: e.target.value as "cloud" | "local",
+                          })
+                        }
                       >
                         <option value="cloud">Cloud (API key)</option>
                         <option value="local">Local (host URL)</option>
@@ -264,7 +284,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                           type="password"
                           placeholder="sk-..."
                           value={newProvider.apiKey}
-                          onChange={(e) => setNewProvider({ ...newProvider, apiKey: e.target.value })}
+                          onChange={(e) =>
+                            setNewProvider({ ...newProvider, apiKey: e.target.value })
+                          }
                         />
                       </div>
                     )}
@@ -289,7 +311,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                         type="text"
                         placeholder="model name"
                         value={newProvider.chatModel}
-                        onChange={(e) => setNewProvider({ ...newProvider, chatModel: e.target.value })}
+                        onChange={(e) =>
+                          setNewProvider({ ...newProvider, chatModel: e.target.value })
+                        }
                       />
                     </div>
 
@@ -300,7 +324,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                         type="text"
                         placeholder="optional"
                         value={newProvider.embedModel}
-                        onChange={(e) => setNewProvider({ ...newProvider, embedModel: e.target.value })}
+                        onChange={(e) =>
+                          setNewProvider({ ...newProvider, embedModel: e.target.value })
+                        }
                       />
                     </div>
                   </div>
@@ -324,27 +350,6 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
           {activeTab === "general" && (
             <>
-              <div className={styles.section}>
-                <div className={styles.sectionTitle}>Appearance</div>
-                <div className={styles.settingRow}>
-                  <div>
-                    <div className={styles.settingLabel}>Theme</div>
-                    <div className={styles.settingDesc}>Switch between dark and light mode</div>
-                  </div>
-                  <div className={styles.themeToggle}>
-                    {THEME_OPTIONS.map((opt) => (
-                      <button
-                        key={opt.value}
-                        className={`${styles.themeBtn}${theme === opt.value ? ` ${styles.themeBtnActive}` : ""}`}
-                        onClick={() => setTheme(opt.value)}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
               <div className={styles.section}>
                 <div className={styles.sectionTitle}>Vault</div>
                 <div className={styles.settingRow}>
@@ -379,7 +384,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                 <div className={styles.settingRow}>
                   <div>
                     <div className={styles.settingLabel}>Read-Before-Write</div>
-                    <div className={styles.settingDesc}>Require agents to read context before writing</div>
+                    <div className={styles.settingDesc}>
+                      Require agents to read context before writing
+                    </div>
                   </div>
                   <span className={styles.settingValue}>Enabled</span>
                 </div>
@@ -396,11 +403,16 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
         </div>
 
         <div className={styles.footer}>
-          <button className={styles.btn} onClick={onClose}>
+          {saveError && <span className={styles.saveError}>{saveError}</span>}
+          <button className={styles.btn} onClick={onClose} disabled={saving}>
             Cancel
           </button>
-          <button className={`${styles.btn} ${styles.btnPrimary}`} onClick={handleSave}>
-            Save
+          <button
+            className={`${styles.btn} ${styles.btnPrimary}`}
+            onClick={handleSave}
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Save"}
           </button>
         </div>
       </div>

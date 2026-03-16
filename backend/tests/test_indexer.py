@@ -66,7 +66,10 @@ class TestVectorIndexer:
         _write_note(topics, "note1.md", "Note One", "Content one.")
         _write_note(topics, "note2.md", "Note Two", "## A\n\nA.\n\n## B\n\nB.")
         _write_note(
-            topics, "note3.md", "Note Three", "Simple content.",
+            topics,
+            "note3.md",
+            "Note Three",
+            "Simple content.",
             id="thr_note3x",
         )
 
@@ -124,13 +127,16 @@ class TestVectorIndexer:
 
         # Rewrite with only one section
         note_path.write_text(
-            build_frontmatter({
-                "id": "thr_upsert",
-                "title": "Upsert Test",
-                "type": "topic",
-                "tags": [],
-                "status": "active",
-            }) + "\nOnly one section now.",
+            build_frontmatter(
+                {
+                    "id": "thr_upsert",
+                    "title": "Upsert Test",
+                    "type": "topic",
+                    "tags": [],
+                    "status": "active",
+                }
+            )
+            + "\nOnly one section now.",
             encoding="utf-8",
         )
         await indexer.index_note(note_path)

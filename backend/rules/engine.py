@@ -82,9 +82,7 @@ class RulesEngine:
                 continue
             value = frontmatter[field]
             if expected_type == "list" and not isinstance(value, list):
-                violations.append(
-                    f"Field '{field}' should be a list, got {type(value).__name__}"
-                )
+                violations.append(f"Field '{field}' should be a list, got {type(value).__name__}")
 
         return violations
 
@@ -108,8 +106,7 @@ class RulesEngine:
             ``True`` if the action is allowed, ``False`` if explicitly denied.
         """
         matching_policies = [
-            p for p in self.policies
-            if p.agent is None or p.agent.lower() == agent_name.lower()
+            p for p in self.policies if p.agent is None or p.agent.lower() == agent_name.lower()
         ]
 
         if not matching_policies:

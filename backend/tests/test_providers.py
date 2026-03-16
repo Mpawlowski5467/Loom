@@ -23,9 +23,7 @@ def _make_config(
 ) -> GlobalConfig:
     """Build a GlobalConfig with provider entries for testing."""
     raw = providers or {}
-    provider_configs = {
-        name: ProviderConfig(**vals) for name, vals in raw.items()
-    }
+    provider_configs = {name: ProviderConfig(**vals) for name, vals in raw.items()}
     return GlobalConfig(
         providers=provider_configs,
         embed_provider=embed_provider,
@@ -71,9 +69,7 @@ class TestRegistryGetValid:
     @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-key"})
     def test_get_openai_provider(self) -> None:
         """get('openai') returns an OpenAIProvider when API key is set."""
-        cfg = _make_config(
-            providers={"openai": {"api_key": "sk-test-key", "chat_model": "gpt-4o"}}
-        )
+        cfg = _make_config(providers={"openai": {"api_key": "sk-test-key", "chat_model": "gpt-4o"}})
         registry = ProviderRegistry(cfg)
 
         provider = registry.get("openai")
@@ -84,9 +80,7 @@ class TestRegistryGetValid:
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"})
     def test_get_anthropic_provider(self) -> None:
         """get('anthropic') returns an AnthropicProvider when API key is set."""
-        cfg = _make_config(
-            providers={"anthropic": {"api_key": "sk-ant-test"}}
-        )
+        cfg = _make_config(providers={"anthropic": {"api_key": "sk-ant-test"}})
         registry = ProviderRegistry(cfg)
 
         provider = registry.get("anthropic")
@@ -97,9 +91,7 @@ class TestRegistryGetValid:
     @patch.dict("os.environ", {"XAI_API_KEY": "xai-test-key"})
     def test_get_xai_provider(self) -> None:
         """get('xai') returns an XAIProvider when API key is set."""
-        cfg = _make_config(
-            providers={"xai": {"api_key": "xai-test-key"}}
-        )
+        cfg = _make_config(providers={"xai": {"api_key": "xai-test-key"}})
         registry = ProviderRegistry(cfg)
 
         provider = registry.get("xai")
@@ -124,9 +116,7 @@ class TestRegistryGetInvalid:
 
     def test_get_unknown_provider_type_raises(self) -> None:
         """get() with an unsupported provider name raises ProviderConfigError."""
-        cfg = _make_config(
-            providers={"foobar": {"api_key": "test"}}
-        )
+        cfg = _make_config(providers={"foobar": {"api_key": "test"}})
         registry = ProviderRegistry(cfg)
 
         with pytest.raises(ProviderConfigError, match="Unknown provider"):

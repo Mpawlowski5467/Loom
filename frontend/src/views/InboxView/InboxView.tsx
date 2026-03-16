@@ -204,8 +204,8 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
           <h1 className={styles.title}>Captures Inbox</h1>
           <p className={styles.subtitle}>
             {captures.length} captures &middot; {pendingCount} pending
-            {processingCount > 0 && <> &middot; {processingCount} processing</>}
-            {" "}&middot; {doneCount} done
+            {processingCount > 0 && <> &middot; {processingCount} processing</>} &middot;{" "}
+            {doneCount} done
           </p>
         </div>
         <div className={styles.headerActions}>
@@ -325,21 +325,13 @@ function CaptureCard({
   return (
     <div className={`${styles.card} ${borderClass}`} onClick={onClick}>
       <div className={styles.cardTop}>
-        <span className={styles.cardSourceLabel}>
-          {getSourceLabel(capture.source)}
-        </span>
+        <span className={styles.cardSourceLabel}>{getSourceLabel(capture.source)}</span>
         <div className={styles.cardIdent}>
-          <span className={styles.cardTitle}>
-            {capture.title || "Untitled capture"}
-          </span>
-          {capture.preview && (
-            <span className={styles.cardPreview}>{capture.preview}</span>
-          )}
+          <span className={styles.cardTitle}>{capture.title || "Untitled capture"}</span>
+          {capture.preview && <span className={styles.cardPreview}>{capture.preview}</span>}
         </div>
         <div className={styles.cardMeta}>
-          <span className={styles.cardTime}>
-            {formatTime(capture.modified || capture.created)}
-          </span>
+          <span className={styles.cardTime}>{formatTime(capture.modified || capture.created)}</span>
           <span className={`${styles.statusBadge} ${getStatusClass(effectiveStatus)}`}>
             {getStatusLabel(effectiveStatus, processResult)}
           </span>
@@ -349,29 +341,36 @@ function CaptureCard({
       {/* Filed-to link for processed captures */}
       {effectiveStatus === "done" && processResult?.note_type && (
         <div className={styles.filedInfo}>
-          <span className={styles.filedLabel}>
-            Type: {processResult.note_type}
-          </span>
+          <span className={styles.filedLabel}>Type: {processResult.note_type}</span>
         </div>
       )}
 
       <div className={styles.cardActions}>
         <button
           className={styles.actionProcess}
-          onClick={(e) => { e.stopPropagation(); onProcess(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onProcess();
+          }}
           disabled={effectiveStatus === "processing" || effectiveStatus === "done"}
         >
           {effectiveStatus === "processing" ? "Processing..." : "Process"}
         </button>
         <button
           className={styles.actionPreview}
-          onClick={(e) => { e.stopPropagation(); onClick(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onClick();
+          }}
         >
           Preview
         </button>
         <button
           className={styles.actionArchive}
-          onClick={(e) => { e.stopPropagation(); onArchive(); }}
+          onClick={(e) => {
+            e.stopPropagation();
+            onArchive();
+          }}
         >
           Archive
         </button>

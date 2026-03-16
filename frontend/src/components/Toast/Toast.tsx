@@ -54,9 +54,7 @@ function ToastItem({
         : styles.borderSuccess;
 
   return (
-    <div
-      className={`${styles.toast} ${borderClass} ${fading ? styles.toastFading : ""}`}
-    >
+    <div className={`${styles.toast} ${borderClass} ${fading ? styles.toastFading : ""}`}>
       <span className={styles.message}>{message}</span>
       <button className={styles.close} onClick={() => onDismiss(id)}>
         <X size={14} />

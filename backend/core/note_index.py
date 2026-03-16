@@ -132,10 +132,7 @@ class NoteIndex:
         Used by ReadChain and Spider to avoid redundant rglob scans.
         """
         with self._lock:
-            return {
-                title: entry.file_path
-                for title, entry in self._by_title.items()
-            }
+            return {title: entry.file_path for title, entry in self._by_title.items()}
 
     def get_title_set(self) -> set[str]:
         """Return a set of lowercase note titles from cached data.

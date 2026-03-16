@@ -95,10 +95,7 @@ export function fetchTree(): Promise<TreeNode> {
   return request<TreeNode>("/api/tree");
 }
 
-export function fetchGraph(params?: {
-  type?: string;
-  tag?: string;
-}): Promise<VaultGraph> {
+export function fetchGraph(params?: { type?: string; tag?: string }): Promise<VaultGraph> {
   const query = new URLSearchParams();
   if (params?.type) query.set("type", params.type);
   if (params?.tag) query.set("tag", params.tag);
@@ -165,10 +162,7 @@ export function runAgent(name: string): Promise<RunResult> {
   });
 }
 
-export function fetchChangelog(
-  agent: string,
-  date?: string,
-): Promise<ChangelogEntry> {
+export function fetchChangelog(agent: string, date?: string): Promise<ChangelogEntry> {
   const query = new URLSearchParams({ agent });
   if (date) query.set("date", date);
   return request<ChangelogEntry>(`/api/changelog?${query.toString()}`);
@@ -322,12 +316,56 @@ export function fetchChatHistoryByDate(
   );
 }
 
-export function fetchChatSessions(
-  agent: string = "_council",
-): Promise<ChatSessionList> {
-  return request<ChatSessionList>(
-    `/api/chat/sessions?agent=${encodeURIComponent(agent)}`,
-  );
+export function fetchChatSessions(agent: string = "_council"): Promise<ChatSessionList> {
+  return request<ChatSessionList>(`/api/chat/sessions?agent=${encodeURIComponent(agent)}`);
+}
+
+// -- Settings types -----------------------------------------------------------
+
+export interface ProviderInput {
+  name: string;
+  type: "cloud" | "local";
+  apiKey: string;
+  host: string;
+  chatModel: string;
+  embedModel: string;
+  isDefault: boolean;
+}
+
+export interface SaveProvidersRequest {
+  providers: Array<{
+    name: string;
+    type: string;
+    api_key: string;
+    host: string;
+    chat_model: string;
+    embed_model: string;
+    is_default: boolean;
+  }>;
+}
+
+export interface SaveProvidersResponse {
+  saved: number;
+  default_chat_provider: string | null;
+  default_embed_provider: string | null;
+}
+
+export function saveProviderSettings(providers: ProviderInput[]): Promise<SaveProvidersResponse> {
+  const payload: SaveProvidersRequest = {
+    providers: providers.map((p) => ({
+      name: p.name,
+      type: p.type,
+      api_key: p.apiKey,
+      host: p.host,
+      chat_model: p.chatModel,
+      embed_model: p.embedModel,
+      is_default: p.isDefault,
+    })),
+  };
+  return request<SaveProvidersResponse>("/api/settings/providers", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }
 
 // -- Archive ------------------------------------------------------------------

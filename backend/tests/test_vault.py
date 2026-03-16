@@ -31,9 +31,7 @@ class TestInitVault:
             assert (agent_dir / "logs").is_dir()
             assert not (agent_dir / "chat").exists()
 
-    def test_creates_shuttle_agent_dirs_with_chat(
-        self, vault_manager: VaultManager
-    ) -> None:
+    def test_creates_shuttle_agent_dirs_with_chat(self, vault_manager: VaultManager) -> None:
         root = vault_manager.init_vault("test")
         for agent in ["researcher", "standup"]:
             agent_dir = root / "agents" / agent
@@ -59,13 +57,18 @@ class TestInitVault:
         assert (root / "prompts" / "_compiler.yaml").is_file()
         assert (root / "prompts" / "shared" / "system-preamble.md").is_file()
 
-    def test_creates_loom_meta_and_changelogs(
-        self, vault_manager: VaultManager
-    ) -> None:
+    def test_creates_loom_meta_and_changelogs(self, vault_manager: VaultManager) -> None:
         root = vault_manager.init_vault("test")
         assert (root / ".loom" / "changelog").is_dir()
-        for agent in ["weaver", "spider", "archivist", "scribe", "sentinel",
-                       "researcher", "standup"]:
+        for agent in [
+            "weaver",
+            "spider",
+            "archivist",
+            "scribe",
+            "sentinel",
+            "researcher",
+            "standup",
+        ]:
             assert (root / ".loom" / "changelog" / agent).is_dir()
 
     def test_creates_vault_yaml(self, vault_manager: VaultManager) -> None:
@@ -90,16 +93,12 @@ class TestInitVault:
             vault_manager.init_vault("test")
 
     @pytest.mark.parametrize("name", ["", " spaces", "a/b", "../evil", "a" * 65])
-    def test_invalid_name_raises(
-        self, vault_manager: VaultManager, name: str
-    ) -> None:
+    def test_invalid_name_raises(self, vault_manager: VaultManager, name: str) -> None:
         with pytest.raises(InvalidVaultNameError):
             vault_manager.init_vault(name)
 
     @pytest.mark.parametrize("name", ["my-vault", "vault_2", "A123"])
-    def test_valid_names_accepted(
-        self, vault_manager: VaultManager, name: str
-    ) -> None:
+    def test_valid_names_accepted(self, vault_manager: VaultManager, name: str) -> None:
         root = vault_manager.init_vault(name)
         assert root.is_dir()
 

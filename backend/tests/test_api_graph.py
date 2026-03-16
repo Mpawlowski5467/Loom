@@ -77,9 +77,7 @@ def empty_vault(vault_manager, note_index):
 
 
 class TestGetGraph:
-    def test_graph_with_seeded_notes(
-        self, client: TestClient, seeded_graph_vault: Path
-    ) -> None:
+    def test_graph_with_seeded_notes(self, client: TestClient, seeded_graph_vault: Path) -> None:
         """GET /api/graph returns nodes and edges from seeded notes."""
         resp = client.get("/api/graph")
         assert resp.status_code == 200
@@ -90,9 +88,7 @@ class TestGetGraph:
         # Django doesn't exist so wikilink doesn't resolve.
         assert len(data["edges"]) >= 3
 
-    def test_node_structure(
-        self, client: TestClient, seeded_graph_vault: Path
-    ) -> None:
+    def test_node_structure(self, client: TestClient, seeded_graph_vault: Path) -> None:
         """Each graph node has required id, title, type fields."""
         resp = client.get("/api/graph")
         data = resp.json()
@@ -114,9 +110,7 @@ class TestGetGraph:
             assert edge["source"] in node_ids, f"Invalid source: {edge['source']}"
             assert edge["target"] in node_ids, f"Invalid target: {edge['target']}"
 
-    def test_empty_vault_returns_empty_graph(
-        self, client: TestClient, empty_vault: Path
-    ) -> None:
+    def test_empty_vault_returns_empty_graph(self, client: TestClient, empty_vault: Path) -> None:
         """GET /api/graph with no notes returns empty nodes and edges."""
         resp = client.get("/api/graph")
         assert resp.status_code == 200
@@ -131,9 +125,7 @@ class TestGetGraph:
 
 
 class TestGetGraphFiltered:
-    def test_filter_by_type(
-        self, client: TestClient, seeded_graph_vault: Path
-    ) -> None:
+    def test_filter_by_type(self, client: TestClient, seeded_graph_vault: Path) -> None:
         """GET /api/graph?type=topic returns only topic nodes."""
         resp = client.get("/api/graph?type=topic")
         assert resp.status_code == 200
@@ -141,9 +133,7 @@ class TestGetGraphFiltered:
         assert len(data["nodes"]) == 2
         assert all(n["type"] == "topic" for n in data["nodes"])
 
-    def test_filter_by_type_project(
-        self, client: TestClient, seeded_graph_vault: Path
-    ) -> None:
+    def test_filter_by_type_project(self, client: TestClient, seeded_graph_vault: Path) -> None:
         """GET /api/graph?type=project returns only project nodes."""
         resp = client.get("/api/graph?type=project")
         assert resp.status_code == 200
@@ -153,9 +143,7 @@ class TestGetGraphFiltered:
         # Single node, no edges between projects
         assert len(data["edges"]) == 0
 
-    def test_filter_by_tag(
-        self, client: TestClient, seeded_graph_vault: Path
-    ) -> None:
+    def test_filter_by_tag(self, client: TestClient, seeded_graph_vault: Path) -> None:
         """GET /api/graph?tag=test returns nodes tagged with 'test'."""
         resp = client.get("/api/graph?tag=test")
         assert resp.status_code == 200

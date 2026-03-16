@@ -37,7 +37,7 @@ def _extract_body(text: str) -> str:
     """Strip YAML frontmatter from *text*, returning the markdown body."""
     match = _FRONTMATTER_RE.match(text)
     if match:
-        return text[match.end():]
+        return text[match.end() :]
     return text
 
 
@@ -144,9 +144,7 @@ def parse_policy(path: Path) -> PolicyRule:
     conditions = _split_numbered_items(rules_text)
 
     # First paragraph after the heading (before ## Rules) serves as description.
-    desc_match = re.search(
-        r"^#\s+Policy:.*?\n\n(.+?)(?=\n##|\Z)", body, re.DOTALL
-    )
+    desc_match = re.search(r"^#\s+Policy:.*?\n\n(.+?)(?=\n##|\Z)", body, re.DOTALL)
     description = desc_match.group(1).strip() if desc_match else ""
 
     return PolicyRule(
@@ -189,11 +187,13 @@ def parse_workflow(path: Path) -> WorkflowRule:
             # Fallback: treat the whole line as the action with unknown agent.
             agent = "unknown"
             action = raw.strip()
-        steps.append(WorkflowStep(
-            agent=agent,
-            action=action,
-            input_from=prev_agent,
-        ))
+        steps.append(
+            WorkflowStep(
+                agent=agent,
+                action=action,
+                input_from=prev_agent,
+            )
+        )
         prev_agent = agent
 
     # -- Trigger --------------------------------------------------------------

@@ -25,13 +25,23 @@
 }
 
 @keyframes fadeIn {
-  from { opacity: 0; }
-  to { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 @keyframes slideUp {
-  from { opacity: 0; transform: translateY(12px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* ── Header ──────────────────────────────────────────────────────────── */
@@ -88,7 +98,9 @@
   color: var(--text-secondary);
   font-size: var(--text-sm);
   font-weight: 500;
-  transition: background var(--transition-base), color var(--transition-base);
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
 }
 
 .tab:hover {
@@ -346,12 +358,19 @@
 
 .footer {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: var(--sp-2);
   padding: var(--sp-2) var(--sp-3);
   border-top: 1px solid var(--border);
   background: var(--bg-raised);
   flex-shrink: 0;
+}
+
+.saveError {
+  margin-right: auto;
+  font-size: var(--text-xs);
+  color: var(--danger);
 }
 
 /* ── General settings ────────────────────────────────────────────────── */
@@ -377,41 +396,4 @@
   font-size: var(--text-sm);
   font-family: var(--font-mono);
   color: var(--text-secondary);
-}
-
-/* ── Theme toggle ────────────────────────────────────────────────────── */
-
-.themeToggle {
-  display: flex;
-  border: 1px solid var(--border);
-  overflow: hidden;
-}
-
-.themeBtn {
-  padding: 3px var(--sp-3);
-  border: none;
-  background: var(--bg-inset);
-  color: var(--text-secondary);
-  font-size: var(--text-sm);
-  font-weight: 500;
-  cursor: pointer;
-  transition: background var(--transition-base), color var(--transition-base);
-}
-
-.themeBtn:not(:last-child) {
-  border-right: 1px solid var(--border);
-}
-
-.themeBtn:hover {
-  background: var(--bg-elevated);
-  color: var(--text-primary);
-}
-
-.themeBtnActive {
-  background: var(--accent-amber-muted);
-  color: var(--accent-amber);
-}
-
-.themeBtnActive:hover {
-  background: var(--accent-amber-muted-hover);
 }

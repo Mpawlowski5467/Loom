@@ -22,7 +22,9 @@
   box-shadow: var(--shadow-dropdown);
   pointer-events: auto;
   animation: slideIn 0.2s ease;
-  transition: opacity 0.2s ease, transform 0.2s ease;
+  transition:
+    opacity 0.2s ease,
+    transform 0.2s ease;
   max-width: 360px;
 }
 
@@ -61,7 +63,9 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  transition: background var(--transition-fast), color var(--transition-fast);
+  transition:
+    background var(--transition-fast),
+    color var(--transition-fast);
 }
 
 .close:hover {

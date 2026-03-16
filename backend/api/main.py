@@ -5,14 +5,17 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from slowapi.errors import RateLimitExceeded
 
 from api.routers.agents import router as agents_router
+from api.routers.bridges import router as bridges_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
 from api.routers.search import router as search_router
+from api.routers.settings import router as settings_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import router as vaults_router
 from core.config import settings
@@ -26,6 +29,7 @@ from core.exceptions import (
     VaultExistsError,
     VaultNotFoundError,
 )
+from core.rate_limit import limiter, rate_limit_exceeded_handler
 from core.watcher import start_watcher, stop_watcher
 
 logger = logging.getLogger(__name__)
@@ -146,6 +150,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Loom", version="0.1.0", lifespan=lifespan)
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["http://localhost:5173"],
@@ -182,9 +189,7 @@ async def invalid_vault_name_handler(request: Request, exc: InvalidVaultNameErro
 
 @app.exception_handler(ProviderConfigError)
 async def provider_config_handler(request: Request, exc: ProviderConfigError) -> JSONResponse:
-    return JSONResponse(
-        status_code=503, content={"error": str(exc), "type": "ProviderConfigError"}
-    )
+    return JSONResponse(status_code=503, content={"error": str(exc), "type": "ProviderConfigError"})
 
 
 @app.exception_handler(ReadChainError)
@@ -212,7 +217,9 @@ app.include_router(search_router)
 app.include_router(captures_router)
 app.include_router(index_router)
 app.include_router(agents_router)
+app.include_router(bridges_router)
 app.include_router(chat_router)
+app.include_router(settings_router)
 
 
 @app.get("/api/health")

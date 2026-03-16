@@ -107,7 +107,5 @@ def _restore_wikilinks(original: str, compressed: str) -> str:
     if not missing:
         return compressed
 
-    links_section = "\n\n## Related\n" + "\n".join(
-        f"- [[{link}]]" for link in sorted(missing)
-    )
+    links_section = "\n\n## Related\n" + "\n".join(f"- [[{link}]]" for link in sorted(missing))
     return compressed + links_section

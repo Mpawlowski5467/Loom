@@ -55,6 +55,13 @@ class ProviderConfig(BaseModel):
     host: str | None = None
 
 
+class RateLimitConfig(BaseModel):
+    """Rate limit settings, configurable in config.yaml."""
+
+    read: str = "120/minute"
+    write: str = "30/minute"
+
+
 class GlobalConfig(BaseModel):
     """Maps to ~/.loom/config.yaml."""
 
@@ -62,6 +69,7 @@ class GlobalConfig(BaseModel):
     providers: dict[str, ProviderConfig] = {}
     embed_provider: str | None = None
     chat_provider: str | None = None
+    rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
 
     @classmethod
     def load(cls, path: Path) -> Self:
@@ -74,11 +82,13 @@ class GlobalConfig(BaseModel):
     def save(self, path: Path) -> None:
         """Write to a YAML file, creating parent directories as needed."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.safe_dump(
-            self.model_dump(exclude_none=True),
-            default_flow_style=False,
-            sort_keys=False,
-        ))
+        path.write_text(
+            yaml.safe_dump(
+                self.model_dump(exclude_none=True),
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )
 
 
 class VaultConfig(BaseModel):
@@ -99,8 +109,10 @@ class VaultConfig(BaseModel):
     def save(self, path: Path) -> None:
         """Write to a YAML file, creating parent directories as needed."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(yaml.safe_dump(
-            self.model_dump(),
-            default_flow_style=False,
-            sort_keys=False,
-        ))
+        path.write_text(
+            yaml.safe_dump(
+                self.model_dump(),
+                default_flow_style=False,
+                sort_keys=False,
+            )
+        )

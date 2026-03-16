@@ -229,18 +229,14 @@ class XAIProvider(BaseProvider):
                 "xAI API key not set. Provide it in config.yaml or "
                 "set the XAI_API_KEY environment variable."
             )
-        self._client = openai.AsyncOpenAI(
-            api_key=api_key, base_url=cfg.base_url
-        )
+        self._client = openai.AsyncOpenAI(api_key=api_key, base_url=cfg.base_url)
         self._chat_model = cfg.chat_model
         self._embed_model = cfg.embed_model
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding via xAI's OpenAI-compatible API."""
         if not self._embed_model:
-            raise ProviderError(
-                "xai", "No embed_model configured for xAI provider."
-            )
+            raise ProviderError("xai", "No embed_model configured for xAI provider.")
         try:
             resp = await self._client.embeddings.create(
                 model=self._embed_model,
@@ -297,14 +293,11 @@ class ProviderRegistry:
         """Parse the raw ProviderConfig into a typed config model."""
         raw = self._global_config.providers.get(name)
         if raw is None:
-            raise ProviderConfigError(
-                f"Provider '{name}' is not configured in config.yaml."
-            )
+            raise ProviderConfigError(f"Provider '{name}' is not configured in config.yaml.")
         config_cls = _CONFIG_MODEL_MAP.get(name)
         if config_cls is None:
             raise ProviderConfigError(
-                f"Unknown provider '{name}'. "
-                f"Supported: {', '.join(_CONFIG_MODEL_MAP)}."
+                f"Unknown provider '{name}'. Supported: {', '.join(_CONFIG_MODEL_MAP)}."
             )
         return config_cls.model_validate(raw.model_dump(exclude_none=True))
 

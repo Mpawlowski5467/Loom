@@ -68,9 +68,7 @@ export function Sidebar({
 
   function handleNavigate(title: string) {
     if (!graph) return;
-    const target = graph.nodes.find(
-      (n) => n.title.toLowerCase() === title.toLowerCase(),
-    );
+    const target = graph.nodes.find((n) => n.title.toLowerCase() === title.toLowerCase());
     if (target) {
       onNavigate(target.id);
     }
@@ -104,9 +102,7 @@ export function Sidebar({
         <>
           {/* Header */}
           <div className={styles.header}>
-            {mode === "edit" && (
-              <span className={styles.editBadge}>EDITING</span>
-            )}
+            {mode === "edit" && <span className={styles.editBadge}>EDITING</span>}
             <span className={styles.title}>{note?.title ?? ""}</span>
 
             {mode === "view" && note && (
@@ -178,11 +174,7 @@ export function Sidebar({
 
           {!loading && !error && note && mode === "view" && (
             <div className={styles.body}>
-              <ThreadView
-                note={note}
-                graph={graph}
-                onNavigate={handleNavigate}
-              />
+              <ThreadView note={note} graph={graph} onNavigate={handleNavigate} />
             </div>
           )}
 

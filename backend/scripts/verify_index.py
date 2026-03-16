@@ -154,9 +154,7 @@ async def main() -> None:
             print(f"    [{r.score:.4f}] {r.note_id} ({r.note_type})")
 
         # Search with Meridian as context — linked notes should rank higher
-        results_with_ctx = await searcher.search(
-            "fundamentals", context_note_ids=[meridian_id]
-        )
+        results_with_ctx = await searcher.search("fundamentals", context_note_ids=[meridian_id])
         print("\n  With Meridian Protocol as context:")
         for r in results_with_ctx[:5]:
             print(f"    [{r.score:.4f}] {r.note_id} ({r.note_type})")

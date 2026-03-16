@@ -3,9 +3,9 @@
 [data-theme="dark"],
 :root {
   /* ── Backgrounds ──────────────────────────────────────────────────────── */
-  --bg-base: #111318;
-  --bg-surface: #1a1d25;
-  --bg-elevated: #282c36;
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
   --bg-inset: #0a0c10;
   --bg-raised: #21252e;
   --overlay: rgba(0, 0, 0, 0.7);
@@ -16,8 +16,8 @@
   --border-focus: var(--accent-amber);
 
   /* ── Text ──────────────────────────────────────────────────────────────── */
-  --text-primary: #e2e5eb;
-  --text-secondary: #8b90a0;
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
   --text-disabled: #505562;
   --text-on-accent: #111318;
 
@@ -50,7 +50,7 @@
   --success: #34d399;
 
   /* ── Graph canvas (read by JS for Sigma/canvas contexts) ──────────────── */
-  --graph-bg: #111318;
+  --graph-bg: #0f172a;
   --graph-label: #8b90a0;
   --graph-edge: rgba(139, 144, 160, 0.15);
   --graph-edge-hover: rgba(167, 139, 250, 0.5);
@@ -114,60 +114,4 @@
   /* ── Dot sizes ─────────────────────────────────────────────────────── */
   --dot-size-sm: 6px;
   --dot-size-md: 8px;
-}
-
-/* ── Light theme ──────────────────────────────────────────────────────── */
-
-[data-theme="light"] {
-  --bg-base: #f5f6f8;
-  --bg-surface: #ffffff;
-  --bg-elevated: #e4e6ec;
-  --bg-inset: #eceef3;
-  --bg-raised: #eef0f4;
-  --overlay: rgba(0, 0, 0, 0.25);
-
-  --border: #cdd1da;
-  --border-light: #dfe2e8;
-  --border-focus: var(--accent-amber);
-
-  --text-primary: #1a1d24;
-  --text-secondary: #5c6070;
-  --text-disabled: #a0a4b0;
-  --text-on-accent: #ffffff;
-
-  --accent-amber: #d97706;
-  --accent-amber-hover: #b45309;
-  --accent-amber-active: #92400e;
-  --accent-purple: #7c3aed;
-  --accent-purple-hover: #6d28d9;
-  --accent-purple-active: #5b21b6;
-
-  --accent-amber-muted: rgba(217, 119, 6, 0.10);
-  --accent-amber-muted-hover: rgba(217, 119, 6, 0.16);
-  --accent-purple-muted: rgba(124, 58, 237, 0.10);
-  --accent-purple-muted-hover: rgba(124, 58, 237, 0.16);
-  --danger-muted: rgba(220, 38, 38, 0.10);
-  --success-muted: rgba(22, 163, 74, 0.10);
-
-  --node-project: #3b82f6;
-  --node-topic: #16a34a;
-  --node-person: #9333ea;
-  --node-daily: #6b7280;
-  --node-capture: #d97706;
-  --node-custom: #0d9488;
-
-  --danger: #dc2626;
-  --success: #16a34a;
-
-  --graph-bg: #f5f6f8;
-  --graph-label: #5c6070;
-  --graph-edge: rgba(92, 96, 112, 0.18);
-  --graph-edge-hover: rgba(124, 58, 237, 0.45);
-  --graph-selected: #d97706;
-  --graph-dimmed: rgba(92, 96, 112, 0.06);
-
-  --shadow-inset: inset 0 1px 2px rgba(0, 0, 0, 0.06);
-  --shadow-raised: 0 1px 0 rgba(0, 0, 0, 0.04);
-  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.12);
-  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.15);
 }

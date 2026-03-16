@@ -64,17 +64,13 @@ def empty_vault(vault_manager, note_index):
 
 
 class TestGetCaptures:
-    def test_empty_captures_returns_empty_list(
-        self, client: TestClient, empty_vault: Path
-    ) -> None:
+    def test_empty_captures_returns_empty_list(self, client: TestClient, empty_vault: Path) -> None:
         """GET /api/captures with no captures returns an empty list."""
         resp = client.get("/api/captures")
         assert resp.status_code == 200
         assert resp.json() == []
 
-    def test_lists_seeded_captures(
-        self, client: TestClient, seeded_captures: Path
-    ) -> None:
+    def test_lists_seeded_captures(self, client: TestClient, seeded_captures: Path) -> None:
         """GET /api/captures with seeded captures returns items with metadata."""
         resp = client.get("/api/captures")
         assert resp.status_code == 200
@@ -101,9 +97,7 @@ class TestGetCaptures:
         assert item["preview"]  # non-empty preview
         assert item["file_path"]  # non-empty file path
 
-    def test_capture_preview_content(
-        self, client: TestClient, seeded_captures: Path
-    ) -> None:
+    def test_capture_preview_content(self, client: TestClient, seeded_captures: Path) -> None:
         """Preview text is extracted from the note body."""
         resp = client.get("/api/captures")
         data = resp.json()
@@ -130,9 +124,7 @@ class TestProcessCapture:
         assert resp.status_code == 503
         assert "Weaver" in resp.json()["detail"]
 
-    def test_process_capture_not_found(
-        self, client: TestClient, seeded_captures: Path
-    ) -> None:
+    def test_process_capture_not_found(self, client: TestClient, seeded_captures: Path) -> None:
         """POST /api/captures/process with nonexistent path returns 404."""
         mock_weaver = MagicMock()
 
@@ -145,9 +137,7 @@ class TestProcessCapture:
         assert resp.status_code == 404
         assert "not found" in resp.json()["detail"]
 
-    def test_process_capture_success(
-        self, client: TestClient, seeded_captures: Path
-    ) -> None:
+    def test_process_capture_success(self, client: TestClient, seeded_captures: Path) -> None:
         """POST /api/captures/process with valid capture returns processed result."""
         mock_note = MagicMock()
         mock_note.id = "thr_new001"
@@ -194,9 +184,7 @@ class TestProcessCapture:
     ) -> None:
         """POST /api/captures/process returns error when weaver raises."""
         mock_weaver = MagicMock()
-        mock_weaver.process_capture = AsyncMock(
-            side_effect=RuntimeError("LLM call failed")
-        )
+        mock_weaver.process_capture = AsyncMock(side_effect=RuntimeError("LLM call failed"))
 
         with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
             resp = client.post(
@@ -225,9 +213,7 @@ class TestProcessAllCaptures:
 
         assert resp.status_code == 503
 
-    def test_process_all_empty_captures(
-        self, client: TestClient, empty_vault: Path
-    ) -> None:
+    def test_process_all_empty_captures(self, client: TestClient, empty_vault: Path) -> None:
         """POST /api/captures/process-all with no captures returns zero total."""
         mock_weaver = MagicMock()
 
@@ -240,9 +226,7 @@ class TestProcessAllCaptures:
         assert data["processed"] == 0
         assert data["results"] == []
 
-    def test_process_all_success(
-        self, client: TestClient, seeded_captures: Path
-    ) -> None:
+    def test_process_all_success(self, client: TestClient, seeded_captures: Path) -> None:
         """POST /api/captures/process-all processes all captures."""
         mock_note = MagicMock()
         mock_note.id = "thr_batch01"

@@ -1,7 +1,7 @@
 /**
  * Ambient life: subtle breathing animation for nodes.
  * Nodes gently oscillate size by ~5% on a slow 3-5s cycle, staggered per node.
- * Respects prefers-reduced-motion.
+ * Respects prefers-reduced-motion. Throttled to ~20fps to avoid thrashing.
  */
 
 import type Graph from "graphology";
@@ -10,6 +10,7 @@ import type Sigma from "sigma";
 const BREATH_AMPLITUDE = 0.05; // 5% size variation
 const BREATH_MIN_PERIOD = 3000; // ms
 const BREATH_MAX_PERIOD = 5000; // ms
+const FRAME_INTERVAL = 50; // ms (~20fps — enough for subtle breathing)
 
 /** Check if user prefers reduced motion. */
 function prefersReducedMotion(): boolean {
@@ -24,7 +25,7 @@ export function startBreathing(
   sigma: Sigma,
 ): () => void {
   if (prefersReducedMotion()) {
-    return () => {}; // no-op
+    return () => {};
   }
 
   // Store base sizes and assign random phase offsets per node
@@ -40,18 +41,13 @@ export function startBreathing(
     });
   });
 
-  let rafId: number;
-  let running = true;
-
-  function tick() {
-    if (!running) return;
+  // Use setInterval instead of rAF to avoid thrashing at 60fps
+  const intervalId = setInterval(() => {
     const now = performance.now();
 
     graph.forEachNode((node) => {
       const info = nodePhases.get(node);
       if (!info) return;
-
-      // Don't animate hidden nodes
       if (graph.getNodeAttribute(node, "hidden")) return;
 
       const phase = (now / info.period) * Math.PI * 2 + info.offset;
@@ -60,14 +56,10 @@ export function startBreathing(
     });
 
     sigma.scheduleRefresh();
-    rafId = requestAnimationFrame(tick);
-  }
-
-  rafId = requestAnimationFrame(tick);
+  }, FRAME_INTERVAL);
 
   return () => {
-    running = false;
-    cancelAnimationFrame(rafId);
+    clearInterval(intervalId);
 
     // Restore base sizes
     graph.forEachNode((node) => {

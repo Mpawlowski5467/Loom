@@ -46,10 +46,14 @@ export function createNodeReducer(refs: ReducerRefs) {
 
     // Hover dimming — fade non-neighbors
     if (hovered && hovered !== node && node !== selected) {
-      if (g && !g.neighbors(hovered).includes(node)) {
-        res.color = DIMMED_NODE;
-        res.label = null;
-        res.zIndex = 0;
+      try {
+        if (g && g.hasNode(hovered) && !g.neighbors(hovered).includes(node)) {
+          res.color = DIMMED_NODE;
+          res.label = null;
+          res.zIndex = 0;
+        }
+      } catch {
+        // Graph may be mutating during layout — ignore
       }
     }
 
@@ -91,10 +95,16 @@ export function createEdgeReducer(refs: ReducerRefs) {
     const g = refs.graph.current;
     const hovered = refs.hoveredNode.current;
 
-    if (!g) return res;
+    if (!g || !g.hasEdge(edge)) return res;
 
-    const source = g.source(edge);
-    const target = g.target(edge);
+    let source: string;
+    let target: string;
+    try {
+      source = g.source(edge);
+      target = g.target(edge);
+    } catch {
+      return res;
+    }
 
     // Filter: hide edges to hidden nodes
     if (ft !== "all") {

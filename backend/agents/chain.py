@@ -23,6 +23,8 @@ from core.notes import parse_note
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from core.note_index import NoteIndex
+
 logger = logging.getLogger(__name__)
 
 MAX_RELATED_NOTES = 5
@@ -77,8 +79,9 @@ class ReadChainResult:
 class ReadChain:
     """Executes the mandatory read-before-write chain for an agent."""
 
-    def __init__(self, vault_root: Path) -> None:
+    def __init__(self, vault_root: Path, note_index: NoteIndex | None = None) -> None:
         self._root = vault_root
+        self._note_index = note_index
 
     def execute(self, agent_name: str, target_path: Path) -> ReadChainResult:
         """Run the full 6-step read chain.
@@ -208,8 +211,8 @@ class ReadChain:
 
                 threads_dir = self._root / "threads"
                 if threads_dir.exists():
-                    # Build a quick title→path map from available notes
-                    title_map = self._build_title_map(threads_dir)
+                    # Use cached index if available, else fall back to rglob
+                    title_map = self._get_title_map(threads_dir)
                     for link_text in wikilinks:
                         linked_path = title_map.get(link_text.lower())
                         if linked_path and linked_path != target_path:
@@ -230,8 +233,14 @@ class ReadChain:
 
         return step
 
+    def _get_title_map(self, threads_dir: Path) -> dict[str, Path]:
+        """Return a title→path map, preferring the cached NoteIndex."""
+        if self._note_index is not None and self._note_index.size > 0:
+            return self._note_index.get_title_map()
+        return self._build_title_map_from_disk(threads_dir)
+
     @staticmethod
-    def _build_title_map(threads_dir: Path) -> dict[str, Path]:
+    def _build_title_map_from_disk(threads_dir: Path) -> dict[str, Path]:
         """Build a lowercase-title → path map from all .md files in threads/."""
         from core.notes import parse_note_meta
 

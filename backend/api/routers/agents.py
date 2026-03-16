@@ -90,7 +90,6 @@ def list_agents() -> list[AgentStatus]:
 @router.post("/agents/{agent_name}/run")
 async def run_agent(
     agent_name: str,
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> RunResult:
     """Manually trigger a scheduled agent run."""
     from agents.runner import get_runner

@@ -74,12 +74,22 @@ class VectorIndexer:
         # Can't create without data (need vector dimension)
         raise RuntimeError("Cannot create index table without initial data")
 
-    async def _embed_chunks(self, chunks: list[Chunk]) -> list[list[float]]:
-        """Embed all chunks via the configured provider."""
+    async def _embed_chunks(
+        self, chunks: list[Chunk], batch_size: int = 32
+    ) -> list[list[float]]:
+        """Embed all chunks via the configured provider.
+
+        Uses asyncio.gather to parallelize up to batch_size concurrent calls.
+        """
+        import asyncio
+
         vectors: list[list[float]] = []
-        for chunk in chunks:
-            vec = await self._embed.embed(chunk.embed_text)
-            vectors.append(vec)
+        for i in range(0, len(chunks), batch_size):
+            batch = chunks[i : i + batch_size]
+            batch_vecs = await asyncio.gather(
+                *(self._embed.embed(c.embed_text) for c in batch)
+            )
+            vectors.extend(batch_vecs)
         return vectors
 
     async def index_note(self, note_path: Path) -> int:

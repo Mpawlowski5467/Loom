@@ -17,6 +17,7 @@ from agents.chain import ReadChain, ReadChainResult
 from agents.changelog import log_action
 from agents.memory import summarize_memory
 from core.exceptions import ReadChainError
+from core.note_index import get_note_index
 from core.notes import now_iso
 
 if TYPE_CHECKING:
@@ -114,7 +115,7 @@ class BaseAgent(ABC):
         self._agent_dir = vault_root / "agents" / self.name
         self._config = AgentConfig.load(self._agent_dir / "config.yaml")
         self._state = AgentState(self._agent_dir / "state.json")
-        self._chain = ReadChain(vault_root)
+        self._chain = ReadChain(vault_root, note_index=get_note_index())
 
     @property
     @abstractmethod

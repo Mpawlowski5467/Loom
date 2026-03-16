@@ -24,12 +24,18 @@ class _VaultEventHandler(FileSystemEventHandler):
     Also triggers vector re-indexing for changed notes.
     """
 
-    def __init__(self, threads_dir: Path, loom_dir: Path) -> None:
+    def __init__(
+        self,
+        threads_dir: Path,
+        loom_dir: Path,
+        loop: asyncio.AbstractEventLoop | None = None,
+    ) -> None:
         self._threads_dir = threads_dir
         self._loom_dir = loom_dir
         self._rebuild_timer: threading.Timer | None = None
         self._timer_lock = threading.Lock()
         self._index = get_note_index()
+        self._loop = loop
 
     def _is_md(self, event: FileSystemEvent) -> bool:
         return str(event.src_path).endswith(".md")
@@ -74,15 +80,26 @@ class _VaultEventHandler(FileSystemEventHandler):
                     pass
             self._schedule_rebuild()
 
+    def _run_async(self, coro) -> None:
+        """Run an async coroutine from the watcher thread safely."""
+        if self._loop is not None and not self._loop.is_closed():
+            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+            try:
+                future.result(timeout=30)
+            except Exception:  # noqa: BLE001
+                logger.debug("Async operation failed", exc_info=True)
+        else:
+            logger.warning("Event loop unavailable — skipping async operation")
+
     def _vector_index_file(self, path: Path) -> None:
-        """Re-index a single file in the vector store (async via new event loop)."""
+        """Re-index a single file in the vector store."""
         from index.indexer import get_indexer
 
         indexer = get_indexer()
         if indexer is None:
             return
         try:
-            asyncio.run(indexer.index_note(path))
+            self._run_async(indexer.index_note(path))
         except Exception:  # noqa: BLE001
             logger.debug("Vector index update failed for %s", path, exc_info=True)
 
@@ -127,7 +144,11 @@ _observer: Observer | None = None
 _batch_timer: threading.Timer | None = None
 
 
-def _schedule_batch_reindex(threads_dir: Path, loom_dir: Path) -> None:
+def _schedule_batch_reindex(
+    threads_dir: Path,
+    loom_dir: Path,
+    loop: asyncio.AbstractEventLoop | None = None,
+) -> None:
     """Schedule periodic full vector reindex."""
     global _batch_timer
 
@@ -138,19 +159,33 @@ def _schedule_batch_reindex(threads_dir: Path, loom_dir: Path) -> None:
         if indexer is not None:
             logger.info("Running scheduled batch reindex")
             try:
-                asyncio.run(indexer.reindex_vault(threads_dir))
+                if loop is not None and not loop.is_closed():
+                    future = asyncio.run_coroutine_threadsafe(
+                        indexer.reindex_vault(threads_dir), loop
+                    )
+                    future.result(timeout=300)
+                else:
+                    logger.warning("Event loop unavailable — skipping batch reindex")
             except Exception:  # noqa: BLE001
                 logger.warning("Batch reindex failed", exc_info=True)
         # Reschedule
-        _schedule_batch_reindex(threads_dir, loom_dir)
+        _schedule_batch_reindex(threads_dir, loom_dir, loop)
 
     _batch_timer = threading.Timer(_BATCH_REINDEX_SECONDS, _do_batch)
     _batch_timer.daemon = True
     _batch_timer.start()
 
 
-def start_watcher(vault_root: Path) -> Observer:
-    """Start watching the vault's threads/ directory for .md changes."""
+def start_watcher(
+    vault_root: Path,
+    loop: asyncio.AbstractEventLoop | None = None,
+) -> Observer:
+    """Start watching the vault's threads/ directory for .md changes.
+
+    Args:
+        vault_root: Root directory of the vault.
+        loop: The main asyncio event loop, used for thread-safe async calls.
+    """
     global _observer
     if _observer is not None:
         _observer.stop()
@@ -162,7 +197,7 @@ def start_watcher(vault_root: Path) -> Observer:
     index = get_note_index()
     index.build(threads_dir)
 
-    handler = _VaultEventHandler(threads_dir, loom_dir)
+    handler = _VaultEventHandler(threads_dir, loom_dir, loop=loop)
 
     _observer = Observer()
     _observer.schedule(handler, str(threads_dir), recursive=True)
@@ -170,7 +205,7 @@ def start_watcher(vault_root: Path) -> Observer:
     _observer.start()
 
     # Start periodic batch reindex
-    _schedule_batch_reindex(threads_dir, loom_dir)
+    _schedule_batch_reindex(threads_dir, loom_dir, loop)
 
     logger.info("File watcher started for %s", threads_dir)
     return _observer

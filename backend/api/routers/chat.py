@@ -94,7 +94,7 @@ async def send_message(
     reply_text = await _generate_reply(body.agent, body.message, chat, vm)
 
     # Save assistant response
-    role = "assistant" if body.agent in SHUTTLE_AGENTS else "assistant"
+    role = "assistant" if body.agent in SHUTTLE_AGENTS else "council"
     assistant_msg = chat.save_message(body.agent, role, reply_text)
 
     return SendMessageResponse(

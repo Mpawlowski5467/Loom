@@ -22,10 +22,10 @@ const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: "manual", label: "Manual" },
 ];
 
-const SOURCE_ICONS: Record<string, string> = {
-  email: "📧",
-  github: "🐙",
-  manual: "📝",
+const SOURCE_LABELS: Record<string, string> = {
+  email: "EM",
+  github: "GH",
+  manual: "MN",
 };
 
 const POLL_MS = 5_000;
@@ -96,7 +96,7 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
 
       if (result.processed) {
         setCaptureStates((prev) => ({ ...prev, [key]: { status: "done", result } }));
-        addToast(`🧶 Weaver created [[${result.note_title}]]`, "info");
+        addToast(`Weaver created [[${result.note_title}]]`, "info");
       } else {
         setCaptureStates((prev) => ({ ...prev, [key]: { status: "pending" } }));
         addToast(`Processing failed: ${result.error}`, "danger");
@@ -215,7 +215,7 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
             onClick={handleProcessAll}
             disabled={processingAll || pendingCount === 0}
           >
-            {processingAll ? "Processing..." : "🕸 Process All"}
+            {processingAll ? "Processing..." : "Process All"}
           </button>
         </div>
       </div>
@@ -278,11 +278,11 @@ function getStatusLabel(status: string, result?: ProcessResult): string {
   return "Pending";
 }
 
-function getSourceIcon(source: string): string {
+function getSourceLabel(source: string): string {
   const src = (source || "").toLowerCase();
-  if (src.includes("email")) return SOURCE_ICONS.email;
-  if (src.includes("github")) return SOURCE_ICONS.github;
-  return SOURCE_ICONS.manual;
+  if (src.includes("email")) return SOURCE_LABELS.email;
+  if (src.includes("github")) return SOURCE_LABELS.github;
+  return SOURCE_LABELS.manual;
 }
 
 function formatTime(iso: string): string {
@@ -325,8 +325,8 @@ function CaptureCard({
   return (
     <div className={`${styles.card} ${borderClass}`} onClick={onClick}>
       <div className={styles.cardTop}>
-        <span className={styles.cardSourceIcon}>
-          {getSourceIcon(capture.source)}
+        <span className={styles.cardSourceLabel}>
+          {getSourceLabel(capture.source)}
         </span>
         <div className={styles.cardIdent}>
           <span className={styles.cardTitle}>

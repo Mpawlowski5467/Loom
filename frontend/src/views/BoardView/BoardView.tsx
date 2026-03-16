@@ -11,14 +11,14 @@ import {
 } from "../../lib/api";
 import styles from "./BoardView.module.css";
 
-const AGENT_ICONS: Record<string, string> = {
-  weaver: "🧶",
-  spider: "🕷",
-  archivist: "🗃",
-  scribe: "📜",
-  sentinel: "🛡",
-  researcher: "🔬",
-  standup: "☀️",
+const AGENT_INITIALS: Record<string, string> = {
+  weaver: "W",
+  spider: "Sp",
+  archivist: "A",
+  scribe: "Sc",
+  sentinel: "Se",
+  researcher: "R",
+  standup: "St",
 };
 
 const AGENT_DESCS: Record<string, string> = {
@@ -77,7 +77,7 @@ export function BoardView() {
       for (const a of agentList) {
         const prev = lastSeenCountRef.current[a.name] ?? a.action_count;
         if (a.action_count > prev) {
-          const icon = AGENT_ICONS[a.name] || "";
+          const icon = AGENT_INITIALS[a.name] || "";
           addToast(`${icon} ${a.name} completed an action`, "info");
         }
         lastSeenCountRef.current[a.name] = a.action_count;
@@ -142,7 +142,7 @@ export function BoardView() {
     setRunningAgents((s) => new Set(s).add(name));
     try {
       await runAgent(name);
-      addToast(`${AGENT_ICONS[name] || ""} ${name} run completed`, "success");
+      addToast(`${AGENT_INITIALS[name] || ""} ${name} run completed`, "success");
       poll();
     } catch {
       addToast(`${name} run failed`, "danger");
@@ -222,7 +222,7 @@ export function BoardView() {
       {/* Council Chat */}
       <section className={styles.chatSection}>
         <div className={styles.chatHeader}>
-          <span>🕸 Loom Council</span>
+          <span>Loom Council</span>
         </div>
         <div className={styles.chatBody}>
           {councilMessages.length === 0 ? (
@@ -292,7 +292,7 @@ export function BoardView() {
                 className={`${styles.chatTab} ${shuttleTab === name ? styles.chatTabActive : ""}`}
                 onClick={() => setShuttleTab(name)}
               >
-                {AGENT_ICONS[name]} {name}
+                {AGENT_INITIALS[name]} {name}
               </button>
             ))}
           </div>
@@ -353,7 +353,7 @@ export function BoardView() {
               <div key={i} className={styles.activityRow}>
                 <span className={styles.activityTime}>{formatTime(entry.time)}</span>
                 <span className={styles.activityAgent}>
-                  {AGENT_ICONS[entry.agent] || ""} {entry.agent}
+                  {entry.agent}
                 </span>
                 <span className={styles.activityAction}>{entry.details || entry.action}</span>
                 <span className={styles.activityStatus}>
@@ -380,7 +380,7 @@ function AgentCard({
   running: boolean;
   onRun: () => void;
 }) {
-  const icon = AGENT_ICONS[agent.name] || "🤖";
+  const icon = AGENT_INITIALS[agent.name] || "?";
   const desc = AGENT_DESCS[agent.name] || agent.role;
 
   const statusLabel = running ? "Running" : "Idle";
@@ -389,7 +389,7 @@ function AgentCard({
   return (
     <div className={styles.card}>
       <div className={styles.cardTop}>
-        <span className={styles.cardIcon}>{icon}</span>
+        <span className={styles.cardInitial}>{icon}</span>
         <div className={styles.cardIdent}>
           <span className={styles.cardName}>{agent.name}</span>
           <span className={styles.cardRole}>{agent.role}</span>

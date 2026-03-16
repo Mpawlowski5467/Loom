@@ -26,6 +26,7 @@ export function Sidebar({
   const [note, setNote] = useState<Note | null>(null);
   const [graph, setGraph] = useState<VaultGraph | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
 
   // Derive: reset when noteId clears
@@ -34,10 +35,12 @@ export function Sidebar({
     setPrevNoteId(noteId);
     if (!noteId) {
       setNote(null);
+      setError(null);
       onModeChange("view");
       setLoading(false);
     } else {
       setLoading(true);
+      setError(null);
     }
   }
 
@@ -57,6 +60,7 @@ export function Sidebar({
       .catch((err) => {
         if (id !== fetchIdRef.current) return;
         console.error("Failed to load note:", err);
+        setError(err instanceof Error ? err.message : "Failed to load note");
         setLoading(false);
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -141,7 +145,38 @@ export function Sidebar({
             </div>
           )}
 
-          {!loading && note && mode === "view" && (
+          {!loading && error && (
+            <div className={styles.body}>
+              <div className={styles.errorState}>
+                <p className={styles.errorText}>{error}</p>
+                <button
+                  className={styles.errorRetry}
+                  onClick={() => {
+                    setError(null);
+                    setLoading(true);
+                    const rid = ++fetchIdRef.current;
+                    Promise.all([fetchNote(noteId!), fetchGraph()])
+                      .then(([n, g]) => {
+                        if (rid !== fetchIdRef.current) return;
+                        setNote(n);
+                        setGraph(g);
+                        onModeChange("view");
+                        setLoading(false);
+                      })
+                      .catch((e) => {
+                        if (rid !== fetchIdRef.current) return;
+                        setError(e instanceof Error ? e.message : "Failed to load note");
+                        setLoading(false);
+                      });
+                  }}
+                >
+                  Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loading && !error && note && mode === "view" && (
             <div className={styles.body}>
               <ThreadView
                 note={note}
@@ -151,7 +186,7 @@ export function Sidebar({
             </div>
           )}
 
-          {!loading && note && mode === "edit" && (
+          {!loading && !error && note && mode === "edit" && (
             <NoteEditor
               note={note}
               onSaved={handleSaved}

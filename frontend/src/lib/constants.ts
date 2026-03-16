@@ -6,7 +6,24 @@
  * from variables.css (e.g., var(--node-project)) where possible.
  */
 
-/** Hex color map for note types — required by Sigma.js canvas rendering. */
+/** Read the current computed value of a CSS custom property from :root. */
+export function getCSSVar(name: string): string {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+/** Build a fresh node-color hex map by reading current CSS variables. */
+export function getNodeColorsHex(): Record<string, string> {
+  return {
+    project: getCSSVar("--node-project") || "#60a5fa",
+    topic: getCSSVar("--node-topic") || "#4ade80",
+    person: getCSSVar("--node-person") || "#c084fc",
+    daily: getCSSVar("--node-daily") || "#94a3b8",
+    capture: getCSSVar("--node-capture") || "#fbbf24",
+    custom: getCSSVar("--node-custom") || "#2dd4bf",
+  };
+}
+
+/** Static fallback — used when computed styles aren't available yet. */
 export const NODE_COLORS_HEX: Record<string, string> = {
   project: "#60a5fa",
   topic: "#4ade80",
@@ -26,14 +43,14 @@ export const NODE_COLORS_CSS: Record<string, string> = {
   custom: "var(--node-custom)",
 };
 
-/** Filter chip labels for graph type filtering. */
+/** Filter chip labels for graph type filtering. Uses CSS vars so colors follow the theme. */
 export const TYPE_LABELS: { id: string; label: string; color: string }[] = [
   { id: "all", label: "All", color: "" },
-  { id: "project", label: "Projects", color: "#60a5fa" },
-  { id: "topic", label: "Topics", color: "#4ade80" },
-  { id: "person", label: "People", color: "#c084fc" },
-  { id: "daily", label: "Daily", color: "#94a3b8" },
-  { id: "capture", label: "Captures", color: "#fbbf24" },
+  { id: "project", label: "Projects", color: "var(--node-project)" },
+  { id: "topic", label: "Topics", color: "var(--node-topic)" },
+  { id: "person", label: "People", color: "var(--node-person)" },
+  { id: "daily", label: "Daily", color: "var(--node-daily)" },
+  { id: "capture", label: "Captures", color: "var(--node-capture)" },
 ];
 
 /** Format an ISO timestamp for display. */

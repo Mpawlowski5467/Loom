@@ -162,7 +162,10 @@ class AnthropicProvider(BaseProvider):
 
 
 class OllamaProvider(BaseProvider):
-    """Ollama local provider — communicates over HTTP."""
+    """Ollama local provider — communicates over HTTP.
+
+    Reuses a single httpx.AsyncClient for connection pooling.
+    """
 
     name = "ollama"
 
@@ -170,20 +173,28 @@ class OllamaProvider(BaseProvider):
         self._host = cfg.host.rstrip("/")
         self._chat_model = cfg.chat_model
         self._embed_model = cfg.embed_model
+        self._client = httpx.AsyncClient(
+            base_url=self._host,
+            timeout=httpx.Timeout(connect=10.0, read=120.0, write=10.0, pool=10.0),
+        )
+
+    async def close(self) -> None:
+        """Close the underlying httpx client."""
+        await self._client.aclose()
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding via the Ollama API."""
-        async with httpx.AsyncClient(timeout=60) as client:
-            try:
-                resp = await client.post(
-                    f"{self._host}/api/embed",
-                    json={"model": self._embed_model, "input": text},
-                )
-                resp.raise_for_status()
-                data = resp.json()
-                return data["embeddings"][0]
-            except httpx.HTTPError as exc:
-                raise ProviderError("ollama", str(exc)) from exc
+        try:
+            resp = await self._client.post(
+                "/api/embed",
+                json={"model": self._embed_model, "input": text},
+                timeout=10.0,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return data["embeddings"][0]
+        except httpx.HTTPError as exc:
+            raise ProviderError("ollama", str(exc)) from exc
 
     async def chat(self, messages: list[dict], system: str = "") -> str:
         """Generate a chat completion via the Ollama API."""
@@ -191,20 +202,19 @@ class OllamaProvider(BaseProvider):
         if system:
             full_messages.append({"role": "system", "content": system})
         full_messages.extend(messages)
-        async with httpx.AsyncClient(timeout=120) as client:
-            try:
-                resp = await client.post(
-                    f"{self._host}/api/chat",
-                    json={
-                        "model": self._chat_model,
-                        "messages": full_messages,
-                        "stream": False,
-                    },
-                )
-                resp.raise_for_status()
-                return resp.json()["message"]["content"]
-            except httpx.HTTPError as exc:
-                raise ProviderError("ollama", str(exc)) from exc
+        try:
+            resp = await self._client.post(
+                "/api/chat",
+                json={
+                    "model": self._chat_model,
+                    "messages": full_messages,
+                    "stream": False,
+                },
+            )
+            resp.raise_for_status()
+            return resp.json()["message"]["content"]
+        except httpx.HTTPError as exc:
+            raise ProviderError("ollama", str(exc)) from exc
 
 
 class XAIProvider(BaseProvider):
@@ -281,7 +291,6 @@ class ProviderRegistry:
 
     def __init__(self, global_config: GlobalConfig) -> None:
         self._global_config = global_config
-        self._default = global_config.providers.get("default")  # type: ignore[arg-type]
         self._providers: dict[str, BaseProvider] = {}
 
     def _resolve_config(self, name: str) -> BaseModel:
@@ -335,10 +344,13 @@ class ProviderRegistry:
         name = raw.get("chat_provider") or self._default_name()
         return name
 
+    async def close(self) -> None:
+        """Close any providers that hold resources (e.g. httpx clients)."""
+        for provider in self._providers.values():
+            if hasattr(provider, "close"):
+                await provider.close()
+
     def _default_name(self) -> str:
-        if self._default and isinstance(self._default, str):
-            return self._default
-        # Infer from settings
         return settings.default_provider
 
 

@@ -1,34 +1,18 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect } from "react";
 
 export type Theme = "dark" | "light";
 
-const STORAGE_KEY = "loom-theme";
-
-function getInitialTheme(): Theme {
-  try {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored === "dark" || stored === "light") return stored;
-  } catch {
-    // localStorage unavailable
-  }
-  return "dark";
-}
-
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const theme: Theme = "dark";
 
-  const setTheme = useCallback((next: Theme) => {
-    setThemeState(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, next);
-    } catch {
-      // localStorage unavailable
-    }
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const setTheme = useCallback((_next: Theme) => {
+    // Dark-only — no-op by design.
   }, []);
 
   useEffect(() => {
-    document.documentElement.setAttribute("data-theme", theme);
-  }, [theme]);
+    document.documentElement.setAttribute("data-theme", "dark");
+  }, []);
 
   return { theme, setTheme } as const;
 }

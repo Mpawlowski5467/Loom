@@ -18,9 +18,7 @@ def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
     root.mkdir()
 
     # vault.yaml
-    (root / "vault.yaml").write_text(
-        yaml.safe_dump({"name": "test"}), encoding="utf-8"
-    )
+    (root / "vault.yaml").write_text(yaml.safe_dump({"name": "test"}), encoding="utf-8")
 
     # rules/
     rules = root / "rules"
@@ -45,12 +43,14 @@ def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
     agent_dir = root / "agents" / "weaver"
     agent_dir.mkdir(parents=True)
     (agent_dir / "config.yaml").write_text(
-        yaml.safe_dump({
-            "name": "weaver",
-            "enabled": True,
-            "trust_level": trust_level,
-            "memory_threshold": 100,
-        }),
+        yaml.safe_dump(
+            {
+                "name": "weaver",
+                "enabled": True,
+                "trust_level": trust_level,
+                "memory_threshold": 100,
+            }
+        ),
         encoding="utf-8",
     )
     (agent_dir / "memory.md").write_text("# Memory\n\nEmpty.\n", encoding="utf-8")
@@ -111,7 +111,9 @@ class TestWeaverProcessCapture:
         """Weaver processes a capture using heuristic fallback (no chat provider)."""
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-001.md", "Research Notes",
+            root,
+            "cap-001.md",
+            "Research Notes",
             "This is a topic about distributed systems and CRDTs.\n\n"
             "Key concepts: eventual consistency, conflict resolution.\n",
         )
@@ -133,17 +135,21 @@ class TestWeaverProcessCapture:
         """Weaver uses the LLM to classify and generate content."""
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-002.md", "Meeting Notes",
+            root,
+            "cap-002.md",
+            "Meeting Notes",
             "Meeting with the team about the Meridian project.\n"
             "Discussed milestones and sprint planning.\n",
         )
 
         chat_mock = AsyncMock()
         # First call: classification
-        chat_mock.chat = AsyncMock(side_effect=[
-            "type: project\nfolder: projects\ntitle: Meridian Project\ntags: project, planning",
-            "## Overview\n\nMeridian project planning meeting.\n\n## Goals\n\n- Define milestones\n",
-        ])
+        chat_mock.chat = AsyncMock(
+            side_effect=[
+                "type: project\nfolder: projects\ntitle: Meridian Project\ntags: project, planning",
+                "## Overview\n\nMeridian project planning meeting.\n\n## Goals\n\n- Define milestones\n",
+            ]
+        )
 
         weaver = Weaver(root, chat_provider=chat_mock)
         note = await weaver.process_capture(capture_path)
@@ -169,7 +175,9 @@ class TestWeaverProcessCapture:
     async def test_process_capture_logs_to_changelog(self, tmp_path: Path):
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-log.md", "Logging Test",
+            root,
+            "cap-log.md",
+            "Logging Test",
             "Some content about algorithms.\n",
         )
 
@@ -189,7 +197,9 @@ class TestWeaverProcessCapture:
     async def test_process_capture_updates_state(self, tmp_path: Path):
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-state.md", "State Test",
+            root,
+            "cap-state.md",
+            "State Test",
             "Content for state tracking.\n",
         )
 
@@ -316,7 +326,11 @@ class TestWeaverChainEnforcement:
 
         with pytest.raises(ReadChainError):
             await weaver.create_from_modal(
-                title="Blocked", note_type="topic", tags=[], folder="topics", content="",
+                title="Blocked",
+                note_type="topic",
+                tags=[],
+                folder="topics",
+                content="",
             )
 
     @pytest.mark.asyncio
@@ -327,7 +341,11 @@ class TestWeaverChainEnforcement:
 
         weaver = Weaver(root, chat_provider=None)
         note = await weaver.create_from_modal(
-            title="Trusted Note", note_type="topic", tags=[], folder="topics", content="",
+            title="Trusted Note",
+            note_type="topic",
+            tags=[],
+            folder="topics",
+            content="",
         )
 
         assert note is not None
@@ -346,7 +364,9 @@ class TestWeaverHeuristic:
     async def test_daily_keyword_classification(self, tmp_path: Path):
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-daily.md", "Morning Log",
+            root,
+            "cap-daily.md",
+            "Morning Log",
             "This morning I had standup and discussed progress.\n",
         )
 
@@ -361,7 +381,9 @@ class TestWeaverHeuristic:
     async def test_project_keyword_classification(self, tmp_path: Path):
         root = _setup_vault(tmp_path)
         capture_path = _write_capture(
-            root, "cap-proj.md", "Sprint Ideas",
+            root,
+            "cap-proj.md",
+            "Sprint Ideas",
             "This project milestone involves a new sprint roadmap.\n",
         )
 

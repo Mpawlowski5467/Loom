@@ -10,10 +10,7 @@ interface ThreadViewProps {
   onNavigate: (noteTitle: string) => void;
 }
 
-function renderBodyWithWikilinks(
-  body: string,
-  onNavigate: (title: string) => void,
-) {
+function renderBodyWithWikilinks(body: string, onNavigate: (title: string) => void) {
   // Split on [[...]] and render wikilinks as clickable spans
   const parts = body.split(/(\[\[[^\]]+\]\])/g);
   return parts.map((part, i) => {
@@ -21,11 +18,7 @@ function renderBodyWithWikilinks(
     if (match) {
       const title = match[1];
       return (
-        <span
-          key={i}
-          className={styles.wikilink}
-          onClick={() => onNavigate(title)}
-        >
+        <span key={i} className={styles.wikilink} onClick={() => onNavigate(title)}>
           {title}
         </span>
       );
@@ -67,20 +60,14 @@ export function ThreadView({ note, graph, onNavigate }: ThreadViewProps) {
       </div>
 
       {/* Body with wikilinks */}
-      <div className={styles.markdownBody}>
-        {renderBodyWithWikilinks(note.body, onNavigate)}
-      </div>
+      <div className={styles.markdownBody}>{renderBodyWithWikilinks(note.body, onNavigate)}</div>
 
       {/* Backlinks */}
       {backlinks.length > 0 && (
         <div className={styles.section}>
           <div className={styles.sectionTitle}>Backlinks</div>
           {backlinks.map((title) => (
-            <div
-              key={title}
-              className={styles.backlinkItem}
-              onClick={() => onNavigate(title)}
-            >
+            <div key={title} className={styles.backlinkItem} onClick={() => onNavigate(title)}>
               <span className={styles.backlinkDot} />
               {title}
             </div>
@@ -106,9 +93,7 @@ export function ThreadView({ note, graph, onNavigate }: ThreadViewProps) {
                 {entry.action}
                 {entry.reason ? ` — ${entry.reason}` : ""}
               </span>
-              <span className={styles.historyTime}>
-                {formatTime(entry.at)}
-              </span>
+              <span className={styles.historyTime}>{formatTime(entry.at)}</span>
             </div>
           ))}
         </div>

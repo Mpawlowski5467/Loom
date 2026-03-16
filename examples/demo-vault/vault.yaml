@@ -1,0 +1,22 @@
+name: demo
+description: A demonstration vault for onboarding new Loom users
+version: "1.0"
+
+folders:
+  - daily
+  - projects
+  - topics
+  - people
+  - captures
+
+providers:
+  default: openai
+  openai:
+    embed_model: text-embedding-3-small
+    chat_model: gpt-4o
+
+settings:
+  auto_link: true
+  auto_summarize: true
+  breathing_animation: true
+  refresh_interval: 5

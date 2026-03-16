@@ -49,13 +49,15 @@ def build_graph(threads_dir: Path) -> VaultGraph:
         if not note.id:
             continue
 
-        nodes.append(GraphNode(
-            id=note.id,
-            title=note.title,
-            type=note.type,
-            tags=note.tags,
-            link_count=len(note.wikilinks),
-        ))
+        nodes.append(
+            GraphNode(
+                id=note.id,
+                title=note.title,
+                type=note.type,
+                tags=note.tags,
+                link_count=len(note.wikilinks),
+            )
+        )
         notes_by_title[note.title.lower()] = note.id
         note_links[note.id] = note.wikilinks
 

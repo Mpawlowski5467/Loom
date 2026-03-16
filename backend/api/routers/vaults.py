@@ -49,7 +49,7 @@ class SetActiveRequest(BaseModel):
 @router.post("", status_code=201)
 def create_vault(
     body: CreateVaultRequest,
-    vm: VaultManager = Depends(get_vault_manager)  # noqa: B008,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
 ) -> VaultResponse:
     """Initialize a new vault."""
     try:
@@ -63,7 +63,7 @@ def create_vault(
 
 @router.get("")
 def list_vaults(
-    vm: VaultManager = Depends(get_vault_manager)  # noqa: B008,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
 ) -> VaultListResponse:
     """List all initialized vaults."""
     active = vm.get_active_vault()
@@ -81,7 +81,7 @@ def list_vaults(
 
 @router.get("/active")
 def get_active_vault(
-    vm: VaultManager = Depends(get_vault_manager)  # noqa: B008,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
 ) -> dict[str, str]:
     """Get the currently active vault name."""
     return {"name": vm.get_active_vault()}
@@ -90,7 +90,7 @@ def get_active_vault(
 @router.put("/active")
 def set_active_vault(
     body: SetActiveRequest,
-    vm: VaultManager = Depends(get_vault_manager)  # noqa: B008,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
 ) -> dict[str, str]:
     """Switch the active vault."""
     try:

@@ -2,7 +2,7 @@
 
 import shutil
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from core.note_index import NoteIndex, get_note_index
@@ -14,6 +14,7 @@ from core.notes import (
     now_iso,
     parse_note,
 )
+from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
@@ -69,7 +70,9 @@ def _to_kebab(title: str) -> str:
 
 
 @router.get("")
+@limiter.limit(READ_LIMIT)
 def list_notes(
+    request: Request,  # noqa: ARG001 — required by slowapi
     offset: int = Query(0, ge=0),
     limit: int = Query(50, ge=1, le=200),
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
@@ -82,7 +85,9 @@ def list_notes(
 
 
 @router.get("/{note_id}")
+@limiter.limit(READ_LIMIT)
 def get_note(
+    request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str,
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
@@ -94,7 +99,9 @@ def get_note(
 
 
 @router.post("", status_code=201)
+@limiter.limit(WRITE_LIMIT)
 async def create_note(
+    request: Request,  # noqa: ARG001 — required by slowapi
     body: CreateNoteRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
@@ -157,7 +164,9 @@ async def create_note(
 
 
 @router.put("/{note_id}")
+@limiter.limit(WRITE_LIMIT)
 def update_note(
+    request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str,
     body: UpdateNoteRequest,
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
@@ -193,7 +202,9 @@ def update_note(
 
 
 @router.delete("/{note_id}")
+@limiter.limit(WRITE_LIMIT)
 def archive_note(
+    request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008

@@ -73,7 +73,14 @@ function App() {
 
     document.addEventListener("keydown", handleKeyDown);
     return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [activeNote, isCreateModalOpen, isSettingsOpen, closeSidebar, hideCreateModal, showCreateModal]);
+  }, [
+    activeNote,
+    isCreateModalOpen,
+    isSettingsOpen,
+    closeSidebar,
+    hideCreateModal,
+    showCreateModal,
+  ]);
 
   return (
     <div className={styles.app}>
@@ -126,15 +133,10 @@ function App() {
         >
           <ErrorBoundary fallbackMessage="This view encountered an error">
             {activeView === "graph" && (
-              <GraphView
-                activeFile={activeNote}
-                onFileSelect={selectNote}
-              />
+              <GraphView activeFile={activeNote} onFileSelect={selectNote} />
             )}
             {activeView === "board" && <BoardView />}
-            {activeView === "inbox" && (
-              <InboxView onSelectCapture={selectNote} />
-            )}
+            {activeView === "inbox" && <InboxView onSelectCapture={selectNote} />}
           </ErrorBoundary>
         </main>
 
@@ -177,9 +179,7 @@ function App() {
         />
       )}
 
-      {isSettingsOpen && (
-        <SettingsModal onClose={() => setIsSettingsOpen(false)} />
-      )}
+      {isSettingsOpen && <SettingsModal onClose={() => setIsSettingsOpen(false)} />}
 
       <ToastContainer />
     </div>

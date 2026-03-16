@@ -147,7 +147,9 @@ class TestGetHistory:
         """GET /api/chat/history returns messages for the default agent (_council)."""
         _seed_notes(vault_manager, note_index, [])
         chat = _init_chat(tmp_path)
-        chat.save_message("_council", "user", "Hello council", timestamp="2026-03-15T10:00:00+00:00")
+        chat.save_message(
+            "_council", "user", "Hello council", timestamp="2026-03-15T10:00:00+00:00"
+        )
         chat.save_message("_council", "council", "Hi there", timestamp="2026-03-15T10:00:05+00:00")
 
         with patch("agents.chat.get_chat_history", return_value=chat):

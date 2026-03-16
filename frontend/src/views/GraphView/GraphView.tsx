@@ -132,14 +132,10 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
           prev.nodes.length === data.nodes.length &&
           prev.edges.length === data.edges.length &&
           prev.nodes.every(
-            (n, i) =>
-              n.id === data.nodes[i]?.id &&
-              n.link_count === data.nodes[i]?.link_count,
+            (n, i) => n.id === data.nodes[i]?.id && n.link_count === data.nodes[i]?.link_count,
           ) &&
           prev.edges.every(
-            (e, i) =>
-              e.source === data.edges[i]?.source &&
-              e.target === data.edges[i]?.target,
+            (e, i) => e.source === data.edges[i]?.source && e.target === data.edges[i]?.target,
           )
         ) {
           return;
@@ -348,22 +344,16 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
 
   // -- Drag handlers ----------------------------------------------------------
 
-  const handleNodeDrag = useCallback(
-    (node: NodeObject<LoomNode>) => {
-      node.fx = node.x;
-      node.fy = node.y;
-    },
-    [],
-  );
+  const handleNodeDrag = useCallback((node: NodeObject<LoomNode>) => {
+    node.fx = node.x;
+    node.fy = node.y;
+  }, []);
 
-  const handleNodeDragEnd = useCallback(
-    (node: NodeObject<LoomNode>) => {
-      // Release so it can rejoin the simulation
-      node.fx = undefined;
-      node.fy = undefined;
-    },
-    [],
-  );
+  const handleNodeDragEnd = useCallback((node: NodeObject<LoomNode>) => {
+    // Release so it can rejoin the simulation
+    node.fx = undefined;
+    node.fy = undefined;
+  }, []);
 
   // -- Render -----------------------------------------------------------------
 
@@ -378,9 +368,7 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
             className={`${styles.chip}${filterType === t.id ? ` ${styles.chipActive}` : ""}`}
             onClick={() => setFilterType(t.id)}
           >
-            {t.color && (
-              <span className={styles.chipDot} style={{ backgroundColor: t.color }} />
-            )}
+            {t.color && <span className={styles.chipDot} style={{ backgroundColor: t.color }} />}
             {t.label}
           </button>
         ))}

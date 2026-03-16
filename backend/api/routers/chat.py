@@ -10,9 +10,10 @@ Supports two chat modes:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -66,7 +67,9 @@ class ChatSessionList(BaseModel):
 
 
 @router.post("/send")
+@limiter.limit(WRITE_LIMIT)
 async def send_message(
+    request: Request,  # noqa: ARG001 — required by slowapi
     body: SendMessageRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> SendMessageResponse:

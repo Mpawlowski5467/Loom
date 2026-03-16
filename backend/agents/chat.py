@@ -27,7 +27,9 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-_MSG_HEADER_RE = re.compile(r"^### (user|assistant|council|agent:\w+)\s*—\s*(\S+)\s*$", re.MULTILINE)
+_MSG_HEADER_RE = re.compile(
+    r"^### (user|assistant|council|agent:\w+)\s*—\s*(\S+)\s*$", re.MULTILINE
+)
 
 COUNCIL_AGENT = "_council"
 

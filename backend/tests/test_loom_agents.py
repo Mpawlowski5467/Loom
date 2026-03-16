@@ -30,7 +30,8 @@ def _setup_vault(tmp_path: Path) -> Path:
     schemas = rules / "schemas"
     schemas.mkdir()
     (schemas / "topic.md").write_text(
-        "# Schema: Topic\n\n## Expected Sections\n\n- `## Summary`\n- `## Details`\n", encoding="utf-8"
+        "# Schema: Topic\n\n## Expected Sections\n\n- `## Summary`\n- `## Details`\n",
+        encoding="utf-8",
     )
     (schemas / "project.md").write_text(
         "# Schema: Project\n\n## Expected Sections\n\n"
@@ -43,11 +44,20 @@ def _setup_vault(tmp_path: Path) -> Path:
         agent_dir = root / "agents" / agent_name
         agent_dir.mkdir(parents=True)
         (agent_dir / "config.yaml").write_text(
-            yaml.safe_dump({"name": agent_name, "enabled": True, "trust_level": "standard", "memory_threshold": 100}),
+            yaml.safe_dump(
+                {
+                    "name": agent_name,
+                    "enabled": True,
+                    "trust_level": "standard",
+                    "memory_threshold": 100,
+                }
+            ),
             encoding="utf-8",
         )
         (agent_dir / "memory.md").write_text("# Memory\n\nEmpty.\n", encoding="utf-8")
-        (agent_dir / "state.json").write_text(json.dumps({"action_count": 0, "last_action": None}), encoding="utf-8")
+        (agent_dir / "state.json").write_text(
+            json.dumps({"action_count": 0, "last_action": None}), encoding="utf-8"
+        )
         (agent_dir / "logs").mkdir()
         (root / ".loom" / "changelog" / agent_name).mkdir(parents=True, exist_ok=True)
 
@@ -57,23 +67,59 @@ def _setup_vault(tmp_path: Path) -> Path:
 
     # Create some notes with wikilinks
     ts = now_iso()
-    _write_note(root, "topics", "alpha-topic.md", {
-        "id": "thr_aaa111", "title": "Alpha Topic", "type": "topic",
-        "tags": ["distributed", "crdt"], "created": ts, "modified": ts,
-        "author": "user", "status": "active", "history": [],
-    }, "## Summary\n\nAlpha overview.\n\n## Details\n\nSee [[Beta Topic]].\n")
+    _write_note(
+        root,
+        "topics",
+        "alpha-topic.md",
+        {
+            "id": "thr_aaa111",
+            "title": "Alpha Topic",
+            "type": "topic",
+            "tags": ["distributed", "crdt"],
+            "created": ts,
+            "modified": ts,
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## Summary\n\nAlpha overview.\n\n## Details\n\nSee [[Beta Topic]].\n",
+    )
 
-    _write_note(root, "topics", "beta-topic.md", {
-        "id": "thr_bbb222", "title": "Beta Topic", "type": "topic",
-        "tags": ["distributed", "networking"], "created": ts, "modified": ts,
-        "author": "user", "status": "active", "history": [],
-    }, "## Summary\n\nBeta overview.\n\n## Details\n\nRelated to [[Alpha Topic]].\n")
+    _write_note(
+        root,
+        "topics",
+        "beta-topic.md",
+        {
+            "id": "thr_bbb222",
+            "title": "Beta Topic",
+            "type": "topic",
+            "tags": ["distributed", "networking"],
+            "created": ts,
+            "modified": ts,
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## Summary\n\nBeta overview.\n\n## Details\n\nRelated to [[Alpha Topic]].\n",
+    )
 
-    _write_note(root, "projects", "gamma-project.md", {
-        "id": "thr_ccc333", "title": "Gamma Project", "type": "project",
-        "tags": ["crdt"], "created": ts, "modified": ts,
-        "author": "user", "status": "active", "history": [],
-    }, "## Overview\n\nGamma project.\n\n## Goals\n\n- Ship v1.\n\n## Status\n\nIn progress.\n\n## Related\n\n")
+    _write_note(
+        root,
+        "projects",
+        "gamma-project.md",
+        {
+            "id": "thr_ccc333",
+            "title": "Gamma Project",
+            "type": "project",
+            "tags": ["crdt"],
+            "created": ts,
+            "modified": ts,
+            "author": "user",
+            "status": "active",
+            "history": [],
+        },
+        "## Overview\n\nGamma project.\n\n## Goals\n\n- Ship v1.\n\n## Status\n\nIn progress.\n\n## Related\n\n",
+    )
 
     return root
 
@@ -155,11 +201,23 @@ class TestArchivist:
         """Archivist flags notes with no tags."""
         root = _setup_vault(tmp_path)
         # Write a note with no tags
-        _write_note(root, "topics", "bare-note.md", {
-            "id": "thr_bare00", "title": "Bare Note", "type": "topic",
-            "tags": [], "created": now_iso(), "modified": now_iso(),
-            "author": "user", "status": "active", "history": [],
-        }, "No tags on this note.")
+        _write_note(
+            root,
+            "topics",
+            "bare-note.md",
+            {
+                "id": "thr_bare00",
+                "title": "Bare Note",
+                "type": "topic",
+                "tags": [],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "No tags on this note.",
+        )
 
         archivist = Archivist(root, chat_provider=None)
         issues = await archivist.audit_note(root / "threads" / "topics" / "bare-note.md")
@@ -173,11 +231,23 @@ class TestArchivist:
     async def test_finds_broken_wikilink(self, tmp_path: Path):
         """Archivist flags broken wikilinks."""
         root = _setup_vault(tmp_path)
-        _write_note(root, "topics", "broken.md", {
-            "id": "thr_brkn00", "title": "Broken Links", "type": "topic",
-            "tags": ["test"], "created": now_iso(), "modified": now_iso(),
-            "author": "user", "status": "active", "history": [],
-        }, "See [[Nonexistent Note]] for details.\n")
+        _write_note(
+            root,
+            "topics",
+            "broken.md",
+            {
+                "id": "thr_brkn00",
+                "title": "Broken Links",
+                "type": "topic",
+                "tags": ["test"],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "See [[Nonexistent Note]] for details.\n",
+        )
 
         archivist = Archivist(root, chat_provider=None)
         issues = await archivist.audit_note(root / "threads" / "topics" / "broken.md")
@@ -190,12 +260,23 @@ class TestArchivist:
     async def test_finds_stale_note(self, tmp_path: Path):
         """Archivist flags notes not modified in 30+ days."""
         root = _setup_vault(tmp_path)
-        _write_note(root, "topics", "stale.md", {
-            "id": "thr_stale0", "title": "Stale Note", "type": "topic",
-            "tags": ["test"], "created": "2025-01-01T00:00:00+00:00",
-            "modified": "2025-01-01T00:00:00+00:00",
-            "author": "user", "status": "active", "history": [],
-        }, "## Summary\n\nOld content.\n\n## Details\n\nVery old.\n")
+        _write_note(
+            root,
+            "topics",
+            "stale.md",
+            {
+                "id": "thr_stale0",
+                "title": "Stale Note",
+                "type": "topic",
+                "tags": ["test"],
+                "created": "2025-01-01T00:00:00+00:00",
+                "modified": "2025-01-01T00:00:00+00:00",
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "## Summary\n\nOld content.\n\n## Details\n\nVery old.\n",
+        )
 
         archivist = Archivist(root, chat_provider=None)
         issues = await archivist.audit_note(root / "threads" / "topics" / "stale.md")
@@ -316,12 +397,25 @@ class TestSentinel:
         """Sentinel warns about missing expected sections."""
         root = _setup_vault(tmp_path)
         # Write a project note missing required sections
-        _write_note(root, "projects", "bad-project.md", {
-            "id": "thr_bad000", "title": "Bad Project", "type": "project",
-            "tags": ["test"], "created": now_iso(), "modified": now_iso(),
-            "author": "agent:weaver", "status": "active",
-            "history": [{"action": "created", "by": "agent:weaver", "at": now_iso(), "reason": "test"}],
-        }, "Just some text without any sections.\n")
+        _write_note(
+            root,
+            "projects",
+            "bad-project.md",
+            {
+                "id": "thr_bad000",
+                "title": "Bad Project",
+                "type": "project",
+                "tags": ["test"],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "agent:weaver",
+                "status": "active",
+                "history": [
+                    {"action": "created", "by": "agent:weaver", "at": now_iso(), "reason": "test"}
+                ],
+            },
+            "Just some text without any sections.\n",
+        )
 
         sentinel = Sentinel(root, chat_provider=None)
         from agents.chain import ReadChain
@@ -387,11 +481,24 @@ class TestPipeline:
         root = _setup_vault(tmp_path)
 
         # Create a capture
-        capture_path = _write_note(root, "captures", "cap-test.md", {
-            "id": "thr_cap000", "title": "Raw Capture", "type": "capture",
-            "tags": ["inbox"], "created": now_iso(), "modified": now_iso(),
-            "author": "user", "source": "manual", "status": "active", "history": [],
-        }, "This is about distributed systems and CRDT conflict resolution.\n")
+        capture_path = _write_note(
+            root,
+            "captures",
+            "cap-test.md",
+            {
+                "id": "thr_cap000",
+                "title": "Raw Capture",
+                "type": "capture",
+                "tags": ["inbox"],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "source": "manual",
+                "status": "active",
+                "history": [],
+            },
+            "This is about distributed systems and CRDT conflict resolution.\n",
+        )
 
         from agents.loom.archivist import init_archivist
         from agents.loom.scribe import init_scribe

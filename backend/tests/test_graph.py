@@ -17,26 +17,44 @@ def _write_note(threads: Path, folder: str, filename: str, meta: dict, body: str
 def test_build_graph_with_wikilinks(tmp_path: Path) -> None:
     threads = tmp_path / "threads"
 
-    _write_note(threads, "topics", "python.md", {
-        "id": "thr_aaa111",
-        "title": "Python",
-        "type": "topic",
-        "tags": ["lang"],
-    }, "## About\n\nSee also [[FastAPI]].\n")
+    _write_note(
+        threads,
+        "topics",
+        "python.md",
+        {
+            "id": "thr_aaa111",
+            "title": "Python",
+            "type": "topic",
+            "tags": ["lang"],
+        },
+        "## About\n\nSee also [[FastAPI]].\n",
+    )
 
-    _write_note(threads, "topics", "fastapi.md", {
-        "id": "thr_bbb222",
-        "title": "FastAPI",
-        "type": "topic",
-        "tags": ["web", "python"],
-    }, "## About\n\nBuilt on [[Python]].\n")
+    _write_note(
+        threads,
+        "topics",
+        "fastapi.md",
+        {
+            "id": "thr_bbb222",
+            "title": "FastAPI",
+            "type": "topic",
+            "tags": ["web", "python"],
+        },
+        "## About\n\nBuilt on [[Python]].\n",
+    )
 
-    _write_note(threads, "projects", "loom.md", {
-        "id": "thr_ccc333",
-        "title": "Loom",
-        "type": "project",
-        "tags": ["ai"],
-    }, "## About\n\nUses [[Python]] and [[FastAPI]].\n")
+    _write_note(
+        threads,
+        "projects",
+        "loom.md",
+        {
+            "id": "thr_ccc333",
+            "title": "Loom",
+            "type": "project",
+            "tags": ["ai"],
+        },
+        "## About\n\nUses [[Python]] and [[FastAPI]].\n",
+    )
 
     graph = build_graph(threads)
     assert len(graph.nodes) == 3
@@ -55,12 +73,18 @@ def test_build_graph_with_wikilinks(tmp_path: Path) -> None:
 def test_save_and_load_graph(tmp_path: Path) -> None:
     threads = tmp_path / "threads"
 
-    _write_note(threads, "topics", "one.md", {
-        "id": "thr_111111",
-        "title": "One",
-        "type": "topic",
-        "tags": [],
-    }, "Body.\n")
+    _write_note(
+        threads,
+        "topics",
+        "one.md",
+        {
+            "id": "thr_111111",
+            "title": "One",
+            "type": "topic",
+            "tags": [],
+        },
+        "Body.\n",
+    )
 
     graph = build_graph(threads)
     loom_dir = tmp_path / ".loom"
@@ -75,19 +99,31 @@ def test_save_and_load_graph(tmp_path: Path) -> None:
 def test_build_graph_excludes_archive(tmp_path: Path) -> None:
     threads = tmp_path / "threads"
 
-    _write_note(threads, "topics", "active.md", {
-        "id": "thr_act111",
-        "title": "Active",
-        "type": "topic",
-        "tags": [],
-    }, "Body.\n")
+    _write_note(
+        threads,
+        "topics",
+        "active.md",
+        {
+            "id": "thr_act111",
+            "title": "Active",
+            "type": "topic",
+            "tags": [],
+        },
+        "Body.\n",
+    )
 
-    _write_note(threads, ".archive", "old.md", {
-        "id": "thr_old111",
-        "title": "Old",
-        "type": "topic",
-        "tags": [],
-    }, "Archived.\n")
+    _write_note(
+        threads,
+        ".archive",
+        "old.md",
+        {
+            "id": "thr_old111",
+            "title": "Old",
+            "type": "topic",
+            "tags": [],
+        },
+        "Archived.\n",
+    )
 
     graph = build_graph(threads)
     assert len(graph.nodes) == 1

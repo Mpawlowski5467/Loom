@@ -350,12 +350,7 @@ class Weaver(BaseAgent):
         threads_dir = self._vault_root / "threads"
 
         # Validate folder: reject path traversal, absolute paths, separators
-        if (
-            ".." in folder
-            or folder.startswith("/")
-            or "/" in folder.strip("/")
-            or "\\" in folder
-        ):
+        if ".." in folder or folder.startswith("/") or "/" in folder.strip("/") or "\\" in folder:
             logger.warning(
                 "Weaver: suspicious folder '%s' from classification — falling back to captures/",
                 folder,

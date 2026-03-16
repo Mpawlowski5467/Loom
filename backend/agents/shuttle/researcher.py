@@ -1,7 +1,6 @@
 """Researcher agent: queries the vault and synthesizes answers.
 
 Shuttle-layer agent. Writes only to captures/. Loom agents process from there.
-Supports vault search and optional web search (stubbed).
 """
 
 from __future__ import annotations
@@ -65,12 +64,11 @@ class Researcher(BaseAgent):
     def role(self) -> str:
         return "Research: queries vault knowledge and synthesizes answers"
 
-    async def query(self, question: str, *, search_web: bool = False) -> ResearchResult:
+    async def query(self, question: str) -> ResearchResult:
         """Search the vault, synthesize an answer, and save findings to captures/.
 
         Args:
             question: The user's question.
-            search_web: If True, also search the web (stub — not yet implemented).
 
         Returns:
             ResearchResult with the answer, referenced notes, and capture path.
@@ -82,13 +80,8 @@ class Researcher(BaseAgent):
             # Search the vault for relevant context
             vault_context, refs = await self._search_vault(question)
 
-            # Stub: web search
-            web_context = ""
-            if search_web:
-                web_context = self._search_web_stub(question)
-
             # Synthesize answer
-            answer = await self._synthesize(question, vault_context, web_context, chain)
+            answer = await self._synthesize(question, vault_context, chain)
 
             # Save as capture
             capture_id, capture_path = self._save_capture(question, answer, refs)
@@ -167,16 +160,10 @@ class Researcher(BaseAgent):
             return "No relevant notes found in the vault."
         return "\n\n---\n\n".join(matches)
 
-    @staticmethod
-    def _search_web_stub(question: str) -> str:
-        """Stub for web search — not yet implemented."""
-        return f"[Web search not yet implemented for: {question}]"
-
     async def _synthesize(
         self,
         question: str,
         vault_context: str,
-        web_context: str,
         chain: ReadChainResult,
     ) -> str:
         """Synthesize an answer from collected context."""
@@ -184,13 +171,9 @@ class Researcher(BaseAgent):
             # No LLM — return raw context
             return f"## Vault Context\n\n{vault_context}"
 
-        context_parts = [f"## Vault Notes\n\n{vault_context}"]
-        if web_context:
-            context_parts.append(f"## Web Results\n\n{web_context}")
-
         user_msg = (
             f"Question: {question}\n\n"
-            f"Context:\n{''.join(context_parts)}\n\n"
+            f"Context:\n## Vault Notes\n\n{vault_context}\n\n"
             "Provide a clear answer based on the context above."
         )
 

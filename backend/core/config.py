@@ -97,6 +97,10 @@ class VaultConfig(BaseModel):
     name: str
     custom_folders: list[str] = []
     auto_git: bool = False
+    memory_summarize_cadence: int = Field(
+        default=20,
+        description="Number of agent actions between memory summarizations",
+    )
 
     @classmethod
     def load(cls, path: Path) -> Self:

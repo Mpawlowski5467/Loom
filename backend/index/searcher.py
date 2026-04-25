@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from core.graph import VaultGraph
@@ -50,7 +50,7 @@ class VectorSearcher:
         self,
         query: str,
         *,
-        filters: dict | None = None,
+        filters: dict[str, Any] | None = None,
         context_note_ids: list[str] | None = None,
         limit: int = DEFAULT_LIMIT,
     ) -> list[SearchResult]:

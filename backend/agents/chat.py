@@ -18,7 +18,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.notes import now_iso
 from core.vault import VaultManager
@@ -47,7 +47,7 @@ class ChatMessage:
     timestamp: str
     agent: str = ""  # which agent session this belongs to
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "role": self.role,
             "content": self.content,
@@ -55,7 +55,7 @@ class ChatMessage:
             "agent": self.agent,
         }
 
-    def to_llm_message(self) -> dict:
+    def to_llm_message(self) -> dict[str, Any]:
         """Convert to the format expected by BaseProvider.chat()."""
         llm_role = "user" if self.role == "user" else "assistant"
         return {"role": llm_role, "content": self.content}
@@ -161,8 +161,8 @@ class ChatHistory:
                 all_messages = messages + all_messages
                 if len(all_messages) >= limit:
                     break
-            except Exception:  # noqa: BLE001
-                logger.debug("Failed to parse chat file %s", chat_file, exc_info=True)
+            except (OSError, ValueError):
+                logger.warning("Failed to parse chat file %s", chat_file, exc_info=True)
 
         # Return the last `limit` messages in chronological order
         return all_messages[-limit:]

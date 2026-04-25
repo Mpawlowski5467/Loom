@@ -9,7 +9,7 @@ import yaml
 
 from agents.loom.weaver import Weaver, _parse_classification
 from core.exceptions import ReadChainError
-from core.notes import build_frontmatter
+from core.notes import build_frontmatter, parse_note
 
 
 def _setup_vault(tmp_path: Path, trust_level: str = "standard") -> Path:
@@ -192,6 +192,57 @@ class TestWeaverProcessCapture:
         assert "**Agent:** weaver" in content
         assert "**Action:** created" in content
         assert "**Chain:** pass" in content
+
+    @pytest.mark.asyncio
+    async def test_process_capture_archives_source_file(self, tmp_path: Path):
+        """After successful processing the capture is moved to .archive/."""
+        root = _setup_vault(tmp_path)
+        capture_path = _write_capture(
+            root,
+            "cap-archive.md",
+            "Archive Test",
+            "Topic about distributed systems and consensus algorithms.\n",
+        )
+
+        weaver = Weaver(root, chat_provider=None)
+        note = await weaver.process_capture(capture_path)
+
+        assert note is not None
+        # Source no longer exists in captures/
+        assert not capture_path.exists()
+        # Archived copy exists with status=archived
+        archived = root / "threads" / ".archive" / "cap-archive.md"
+        assert archived.exists()
+        archived_note = parse_note(archived)
+        assert archived_note.status == "archived"
+        assert any(h.action == "archived" for h in archived_note.history)
+
+    @pytest.mark.asyncio
+    async def test_process_capture_archive_collision_suffix(self, tmp_path: Path):
+        """If an archived copy with the same filename already exists, the new
+        archive is suffixed with the archival timestamp (notes-router pattern)."""
+        root = _setup_vault(tmp_path)
+        capture_path = _write_capture(
+            root,
+            "cap-dup.md",
+            "Duplicate Test",
+            "Some content about graph databases.\n",
+        )
+        # Pre-populate the archive with a colliding filename
+        existing = root / "threads" / ".archive" / "cap-dup.md"
+        existing.write_text("---\nid: pre\n---\n\npre-existing\n", encoding="utf-8")
+
+        weaver = Weaver(root, chat_provider=None)
+        await weaver.process_capture(capture_path)
+
+        assert not capture_path.exists()
+        # Original archive untouched
+        assert existing.exists()
+        # New archived file present with a timestamp suffix
+        archive_dir = root / "threads" / ".archive"
+        suffixed = [p for p in archive_dir.glob("cap-dup-*.md")]
+        assert len(suffixed) == 1
+        assert parse_note(suffixed[0]).status == "archived"
 
     @pytest.mark.asyncio
     async def test_process_capture_updates_state(self, tmp_path: Path):

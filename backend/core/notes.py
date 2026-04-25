@@ -5,6 +5,7 @@ import re
 import secrets
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import yaml
 from pydantic import BaseModel, Field
@@ -57,10 +58,10 @@ def now_iso() -> str:
     return datetime.now(UTC).isoformat(timespec="seconds")
 
 
-def _coerce_meta(meta: dict) -> dict:
+def _coerce_meta(meta: dict[str, Any]) -> dict[str, Any]:
     """Coerce YAML-auto-typed values (datetimes, ints) to strings where needed."""
     str_fields = {"id", "title", "type", "created", "modified", "author", "source", "status"}
-    out = {}
+    out: dict[str, Any] = {}
     for k, v in meta.items():
         if k in str_fields and not isinstance(v, str):
             out[k] = str(v) if v is not None else ""
@@ -82,7 +83,7 @@ def _coerce_meta(meta: dict) -> dict:
 def parse_note(path: Path) -> Note:
     """Parse a markdown file into a Note model."""
     text = path.read_text(encoding="utf-8")
-    meta: dict = {}
+    meta: dict[str, Any] = {}
     body = text
 
     fm_match = _FRONTMATTER_RE.match(text)
@@ -104,7 +105,7 @@ def parse_note(path: Path) -> Note:
 def parse_note_meta(path: Path) -> NoteMeta:
     """Parse only frontmatter (skip body) for listing endpoints."""
     text = path.read_text(encoding="utf-8")
-    meta: dict = {}
+    meta: dict[str, Any] = {}
 
     fm_match = _FRONTMATTER_RE.match(text)
     if fm_match:
@@ -117,12 +118,13 @@ def parse_note_meta(path: Path) -> NoteMeta:
     )
 
 
-def build_frontmatter(meta: dict) -> str:
+def build_frontmatter(meta: dict[str, Any]) -> str:
     """Serialize a dict into YAML frontmatter block."""
-    return "---\n" + yaml.safe_dump(meta, default_flow_style=False, sort_keys=False) + "---\n"
+    dumped: str = yaml.safe_dump(meta, default_flow_style=False, sort_keys=False)
+    return "---\n" + dumped + "---\n"
 
 
-def note_to_file_content(meta: dict, body: str) -> str:
+def note_to_file_content(meta: dict[str, Any], body: str) -> str:
     """Combine frontmatter dict and body into a full markdown string."""
     return build_frontmatter(meta) + "\n" + body
 

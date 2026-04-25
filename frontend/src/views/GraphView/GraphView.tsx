@@ -2,7 +2,7 @@ import ForceGraph2D from "react-force-graph-2d";
 import type { ForceGraphMethods, NodeObject } from "react-force-graph-2d";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { VaultGraph } from "../../lib/api";
-import { fetchGraph } from "../../lib/api";
+import { fetchGraphConditional } from "../../lib/api";
 import { getCSSVar, getNodeColorsHex, TYPE_LABELS } from "../../lib/constants";
 import { useApp } from "../../lib/context/useApp";
 import styles from "./GraphView.module.css";
@@ -48,17 +48,17 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
   const colors = useMemo(() => {
     const nodeHex = getNodeColorsHex();
     return {
-      bg: getCSSVar("--graph-bg") || "#111318",
-      label: getCSSVar("--graph-label") || "#8b90a0",
-      labelBright: getCSSVar("--text-primary") || "#e2e5eb",
+      bg: getCSSVar("--graph-bg"),
+      label: getCSSVar("--graph-label"),
+      labelBright: getCSSVar("--text-primary"),
       edge: getCSSVar("--graph-edge") || "rgba(139,144,160,0.15)",
       edgeHover: getCSSVar("--graph-edge-hover") || "rgba(167,139,250,0.5)",
-      selected: getCSSVar("--graph-selected") || "#f59e0b",
+      selected: getCSSVar("--graph-selected"),
       dimmedNode: getCSSVar("--graph-dimmed") || "rgba(139,144,160,0.08)",
       dimmedEdge: getCSSVar("--graph-dimmed") || "rgba(139,144,160,0.04)",
       labelBg: theme === "light" ? "rgba(245,246,248,0.8)" : "rgba(17,19,24,0.75)",
       nodeHex,
-      fallback: getCSSVar("--node-daily") || "#94a3b8",
+      fallback: getCSSVar("--node-daily"),
     };
   }, [theme]);
 
@@ -72,6 +72,7 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
   const dataRef = useRef<VaultGraph | null>(null);
+  const lastEtagRef = useRef<string | null>(null);
   const hasZoomedRef = useRef(false);
 
   // -- Resize observer --------------------------------------------------------
@@ -123,23 +124,14 @@ export function GraphView({ activeFile, onFileSelect }: GraphViewProps) {
 
     const load = async () => {
       try {
-        const data = await fetchGraph();
+        const { data, etag } = await fetchGraphConditional(lastEtagRef.current);
         if (cancelled) return;
 
-        const prev = dataRef.current;
-        if (
-          prev &&
-          prev.nodes.length === data.nodes.length &&
-          prev.edges.length === data.edges.length &&
-          prev.nodes.every(
-            (n, i) => n.id === data.nodes[i]?.id && n.link_count === data.nodes[i]?.link_count,
-          ) &&
-          prev.edges.every(
-            (e, i) => e.source === data.edges[i]?.source && e.target === data.edges[i]?.target,
-          )
-        ) {
-          return;
-        }
+        // Always advance the etag so subsequent polls send the freshest one.
+        lastEtagRef.current = etag;
+
+        // 304 Not Modified: nothing changed, skip state updates entirely.
+        if (data === null) return;
 
         dataRef.current = data;
         setStats({ nodes: data.nodes.length, edges: data.edges.length });

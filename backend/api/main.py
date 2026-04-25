@@ -1,11 +1,16 @@
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
+from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
+
+from core.providers.base import BaseProvider
 
 from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
@@ -34,7 +39,7 @@ from core.watcher import start_watcher, stop_watcher
 logger = logging.getLogger(__name__)
 
 
-def _init_vector_index(vault_dir) -> None:
+def _init_vector_index(vault_dir: Path) -> None:
     """Try to initialize the vector indexer and searcher.
 
     Non-fatal: if the embed provider is not configured, the app still
@@ -56,7 +61,7 @@ def _init_vector_index(vault_dir) -> None:
         init_searcher(indexer, embed_provider, graph)
 
         logger.info("Vector index initialized at %s", loom_dir / "index.db")
-    except Exception:  # noqa: BLE001
+    except (ProviderConfigError, ProviderError, OSError):
         logger.warning(
             "Vector index not available — falling back to keyword search. "
             "Configure an embed provider in ~/.loom/config.yaml to enable semantic search.",
@@ -70,7 +75,7 @@ def _get_chat_provider():
         from core.providers import get_registry
 
         return get_registry().get_chat_provider()
-    except Exception:  # noqa: BLE001
+    except (ProviderConfigError, ProviderError):
         return None
 
 
@@ -100,7 +105,7 @@ def _init_agents(vault_dir) -> None:
             init_fn = getattr(mod, fn_name)
             init_fn(vault_dir, chat)
             logger.info("Agent '%s' initialized", name)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.warning("Agent '%s' initialization failed", name, exc_info=True)
 
     # Initialize the runner
@@ -109,7 +114,7 @@ def _init_agents(vault_dir) -> None:
 
         init_runner(vault_dir)
         logger.info("AgentRunner initialized")
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("AgentRunner initialization failed", exc_info=True)
 
 
@@ -120,7 +125,7 @@ def _init_chat(vault_dir) -> None:
 
         init_chat_history(vault_dir)
         logger.info("Chat history initialized")
-    except Exception:  # noqa: BLE001
+    except Exception:
         logger.warning("Chat history initialization failed", exc_info=True)
 
 
@@ -143,8 +148,8 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         from core.providers import get_registry
 
         await get_registry().close()
-    except Exception:  # noqa: BLE001
-        pass
+    except Exception:
+        logger.warning("Provider registry close failed", exc_info=True)
 
 
 app = FastAPI(title="Loom", version="0.1.0", lifespan=lifespan)
@@ -220,7 +225,82 @@ app.include_router(chat_router)
 app.include_router(settings_router)
 
 
+def _check_indexer() -> dict:
+    """Report indexer readiness."""
+    try:
+        from index.indexer import get_indexer
+
+        indexer = get_indexer()
+        if indexer is None:
+            return {"ready": False, "details": "indexer not initialized"}
+        if indexer.is_ready:
+            return {"ready": True, "details": "index ready"}
+        return {"ready": False, "details": "index has no data"}
+    except Exception as exc:
+        logger.warning("Indexer health check failed", exc_info=True)
+        return {"ready": False, "details": f"error: {exc}"}
+
+
+def _check_agents() -> dict:
+    """Report agent runner readiness and agent count."""
+    try:
+        from agents.runner import get_runner
+
+        runner = get_runner()
+        if runner is None:
+            return {"ready": False, "count": 0}
+        agents = runner.list_agents()
+        return {"ready": True, "count": len(agents)}
+    except Exception:
+        logger.warning("Agent health check failed", exc_info=True)
+        return {"ready": False, "count": 0}
+
+
+def _check_watcher() -> dict:
+    """Report file watcher readiness."""
+    try:
+        from core import watcher
+
+        observer = watcher._observer
+        ready = observer is not None and observer.is_alive()
+        return {"ready": bool(ready)}
+    except Exception:
+        logger.warning("Watcher health check failed", exc_info=True)
+        return {"ready": False}
+
+
+def _check_chat() -> dict:
+    """Report chat history readiness."""
+    try:
+        from agents.chat import get_chat_history
+
+        return {"ready": get_chat_history() is not None}
+    except Exception:
+        logger.warning("Chat history health check failed", exc_info=True)
+        return {"ready": False}
+
+
+def _build_health_report() -> dict:
+    """Compose the structured component health report."""
+    components = {
+        "indexer": _check_indexer(),
+        "agents": _check_agents(),
+        "watcher": _check_watcher(),
+        "chat": _check_chat(),
+    }
+    ok = all(c["ready"] for c in components.values())
+    return {"ok": ok, "components": components}
+
+
 @app.get("/api/health")
-async def health_check() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "ok"}
+async def health_check() -> dict:
+    """Structured component health check."""
+    return _build_health_report()
+
+
+@app.get("/api/ready")
+async def readiness_check() -> JSONResponse:
+    """Kubernetes-style readiness probe — 503 when any component is not ready."""
+    report = _build_health_report()
+    status_code = 200 if report["ok"] else HTTP_503_SERVICE_UNAVAILABLE
+    return JSONResponse(status_code=status_code, content=report)

@@ -1,8 +1,18 @@
 import { X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useApp } from "../../lib/context/useApp";
-import { loadProviderSettings, saveProviderSettings } from "../../lib/api";
+import {
+  loadProviderSettings,
+  saveProviderSettings,
+  testProviderConnection,
+} from "../../lib/api";
 import styles from "./SettingsModal.module.css";
+
+type TestStatus =
+  | { status: "idle" }
+  | { status: "running" }
+  | { status: "ok"; latencyMs: number }
+  | { status: "error"; error: string };
 
 type SettingsTab = "providers" | "general";
 
@@ -132,6 +142,38 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [testStates, setTestStates] = useState<Record<string, TestStatus>>({});
+
+  async function handleTestProvider(provider: ProviderConfig) {
+    const key = provider.name;
+    setTestStates((prev) => ({ ...prev, [key]: { status: "running" } }));
+    try {
+      const result = await testProviderConnection({
+        name: provider.name,
+        type: provider.type,
+        apiKey: provider.apiKey,
+        host: provider.host,
+        baseUrl: provider.baseUrl,
+        chatModel: provider.chatModel,
+        embedModel: provider.embedModel,
+        isDefault: provider.isDefault,
+      });
+      setTestStates((prev) => ({
+        ...prev,
+        [key]: result.ok
+          ? { status: "ok", latencyMs: result.latencyMs }
+          : { status: "error", error: result.error || "Test failed" },
+      }));
+    } catch (err) {
+      setTestStates((prev) => ({
+        ...prev,
+        [key]: {
+          status: "error",
+          error: err instanceof Error ? err.message : "Test failed",
+        },
+      }));
+    }
+  }
 
   async function handleSave() {
     setSaving(true);
@@ -183,7 +225,10 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
               </div>
 
               <div className={styles.providerList}>
-                {providers.map((provider, i) => (
+                {providers.map((provider, i) => {
+                  const test = testStates[provider.name] ?? { status: "idle" };
+                  const testing = test.status === "running";
+                  return (
                   <div key={`${provider.name}-${i}`} className={styles.providerCard}>
                     <div className={styles.providerHeader}>
                       <span className={styles.providerName}>{provider.name}</span>
@@ -202,6 +247,27 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                         >
                           Set default
                         </button>
+                      )}
+                      <button
+                        className={styles.btn}
+                        onClick={() => handleTestProvider(provider)}
+                        disabled={testing}
+                        title="Verify connection without saving"
+                      >
+                        {testing ? "Testing…" : "Test connection"}
+                      </button>
+                      {test.status === "ok" && (
+                        <span
+                          className={styles.testResultOk}
+                          title={`Connected in ${test.latencyMs} ms`}
+                        >
+                          ✓ {test.latencyMs} ms
+                        </span>
+                      )}
+                      {test.status === "error" && (
+                        <span className={styles.testResultError} title={test.error}>
+                          ✗ {test.error}
+                        </span>
                       )}
                       <button
                         className={styles.providerRemoveBtn}
@@ -284,7 +350,8 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                       </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               {!showAddForm ? (

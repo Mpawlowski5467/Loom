@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 import openai
+from openai.types.chat import ChatCompletionMessageParam
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.providers.base import BaseProvider, OpenAIProviderConfig
@@ -41,16 +43,16 @@ class OpenAIProvider(BaseProvider):
         except openai.OpenAIError as exc:
             raise ProviderError("openai", str(exc)) from exc
 
-    async def chat(self, messages: list[dict], system: str = "") -> str:
+    async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Generate a chat completion via the OpenAI chat API."""
-        full_messages: list[dict] = []
+        full_messages: list[dict[str, Any]] = []
         if system:
             full_messages.append({"role": "system", "content": system})
         full_messages.extend(messages)
         try:
             resp = await self._client.chat.completions.create(
                 model=self._chat_model,
-                messages=full_messages,
+                messages=cast(list[ChatCompletionMessageParam], full_messages),
             )
             return resp.choices[0].message.content or ""
         except openai.OpenAIError as exc:

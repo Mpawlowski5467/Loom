@@ -61,6 +61,15 @@ export interface GraphEdge {
 export interface VaultGraph {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  updated_at?: string;
+}
+
+/** Result of a conditional graph fetch. */
+export interface GraphFetchResult {
+  /** Null if the server returned 304 Not Modified. */
+  data: VaultGraph | null;
+  /** ETag returned by the server, or null if absent. */
+  etag: string | null;
 }
 
 // -- Note types ---------------------------------------------------------------
@@ -101,6 +110,45 @@ export function fetchGraph(params?: { type?: string; tag?: string }): Promise<Va
   if (params?.tag) query.set("tag", params.tag);
   const qs = query.toString();
   return request<VaultGraph>(`/api/graph${qs ? `?${qs}` : ""}`);
+}
+
+/**
+ * Conditional graph fetch using If-None-Match.
+ *
+ * Returns `{ data: null, etag }` on 304 so the caller can skip re-rendering.
+ * On 200, returns the parsed graph and the new ETag.
+ */
+export async function fetchGraphConditional(
+  etag: string | null,
+  params?: { type?: string; tag?: string },
+): Promise<GraphFetchResult> {
+  const query = new URLSearchParams();
+  if (params?.type) query.set("type", params.type);
+  if (params?.tag) query.set("tag", params.tag);
+  const qs = query.toString();
+
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (etag) headers["If-None-Match"] = etag;
+
+  const res = await fetch(`${API_BASE}/api/graph${qs ? `?${qs}` : ""}`, { headers });
+
+  if (res.status === 304) {
+    return { data: null, etag: res.headers.get("ETag") ?? etag };
+  }
+
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      if (body.detail) detail = body.detail;
+    } catch {
+      // Use statusText as fallback
+    }
+    throw new ApiError(res.status, detail);
+  }
+
+  const data = (await res.json()) as VaultGraph;
+  return { data, etag: res.headers.get("ETag") };
 }
 
 export function fetchNote(id: string): Promise<Note> {
@@ -424,6 +472,40 @@ export function saveProviderSettings(providers: ProviderInput[]): Promise<SavePr
     method: "POST",
     body: JSON.stringify(payload),
   });
+}
+
+export interface TestProviderResponse {
+  ok: boolean;
+  latencyMs: number;
+  error: string;
+}
+
+interface TestProviderResponseWire {
+  ok: boolean;
+  latency_ms: number;
+  error: string;
+}
+
+export async function testProviderConnection(
+  provider: ProviderInput,
+): Promise<TestProviderResponse> {
+  const wire = await request<TestProviderResponseWire>(
+    `/api/settings/providers/${encodeURIComponent(provider.name)}/test`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        name: provider.name,
+        type: provider.type,
+        api_key: provider.apiKey,
+        host: provider.host,
+        base_url: provider.baseUrl,
+        chat_model: provider.chatModel,
+        embed_model: provider.embedModel,
+        is_default: provider.isDefault,
+      }),
+    },
+  );
+  return { ok: wire.ok, latencyMs: wire.latency_ms, error: wire.error };
 }
 
 // -- Archive ------------------------------------------------------------------

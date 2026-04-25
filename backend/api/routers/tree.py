@@ -3,8 +3,9 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from core.notes import parse_note_meta
 from core.vault import VaultManager, get_vault_manager
@@ -50,7 +51,7 @@ def _build_tree(dir_path: Path, threads_root: Path) -> TreeNode:
             node.note_type = meta.type
             node.tag_count = len(meta.tags)
             node.modified = meta.modified
-        except Exception:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValidationError, ValueError):
             stat = dir_path.stat()
             node.modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC).isoformat(
                 timespec="seconds"

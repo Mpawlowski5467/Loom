@@ -1,6 +1,7 @@
 """Graph builder: scan vault notes and produce nodes + edges for react-force-graph-2d."""
 
 import json
+from datetime import UTC, datetime
 from pathlib import Path
 
 from pydantic import BaseModel, Field
@@ -30,6 +31,7 @@ class VaultGraph(BaseModel):
 
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
+    updated_at: str = ""
 
 
 def build_graph(threads_dir: Path) -> VaultGraph:
@@ -78,8 +80,13 @@ def build_graph(threads_dir: Path) -> VaultGraph:
 
 
 def save_graph(graph: VaultGraph, loom_dir: Path) -> Path:
-    """Write graph.json to the .loom directory."""
+    """Write graph.json to the .loom directory.
+
+    Stamps ``graph.updated_at`` with the current UTC time so the API can
+    serve ETag/Last-Modified headers based on it.
+    """
     loom_dir.mkdir(parents=True, exist_ok=True)
+    graph.updated_at = datetime.now(UTC).isoformat()
     path = loom_dir / "graph.json"
     path.write_text(json.dumps(graph.model_dump(), indent=2))
     return path

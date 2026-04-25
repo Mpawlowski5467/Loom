@@ -12,12 +12,32 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from agents.loom.weaver_helpers import (
+    build_meta as _build_meta,
+)
+from agents.loom.weaver_helpers import (
+    load_schema as _load_schema,
+)
+from agents.loom.weaver_helpers import (
+    parse_classification as _parse_classification,
+)
+from agents.loom.weaver_prompts import (
+    CLASSIFY_SYSTEM as _CLASSIFY_SYSTEM,
+)
+from agents.loom.weaver_prompts import (
+    CREATE_SYSTEM as _CREATE_SYSTEM,
+)
+from agents.loom.weaver_prompts import (
+    FORMAT_SYSTEM as _FORMAT_SYSTEM,
+)
+from agents.loom.weaver_prompts import (
+    SKELETON_SECTIONS as _SKELETON_SECTIONS,
+)
 from core.notes import (
     Note,
     atomic_write_text,
     generate_id,
     note_to_file_content,
-    now_iso,
     parse_note,
 )
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
@@ -29,119 +49,6 @@ if TYPE_CHECKING:
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
-
-# System prompt for capture classification
-_CLASSIFY_SYSTEM = """\
-You are the Weaver agent in a knowledge management system. Your job is to
-classify a raw capture and decide how it should be filed.
-
-Analyze the capture content and respond with EXACTLY this format (no extra text):
-
-type: <topic|project|person|daily>
-folder: <topics|projects|people|daily>
-title: <concise descriptive title>
-tags: <comma-separated tags>
-
-Rules:
-- If the capture discusses a specific project or initiative → type: project
-- If it's about a person or collaborator → type: person
-- If it's a daily log or standup → type: daily
-- Otherwise → type: topic
-- Tags should be 2-5 relevant keywords, lowercase
-- Title should be concise (under 60 chars), descriptive, no dates unless daily
-"""
-
-# System prompt for note content generation
-_CREATE_SYSTEM = """\
-You are the Weaver agent in a knowledge management system. Your job is to
-transform raw content into a well-structured vault note.
-
-Given a raw capture and a schema template, produce the note body (markdown only,
-no frontmatter — that's handled separately).
-
-Rules:
-- Follow the schema's expected sections exactly
-- Use ## headers for sections as specified in the schema
-- Use [[wikilinks]] for any references to people, projects, or topics
-- Keep the content faithful to the source material — don't invent facts
-- Be concise but preserve all important information
-- If the source references specific people, projects, or concepts, wrap them
-  in [[double brackets]]
-"""
-
-# System prompt for formatting modal content per schema
-_FORMAT_SYSTEM = """\
-You are the Weaver agent. The user has provided content for a new note.
-Format it to match the schema template for the note type.
-
-Rules:
-- Organize the content under the schema's expected ## sections
-- Use [[wikilinks]] for references to other notes
-- Don't add information that isn't in the original content
-- Keep it concise and well-structured
-- Return only the markdown body (no frontmatter)
-"""
-
-# Default schema section templates for skeleton notes
-_SKELETON_SECTIONS: dict[str, str] = {
-    "project": "## Overview\n\n\n\n## Goals\n\n\n\n## Status\n\n\n\n## Related\n\n",
-    "topic": "## Summary\n\n\n\n## Details\n\n\n\n## References\n\n",
-    "person": "## Context\n\n\n\n## Notes\n\n\n\n## Related\n\n",
-    "daily": "## Log\n\n\n\n## Tasks\n\n\n\n## Links\n\n",
-    "capture": "## Content\n\n\n\n## Context\n\n",
-}
-
-
-def _parse_classification(text: str) -> dict[str, str]:
-    """Parse the LLM classification response into a dict."""
-    result: dict[str, str] = {}
-    for line in text.strip().splitlines():
-        if ":" in line:
-            key, _, value = line.partition(":")
-            key = key.strip().lower()
-            value = value.strip()
-            if key in ("type", "folder", "title", "tags"):
-                result[key] = value
-    return result
-
-
-def _load_schema(vault_root: Path, note_type: str) -> str:
-    """Load the schema template for a note type from rules/schemas/."""
-    schema_path = vault_root / "rules" / "schemas" / f"{note_type}.md"
-    if schema_path.exists():
-        return schema_path.read_text(encoding="utf-8")
-    return ""
-
-
-def _build_meta(
-    note_id: str,
-    title: str,
-    note_type: str,
-    tags: list[str],
-    source: str = "manual",
-) -> dict:
-    """Build a complete frontmatter metadata dict."""
-    ts = now_iso()
-    return {
-        "id": note_id,
-        "title": title,
-        "type": note_type,
-        "tags": tags,
-        "created": ts,
-        "modified": ts,
-        "author": "agent:weaver",
-        "source": source,
-        "links": [],
-        "status": "active",
-        "history": [
-            {
-                "action": "created",
-                "by": "agent:weaver",
-                "at": ts,
-                "reason": "Created by Weaver agent",
-            },
-        ],
-    }
 
 
 class Weaver(BaseAgent):

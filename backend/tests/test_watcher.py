@@ -1,6 +1,7 @@
 """Tests for the file watcher in core/watcher.py."""
 
 import threading
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -266,6 +267,50 @@ class TestOnMoved:
 # ---------------------------------------------------------------------------
 # _is_md filter
 # ---------------------------------------------------------------------------
+
+
+class TestContentDedup:
+    """Identical-content rewrites must not enqueue a re-index."""
+
+    def test_unchanged_content_not_queued(self, tmp_path: Path) -> None:
+        mock_index = MagicMock(spec=NoteIndex)
+        handler = _make_handler(tmp_path, note_index=mock_index)
+
+        md_path = tmp_path / "threads" / "topics" / "stable.md"
+        _write_note(md_path)
+
+        # First modify event seeds the hash cache and enqueues
+        handler._vector_index_file(md_path)
+        first_size = handler._task_queue.qsize()
+        assert first_size == 1
+
+        # Drain (without running) to simulate the worker having processed it
+        handler._task_queue.get_nowait()
+
+        # Same bytes again → no enqueue
+        handler._vector_index_file(md_path)
+        assert handler._task_queue.qsize() == 0
+
+        handler.stop()
+
+    def test_changed_content_is_queued(self, tmp_path: Path) -> None:
+        mock_index = MagicMock(spec=NoteIndex)
+        handler = _make_handler(tmp_path, note_index=mock_index)
+
+        md_path = tmp_path / "threads" / "topics" / "evolves.md"
+        _write_note(md_path)
+
+        handler._vector_index_file(md_path)
+        handler._task_queue.get_nowait()
+
+        # Modify the file content
+        time.sleep(0.01)
+        md_path.write_text(md_path.read_text() + "\n\nNew paragraph.\n")
+
+        handler._vector_index_file(md_path)
+        assert handler._task_queue.qsize() == 1
+
+        handler.stop()
 
 
 class TestIsMd:

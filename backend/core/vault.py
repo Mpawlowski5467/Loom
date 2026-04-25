@@ -20,13 +20,32 @@ from core.defaults import (
 )
 from core.exceptions import (
     InvalidVaultNameError,
+    LoomError,
     VaultExistsError,
     VaultNotFoundError,
 )
 
 CORE_FOLDERS = ["daily", "projects", "topics", "people", "captures", ".archive"]
 
+AGENT_NAMES = frozenset(
+    {
+        "weaver",
+        "spider",
+        "archivist",
+        "scribe",
+        "sentinel",
+        "researcher",
+        "standup",
+        "_council",
+    }
+)
+
 _NAME_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+class VaultPathError(LoomError):
+    """Raised when a user-supplied path component is invalid or escapes the vault."""
 
 
 class VaultManager:
@@ -103,6 +122,64 @@ class VaultManager:
     def vault_path(self, name: str) -> Path:
         """Return the root path for a vault by name."""
         return self._settings.vaults_dir / name
+
+    # -- Path validation / safe construction ----------------------------------
+
+    @staticmethod
+    def validate_agent_name(name: str) -> str:
+        """Return ``name`` if it is a known agent identifier, else raise."""
+        if name not in AGENT_NAMES:
+            raise VaultPathError(f"Unknown agent: {name!r}")
+        return name
+
+    @staticmethod
+    def validate_date(date_str: str) -> str:
+        """Return ``date_str`` if it matches ``YYYY-MM-DD``, else raise."""
+        if not _DATE_RE.match(date_str):
+            raise VaultPathError(f"Invalid date: {date_str!r}")
+        return date_str
+
+    def changelog_path(self, agent: str, date_str: str) -> Path:
+        """Return the changelog path for an agent on a date, validated."""
+        agent = self.validate_agent_name(agent)
+        date_str = self.validate_date(date_str)
+        return self.active_loom_dir() / "changelog" / agent / f"{date_str}.md"
+
+    def chat_path(self, agent: str, date_str: str) -> Path:
+        """Return the chat-history path for an agent on a date, validated."""
+        agent = self.validate_agent_name(agent)
+        date_str = self.validate_date(date_str)
+        return self.active_vault_dir() / "agents" / agent / "chat" / f"{date_str}.md"
+
+    def resolve_capture_path(self, user_path: str) -> Path:
+        """Resolve a user-supplied capture path, refusing anything outside the vault.
+
+        Accepts a relative path under ``threads/`` or an absolute path.  The result
+        is canonicalized (symlinks resolved) and asserted to live inside the active
+        threads directory and end in ``.md``.
+        """
+        if not user_path:
+            raise VaultPathError("Capture path is empty")
+
+        threads_dir = self.active_threads_dir().resolve()
+        candidate = Path(user_path)
+        if not candidate.is_absolute():
+            candidate = threads_dir / candidate
+
+        try:
+            resolved = candidate.resolve()
+        except OSError as exc:
+            raise VaultPathError(f"Cannot resolve capture path: {exc}") from exc
+
+        if resolved.suffix != ".md":
+            raise VaultPathError("Capture path must end in .md")
+
+        try:
+            resolved.relative_to(threads_dir)
+        except ValueError as exc:
+            raise VaultPathError("Capture path escapes the vault") from exc
+
+        return resolved
 
     # -- Private helpers ------------------------------------------------------
 

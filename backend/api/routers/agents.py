@@ -8,7 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from core.rate_limit import WRITE_LIMIT, limiter
-from core.vault import VaultManager, get_vault_manager
+from core.vault import VaultManager, VaultPathError, get_vault_manager
 
 router = APIRouter(prefix="/api", tags=["agents"])
 
@@ -257,8 +257,10 @@ def get_changelog(
     if not date:
         date = _today_str()
 
-    vault_dir = vm.active_vault_dir()
-    changelog_path = vault_dir / ".loom" / "changelog" / agent / f"{date}.md"
+    try:
+        changelog_path = vm.changelog_path(agent, date)
+    except VaultPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if not changelog_path.exists():
         return ChangelogEntry(agent=agent, date=date, content="")

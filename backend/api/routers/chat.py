@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
 from core.rate_limit import WRITE_LIMIT, limiter
-from core.vault import VaultManager, get_vault_manager
+from core.vault import VaultManager, VaultPathError, get_vault_manager
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -134,6 +134,14 @@ def get_history_by_date(
 ) -> ChatHistoryResponse:
     """Load chat history for a specific date."""
     from agents.chat import get_chat_history
+
+    if agent not in ALLOWED_TARGETS:
+        raise HTTPException(status_code=400, detail=f"Invalid agent: {agent!r}")
+
+    try:
+        vm.validate_date(date_str)
+    except VaultPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     chat = get_chat_history()
     if chat is None:

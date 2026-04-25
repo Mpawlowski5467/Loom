@@ -21,6 +21,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from core.notes import now_iso
+from core.vault import VaultManager
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -79,8 +80,15 @@ class ChatHistory:
         return self._vault_root / "agents" / agent / "chat"
 
     def _chat_file(self, agent: str, date_str: str | None = None) -> Path:
-        """Return the chat file path for a given agent and date."""
+        """Return the chat file path for a given agent and date.
+
+        Both ``agent`` and ``date_str`` are validated as a defense-in-depth
+        guard — even if a route forgets to validate, this method refuses
+        path-traversal attempts.
+        """
+        VaultManager.validate_agent_name(agent)
         date_str = date_str or _today_str()
+        VaultManager.validate_date(date_str)
         chat_dir = self._chat_dir(agent)
         chat_dir.mkdir(parents=True, exist_ok=True)
         return chat_dir / f"{date_str}.md"

@@ -1,7 +1,7 @@
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useApp } from "../../lib/context/useApp";
-import { saveProviderSettings } from "../../lib/api";
+import { loadProviderSettings, saveProviderSettings } from "../../lib/api";
 import styles from "./SettingsModal.module.css";
 
 type SettingsTab = "providers" | "general";
@@ -10,39 +10,48 @@ interface ProviderConfig {
   name: string;
   type: "cloud" | "local";
   apiKey: string;
+  apiKeySet: boolean; // server-side: a key was previously saved
   host: string;
+  baseUrl: string;
   chatModel: string;
   embedModel: string;
   isDefault: boolean;
 }
 
+const EMPTY_PROVIDER: ProviderConfig = {
+  name: "",
+  type: "cloud",
+  apiKey: "",
+  apiKeySet: false,
+  host: "",
+  baseUrl: "",
+  chatModel: "",
+  embedModel: "",
+  isDefault: false,
+};
+
 const DEFAULT_PROVIDERS: ProviderConfig[] = [
   {
+    ...EMPTY_PROVIDER,
     name: "openai",
     type: "cloud",
-    apiKey: "",
-    host: "",
     chatModel: "gpt-4o",
     embedModel: "text-embedding-3-small",
     isDefault: true,
   },
   {
+    ...EMPTY_PROVIDER,
     name: "anthropic",
     type: "cloud",
-    apiKey: "",
-    host: "",
     chatModel: "claude-sonnet-4-20250514",
-    embedModel: "",
-    isDefault: false,
   },
   {
+    ...EMPTY_PROVIDER,
     name: "ollama",
     type: "local",
-    apiKey: "",
     host: "http://localhost:11434",
     chatModel: "llama3",
     embedModel: "nomic-embed-text",
-    isDefault: false,
   },
 ];
 
@@ -54,16 +63,41 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
   useApp();
   const [activeTab, setActiveTab] = useState<SettingsTab>("providers");
   const [providers, setProviders] = useState<ProviderConfig[]>(DEFAULT_PROVIDERS);
+  const [activeVault, setActiveVault] = useState<string>("default");
+  const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [newProvider, setNewProvider] = useState<ProviderConfig>({
-    name: "",
-    type: "cloud",
-    apiKey: "",
-    host: "",
-    chatModel: "",
-    embedModel: "",
-    isDefault: false,
-  });
+  const [newProvider, setNewProvider] = useState<ProviderConfig>(EMPTY_PROVIDER);
+
+  useEffect(() => {
+    let cancelled = false;
+    loadProviderSettings()
+      .then((data) => {
+        if (cancelled) return;
+        setActiveVault(data.activeVault);
+        if (data.providers.length > 0) {
+          setProviders(
+            data.providers.map((p) => ({
+              name: p.name,
+              type: p.type,
+              apiKey: "", // user must re-enter to change; empty = "no change"
+              apiKeySet: p.apiKeySet,
+              host: p.host,
+              baseUrl: p.baseUrl,
+              chatModel: p.chatModel,
+              embedModel: p.embedModel,
+              isDefault: p.isDefaultChat || p.isDefaultEmbed,
+            })),
+          );
+        }
+      })
+      .catch((err) => console.error("Failed to load settings:", err))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleUpdateProvider(
     index: number,
@@ -92,15 +126,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
       ...prev,
       { ...newProvider, name: newProvider.name.trim().toLowerCase() },
     ]);
-    setNewProvider({
-      name: "",
-      type: "cloud",
-      apiKey: "",
-      host: "",
-      chatModel: "",
-      embedModel: "",
-      isDefault: false,
-    });
+    setNewProvider(EMPTY_PROVIDER);
     setShowAddForm(false);
   }
 
@@ -188,16 +214,38 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
 
                     <div className={styles.providerFields}>
                       {provider.type === "cloud" && (
-                        <div className={`${styles.field} ${styles.fieldFull}`}>
-                          <span className={styles.fieldLabel}>API Key</span>
-                          <input
-                            className={styles.fieldInput}
-                            type="password"
-                            placeholder="sk-..."
-                            value={provider.apiKey}
-                            onChange={(e) => handleUpdateProvider(i, "apiKey", e.target.value)}
-                          />
-                        </div>
+                        <>
+                          <div className={`${styles.field} ${styles.fieldFull}`}>
+                            <span className={styles.fieldLabel}>API Key</span>
+                            <input
+                              className={styles.fieldInput}
+                              type="password"
+                              placeholder={
+                                provider.apiKeySet
+                                  ? "(saved — leave blank to keep)"
+                                  : "sk-..."
+                              }
+                              value={provider.apiKey}
+                              onChange={(e) =>
+                                handleUpdateProvider(i, "apiKey", e.target.value)
+                              }
+                            />
+                          </div>
+                          {provider.name === "xai" && (
+                            <div className={`${styles.field} ${styles.fieldFull}`}>
+                              <span className={styles.fieldLabel}>Base URL</span>
+                              <input
+                                className={styles.fieldInput}
+                                type="text"
+                                placeholder="https://api.x.ai/v1"
+                                value={provider.baseUrl}
+                                onChange={(e) =>
+                                  handleUpdateProvider(i, "baseUrl", e.target.value)
+                                }
+                              />
+                            </div>
+                          )}
+                        </>
                       )}
 
                       {provider.type === "local" && (
@@ -357,7 +405,7 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
                     <div className={styles.settingLabel}>Active Vault</div>
                     <div className={styles.settingDesc}>Current vault directory</div>
                   </div>
-                  <span className={styles.settingValue}>~/.loom/vaults/default</span>
+                  <span className={styles.settingValue}>~/.loom/vaults/{activeVault}</span>
                 </div>
               </div>
 
@@ -410,9 +458,9 @@ export function SettingsModal({ onClose }: SettingsModalProps) {
           <button
             className={`${styles.btn} ${styles.btnPrimary}`}
             onClick={handleSave}
-            disabled={saving}
+            disabled={saving || loading}
           >
-            {saving ? "Saving..." : "Save"}
+            {saving ? "Saving..." : loading ? "Loading..." : "Save"}
           </button>
         </div>
       </div>

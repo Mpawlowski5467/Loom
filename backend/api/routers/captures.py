@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
 from core.rate_limit import WRITE_LIMIT, limiter
-from core.vault import VaultManager, get_vault_manager
+from core.vault import VaultManager, VaultPathError, get_vault_manager
 
 router = APIRouter(prefix="/api/captures", tags=["captures"])
 
@@ -111,6 +111,12 @@ async def process_capture(
 
     The capture_path should be relative to threads/ or an absolute path.
     """
+    # Validate path first (cheap, doesn't depend on agent state).
+    try:
+        capture_path = vm.resolve_capture_path(body.capture_path)
+    except VaultPathError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     from agents.loom.weaver import get_weaver
 
     weaver = get_weaver()
@@ -119,11 +125,6 @@ async def process_capture(
             status_code=503,
             detail="Weaver agent not initialized. Configure a chat provider.",
         )
-
-    # Resolve the capture path
-    capture_path = Path(body.capture_path)
-    if not capture_path.is_absolute():
-        capture_path = vm.active_threads_dir() / capture_path
 
     if not capture_path.exists():
         raise HTTPException(status_code=404, detail=f"Capture not found: {body.capture_path}")

@@ -49,7 +49,7 @@
   --danger: #f87171;
   --success: #34d399;
 
-  /* ── Graph canvas (read by JS for Sigma/canvas contexts) ──────────────── */
+  /* ── Graph canvas (read by JS for react-force-graph-2d canvas drawing) ── */
   --graph-bg: #0f172a;
   --graph-label: #8b90a0;
   --graph-edge: rgba(139, 144, 160, 0.15);

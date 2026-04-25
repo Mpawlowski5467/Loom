@@ -21,6 +21,13 @@ class LoomSettings(BaseSettings):
         default="openai",
         description="Default LLM provider",
     )
+    cors_origins: list[str] = Field(
+        default=["http://localhost:5173"],
+        description=(
+            "Allowed CORS origins for the API. Override via LOOM_CORS_ORIGINS "
+            "(JSON list, e.g. '[\"http://localhost:5173\",\"http://localhost:4173\"]')."
+        ),
+    )
 
     @property
     def vaults_dir(self) -> Path:

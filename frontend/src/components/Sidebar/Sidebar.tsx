@@ -29,24 +29,19 @@ export function Sidebar({
   const [error, setError] = useState<string | null>(null);
   const fetchIdRef = useRef(0);
 
-  // Derive: reset when noteId clears
-  const [prevNoteId, setPrevNoteId] = useState<string | null>(null);
-  if (noteId !== prevNoteId) {
-    setPrevNoteId(noteId);
+  // Reset/refresh when noteId changes — moved from render body to useEffect
+  // to avoid Strict-Mode double-render warnings.
+  useEffect(() => {
     if (!noteId) {
       setNote(null);
       setError(null);
-      onModeChange("view");
       setLoading(false);
-    } else {
-      setLoading(true);
-      setError(null);
+      onModeChange("view");
+      return;
     }
-  }
 
-  // Fetch note data
-  useEffect(() => {
-    if (!noteId) return;
+    setLoading(true);
+    setError(null);
 
     const id = ++fetchIdRef.current;
     Promise.all([fetchNote(noteId), fetchGraph()])

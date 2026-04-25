@@ -1,4 +1,4 @@
-"""Graph builder: scan vault notes and produce nodes + edges for Sigma.js."""
+"""Graph builder: scan vault notes and produce nodes + edges for react-force-graph-2d."""
 
 import json
 from pathlib import Path

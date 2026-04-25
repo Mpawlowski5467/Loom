@@ -1,9 +1,10 @@
 /**
  * Shared constants used across multiple components.
  *
- * NODE_COLORS_HEX is the canonical hex map for canvas contexts (Sigma.js)
- * that cannot read CSS variables. DOM components should prefer CSS variables
- * from variables.css (e.g., var(--node-project)) where possible.
+ * NODE_COLORS_HEX is the canonical hex map for canvas contexts
+ * (react-force-graph-2d node draw callbacks) that cannot read CSS variables.
+ * DOM components should prefer CSS variables from variables.css (e.g.,
+ * var(--node-project)) where possible.
  */
 
 /** Read the current computed value of a CSS custom property from :root. */

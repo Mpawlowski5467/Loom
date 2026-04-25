@@ -92,7 +92,7 @@ class TestVectorIndexer:
 
         indexer.remove_note("thr_remove")
         # After removing the only note, the table should be empty
-        db = indexer._get_db()
+        db = indexer.get_db()
         table = db.open_table("chunks")
         assert table.count_rows() == 0
 
@@ -121,7 +121,7 @@ class TestVectorIndexer:
         indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
         await indexer.index_note(note_path)
 
-        db = indexer._get_db()
+        db = indexer.get_db()
         table = db.open_table("chunks")
         assert table.count_rows() == 2
 

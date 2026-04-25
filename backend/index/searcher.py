@@ -73,7 +73,7 @@ class VectorSearcher:
 
         # Vector search — fetch more than limit so post-filters still yield enough
         fetch_k = limit * 4
-        db = self._indexer._get_db()
+        db = self._indexer.get_db()
         table = db.open_table("chunks")
 
         raw_results = table.search(query_vec).limit(fetch_k).to_list()

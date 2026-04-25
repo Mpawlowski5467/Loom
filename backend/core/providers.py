@@ -97,6 +97,10 @@ class OpenAIProvider(BaseProvider):
         self._chat_model = cfg.chat_model
         self._embed_model = cfg.embed_model
 
+    async def close(self) -> None:
+        """Close the underlying httpx client owned by AsyncOpenAI."""
+        await self._client.close()
+
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding via the OpenAI embeddings API."""
         try:
@@ -138,6 +142,10 @@ class AnthropicProvider(BaseProvider):
             )
         self._client = anthropic.AsyncAnthropic(api_key=api_key)
         self._chat_model = cfg.chat_model
+
+    async def close(self) -> None:
+        """Close the underlying httpx client owned by AsyncAnthropic."""
+        await self._client.close()
 
     async def embed(self, text: str) -> list[float]:
         """Anthropic does not offer an embeddings API."""
@@ -232,6 +240,10 @@ class XAIProvider(BaseProvider):
         self._client = openai.AsyncOpenAI(api_key=api_key, base_url=cfg.base_url)
         self._chat_model = cfg.chat_model
         self._embed_model = cfg.embed_model
+
+    async def close(self) -> None:
+        """Close the underlying httpx client owned by AsyncOpenAI."""
+        await self._client.close()
 
     async def embed(self, text: str) -> list[float]:
         """Generate an embedding via xAI's OpenAI-compatible API."""
@@ -363,9 +375,19 @@ def get_registry() -> ProviderRegistry:
     return _registry
 
 
-def reset_registry() -> None:
-    """Force re-creation of the registry (useful after config changes)."""
+async def reset_registry() -> None:
+    """Force re-creation of the registry (useful after config changes).
+
+    Closes any provider clients first so we don't leak httpx connections.
+    Best-effort: any close failure is swallowed so the registry slot
+    is always cleared.
+    """
+    import contextlib
+
     global _registry
+    if _registry is not None:
+        with contextlib.suppress(Exception):
+            await _registry.close()
     _registry = None
 
 

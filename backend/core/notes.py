@@ -1,5 +1,6 @@
 """Note parser: extract YAML frontmatter, markdown body, and wikilinks."""
 
+import os
 import re
 import secrets
 from datetime import UTC, datetime
@@ -124,3 +125,15 @@ def build_frontmatter(meta: dict) -> str:
 def note_to_file_content(meta: dict, body: str) -> str:
     """Combine frontmatter dict and body into a full markdown string."""
     return build_frontmatter(meta) + "\n" + body
+
+
+def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+    """Write ``content`` to ``path`` atomically.
+
+    Writes to a temp file in the same directory then ``os.replace``s it onto
+    ``path``. This prevents readers (e.g. the file watcher's indexer) from
+    observing partially-written content during concurrent edits.
+    """
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(content, encoding=encoding)
+    os.replace(tmp, path)

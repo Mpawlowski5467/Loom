@@ -45,16 +45,20 @@ class VectorIndexer:
         self._embed = embed_provider
         self._db: lancedb.DBConnection | None = None
 
-    def _get_db(self) -> lancedb.DBConnection:
+    def get_db(self) -> lancedb.DBConnection:
         """Lazily open (or create) the LanceDB database."""
         if self._db is None:
             self._db_path.parent.mkdir(parents=True, exist_ok=True)
             self._db = lancedb.connect(str(self._db_path))
         return self._db
 
+    def open_table(self) -> lancedb.table.Table:
+        """Return the chunks table. Raises if it does not yet exist."""
+        return self.get_db().open_table(TABLE_NAME)
+
     def _table_exists(self) -> bool:
         """Check whether the chunks table exists."""
-        return TABLE_NAME in self._get_db().list_tables().tables
+        return TABLE_NAME in self.get_db().list_tables().tables
 
     def _get_or_create_table(self, data: list[dict] | None = None) -> lancedb.table.Table:
         """Return the chunks table.
@@ -62,7 +66,7 @@ class VectorIndexer:
         If the table doesn't exist yet, *data* must be provided so LanceDB
         can infer the schema (including the correct fixed-size vector dimension).
         """
-        db = self._get_db()
+        db = self.get_db()
         if self._table_exists():
             return db.open_table(TABLE_NAME)
         if data:
@@ -95,12 +99,12 @@ class VectorIndexer:
         rows = _rows_from_chunks(chunks, vectors)
 
         if self._table_exists():
-            table = self._get_db().open_table(TABLE_NAME)
+            table = self.get_db().open_table(TABLE_NAME)
             self._delete_by_note_id(table, note_id)
             table.add(rows)
         else:
             # First note indexed — create table from data
-            self._get_db().create_table(TABLE_NAME, data=rows)
+            self.get_db().create_table(TABLE_NAME, data=rows)
 
         logger.info("Indexed %d chunks for note %s", len(rows), note_id)
         return len(rows)
@@ -109,7 +113,7 @@ class VectorIndexer:
         """Delete all chunks for a given note from the index."""
         if not self._table_exists():
             return
-        table = self._get_db().open_table(TABLE_NAME)
+        table = self.get_db().open_table(TABLE_NAME)
         self._delete_by_note_id(table, note_id)
         logger.info("Removed chunks for note %s", note_id)
 
@@ -121,7 +125,7 @@ class VectorIndexer:
         md_files = [p for p in threads_dir.rglob("*.md") if ".archive" not in p.parts]
 
         # Drop old table for a clean reindex
-        db = self._get_db()
+        db = self.get_db()
         if self._table_exists():
             db.drop_table(TABLE_NAME)
 
@@ -146,7 +150,7 @@ class VectorIndexer:
         try:
             if not self._table_exists():
                 return False
-            table = self._get_db().open_table(TABLE_NAME)
+            table = self.get_db().open_table(TABLE_NAME)
             return table.count_rows() > 0
         except Exception:  # noqa: BLE001
             return False

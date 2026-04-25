@@ -47,14 +47,9 @@ class TestInitVault:
         assert "constitution" in (root / "rules" / "prime.md").read_text().lower()
         for schema in ["project.md", "topic.md", "person.md", "daily.md", "capture.md"]:
             assert (root / "rules" / "schemas" / schema).is_file()
-        for policy in ["linking.md", "archival.md", "summarization.md", "naming.md"]:
-            assert (root / "rules" / "policies" / policy).is_file()
-        for workflow in ["capture-to-thread.md", "daily-standup.md"]:
-            assert (root / "rules" / "workflows" / workflow).is_file()
 
     def test_creates_prompts(self, vault_manager: VaultManager) -> None:
         root = vault_manager.init_vault("test")
-        assert (root / "prompts" / "_compiler.yaml").is_file()
         assert (root / "prompts" / "shared" / "system-preamble.md").is_file()
 
     def test_creates_loom_meta_and_changelogs(self, vault_manager: VaultManager) -> None:
@@ -84,8 +79,7 @@ class TestInitVault:
         root = vault_manager.init_vault("test")
         assert len((root / "rules" / "prime.md").read_text()) > 100
         assert len((root / "rules" / "schemas" / "project.md").read_text()) > 50
-        assert len((root / "rules" / "policies" / "linking.md").read_text()) > 50
-        assert len((root / "prompts" / "_compiler.yaml").read_text()) > 50
+        assert len((root / "prompts" / "shared" / "system-preamble.md").read_text()) > 50
 
     def test_duplicate_raises(self, vault_manager: VaultManager) -> None:
         vault_manager.init_vault("test")

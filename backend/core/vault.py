@@ -8,14 +8,11 @@ from core.defaults import (
     AGENT_MEMORY_MD,
     AGENT_STATE_JSON,
     ALL_AGENTS,
-    COMPILER_YAML,
     LOOM_AGENTS,
-    POLICIES,
     PRIME_MD,
     SCHEMAS,
     SHUTTLE_AGENTS,
     SYSTEM_PREAMBLE_MD,
-    WORKFLOWS,
     agent_config_yaml,
 )
 from core.exceptions import (
@@ -220,20 +217,9 @@ class VaultManager:
         for filename, content in SCHEMAS.items():
             (schemas_dir / filename).write_text(content)
 
-        policies_dir = rules / "policies"
-        policies_dir.mkdir()
-        for filename, content in POLICIES.items():
-            (policies_dir / filename).write_text(content)
-
-        workflows_dir = rules / "workflows"
-        workflows_dir.mkdir()
-        for filename, content in WORKFLOWS.items():
-            (workflows_dir / filename).write_text(content)
-
     def _create_prompts(self, root: Path) -> None:
         prompts = root / "prompts"
         prompts.mkdir()
-        (prompts / "_compiler.yaml").write_text(COMPILER_YAML)
         shared = prompts / "shared"
         shared.mkdir()
         (shared / "system-preamble.md").write_text(SYSTEM_PREAMBLE_MD)

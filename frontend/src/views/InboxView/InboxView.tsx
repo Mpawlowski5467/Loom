@@ -10,21 +10,17 @@ import {
 } from "../../lib/api";
 import styles from "./InboxView.module.css";
 
-type FilterTab = "all" | "pending" | "processing" | "done" | "email" | "github" | "manual";
+type FilterTab = "all" | "pending" | "processing" | "done" | "manual";
 
 const FILTER_TABS: { id: FilterTab; label: string }[] = [
   { id: "all", label: "All" },
   { id: "pending", label: "Pending" },
   { id: "processing", label: "Processing" },
   { id: "done", label: "Done" },
-  { id: "email", label: "Email" },
-  { id: "github", label: "GitHub" },
   { id: "manual", label: "Manual" },
 ];
 
 const SOURCE_LABELS: Record<string, string> = {
-  email: "EM",
-  github: "GH",
   manual: "MN",
 };
 
@@ -185,8 +181,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
     if (activeFilter === "processing") return eff === "processing";
     if (activeFilter === "done") return eff === "done" || c.status === "archived";
     const src = (c.source || "manual").toLowerCase();
-    if (activeFilter === "email") return src.includes("email");
-    if (activeFilter === "github") return src.includes("github");
     if (activeFilter === "manual") return src === "manual" || src === "";
     return true;
   });
@@ -278,10 +272,7 @@ function getStatusLabel(status: string, result?: ProcessResult): string {
   return "Pending";
 }
 
-function getSourceLabel(source: string): string {
-  const src = (source || "").toLowerCase();
-  if (src.includes("email")) return SOURCE_LABELS.email;
-  if (src.includes("github")) return SOURCE_LABELS.github;
+function getSourceLabel(): string {
   return SOURCE_LABELS.manual;
 }
 
@@ -325,7 +316,7 @@ function CaptureCard({
   return (
     <div className={`${styles.card} ${borderClass}`} onClick={onClick}>
       <div className={styles.cardTop}>
-        <span className={styles.cardSourceLabel}>{getSourceLabel(capture.source)}</span>
+        <span className={styles.cardSourceLabel}>{getSourceLabel()}</span>
         <div className={styles.cardIdent}>
           <span className={styles.cardTitle}>{capture.title || "Untitled capture"}</span>
           {capture.preview && <span className={styles.cardPreview}>{capture.preview}</span>}

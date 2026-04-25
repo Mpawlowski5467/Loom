@@ -15,22 +15,18 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 
 ```
 loom/
-├── backend/           # Python — FastAPI server, agents, index, rules, bridge
+├── backend/           # Python — FastAPI server, agents, index
 │   ├── api/           # FastAPI routes
 │   ├── agents/loom/   # Weaver, Spider, Archivist, Scribe, Sentinel
 │   ├── agents/shuttle/ # Researcher, Standup
-│   ├── compiler/      # Prompt Compiler pipeline
 │   ├── index/         # LanceDB, embeddings, search
-│   ├── rules/         # Rules engine parser
-│   ├── bridge/        # GitHub, Email, Calendar integrations
 │   └── core/          # Vault management, file watcher, config
 ├── frontend/          # React — Graph UI
 │   ├── views/         # Graph, Board, Thread, Inbox
 │   ├── components/    # File tree, sidebar, agent cards, editor
 │   └── lib/           # react-force-graph-2d graph logic, react-markdown config
 ├── docs/              # Architecture docs, reference
-├── examples/          # Example vaults, rules, schemas
-└── pyproject.toml
+└── examples/          # Example vaults, rules, schemas
 ```
 
 ## Key Concepts
@@ -38,9 +34,8 @@ loom/
 - **Vault**: multi-vault markdown filesystem at `~/.loom/vaults/`. Fixed core folders (daily, projects, topics, people, captures) + user custom folders.
 - **Wikilinks**: all inter-note links use `[[note-name]]` syntax.
 - **Two-tier agents**: Loom Layer (system: Weaver, Spider, Archivist, Scribe, Sentinel) manages the vault. Shuttle Layer (task: Researcher, Standup) produces content into `captures/`, Loom agents process it.
-- **Read-Before-Write**: every agent must read vault.yaml → prime.md → role rules → memory.md → _index.md → related notes BEFORE writing anything.
+- **Read-Before-Write**: every agent must read vault.yaml → prime.md → memory.md → _index.md → related notes BEFORE writing anything.
 - **prime.md**: user-owned constitution. Immutable to agents by default.
-- **Prompt Compiler**: centralized pipeline that optimizes all prompts before sending to LLM (pruning, compression, token counting, templates).
 
 ## Commands
 
@@ -63,7 +58,6 @@ cd frontend && npm run lint
 
 Full architecture doc: @docs/architecture-ref.md
 Style guide: @docs/style-guide.md
-Task prompts: @docs/tasks/
 
 ## Conventions
 

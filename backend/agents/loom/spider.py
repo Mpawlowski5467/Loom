@@ -466,9 +466,9 @@ class Spider(BaseAgent):
             {"action": "linked", "by": "agent:spider", "at": ts, "reason": reason}
         )
 
-        from core.notes import note_to_file_content
+        from core.notes import atomic_write_text, note_to_file_content
 
-        path.write_text(note_to_file_content(meta, new_body), encoding="utf-8")
+        atomic_write_text(path, note_to_file_content(meta, new_body))
 
     # -- Helpers -------------------------------------------------------------
 

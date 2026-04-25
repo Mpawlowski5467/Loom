@@ -12,7 +12,15 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from core.notes import Note, generate_id, note_to_file_content, now_iso, parse_note
+from core.notes import (
+    Note,
+    atomic_write_text,
+    generate_id,
+    note_to_file_content,
+    now_iso,
+    parse_note,
+)
+from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,15 +29,6 @@ if TYPE_CHECKING:
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
-
-# Maps note type to default target folder
-_TYPE_TO_FOLDER = {
-    "daily": "daily",
-    "project": "projects",
-    "topic": "topics",
-    "person": "people",
-    "capture": "captures",
-}
 
 # System prompt for capture classification
 _CLASSIFY_SYSTEM = """\
@@ -91,12 +90,6 @@ _SKELETON_SECTIONS: dict[str, str] = {
     "daily": "## Log\n\n\n\n## Tasks\n\n\n\n## Links\n\n",
     "capture": "## Content\n\n\n\n## Context\n\n",
 }
-
-
-def _to_kebab(title: str) -> str:
-    """Convert a title to a kebab-case filename stem (max 60 chars)."""
-    cleaned = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
-    return "-".join(cleaned.lower().split())[:60]
 
 
 def _parse_classification(text: str) -> dict[str, str]:
@@ -188,7 +181,7 @@ class Weaver(BaseAgent):
             # Classify the capture
             classification = await self._classify_capture(raw_content, chain)
             note_type = classification.get("type", "topic")
-            folder = classification.get("folder", _TYPE_TO_FOLDER.get(note_type, "topics"))
+            folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
             title = classification.get("title", raw_note.title or capture_path.stem)
             tags_str = classification.get("tags", "")
             tags = [t.strip() for t in tags_str.split(",") if t.strip()]
@@ -203,7 +196,7 @@ class Weaver(BaseAgent):
 
             return {
                 "action": "created",
-                "details": f"Processed capture '{capture_path.name}' → {folder}/{_to_kebab(title)}.md",
+                "details": f"Processed capture '{capture_path.name}' → {folder}/{to_kebab(title)}.md",
                 "note": note,
             }
 
@@ -369,7 +362,7 @@ class Weaver(BaseAgent):
         target_dir.mkdir(parents=True, exist_ok=True)
 
         note_id = generate_id()
-        stem = _to_kebab(title) or note_id
+        stem = to_kebab(title) or note_id
         file_path = target_dir / f"{stem}.md"
 
         # Avoid overwriting existing files
@@ -377,7 +370,7 @@ class Weaver(BaseAgent):
             file_path = target_dir / f"{stem}-{note_id}.md"
 
         meta = _build_meta(note_id, title, note_type, tags, source)
-        file_path.write_text(note_to_file_content(meta, body), encoding="utf-8")
+        atomic_write_text(file_path, note_to_file_content(meta, body))
 
         logger.info("Weaver created note: %s → %s", title, file_path)
         return parse_note(file_path)

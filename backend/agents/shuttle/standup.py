@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from core.notes import generate_id, note_to_file_content, now_iso
+from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
+from core.notes_helpers import collect_changelog
 
 if TYPE_CHECKING:
     from datetime import date
@@ -127,23 +128,7 @@ class Standup(BaseAgent):
 
     def _collect_changelog(self, target_date: date) -> str:
         """Collect all changelog entries for a given date across all agents."""
-        changelog_root = self._vault_root / ".loom" / "changelog"
-        date_str = target_date.isoformat()
-        parts: list[str] = []
-
-        if not changelog_root.exists():
-            return ""
-
-        for agent_dir in sorted(changelog_root.iterdir()):
-            if not agent_dir.is_dir():
-                continue
-            log_file = agent_dir / f"{date_str}.md"
-            if log_file.exists():
-                try:
-                    parts.append(log_file.read_text(encoding="utf-8"))
-                except Exception:  # noqa: BLE001
-                    continue
-        return "\n\n".join(parts)
+        return collect_changelog(self._vault_root, target_date)
 
     def _find_modified_notes(self, target_date: date) -> list[dict]:
         """Find notes modified on the given date."""
@@ -221,7 +206,7 @@ class Standup(BaseAgent):
 
         filename = f"standup-{date_str}.md"
         path = captures_dir / filename
-        path.write_text(note_to_file_content(meta, recap), encoding="utf-8")
+        atomic_write_text(path, note_to_file_content(meta, recap))
         return capture_id, path
 
 

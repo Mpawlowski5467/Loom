@@ -89,7 +89,7 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
         embed_provider,
     )
 
-    reset_registry()
+    await reset_registry()
 
     return SaveProvidersResponse(
         saved=len(providers),

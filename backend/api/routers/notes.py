@@ -9,11 +9,13 @@ from core.note_index import NoteIndex, get_note_index
 from core.notes import (
     Note,
     NoteMeta,
+    atomic_write_text,
     generate_id,
     note_to_file_content,
     now_iso,
     parse_note,
 )
+from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
@@ -47,23 +49,6 @@ class NoteListResponse(BaseModel):
     total: int
     offset: int
     limit: int
-
-
-# -- Helpers ------------------------------------------------------------------
-
-_TYPE_TO_FOLDER = {
-    "daily": "daily",
-    "project": "projects",
-    "topic": "topics",
-    "person": "people",
-    "capture": "captures",
-}
-
-
-def _to_kebab(title: str) -> str:
-    """Convert a title to a kebab-case filename stem."""
-    cleaned = "".join(c if c.isalnum() or c in " -_" else "" for c in title)
-    return "-".join(cleaned.lower().split())[:60]
 
 
 # -- Endpoints ----------------------------------------------------------------
@@ -109,7 +94,7 @@ async def create_note(
     """Create a new note via Weaver agent (or direct write as fallback)."""
     from agents.loom.weaver import get_weaver
 
-    folder = body.folder or _TYPE_TO_FOLDER.get(body.type, "topics")
+    folder = body.folder or TYPE_TO_FOLDER.get(body.type, "topics")
 
     weaver = get_weaver()
     if weaver is not None:
@@ -136,7 +121,7 @@ async def create_note(
 
     note_id = generate_id()
     ts = now_iso()
-    stem = _to_kebab(body.title) or note_id
+    stem = to_kebab(body.title) or note_id
 
     meta = {
         "id": note_id,
@@ -155,7 +140,7 @@ async def create_note(
     }
 
     file_path = target_dir / f"{stem}.md"
-    file_path.write_text(note_to_file_content(meta, body.content), encoding="utf-8")
+    atomic_write_text(file_path, note_to_file_content(meta, body.content))
 
     # Eagerly update the index so the new note is immediately findable
     index.refresh_file(file_path)
@@ -193,7 +178,7 @@ def update_note(
     )
 
     new_body = body.body if body.body is not None else note.body
-    path.write_text(note_to_file_content(meta, new_body), encoding="utf-8")
+    atomic_write_text(path, note_to_file_content(meta, new_body))
 
     # Update index with new metadata
     index.refresh_file(path)
@@ -227,9 +212,14 @@ def archive_note(
     meta["history"].append(
         {"action": "archived", "by": "user", "at": ts, "reason": "Archived via API"},
     )
-    path.write_text(note_to_file_content(meta, note.body), encoding="utf-8")
+    atomic_write_text(path, note_to_file_content(meta, note.body))
 
     dest = archive_dir / path.name
+    if dest.exists():
+        # Collision: prior archive of a note with the same filename.
+        # Suffix with the archival timestamp (filesystem-safe) to keep both.
+        safe_ts = ts.replace(":", "-")
+        dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
     shutil.move(str(path), str(dest))
 
     # Remove from index (archived notes are excluded)

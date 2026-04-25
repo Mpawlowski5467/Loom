@@ -29,7 +29,10 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 _MSG_HEADER_RE = re.compile(
-    r"^### (user|assistant|council|agent:\w+)\s*—\s*(\S+)\s*$", re.MULTILINE
+    # Accept both em-dash (—, written by save_message) and ASCII hyphen (-)
+    # so user-pasted history with plain hyphens still parses correctly.
+    r"^### (user|assistant|council|agent:\w+)\s*[—-]\s*(\S+)\s*$",
+    re.MULTILINE,
 )
 
 COUNCIL_AGENT = "_council"

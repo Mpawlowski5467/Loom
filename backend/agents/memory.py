@@ -1,8 +1,8 @@
 """Agent memory summarization: compress recent logs into memory.md.
 
 When an agent hits its memory cadence (default 20 actions), this module
-reads recent log entries and existing memory, uses the prompt compiler to
-build a summarization prompt, and produces a condensed memory.md that:
+reads recent log entries and existing memory, builds a summarization prompt,
+and produces a condensed memory.md that:
 
 - Replaces older content with an LLM summary
 - Preserves the most recent raw entries verbatim (recency matters)
@@ -30,8 +30,8 @@ RECENT_ENTRIES_TO_KEEP = 5
 # -- Entry boundary pattern: each entry starts with "## <ISO timestamp>" -----
 _ENTRY_RE = re.compile(r"(?=^## \d{4}-\d{2}-\d{2}T)", re.MULTILINE)
 
-# -- Fallback system prompt (used when template file is unavailable) ----------
-_FALLBACK_SYSTEM = """\
+# -- Memory summarization system prompt ---------------------------------------
+_SYSTEM_PROMPT = """\
 You are a memory summarizer for an AI agent in a knowledge management system.
 Given the agent's existing memory and recent action logs, produce a condensed
 summary that captures:
@@ -107,8 +107,8 @@ async def summarize_memory(
         _write_memory(memory_path, "", entries_to_keep)
         return ""
 
-    # Build the prompt via compiler or fallback
-    system_prompt = _load_system_prompt(vault_root, agent_name)
+    # Build the prompt
+    system_prompt = _SYSTEM_PROMPT
     user_message = (
         f"Agent: {agent_name}\n\n"
         f"## Content to Summarize\n\n{content_to_summarize}\n\n"
@@ -141,25 +141,6 @@ async def summarize_memory(
 
     logger.info("Updated memory.md for agent %s", agent_name)
     return summary
-
-
-def _load_system_prompt(vault_root: Path, agent_name: str) -> str:
-    """Load the summarization prompt template, falling back to built-in."""
-    try:
-        from compiler.templates import load_template
-
-        return load_template(
-            vault_root,
-            "shared",
-            "summarize-memory",
-            {"agent_name": agent_name},
-        )
-    except Exception:  # noqa: BLE001
-        logger.debug(
-            "Summarize-memory template not found, using fallback prompt",
-            exc_info=True,
-        )
-        return _FALLBACK_SYSTEM
 
 
 def _parse_memory(memory_path: Path) -> tuple[str, str]:

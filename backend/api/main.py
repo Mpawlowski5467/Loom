@@ -8,7 +8,6 @@ from fastapi.responses import JSONResponse
 from slowapi.errors import RateLimitExceeded
 
 from api.routers.agents import router as agents_router
-from api.routers.bridges import router as bridges_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.graph import router as graph_router
@@ -217,7 +216,6 @@ app.include_router(search_router)
 app.include_router(captures_router)
 app.include_router(index_router)
 app.include_router(agents_router)
-app.include_router(bridges_router)
 app.include_router(chat_router)
 app.include_router(settings_router)
 

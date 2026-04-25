@@ -11,27 +11,23 @@ import {
 } from "../../lib/api";
 import styles from "./BoardView.module.css";
 
-const AGENT_INITIALS: Record<string, string> = {
-  weaver: "W",
-  spider: "Sp",
-  archivist: "A",
-  scribe: "Sc",
-  sentinel: "Se",
-  researcher: "R",
-  standup: "St",
-};
-
-const AGENT_DESCS: Record<string, string> = {
-  weaver: "Creates new notes from captures and user requests.",
-  spider: "Discovers and creates wikilink connections between notes.",
-  archivist: "Audits notes for quality, broken links, and staleness.",
-  scribe: "Generates summaries, folder indexes, and daily logs.",
-  sentinel: "Validates actions against vault rules and schemas.",
-  researcher: "Researches topics and synthesizes findings.",
-  standup: "Generates daily standup recaps from vault activity.",
-};
-
 const LOOM_NAMES = new Set(["weaver", "spider", "archivist", "scribe", "sentinel"]);
+
+const SHUTTLE_TABS = ["researcher", "standup"] as const;
+const SKELETON_LOOM_COUNT = 5;
+const SKELETON_SHUTTLE_COUNT = 2;
+
+/**
+ * Derive a short initial badge from an agent name, using the minimum-unique
+ * prefix among all known agents (1 char if unique, otherwise 2 chars).
+ */
+function getInitials(name: string, allNames: string[]): string {
+  if (!name) return "?";
+  const first = name[0]?.toLowerCase();
+  const conflicts = allNames.filter((n) => n[0]?.toLowerCase() === first);
+  if (conflicts.length <= 1) return name[0].toUpperCase();
+  return name[0].toUpperCase() + (name[1]?.toLowerCase() ?? "");
+}
 
 interface ActivityEntry {
   time: string;
@@ -47,6 +43,7 @@ const POLL_MS = 5_000;
 export function BoardView() {
   const { addToast } = useApp();
   const [agents, setAgents] = useState<AgentStatus[]>([]);
+  const [agentsLoading, setAgentsLoading] = useState(true);
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
 
@@ -72,18 +69,20 @@ export function BoardView() {
       const agentList = await fetchAgents();
       if (!mountedRef.current) return;
       setAgents(agentList);
+      setAgentsLoading(false);
 
       // Check for new actions and fire toasts
+      const names = agentList.map((a) => a.name);
       for (const a of agentList) {
         const prev = lastSeenCountRef.current[a.name] ?? a.action_count;
         if (a.action_count > prev) {
-          const icon = AGENT_INITIALS[a.name] || "";
+          const icon = getInitials(a.name, names);
           addToast(`${icon} ${a.name} completed an action`, "info");
         }
         lastSeenCountRef.current[a.name] = a.action_count;
       }
     } catch {
-      // silent
+      if (mountedRef.current) setAgentsLoading(false);
     }
 
     // Fetch recent activity from all agent changelogs
@@ -119,10 +118,14 @@ export function BoardView() {
     // Set initial counts so we don't toast on first load
     fetchAgents()
       .then((list) => {
+        if (!mountedRef.current) return;
         for (const a of list) lastSeenCountRef.current[a.name] = a.action_count;
         setAgents(list);
+        setAgentsLoading(false);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (mountedRef.current) setAgentsLoading(false);
+      });
     poll();
     const interval = setInterval(poll, POLL_MS);
     return () => {
@@ -148,7 +151,11 @@ export function BoardView() {
     setRunningAgents((s) => new Set(s).add(name));
     try {
       await runAgent(name);
-      addToast(`${AGENT_INITIALS[name] || ""} ${name} run completed`, "success");
+      const icon = getInitials(
+        name,
+        agents.map((a) => a.name),
+      );
+      addToast(`${icon} ${name} run completed`, "success");
       poll();
     } catch {
       addToast(`${name} run failed`, "danger");
@@ -196,12 +203,15 @@ export function BoardView() {
 
   const loomAgents = agents.filter((a) => LOOM_NAMES.has(a.name));
   const shuttleAgents = agents.filter((a) => !LOOM_NAMES.has(a.name));
+  const allAgentNames = agents.map((a) => a.name);
 
   return (
     <div className={styles.board}>
       <div className={styles.header}>
         <h1 className={styles.title}>Agent Board</h1>
-        <p className={styles.subtitle}>{agents.length} agents configured</p>
+        <p className={styles.subtitle}>
+          {agentsLoading ? "Loading agents..." : `${agents.length} agents configured`}
+        </p>
       </div>
 
       {/* Loom Layer */}
@@ -212,14 +222,19 @@ export function BoardView() {
         </div>
         <div className={styles.divider} />
         <div className={styles.agentGrid}>
-          {loomAgents.map((agent) => (
-            <AgentCard
-              key={agent.name}
-              agent={agent}
-              running={runningAgents.has(agent.name)}
-              onRun={() => handleRunAgent(agent.name)}
-            />
-          ))}
+          {agentsLoading
+            ? Array.from({ length: SKELETON_LOOM_COUNT }, (_, i) => (
+                <SkeletonCard key={`skel-loom-${i}`} />
+              ))
+            : loomAgents.map((agent) => (
+                <AgentCard
+                  key={agent.name}
+                  agent={agent}
+                  initial={getInitials(agent.name, allAgentNames)}
+                  running={runningAgents.has(agent.name)}
+                  onRun={() => handleRunAgent(agent.name)}
+                />
+              ))}
         </div>
       </section>
 
@@ -271,14 +286,19 @@ export function BoardView() {
         </div>
         <div className={styles.divider} />
         <div className={styles.agentGrid}>
-          {shuttleAgents.map((agent) => (
-            <AgentCard
-              key={agent.name}
-              agent={agent}
-              running={runningAgents.has(agent.name)}
-              onRun={() => handleRunAgent(agent.name)}
-            />
-          ))}
+          {agentsLoading
+            ? Array.from({ length: SKELETON_SHUTTLE_COUNT }, (_, i) => (
+                <SkeletonCard key={`skel-shuttle-${i}`} />
+              ))
+            : shuttleAgents.map((agent) => (
+                <AgentCard
+                  key={agent.name}
+                  agent={agent}
+                  initial={getInitials(agent.name, allAgentNames)}
+                  running={runningAgents.has(agent.name)}
+                  onRun={() => handleRunAgent(agent.name)}
+                />
+              ))}
         </div>
       </section>
 
@@ -286,13 +306,13 @@ export function BoardView() {
       <section className={styles.chatSection}>
         <div className={styles.chatHeader}>
           <div className={styles.chatTabs}>
-            {(["researcher", "standup"] as const).map((name) => (
+            {SHUTTLE_TABS.map((name) => (
               <button
                 key={name}
                 className={`${styles.chatTab} ${shuttleTab === name ? styles.chatTabActive : ""}`}
                 onClick={() => setShuttleTab(name)}
               >
-                {AGENT_INITIALS[name]} {name}
+                {getInitials(name, allAgentNames.length ? allAgentNames : [...SHUTTLE_TABS])} {name}
               </button>
             ))}
           </div>
@@ -367,30 +387,29 @@ export function BoardView() {
 
 function AgentCard({
   agent,
+  initial,
   running,
   onRun,
 }: {
   agent: AgentStatus;
+  initial: string;
   running: boolean;
   onRun: () => void;
 }) {
-  const icon = AGENT_INITIALS[agent.name] || "?";
-  const desc = AGENT_DESCS[agent.name] || agent.role;
-
   const statusLabel = running ? "Running" : "Idle";
   const statusClass = running ? styles.badgeRunning : styles.badgeIdle;
 
   return (
     <div className={styles.card}>
       <div className={styles.cardTop}>
-        <span className={styles.cardInitial}>{icon}</span>
+        <span className={styles.cardInitial}>{initial}</span>
         <div className={styles.cardIdent}>
           <span className={styles.cardName}>{agent.name}</span>
           <span className={styles.cardRole}>{agent.role}</span>
         </div>
         <span className={statusClass}>{statusLabel}</span>
       </div>
-      <p className={styles.cardDesc}>{desc}</p>
+      <p className={styles.cardDesc}>{agent.role}</p>
       <div className={styles.cardStats}>
         <span>Actions: {agent.action_count}</span>
         <span>Last: {agent.last_action ? formatTime(agent.last_action) : "never"}</span>
@@ -399,6 +418,27 @@ function AgentCard({
         <button className={styles.runBtn} onClick={onRun} disabled={running}>
           {running ? "Running..." : "Run"}
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* -- Skeleton Card ------------------------------------------------------------ */
+
+function SkeletonCard() {
+  return (
+    <div className={`${styles.card} ${styles.skeletonCard}`} aria-hidden="true">
+      <div className={styles.cardTop}>
+        <span className={`${styles.cardInitial} ${styles.skeletonBlock}`} />
+        <div className={styles.cardIdent}>
+          <span className={`${styles.skeletonLine} ${styles.skeletonLineWide}`} />
+          <span className={`${styles.skeletonLine} ${styles.skeletonLineNarrow}`} />
+        </div>
+      </div>
+      <span className={`${styles.skeletonLine} ${styles.skeletonLineFull}`} />
+      <span className={`${styles.skeletonLine} ${styles.skeletonLineWide}`} />
+      <div className={styles.cardBottom}>
+        <span className={`${styles.skeletonLine} ${styles.skeletonLineButton}`} />
       </div>
     </div>
   );

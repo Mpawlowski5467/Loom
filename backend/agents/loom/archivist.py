@@ -11,6 +11,9 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+import yaml
+from pydantic import ValidationError
+
 from agents.base import BaseAgent
 from core.note_index import get_note_index
 from core.notes import parse_note, parse_note_meta
@@ -55,7 +58,7 @@ class AuditResult:
     def warning_count(self) -> int:
         return sum(1 for i in self.issues if i.severity == "warning")
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "total_notes": self.total_notes,
             "issues": [
@@ -98,7 +101,8 @@ class Archivist(BaseAgent):
             }
 
         result = await self.execute_with_chain(note_path, _action)
-        return result.get("issues", [])
+        issues_list: list[AuditIssue] = result.get("issues", [])
+        return issues_list
 
     async def audit_vault(self) -> AuditResult:
         """Audit all notes in the vault. Returns aggregate AuditResult."""
@@ -123,8 +127,8 @@ class Archivist(BaseAgent):
                 try:
                     issues = self._check_note(md_path, title_set=title_set)
                     audit.issues.extend(issues)
-                except Exception:  # noqa: BLE001
-                    logger.debug("Audit failed for %s", md_path, exc_info=True)
+                except Exception:
+                    logger.warning("Audit failed for %s", md_path, exc_info=True)
 
             return {
                 "action": "audited",
@@ -136,7 +140,8 @@ class Archivist(BaseAgent):
             }
 
         result = await self.execute_with_chain(threads_dir, _action)
-        return result.get("audit", AuditResult())
+        audit_result: AuditResult = result.get("audit", AuditResult())
+        return audit_result
 
     def _check_note(
         self,
@@ -148,7 +153,7 @@ class Archivist(BaseAgent):
         issues: list[AuditIssue] = []
         try:
             note = parse_note(note_path)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValidationError, ValueError) as exc:
             return [
                 AuditIssue(
                     note_id="unknown",
@@ -266,7 +271,7 @@ class Archivist(BaseAgent):
                 meta = parse_note_meta(md)
                 if meta.title:
                     titles.add(meta.title.lower())
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return titles
 

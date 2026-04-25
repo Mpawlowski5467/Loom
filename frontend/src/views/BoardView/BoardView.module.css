@@ -211,6 +211,57 @@
   cursor: not-allowed;
 }
 
+/* ── Skeleton card (loading state) ───────────────────────────────────── */
+
+.skeletonCard:hover {
+  border-color: var(--border);
+}
+
+.skeletonBlock,
+.skeletonLine {
+  display: block;
+  background: var(--bg-elevated);
+  border: none;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonBlock {
+  width: 28px;
+  height: 28px;
+}
+
+.skeletonLine {
+  height: 10px;
+  margin: 4px 0;
+}
+
+.skeletonLineFull {
+  width: 100%;
+}
+
+.skeletonLineWide {
+  width: 60%;
+}
+
+.skeletonLineNarrow {
+  width: 40%;
+}
+
+.skeletonLineButton {
+  width: 56px;
+  height: 18px;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
 /* ── Chat panels — inset area ────────────────────────────────────────── */
 
 .chatSection {

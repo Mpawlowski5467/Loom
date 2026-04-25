@@ -7,7 +7,11 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, Any
 
+import yaml
+from pydantic import ValidationError
+
 from agents.base import BaseAgent
+from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import (
     atomic_write_text,
     generate_id,
@@ -90,7 +94,7 @@ class Scribe(BaseAgent):
             }
 
         result = await self.execute_with_chain(folder_path, _action)
-        return result.get("content", "")
+        return str(result.get("content", ""))
 
     async def generate_daily_log(self, target_date: date) -> str:
         """Create or update the daily log for a given date.
@@ -161,16 +165,18 @@ class Scribe(BaseAgent):
             }
 
         result = await self.execute_with_chain(daily_dir, _action)
-        return result.get("content", "")
+        return str(result.get("content", ""))
 
-    async def _generate_index(self, folder_name: str, notes_info: list[dict]) -> str:
+    async def _generate_index(self, folder_name: str, notes_info: list[dict[str, Any]]) -> str:
         """Generate index content from note metadata."""
         if self._chat_provider is not None:
             return await self._generate_index_llm(folder_name, notes_info)
         return self._generate_index_simple(notes_info)
 
-    async def _generate_index_llm(self, folder_name: str, notes_info: list[dict]) -> str:
+    async def _generate_index_llm(self, folder_name: str, notes_info: list[dict[str, Any]]) -> str:
         """Use LLM to generate a rich folder index."""
+        if self._chat_provider is None:
+            return self._generate_index_simple(notes_info)
         notes_text = "\n".join(
             f"- {n['title']} (type: {n['type']}, tags: {', '.join(n['tags'])}): {n['preview']}"
             for n in notes_info
@@ -182,12 +188,12 @@ class Scribe(BaseAgent):
                 messages=[{"role": "user", "content": user_msg}],
                 system=_SUMMARIZE_FOLDER_SYSTEM,
             )
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM index generation failed, using simple format", exc_info=True)
             return self._generate_index_simple(notes_info)
 
     @staticmethod
-    def _generate_index_simple(notes_info: list[dict]) -> str:
+    def _generate_index_simple(notes_info: list[dict[str, Any]]) -> str:
         """Generate a simple bullet-list index."""
         lines = [
             f"- [[{n['title']}]] — {n['type']}, tags: {', '.join(n['tags'])}" for n in notes_info
@@ -207,14 +213,14 @@ class Scribe(BaseAgent):
                     ],
                     system=_DAILY_LOG_SYSTEM,
                 )
-            except Exception:  # noqa: BLE001
+            except (ProviderError, ProviderConfigError):
                 logger.warning("LLM daily log failed, using raw changelog", exc_info=True)
 
         return f"## Summary\n\nActivity log for {date_str}.\n\n## Activity\n\n{changelog_text}\n"
 
-    def _collect_folder_notes(self, folder_path: Path) -> list[dict]:
+    def _collect_folder_notes(self, folder_path: Path) -> list[dict[str, Any]]:
         """Collect metadata + preview for all notes in a folder."""
-        notes: list[dict] = []
+        notes: list[dict[str, Any]] = []
         if not folder_path.exists():
             return notes
         for md in sorted(folder_path.glob("*.md")):
@@ -235,7 +241,7 @@ class Scribe(BaseAgent):
                         "preview": preview,
                     }
                 )
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return notes
 

@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import httpx
 
 from core.exceptions import ProviderError
@@ -39,13 +41,14 @@ class OllamaProvider(BaseProvider):
             )
             resp.raise_for_status()
             data = resp.json()
-            return data["embeddings"][0]
+            embedding: list[float] = data["embeddings"][0]
+            return embedding
         except httpx.HTTPError as exc:
             raise ProviderError("ollama", str(exc)) from exc
 
-    async def chat(self, messages: list[dict], system: str = "") -> str:
+    async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Generate a chat completion via the Ollama API."""
-        full_messages: list[dict] = []
+        full_messages: list[dict[str, Any]] = []
         if system:
             full_messages.append({"role": "system", "content": system})
         full_messages.extend(messages)
@@ -59,6 +62,7 @@ class OllamaProvider(BaseProvider):
                 },
             )
             resp.raise_for_status()
-            return resp.json()["message"]["content"]
+            content: str = resp.json()["message"]["content"]
+            return content
         except httpx.HTTPError as exc:
             raise ProviderError("ollama", str(exc)) from exc

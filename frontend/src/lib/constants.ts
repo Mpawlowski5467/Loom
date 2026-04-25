@@ -9,7 +9,11 @@
 
 /** Read the current computed value of a CSS custom property from :root. */
 export function getCSSVar(name: string): string {
-  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const value = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  if (!value) {
+    console.warn(`[loom] CSS variable ${name} is not defined in variables.css`);
+  }
+  return value;
 }
 
 /** Build a fresh node-color hex map by reading current CSS variables. */

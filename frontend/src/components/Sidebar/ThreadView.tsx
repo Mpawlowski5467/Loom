@@ -48,7 +48,7 @@ export function ThreadView({ note, graph, onNavigate }: ThreadViewProps) {
       <div className={styles.meta}>
         <span
           className={styles.typeBadge}
-          style={{ backgroundColor: NODE_COLORS_CSS[note.type] ?? "#94a3b8" }}
+          style={{ backgroundColor: NODE_COLORS_CSS[note.type] ?? "var(--node-daily)" }}
         >
           {note.type}
         </span>

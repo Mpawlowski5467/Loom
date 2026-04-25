@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import yaml
 
@@ -41,7 +41,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -78,7 +78,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -120,7 +120,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -141,7 +141,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -188,7 +188,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -228,7 +228,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry"),
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
         ):
             mock_settings.config_path = cfg_path
 
@@ -258,7 +258,7 @@ class TestSaveProviders:
 
         with (
             patch("api.routers.settings.settings") as mock_settings,
-            patch("api.routers.settings.reset_registry") as mock_reset,
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock) as mock_reset,
         ):
             mock_settings.config_path = cfg_path
 

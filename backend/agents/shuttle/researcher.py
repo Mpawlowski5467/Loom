@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from core.notes import generate_id, note_to_file_content, now_iso
+from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -221,7 +221,7 @@ class Researcher(BaseAgent):
 
         filename = f"research-{capture_id}.md"
         path = captures_dir / filename
-        path.write_text(note_to_file_content(meta, body), encoding="utf-8")
+        atomic_write_text(path, note_to_file_content(meta, body))
         return capture_id, path
 
 

@@ -8,7 +8,15 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from core.notes import generate_id, now_iso, parse_note, parse_note_meta
+from core.notes import (
+    atomic_write_text,
+    generate_id,
+    note_to_file_content,
+    now_iso,
+    parse_note,
+    parse_note_meta,
+)
+from core.notes_helpers import collect_changelog
 
 if TYPE_CHECKING:
     from datetime import date
@@ -70,8 +78,9 @@ class Scribe(BaseAgent):
             content = await self._generate_index(folder_path.name, notes_info)
 
             index_path = folder_path / "_index.md"
-            index_path.write_text(
-                f"# {folder_path.name.title()} Index\n\n{content}\n", encoding="utf-8"
+            atomic_write_text(
+                index_path,
+                f"# {folder_path.name.title()} Index\n\n{content}\n",
             )
 
             return {
@@ -143,9 +152,7 @@ class Scribe(BaseAgent):
                     ],
                 }
 
-            from core.notes import note_to_file_content
-
-            daily_path.write_text(note_to_file_content(meta, body), encoding="utf-8")
+            atomic_write_text(daily_path, note_to_file_content(meta, body))
 
             return {
                 "action": "created",
@@ -234,23 +241,7 @@ class Scribe(BaseAgent):
 
     def _collect_changelog(self, target_date: date) -> str:
         """Collect all changelog entries for a given date across all agents."""
-        changelog_root = self._vault_root / ".loom" / "changelog"
-        date_str = target_date.isoformat()
-        parts: list[str] = []
-
-        if not changelog_root.exists():
-            return ""
-
-        for agent_dir in sorted(changelog_root.iterdir()):
-            if not agent_dir.is_dir():
-                continue
-            log_file = agent_dir / f"{date_str}.md"
-            if log_file.exists():
-                try:
-                    parts.append(log_file.read_text(encoding="utf-8"))
-                except Exception:  # noqa: BLE001
-                    continue
-        return "\n\n".join(parts)
+        return collect_changelog(self._vault_root, target_date)
 
 
 _scribe: Scribe | None = None

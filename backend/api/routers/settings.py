@@ -1,12 +1,27 @@
 """Settings API routes — provider configuration management."""
 
+import asyncio
+import contextlib
 import logging
+import time
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from core.config import GlobalConfig, ProviderConfig, settings
+from core.exceptions import ProviderConfigError
 from core.providers import reset_registry
+from core.providers.anthropic import AnthropicProvider
+from core.providers.base import (
+    AnthropicProviderConfig,
+    BaseProvider,
+    OllamaProviderConfig,
+    OpenAIProviderConfig,
+    XAIProviderConfig,
+)
+from core.providers.ollama import OllamaProvider
+from core.providers.openai import OpenAIProvider
+from core.providers.xai import XAIProvider
 
 logger = logging.getLogger(__name__)
 
@@ -65,6 +80,14 @@ class GetProvidersResponse(BaseModel):
     active_vault: str
 
 
+class TestProviderResponse(BaseModel):
+    """Result of a provider connection test."""
+
+    ok: bool
+    latency_ms: int
+    error: str = ""
+
+
 # -- Helpers ------------------------------------------------------------------
 
 
@@ -81,6 +104,48 @@ def _mask_api_key(key: str | None) -> tuple[str, bool]:
     if len(key) <= 4:
         return "…", True
     return f"…{key[-4:]}", True
+
+
+def _build_provider_from_input(p: ProviderInput) -> BaseProvider:
+    """Build a provider instance directly from frontend-supplied config.
+
+    Bypasses the registry (and therefore disk) so unsaved keys can be
+    sanity-checked. Raises ProviderConfigError for unknown providers or
+    missing required credentials.
+    """
+    if p.name == "openai":
+        return OpenAIProvider(
+            OpenAIProviderConfig(
+                api_key=p.api_key or None,
+                chat_model=p.chat_model or "gpt-4o",
+                embed_model=p.embed_model or "text-embedding-3-small",
+            )
+        )
+    if p.name == "anthropic":
+        return AnthropicProvider(
+            AnthropicProviderConfig(
+                api_key=p.api_key or None,
+                chat_model=p.chat_model or "claude-sonnet-4-20250514",
+            )
+        )
+    if p.name == "ollama":
+        return OllamaProvider(
+            OllamaProviderConfig(
+                host=p.host or "http://localhost:11434",
+                chat_model=p.chat_model or "llama3",
+                embed_model=p.embed_model or "nomic-embed-text",
+            )
+        )
+    if p.name == "xai":
+        return XAIProvider(
+            XAIProviderConfig(
+                api_key=p.api_key or None,
+                base_url=p.base_url or "https://api.x.ai/v1",
+                chat_model=p.chat_model or "grok-3",
+                embed_model=p.embed_model or None,
+            )
+        )
+    raise ProviderConfigError(f"Unknown provider '{p.name}'.")
 
 
 # -- Endpoints ----------------------------------------------------------------
@@ -182,3 +247,55 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
         default_chat_provider=cfg.chat_provider,
         default_embed_provider=cfg.embed_provider,
     )
+
+
+@router.post("/settings/providers/{name}/test")
+async def test_provider(name: str, body: ProviderInput) -> TestProviderResponse:
+    """Verify a provider's credentials/host actually work.
+
+    Builds a provider instance from the frontend-supplied config (NOT
+    from disk) so the user can sanity-check unsaved keys. Calls
+    ``embed("ping")`` if an embed model is configured, otherwise sends
+    a minimal chat. Times out after 10 seconds so an unreachable host
+    can't hang the request. Errors are returned in the body, never
+    raised — the UI shows them inline next to the button.
+    """
+    if body.name != name:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Path provider name '{name}' does not match body name '{body.name}'.",
+        )
+
+    start = time.perf_counter()
+    try:
+        provider = _build_provider_from_input(body)
+    except ProviderConfigError as exc:
+        return TestProviderResponse(ok=False, latency_ms=0, error=str(exc))
+
+    def _elapsed_ms() -> int:
+        return int((time.perf_counter() - start) * 1000)
+
+    try:
+        if body.embed_model:
+            await asyncio.wait_for(provider.embed("ping"), timeout=10.0)
+        else:
+            await asyncio.wait_for(
+                provider.chat(
+                    [{"role": "user", "content": "ping"}],
+                    system="Reply with one word: pong",
+                ),
+                timeout=10.0,
+            )
+        return TestProviderResponse(ok=True, latency_ms=_elapsed_ms())
+    except TimeoutError:
+        return TestProviderResponse(
+            ok=False,
+            latency_ms=_elapsed_ms(),
+            error="Timed out after 10s",
+        )
+    except Exception as exc:  # noqa: BLE001 — surface any provider error to the UI
+        return TestProviderResponse(ok=False, latency_ms=_elapsed_ms(), error=str(exc))
+    finally:
+        if hasattr(provider, "close"):
+            with contextlib.suppress(Exception):
+                await provider.close()

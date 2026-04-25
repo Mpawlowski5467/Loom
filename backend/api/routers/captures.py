@@ -1,14 +1,18 @@
 """Captures inbox API routes: listing and Weaver processing."""
 
+import logging
 from pathlib import Path
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/captures", tags=["captures"])
 
@@ -84,7 +88,7 @@ def _list_captures(captures_dir: Path) -> list[CaptureItem]:
                     file_path=note.file_path,
                 )
             )
-        except Exception:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValidationError, ValueError):
             continue
 
     return items
@@ -141,7 +145,8 @@ async def process_capture(
             note_type=note.type,
             target_path=note.file_path,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        logger.warning("Capture processing failed", exc_info=True)
         return ProcessResult(processed=False, error=str(exc))
 
 
@@ -185,7 +190,8 @@ async def process_all_captures(
                     target_path=note.file_path,
                 )
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            logger.warning("Capture processing failed for %s", capture_path, exc_info=True)
             results.append(ProcessResult(processed=False, error=str(exc)))
 
     processed_count = sum(1 for r in results if r.processed)

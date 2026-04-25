@@ -6,7 +6,7 @@ classification output, and build frontmatter metadata dicts.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from core.notes import now_iso
 
@@ -41,7 +41,7 @@ def build_meta(
     note_type: str,
     tags: list[str],
     source: str = "manual",
-) -> dict:
+) -> dict[str, Any]:
     """Build a complete frontmatter metadata dict for a Weaver-authored note."""
     ts = now_iso()
     return {

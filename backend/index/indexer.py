@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import lancedb
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 TABLE_NAME = "chunks"
 
 
-def _rows_from_chunks(chunks: list[Chunk], vectors: list[list[float]]) -> list[dict]:
+def _rows_from_chunks(chunks: list[Chunk], vectors: list[list[float]]) -> list[dict[str, Any]]:
     """Build row dicts ready for LanceDB insertion."""
     return [
         {
@@ -60,7 +60,7 @@ class VectorIndexer:
         """Check whether the chunks table exists."""
         return TABLE_NAME in self.get_db().list_tables().tables
 
-    def _get_or_create_table(self, data: list[dict] | None = None) -> lancedb.table.Table:
+    def _get_or_create_table(self, data: list[dict[str, Any]] | None = None) -> lancedb.table.Table:
         """Return the chunks table.
 
         If the table doesn't exist yet, *data* must be provided so LanceDB
@@ -130,7 +130,7 @@ class VectorIndexer:
             db.drop_table(TABLE_NAME)
 
         # Collect all rows first, then create table from data
-        all_rows: list[dict] = []
+        all_rows: list[dict[str, Any]] = []
         for md_path in md_files:
             chunks = chunk_file(md_path)
             if not chunks:
@@ -151,7 +151,7 @@ class VectorIndexer:
             if not self._table_exists():
                 return False
             table = self.get_db().open_table(TABLE_NAME)
-            return table.count_rows() > 0
+            return bool(table.count_rows() > 0)
         except Exception:  # noqa: BLE001
             return False
 

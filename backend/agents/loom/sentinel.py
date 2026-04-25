@@ -10,10 +10,14 @@ from __future__ import annotations
 import contextlib
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+import yaml
+from pydantic import ValidationError
 
 from agents.base import BaseAgent
-from core.notes import parse_note
+from core.exceptions import ProviderConfigError, ProviderError
+from core.notes import Note, parse_note
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -63,7 +67,7 @@ class ValidationResult:
     action: str = ""
     target: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "status": self.status,
             "reasons": self.reasons,
@@ -144,7 +148,7 @@ class Sentinel(BaseAgent):
 
         try:
             note = parse_note(note_path)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValidationError, ValueError) as exc:
             return [f"Failed to parse note: {exc}"]
 
         meta_dict = note.model_dump()
@@ -165,7 +169,7 @@ class Sentinel(BaseAgent):
 
         return issues
 
-    def _check_schema_sections(self, note) -> list[str]:
+    def _check_schema_sections(self, note: Note) -> list[str]:
         """Check if note has expected sections for its type."""
         expected_sections: dict[str, list[str]] = {
             "project": ["Overview", "Goals", "Status", "Related"],
@@ -208,13 +212,15 @@ class Sentinel(BaseAgent):
             "Validate this action."
         )
 
+        if self._chat_provider is None:
+            return result
         try:
             resp = await self._chat_provider.chat(
                 messages=[{"role": "user", "content": user_msg}],
                 system=_VALIDATE_SYSTEM,
             )
             return self._parse_validation_response(resp, agent_name, action, str(target))
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM validation failed", exc_info=True)
             return result
 

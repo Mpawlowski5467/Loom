@@ -100,7 +100,7 @@ export function SearchDropdown({ onSelect, inputRef }: SearchDropdownProps) {
                 <span
                   className={styles.dot}
                   style={{
-                    backgroundColor: NODE_COLORS_CSS[r.type] ?? "#94a3b8",
+                    backgroundColor: NODE_COLORS_CSS[r.type] ?? "var(--node-daily)",
                   }}
                 />
                 <span className={styles.itemTitle}>{r.title}</span>

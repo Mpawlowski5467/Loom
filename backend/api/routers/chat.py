@@ -13,6 +13,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 
+from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
 
@@ -232,7 +233,7 @@ async def _council_reply(
 
     try:
         provider = get_chat_provider()
-    except Exception:  # noqa: BLE001
+    except (ProviderConfigError, ProviderError):
         return (
             "No chat provider configured. Add a provider to "
             "~/.loom/config.yaml to enable the Loom Council."
@@ -259,5 +260,5 @@ async def _council_reply(
 
     try:
         return await provider.chat(messages=messages, system=system)
-    except Exception as exc:  # noqa: BLE001
+    except (ProviderError, ProviderConfigError) as exc:
         return f"Council response failed: {exc}"

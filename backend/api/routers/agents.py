@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from datetime import date
 
+import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
@@ -158,7 +159,7 @@ async def spider_scan(
                     if meta.id == note_id:
                         note_path = md
                         break
-                except Exception:  # noqa: BLE001
+                except (OSError, yaml.YAMLError, ValidationError, ValueError):
                     continue
         if note_path is None:
             raise HTTPException(status_code=404, detail=f"Note not found: {note_id}")

@@ -63,7 +63,9 @@ class ProviderRegistry:
         if name not in self._providers:
             cfg = self._resolve_config(name)
             provider_cls = _PROVIDER_CLASS_MAP[name]
-            self._providers[name] = provider_cls(cfg)  # type: ignore[arg-type]
+            # Each provider class takes its specific *ProviderConfig in __init__;
+            # BaseProvider itself takes none, so mypy can't see the call signature.
+            self._providers[name] = provider_cls(cfg)  # type: ignore[call-arg]
         return self._providers[name]
 
     def get_embed_provider(self) -> BaseProvider:

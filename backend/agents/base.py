@@ -70,7 +70,7 @@ class AgentState:
 
     @property
     def action_count(self) -> int:
-        return self._data.get("action_count", 0)
+        return int(self._data.get("action_count", 0))
 
     @action_count.setter
     def action_count(self, value: int) -> None:
@@ -86,7 +86,7 @@ class AgentState:
 
     @property
     def actions_since_summary(self) -> int:
-        return self._data.get("actions_since_summary", 0)
+        return int(self._data.get("actions_since_summary", 0))
 
     @actions_since_summary.setter
     def actions_since_summary(self, value: int) -> None:
@@ -96,11 +96,12 @@ class AgentState:
         """Persist state to disk."""
         self._path.write_text(json.dumps(self._data, indent=2) + "\n", encoding="utf-8")
 
-    def _load(self) -> dict:
+    def _load(self) -> dict[str, Any]:
         if not self._path.exists():
             return {"action_count": 0, "last_action": None}
         try:
-            return json.loads(self._path.read_text(encoding="utf-8"))
+            data: dict[str, Any] = json.loads(self._path.read_text(encoding="utf-8"))
+            return data
         except (json.JSONDecodeError, OSError):
             return {"action_count": 0, "last_action": None}
 
@@ -260,7 +261,7 @@ class BaseAgent(ABC):
                 await summarize_memory(self._vault_root, self.name, self._chat_provider)
                 self._state.actions_since_summary = 0
                 self._state.save()
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning(
                     "Memory summarization failed for agent %s",
                     self.name,
@@ -278,7 +279,7 @@ class BaseAgent(ABC):
                 cadence = data.get("memory_summarize_cadence")
                 if cadence is not None:
                     return int(cadence)
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValueError, TypeError):
                 pass
         return self._config.memory_threshold
 
@@ -288,5 +289,5 @@ class BaseAgent(ABC):
             resolved = target_path.resolve()
             prime = (self._vault_root / "rules" / "prime.md").resolve()
             return resolved == prime
-        except Exception:  # noqa: BLE001
+        except (OSError, RuntimeError):
             return False

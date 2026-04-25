@@ -6,10 +6,13 @@ import hashlib
 import logging
 import queue
 import threading
+from collections.abc import Coroutine
 from pathlib import Path
+from typing import Any
 
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
+from watchdog.observers.api import BaseObserver
 
 from core.graph import build_graph, save_graph
 from core.note_index import get_note_index
@@ -60,19 +63,19 @@ class _VaultEventHandler(FileSystemEventHandler):
 
     def on_created(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
-            self._index.refresh_file(Path(event.src_path))
-            self._vector_index_file(Path(event.src_path))
+            self._index.refresh_file(Path(str(event.src_path)))
+            self._vector_index_file(Path(str(event.src_path)))
             self._schedule_rebuild()
 
     def on_modified(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
-            self._index.refresh_file(Path(event.src_path))
-            self._vector_index_file(Path(event.src_path))
+            self._index.refresh_file(Path(str(event.src_path)))
+            self._vector_index_file(Path(str(event.src_path)))
             self._schedule_rebuild()
 
     def on_deleted(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
-            path = Path(event.src_path)
+            path = Path(str(event.src_path))
             entry = self._index.get_by_path(path)
             note_id = entry.id if entry else None
             self._index.remove_file(path)
@@ -83,7 +86,7 @@ class _VaultEventHandler(FileSystemEventHandler):
 
     def on_moved(self, event: FileSystemEvent) -> None:
         src = str(event.src_path)
-        dest = str(event.dest_path)
+        dest = str(event.dest_path or "")
         if src.endswith(".md") or dest.endswith(".md"):
             self._index.move_file(Path(src), Path(dest))
             self._forget_hash(Path(src))
@@ -133,14 +136,14 @@ class _VaultEventHandler(FileSystemEventHandler):
             finally:
                 self._task_queue.task_done()
 
-    def _run_async(self, coro) -> None:
+    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> None:
         """Run an async coroutine on the main loop, with a bounded wait."""
         if self._loop is not None and not self._loop.is_closed():
             future = asyncio.run_coroutine_threadsafe(coro, self._loop)
             try:
                 future.result(timeout=_INDEX_TIMEOUT_SECONDS)
-            except Exception:  # noqa: BLE001
-                logger.debug("Async operation failed", exc_info=True)
+            except Exception:
+                logger.warning("Async operation failed", exc_info=True)
         else:
             logger.warning("Event loop unavailable — skipping async operation")
 
@@ -152,8 +155,8 @@ class _VaultEventHandler(FileSystemEventHandler):
             return
         try:
             self._run_async(indexer.index_note(path))
-        except Exception:  # noqa: BLE001
-            logger.debug("Vector index update failed for %s", path, exc_info=True)
+        except Exception:
+            logger.warning("Vector index update failed for %s", path, exc_info=True)
 
     def _vector_index_file(self, path: Path) -> None:
         """Queue a re-index of ``path`` if its content actually changed."""
@@ -171,8 +174,8 @@ class _VaultEventHandler(FileSystemEventHandler):
             return
         try:
             indexer.remove_note(note_id)
-        except Exception:  # noqa: BLE001
-            logger.debug("Vector remove failed for %s", note_id, exc_info=True)
+        except Exception:
+            logger.warning("Vector remove failed for %s", note_id, exc_info=True)
 
     # -- Lifecycle ----------------------------------------------------------
 
@@ -207,7 +210,7 @@ class _VaultEventHandler(FileSystemEventHandler):
             searcher.set_graph(graph)
 
 
-_observer: Observer | None = None
+_observer: BaseObserver | None = None
 _handler: _VaultEventHandler | None = None
 _batch_timer: threading.Timer | None = None
 
@@ -234,7 +237,7 @@ def _schedule_batch_reindex(
                     future.result(timeout=300)
                 else:
                     logger.warning("Event loop unavailable — skipping batch reindex")
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.warning("Batch reindex failed", exc_info=True)
         # Reschedule
         _schedule_batch_reindex(threads_dir, loom_dir, loop)
@@ -247,7 +250,7 @@ def _schedule_batch_reindex(
 def start_watcher(
     vault_root: Path,
     loop: asyncio.AbstractEventLoop | None = None,
-) -> Observer:
+) -> BaseObserver:
     """Start watching the vault's threads/ directory for .md changes.
 
     Args:

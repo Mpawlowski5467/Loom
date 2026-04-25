@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from agents.loom.archivist import get_archivist
 from agents.loom.scribe import get_scribe
@@ -37,7 +37,7 @@ class PipelineResult:
     def success(self) -> bool:
         return self.note is not None and not self.errors
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "success": self.success,
             "note_id": self.note.id if self.note else None,
@@ -55,9 +55,9 @@ class AgentRunner:
     def __init__(self, vault_root: Path) -> None:
         self._vault_root = vault_root
 
-    def list_agents(self) -> list[dict]:
+    def list_agents(self) -> list[dict[str, Any]]:
         """List all agents with their current status."""
-        agents: list[dict] = []
+        agents: list[dict[str, Any]] = []
         for getter, role in [
             (get_weaver, "creator"),
             (get_spider, "linker"),
@@ -116,7 +116,8 @@ class AgentRunner:
                 result.errors.append("Weaver returned no note (empty capture?)")
                 return result
             result.note = note
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
+            logger.warning("Weaver failed during pipeline run", exc_info=True)
             result.errors.append(f"Weaver failed: {exc}")
             return result
 
@@ -127,7 +128,8 @@ class AgentRunner:
         if spider is not None:
             try:
                 result.links_added = await spider.scan_for_connections(note_path)
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
+                logger.warning("Spider failed during pipeline run", exc_info=True)
                 result.errors.append(f"Spider failed: {exc}")
 
         # Step 3: Scribe updates folder index
@@ -137,7 +139,8 @@ class AgentRunner:
                 folder_path = note_path.parent
                 await scribe.update_index(folder_path)
                 result.index_updated = True
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
+                logger.warning("Scribe failed during pipeline run", exc_info=True)
                 result.errors.append(f"Scribe failed: {exc}")
 
         # Step 4: Sentinel validates
@@ -152,12 +155,13 @@ class AgentRunner:
                 result.validation = await sentinel.validate_action(
                     "weaver", "created", note_path, chain_result
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
+                logger.warning("Sentinel failed during pipeline run", exc_info=True)
                 result.errors.append(f"Sentinel failed: {exc}")
 
         return result
 
-    async def run_scheduled(self, agent_name: str, **kwargs) -> dict:
+    async def run_scheduled(self, agent_name: str, **kwargs: Any) -> dict[str, Any]:
         """Trigger a scheduled agent run by name.
 
         Supported agents:
@@ -176,7 +180,7 @@ class AgentRunner:
             scribe = get_scribe()
             if scribe is None:
                 return {"error": "Scribe not initialized"}
-            scribe_date: date | None = kwargs.get("date")  # type: ignore[assignment]
+            scribe_date: date | None = kwargs.get("date")
             if scribe_date is None:
                 from datetime import date as date_cls
 
@@ -197,7 +201,7 @@ class AgentRunner:
             standup = get_standup()
             if standup is None:
                 return {"error": "Standup not initialized"}
-            standup_date: date | None = kwargs.get("date")  # type: ignore[assignment]
+            standup_date: date | None = kwargs.get("date")
             # standup.generate(None) defaults to UTC date internally
             result = await standup.generate(standup_date)
             return result.to_dict()

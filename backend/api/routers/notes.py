@@ -1,9 +1,12 @@
 """Notes CRUD API routes."""
 
+import logging
 import shutil
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
+
+logger = logging.getLogger(__name__)
 
 from core.note_index import NoteIndex, get_note_index
 from core.notes import (
@@ -111,8 +114,8 @@ async def create_note(
 
             index.refresh_file(Path(note.file_path))
             return note
-        except Exception:  # noqa: BLE001
-            pass  # Fall through to direct creation
+        except Exception:
+            logger.warning("Weaver create_from_modal failed, falling back", exc_info=True)
 
     # Direct creation fallback (no Weaver or Weaver failed)
     tdir = vm.active_threads_dir()

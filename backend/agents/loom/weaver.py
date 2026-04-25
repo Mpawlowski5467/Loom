@@ -9,9 +9,11 @@ writes them to the appropriate vault folder with correct frontmatter.
 from __future__ import annotations
 
 import logging
+import shutil
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from agents.changelog import log_action
 from agents.loom.weaver_helpers import (
     build_meta as _build_meta,
 )
@@ -33,11 +35,13 @@ from agents.loom.weaver_prompts import (
 from agents.loom.weaver_prompts import (
     SKELETON_SECTIONS as _SKELETON_SECTIONS,
 )
+from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import (
     Note,
     atomic_write_text,
     generate_id,
     note_to_file_content,
+    now_iso,
     parse_note,
 )
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
@@ -101,6 +105,9 @@ class Weaver(BaseAgent):
                 title, note_type, tags, folder, body, source=f"capture:{raw_note.id}"
             )
 
+            # Archive the original capture now that the structured note exists
+            self._archive_capture(capture_path)
+
             return {
                 "action": "created",
                 "details": f"Processed capture '{capture_path.name}' → {folder}/{to_kebab(title)}.md",
@@ -144,7 +151,8 @@ class Weaver(BaseAgent):
             }
 
         result = await self.execute_with_chain(target_dir, _action)
-        return result["note"]
+        note: Note = result["note"]
+        return note
 
     # -- Private helpers --------------------------------------------------------
 
@@ -166,7 +174,7 @@ class Weaver(BaseAgent):
             parsed = _parse_classification(response)
             if parsed.get("type") and parsed.get("title"):
                 return parsed
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM classification failed, using heuristic", exc_info=True)
 
         return self._classify_heuristic(content)
@@ -212,7 +220,7 @@ class Weaver(BaseAgent):
                 messages=[{"role": "user", "content": user_message}],
                 system=_CREATE_SYSTEM,
             )
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM note generation failed, using raw content", exc_info=True)
             return raw_content
 
@@ -233,7 +241,7 @@ class Weaver(BaseAgent):
                 messages=[{"role": "user", "content": user_message}],
                 system=_FORMAT_SYSTEM,
             )
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM formatting failed, using raw content", exc_info=True)
             return content
 
@@ -281,6 +289,50 @@ class Weaver(BaseAgent):
 
         logger.info("Weaver created note: %s → %s", title, file_path)
         return parse_note(file_path)
+
+    def _archive_capture(self, capture_path: Path) -> Path:
+        """Move a processed capture into ``threads/.archive/``.
+
+        Updates the capture's frontmatter (``status=archived`` + history
+        entry) before moving the file, and records the action in the
+        Weaver changelog. Mirrors the collision pattern used by the notes
+        router: on a name clash, the destination filename is suffixed
+        with the archival timestamp.
+        """
+        archive_dir = self._vault_root / "threads" / ".archive"
+        archive_dir.mkdir(parents=True, exist_ok=True)
+
+        capture = parse_note(capture_path)
+        ts = now_iso()
+        meta = capture.model_dump(exclude={"body", "wikilinks", "file_path"})
+        meta["status"] = "archived"
+        meta["modified"] = ts
+        meta.setdefault("history", []).append(
+            {
+                "action": "archived",
+                "by": "agent:weaver",
+                "at": ts,
+                "reason": "Archived after Weaver processing",
+            },
+        )
+        atomic_write_text(capture_path, note_to_file_content(meta, capture.body))
+
+        dest = archive_dir / capture_path.name
+        if dest.exists():
+            safe_ts = ts.replace(":", "-")
+            dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
+        shutil.move(str(capture_path), str(dest))
+
+        log_action(
+            self._vault_root,
+            self.name,
+            "archived",
+            str(capture_path),
+            details=f"Archived processed capture → {dest.name}",
+            chain_status="pass",
+        )
+        logger.info("Weaver archived capture: %s → %s", capture_path.name, dest)
+        return dest
 
 
 # ---------------------------------------------------------------------------

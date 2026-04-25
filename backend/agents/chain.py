@@ -14,9 +14,10 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
+from pydantic import ValidationError
 
 from core.notes import parse_note
 
@@ -47,12 +48,12 @@ class ReadChainResult:
 
     success: bool
     steps: list[StepResult] = field(default_factory=list)
-    vault_config: dict = field(default_factory=dict)
+    vault_config: dict[str, Any] = field(default_factory=dict)
     prime_text: str = ""
     role_rules: str = ""
     memory: str = ""
     folder_index: str = ""
-    related_notes: list[dict] = field(default_factory=list)
+    related_notes: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def failed_required(self) -> list[StepResult]:
@@ -129,7 +130,7 @@ class ReadChain:
         except FileNotFoundError:
             step.error = f"vault.yaml not found at {path}"
             logger.warning("Read chain: %s", step.error)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValueError) as exc:
             step.error = f"Failed to parse vault.yaml: {exc}"
             logger.warning("Read chain: %s", step.error)
         return step
@@ -146,7 +147,7 @@ class ReadChain:
         except FileNotFoundError:
             step.error = f"prime.md not found at {path}"
             logger.warning("Read chain: %s", step.error)
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, ValueError) as exc:
             step.error = f"Failed to read prime.md: {exc}"
             logger.warning("Read chain: %s", step.error)
         return step
@@ -162,7 +163,7 @@ class ReadChain:
             step.loaded = True
         except FileNotFoundError:
             step.error = "No role-specific rules file"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, ValueError) as exc:
             step.error = f"Failed to read role rules: {exc}"
         return step
 
@@ -177,7 +178,7 @@ class ReadChain:
             step.loaded = True
         except FileNotFoundError:
             step.error = "No memory file"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, ValueError) as exc:
             step.error = f"Failed to read memory: {exc}"
         return step
 
@@ -194,14 +195,14 @@ class ReadChain:
             step.loaded = True
         except FileNotFoundError:
             step.error = "No _index.md in target folder"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, ValueError) as exc:
             step.error = f"Failed to read folder index: {exc}"
         return step
 
     def _step_related_notes(self, target_path: Path, result: ReadChainResult) -> StepResult:
         """Step 6: Read notes linked via wikilinks from the target area."""
         step = StepResult(name="related notes", required=False, loaded=False)
-        related: list[dict] = []
+        related: list[dict[str, Any]] = []
 
         try:
             # If target is a file that exists, parse it for wikilinks
@@ -228,7 +229,7 @@ class ReadChain:
             result.related_notes = related
             step.loaded = True
             step.content = f"{len(related)} related note(s) loaded"
-        except Exception as exc:  # noqa: BLE001
+        except (OSError, yaml.YAMLError, ValidationError, ValueError) as exc:
             step.error = f"Failed to resolve related notes: {exc}"
 
         return step
@@ -252,6 +253,6 @@ class ReadChain:
                 meta = parse_note_meta(md)
                 if meta.title:
                     title_map[meta.title.lower()] = md
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return title_map

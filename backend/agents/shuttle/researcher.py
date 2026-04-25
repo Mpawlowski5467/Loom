@@ -9,7 +9,11 @@ import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+import yaml
+from pydantic import ValidationError
+
 from agents.base import BaseAgent
+from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
 
 if TYPE_CHECKING:
@@ -40,11 +44,11 @@ class ResearchResult:
     """Result of a Researcher query."""
 
     answer: str
-    referenced_notes: list[dict] = field(default_factory=list)
+    referenced_notes: list[dict[str, Any]] = field(default_factory=list)
     capture_id: str = ""
     capture_path: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "answer": self.answer,
             "referenced_notes": self.referenced_notes,
@@ -98,14 +102,17 @@ class Researcher(BaseAgent):
             }
 
         result = await self.execute_with_chain(captures_dir, _action)
-        return result.get("result", ResearchResult(answer="Research failed."))
+        research_result: ResearchResult = result.get(
+            "result", ResearchResult(answer="Research failed.")
+        )
+        return research_result
 
-    async def _search_vault(self, question: str) -> tuple[str, list[dict]]:
+    async def _search_vault(self, question: str) -> tuple[str, list[dict[str, Any]]]:
         """Search the vault index for notes relevant to the question."""
         from index.searcher import get_searcher
 
         searcher = get_searcher()
-        refs: list[dict] = []
+        refs: list[dict[str, Any]] = []
 
         if searcher is None:
             # Fall back to keyword search via in-memory index
@@ -113,8 +120,8 @@ class Researcher(BaseAgent):
 
         try:
             results = await searcher.search(question, limit=10)
-        except Exception:  # noqa: BLE001
-            logger.debug("Semantic search failed, falling back to keyword", exc_info=True)
+        except (ProviderError, ProviderConfigError, OSError):
+            logger.warning("Semantic search failed, falling back to keyword", exc_info=True)
             return self._keyword_search_fallback(question), refs
 
         if not results:
@@ -151,7 +158,7 @@ class Researcher(BaseAgent):
                 try:
                     note = parse_note(entry.file_path)
                     matches.append(f"[{note.id}] {note.title}\n{note.body[:500]}")
-                except Exception:  # noqa: BLE001
+                except (OSError, yaml.YAMLError, ValidationError, ValueError):
                     continue
             if len(matches) >= 5:
                 break
@@ -182,11 +189,13 @@ class Researcher(BaseAgent):
                 messages=[{"role": "user", "content": user_msg}],
                 system=_RESEARCH_SYSTEM,
             )
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM synthesis failed, returning raw context", exc_info=True)
             return f"## Vault Context\n\n{vault_context}"
 
-    def _save_capture(self, question: str, answer: str, refs: list[dict]) -> tuple[str, Path]:
+    def _save_capture(
+        self, question: str, answer: str, refs: list[dict[str, Any]]
+    ) -> tuple[str, Path]:
         """Save research findings as a capture note."""
         captures_dir = self._vault_root / "threads" / "captures"
         captures_dir.mkdir(parents=True, exist_ok=True)

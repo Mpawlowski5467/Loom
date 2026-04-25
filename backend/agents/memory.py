@@ -229,6 +229,6 @@ def _collect_recent_logs(logs_dir: Path, max_files: int = 5) -> str:
     for lf in log_files:
         try:
             parts.append(lf.read_text(encoding="utf-8"))
-        except Exception:  # noqa: BLE001
+        except (OSError, ValueError):
             continue
     return "\n\n".join(parts)

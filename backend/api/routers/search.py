@@ -1,11 +1,17 @@
 """Search API route: semantic search with keyword fallback."""
 
-from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+import logging
 
+import yaml
+from fastapi import APIRouter, Depends, Query
+from pydantic import BaseModel, Field, ValidationError
+
+from core.exceptions import ProviderConfigError, ProviderError
 from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
 from index.searcher import get_searcher
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/search", tags=["search"])
 
@@ -88,7 +94,7 @@ def _keyword_search(
             try:
                 note = parse_note(entry.file_path)
                 body_text = note.body
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 body_text = None
 
         if body_text and query_lower in body_text.lower():
@@ -171,8 +177,8 @@ async def search_notes(
                         )
                     )
                 return SearchResponse(query=q, results=results, mode="semantic")
-        except Exception:  # noqa: BLE001
-            pass  # Fall through to keyword search
+        except (ProviderError, ProviderConfigError, OSError):
+            logger.warning("Semantic search failed, falling back to keyword", exc_info=True)
 
     # Keyword fallback
     keyword_results = _keyword_search(q, index, type_filter=note_type, tag_filter=tag_list)

@@ -67,10 +67,13 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
   }, [load]);
 
   const getEffectiveStatus = (capture: CaptureItem): string => {
+    // Server-side archived state always wins: once Weaver has archived the
+    // source file we never want stale client state to show it as pending.
+    if (capture.status === "archived") return "done";
     const key = capture.id || capture.file_path;
     const state = captureStates[key];
     if (state) return state.status;
-    return capture.status === "archived" ? "done" : "pending";
+    return "pending";
   };
 
   const getProcessResult = (capture: CaptureItem): ProcessResult | undefined => {

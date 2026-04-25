@@ -13,10 +13,16 @@ existing callers. Implementation is split across:
 
 from __future__ import annotations
 
-from core.providers.anthropic import AnthropicProvider, AnthropicProviderConfig
-from core.providers.base import BaseProvider
-from core.providers.ollama import OllamaProvider, OllamaProviderConfig
-from core.providers.openai import OpenAIProvider, OpenAIProviderConfig
+from core.providers.anthropic import AnthropicProvider
+from core.providers.base import (
+    AnthropicProviderConfig,
+    BaseProvider,
+    OllamaProviderConfig,
+    OpenAIProviderConfig,
+    XAIProviderConfig,
+)
+from core.providers.ollama import OllamaProvider
+from core.providers.openai import OpenAIProvider
 from core.providers.registry import (
     ChatProvider,
     EmbedProvider,
@@ -26,7 +32,7 @@ from core.providers.registry import (
     get_registry,
     reset_registry,
 )
-from core.providers.xai import XAIProvider, XAIProviderConfig
+from core.providers.xai import XAIProvider
 
 __all__ = [
     "AnthropicProvider",

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
 from core.notes_helpers import collect_changelog
 
@@ -53,7 +54,7 @@ class StandupResult:
     capture_id: str = ""
     capture_path: str = ""
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "recap": self.recap,
             "date": self.date,
@@ -124,19 +125,22 @@ class Standup(BaseAgent):
             }
 
         result = await self.execute_with_chain(captures_dir, _action)
-        return result.get("result", StandupResult(recap="", date=date_str, notes_modified=0))
+        standup_result: StandupResult = result.get(
+            "result", StandupResult(recap="", date=date_str, notes_modified=0)
+        )
+        return standup_result
 
     def _collect_changelog(self, target_date: date) -> str:
         """Collect all changelog entries for a given date across all agents."""
         return collect_changelog(self._vault_root, target_date)
 
-    def _find_modified_notes(self, target_date: date) -> list[dict]:
+    def _find_modified_notes(self, target_date: date) -> list[dict[str, Any]]:
         """Find notes modified on the given date."""
         from core.note_index import get_note_index
 
         index = get_note_index()
         date_str = target_date.isoformat()
-        modified: list[dict] = []
+        modified: list[dict[str, Any]] = []
 
         for entry in index.all_entries():
             # Check if the note's mtime matches the target date
@@ -165,7 +169,7 @@ class Standup(BaseAgent):
                     messages=[{"role": "user", "content": user_msg}],
                     system=_STANDUP_SYSTEM,
                 )
-            except Exception:  # noqa: BLE001
+            except (ProviderError, ProviderConfigError):
                 logger.warning("LLM standup generation failed", exc_info=True)
 
         # Fallback: simple formatted recap

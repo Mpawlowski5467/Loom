@@ -14,6 +14,9 @@ import logging
 import re
 from typing import TYPE_CHECKING, Any
 
+import yaml
+from pydantic import ValidationError
+
 from agents.base import BaseAgent
 from agents.loom.spider_models import (
     AUTO_LINK_THRESHOLD,
@@ -26,6 +29,7 @@ from agents.loom.spider_models import (
 from agents.loom.spider_models import (
     FIND_CONNECTIONS_SYSTEM as _FIND_CONNECTIONS_SYSTEM,
 )
+from core.exceptions import ProviderConfigError, ProviderError
 from core.note_index import get_note_index
 from core.notes import Note, now_iso, parse_note, parse_note_meta
 
@@ -116,7 +120,8 @@ class Spider(BaseAgent):
             }
 
         result = await self.execute_with_chain(note_path, _action)
-        return result.get("_report", ScanReport(source_id="", source_title=""))
+        report: ScanReport = result.get("_report", ScanReport(source_id="", source_title=""))
+        return report
 
     async def scan_vault(self) -> int:
         """Run scan_for_connections on all notes. Returns total new links."""
@@ -135,8 +140,8 @@ class Spider(BaseAgent):
             try:
                 linked = await self.scan_for_connections(md_path)
                 total += len(linked)
-            except Exception:  # noqa: BLE001
-                logger.debug("Spider scan failed for %s", md_path, exc_info=True)
+            except Exception:
+                logger.warning("Spider scan failed for %s", md_path, exc_info=True)
         return total
 
     async def scan_vault_report(self) -> VaultScanReport:
@@ -160,8 +165,8 @@ class Spider(BaseAgent):
                 vault_report.total_auto_linked += len(report.auto_linked)
                 vault_report.total_suggested += len(report.suggested)
                 vault_report.total_skipped += report.skipped
-            except Exception:  # noqa: BLE001
-                logger.debug("Spider scan failed for %s", md_path, exc_info=True)
+            except Exception:
+                logger.warning("Spider scan failed for %s", md_path, exc_info=True)
 
         return vault_report
 
@@ -197,7 +202,7 @@ class Spider(BaseAgent):
                 context_note_ids=[note.id],
                 limit=MAX_CANDIDATES * 2,  # fetch extra, we'll filter
             )
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError, OSError):
             logger.warning("Vector search failed for Spider", exc_info=True)
             return []
 
@@ -300,15 +305,17 @@ class Spider(BaseAgent):
                 other = parse_note(path)
                 if note.title.lower() in [wl.lower() for wl in other.wikilinks]:
                     existing.add(title_lower)
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
 
         return existing
 
     # -- LLM / heuristic fallbacks (unchanged) -------------------------------
 
-    async def _find_connections_llm(self, note: Note, vault_notes: list[dict]) -> list[str]:
+    async def _find_connections_llm(self, note: Note, vault_notes: list[dict[str, Any]]) -> list[str]:
         """Use LLM to find meaningful connections."""
+        if self._chat_provider is None:
+            return self._find_connections_heuristic(note, vault_notes)
         note_list = "\n".join(
             f"- {n['title']} (tags: {', '.join(n['tags'])})" for n in vault_notes[:50]
         )
@@ -329,12 +336,12 @@ class Spider(BaseAgent):
             titles = [line.strip() for line in resp.strip().splitlines() if line.strip()]
             valid = {n["title"].lower(): n["title"] for n in vault_notes}
             return [valid[t.lower()] for t in titles[:MAX_CANDIDATES] if t.lower() in valid]
-        except Exception:  # noqa: BLE001
+        except (ProviderError, ProviderConfigError):
             logger.warning("LLM connection finding failed, using heuristic", exc_info=True)
             return self._find_connections_heuristic(note, vault_notes)
 
     @staticmethod
-    def _find_connections_heuristic(note: Note, vault_notes: list[dict]) -> list[str]:
+    def _find_connections_heuristic(note: Note, vault_notes: list[dict[str, Any]]) -> list[str]:
         """Find connections by tag overlap."""
         if not note.tags:
             return []
@@ -414,19 +421,19 @@ class Spider(BaseAgent):
                 meta = parse_note_meta(md)
                 if meta.id == note_id:
                     return meta.title
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return ""
 
     @staticmethod
-    def _resolve_id(title: str, vault_notes: list[dict]) -> str:
+    def _resolve_id(title: str, vault_notes: list[dict[str, Any]]) -> str:
         """Look up a note ID by title from the vault notes list."""
         for vn in vault_notes:
             if vn["title"].lower() == title.lower():
-                return vn.get("id", "")
+                return str(vn.get("id", ""))
         return ""
 
-    def _list_vault_notes(self, threads_dir: Path, exclude_id: str = "") -> list[dict]:
+    def _list_vault_notes(self, threads_dir: Path, exclude_id: str = "") -> list[dict[str, Any]]:
         """List all vault notes as dicts with title and tags."""
         index = get_note_index()
         if index.size > 0:
@@ -435,7 +442,7 @@ class Spider(BaseAgent):
                 for e in index.all_entries()
                 if e.id != exclude_id
             ]
-        notes: list[dict] = []
+        notes: list[dict[str, Any]] = []
         if not threads_dir.exists():
             return notes
         for md in threads_dir.rglob("*.md"):
@@ -445,7 +452,7 @@ class Spider(BaseAgent):
                 meta = parse_note_meta(md)
                 if meta.id and meta.id != exclude_id:
                     notes.append({"title": meta.title, "tags": list(meta.tags), "id": meta.id})
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return notes
 
@@ -463,7 +470,7 @@ class Spider(BaseAgent):
                 meta = parse_note_meta(md)
                 if meta.title:
                     title_map[meta.title.lower()] = md
-            except Exception:  # noqa: BLE001
+            except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
         return title_map
 

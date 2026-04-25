@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import os
+from typing import Any, cast
 
 import anthropic
+from anthropic.types import MessageParam, TextBlock
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.providers.base import AnthropicProviderConfig, BaseProvider
@@ -37,15 +39,18 @@ class AnthropicProvider(BaseProvider):
             "Configure a different provider for embeddings.",
         )
 
-    async def chat(self, messages: list[dict], system: str = "") -> str:
+    async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Generate a chat completion via the Anthropic messages API."""
         try:
             resp = await self._client.messages.create(
                 model=self._chat_model,
                 max_tokens=4096,
-                system=system or anthropic.NOT_GIVEN,
-                messages=messages,
+                system=system if system else anthropic.NOT_GIVEN,
+                messages=cast(list[MessageParam], messages),
             )
-            return resp.content[0].text
+            block = resp.content[0]
+            if not isinstance(block, TextBlock):
+                raise ProviderError("anthropic", f"Unexpected response block type: {type(block).__name__}")
+            return block.text
         except anthropic.APIError as exc:
             raise ProviderError("anthropic", str(exc)) from exc

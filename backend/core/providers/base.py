@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -49,5 +50,5 @@ class BaseProvider(ABC):
         """Return an embedding vector for *text*."""
 
     @abstractmethod
-    async def chat(self, messages: list[dict], system: str = "") -> str:
+    async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Return a chat completion string."""

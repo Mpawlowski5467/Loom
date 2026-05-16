@@ -35,6 +35,9 @@ Condensed reference for Claude Code. Full doc: see `ARCHITECTURE.md` in project 
 │   │   ├── _compiler.yaml     # token budgets, compression config
 │   │   ├── shared/            # system preamble, output format
 │   │   └── <agent>/           # per-agent prompt templates
+│   │   └── schemas/           # note templates per type
+│   ├── prompts/
+│   │   └── shared/            # system preamble
 │   └── .loom/
 │       ├── index.db           # LanceDB vectors
 │       ├── graph.json         # node/edge map for UI
@@ -82,6 +85,10 @@ history:
 5. _index.md of target folder
 6. related [[linked]] notes
 7. THEN: act
+3. agents/<self>/memory.md
+4. _index.md of target folder
+5. related [[linked]] notes
+6. THEN: act
 ```
 
 Hard block on failure (default). Soft warning for trusted agents (configurable).
@@ -127,6 +134,10 @@ Templates live in `prompts/` as `.md` files. Per-agent budgets in `_compiler.yam
 - Nodes: dots + labels, size by connections, color by type, glow on hover
 - Edges: thickness by density, muted purple
 - Editor: Plate (Slate.js) WYSIWYG, toolbar, meta fields, [[wikilink]] insert
+- Graph: react-force-graph-2d, force-directed, drag/zoom/pan/hover-highlight/pin/filter
+- Nodes: dots + labels, size by connections, color by type, glow on hover
+- Edges: thickness by density, muted purple
+- Editor: Markdown textarea with toolbar, react-markdown preview, meta fields, [[wikilink]] insert
 - Create note: modal → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
 - Auto-refresh: 5-10s interval

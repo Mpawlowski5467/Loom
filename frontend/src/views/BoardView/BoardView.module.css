@@ -1,0 +1,497 @@
+/* ── Board View — classic panel layout ────────────────────────────────── */
+
+.board {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-6);
+  max-width: 1100px;
+  margin: 0 auto;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────── */
+
+.header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+}
+
+.title {
+  font-size: var(--text-2xl);
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.subtitle {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+/* ── Tier sections ───────────────────────────────────────────────────── */
+
+.tierSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.tierHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.tierTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.badgePurple {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--accent-purple);
+  background: var(--accent-purple-muted);
+  color: var(--accent-purple);
+}
+
+.badgeAmber {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--accent-amber);
+  background: var(--accent-amber-muted);
+  color: var(--accent-amber);
+}
+
+.badgeIdle {
+  font-size: var(--text-xs);
+  font-weight: 500;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+}
+
+.badgeRunning {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--success);
+  background: var(--success-muted);
+  color: var(--success);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+
+.divider {
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── Agent grid & cards — classic bordered panels ────────────────────── */
+
+.agentGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--sp-3);
+}
+
+.card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  padding: var(--sp-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  transition: border-color var(--transition-base);
+}
+
+.card:hover {
+  border-color: var(--accent-purple);
+}
+
+.cardTop {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+}
+
+.cardInitial {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  font-family: var(--font-mono);
+  background: var(--accent-purple-muted);
+  border: 1px solid var(--accent-purple);
+  color: var(--accent-purple);
+  flex-shrink: 0;
+}
+
+.cardIdent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.cardName {
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.cardRole {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+}
+
+.cardDesc {
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.5;
+  margin: 0;
+}
+
+.cardStats {
+  display: flex;
+  gap: var(--sp-3);
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-secondary);
+}
+
+.cardRecent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-1);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-light);
+}
+
+.cardBottom {
+  display: flex;
+  gap: var(--sp-2);
+  padding-top: var(--sp-2);
+  border-top: 1px solid var(--border-light);
+}
+
+.runBtn {
+  padding: 2px var(--sp-3);
+  border: 1px solid var(--accent-purple);
+  background: var(--accent-purple-muted);
+  color: var(--accent-purple);
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+
+.runBtn:hover:not(:disabled) {
+  background: var(--accent-purple-muted-hover);
+}
+
+.runBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ── Skeleton card (loading state) ───────────────────────────────────── */
+
+.skeletonCard:hover {
+  border-color: var(--border);
+}
+
+.skeletonBlock,
+.skeletonLine {
+  display: block;
+  background: var(--bg-elevated);
+  border: none;
+  animation: skeleton-pulse 1.4s ease-in-out infinite;
+}
+
+.skeletonBlock {
+  width: 28px;
+  height: 28px;
+}
+
+.skeletonLine {
+  height: 10px;
+  margin: 4px 0;
+}
+
+.skeletonLineFull {
+  width: 100%;
+}
+
+.skeletonLineWide {
+  width: 60%;
+}
+
+.skeletonLineNarrow {
+  width: 40%;
+}
+
+.skeletonLineButton {
+  width: 56px;
+  height: 18px;
+}
+
+@keyframes skeleton-pulse {
+  0%,
+  100% {
+    opacity: 0.5;
+  }
+  50% {
+    opacity: 0.85;
+  }
+}
+
+/* ── Chat panels — inset area ────────────────────────────────────────── */
+
+.chatSection {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.chatHeader {
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-md);
+  font-weight: 600;
+  color: var(--text-primary);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.chatTabs {
+  display: flex;
+  gap: 1px;
+}
+
+.chatTab {
+  padding: 2px var(--sp-3);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--text-base);
+  font-weight: 500;
+  transition:
+    background var(--transition-base),
+    color var(--transition-base);
+}
+
+.chatTab:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.chatTabActive {
+  background: var(--bg-surface);
+  border-color: var(--border);
+  border-bottom-color: var(--bg-surface);
+  color: var(--accent-amber);
+}
+
+.chatBody {
+  padding: var(--sp-3) var(--sp-4);
+  min-height: 80px;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-inset);
+  box-shadow: var(--shadow-inset);
+}
+
+.chatMessages {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.chatMsg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--sp-2);
+}
+
+.chatMsgUser {
+  background: var(--bg-elevated);
+}
+
+.chatMsgAgent {
+  background: var(--accent-purple-muted);
+  border-left: 2px solid var(--accent-purple);
+}
+
+.chatMsgRole {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.chatMsgText {
+  font-size: var(--text-base);
+  color: var(--text-primary);
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.chatEmpty {
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  text-align: center;
+  max-width: 420px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.chatInputRow {
+  display: flex;
+  gap: var(--sp-2);
+  padding: var(--sp-2) var(--sp-3);
+  border-top: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.chatInput {
+  flex: 1;
+  height: 28px;
+  padding: 0 var(--sp-2);
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font-size: var(--text-base);
+  outline: none;
+  box-shadow: var(--shadow-inset);
+}
+
+.chatInput:focus {
+  border-color: var(--border-focus);
+}
+
+.chatSend {
+  padding: 0 var(--sp-3);
+  height: 28px;
+  border: 1px solid var(--accent-amber);
+  background: var(--accent-amber);
+  color: var(--bg-base);
+  font-size: var(--text-base);
+  font-weight: 600;
+}
+
+.chatSend:hover {
+  background: var(--accent-amber-hover);
+  border-color: var(--accent-amber-hover);
+}
+
+/* ── Activity log — classic data table ───────────────────────────────── */
+
+.activitySection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-3);
+}
+
+.activityTitle {
+  font-size: var(--text-lg);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+}
+
+.activityTable {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  overflow: hidden;
+}
+
+.activityHeader {
+  display: grid;
+  grid-template-columns: 140px 120px 1fr 80px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-raised);
+}
+
+.activityEmpty {
+  padding: var(--sp-6) var(--sp-4);
+  font-size: var(--text-base);
+  color: var(--text-secondary);
+  text-align: center;
+  font-style: italic;
+}
+
+.activityRow {
+  display: grid;
+  grid-template-columns: 140px 120px 1fr 80px;
+  gap: var(--sp-3);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--text-sm);
+  border-bottom: 1px solid var(--border-light);
+  color: var(--text-primary);
+}
+
+.activityRow:last-child {
+  border-bottom: none;
+}
+
+.activityTime {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+}
+
+.activityAgent {
+  font-weight: 500;
+  color: var(--accent-purple);
+}
+
+.activityAction {
+  color: var(--text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.activityStatus {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--text-xs);
+  color: var(--success);
+}
+
+.statusDot {
+  width: var(--dot-size-sm);
+  height: var(--dot-size-sm);
+  border-radius: 50%;
+  background: var(--success);
+}

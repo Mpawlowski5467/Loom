@@ -9,41 +9,13 @@ writes them to the appropriate vault folder with correct frontmatter.
 from __future__ import annotations
 
 import logging
-import shutil
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from agents.changelog import log_action
-from agents.loom.weaver_helpers import (
-    build_meta as _build_meta,
-)
-from agents.loom.weaver_helpers import (
-    load_schema as _load_schema,
-)
-from agents.loom.weaver_helpers import (
-    parse_classification as _parse_classification,
-)
-from agents.loom.weaver_prompts import (
-    CLASSIFY_SYSTEM as _CLASSIFY_SYSTEM,
-)
-from agents.loom.weaver_prompts import (
-    CREATE_SYSTEM as _CREATE_SYSTEM,
-)
-from agents.loom.weaver_prompts import (
-    FORMAT_SYSTEM as _FORMAT_SYSTEM,
-)
-from agents.loom.weaver_prompts import (
-    SKELETON_SECTIONS as _SKELETON_SECTIONS,
-)
-from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import (
-    Note,
-    atomic_write_text,
-    generate_id,
-    note_to_file_content,
-    now_iso,
-    parse_note,
-)
+from agents.loom.weaver_io import archive_capture, write_note
+from agents.loom.weaver_llm import classify_capture, format_content, generate_note_body
+from agents.loom.weaver_prompts import SKELETON_SECTIONS
+from core.notes import Note, parse_note
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 
 if TYPE_CHECKING:
@@ -78,7 +50,6 @@ class Weaver(BaseAgent):
         captures_dir = capture_path.parent
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
-            # Read the capture
             raw_note = parse_note(capture_path)
             raw_content = raw_note.body.strip()
 
@@ -89,28 +60,35 @@ class Weaver(BaseAgent):
                     "note": None,
                 }
 
-            # Classify the capture
-            classification = await self._classify_capture(raw_content, chain)
+            classification = await classify_capture(raw_content, self._chat_provider)
             note_type = classification.get("type", "topic")
             folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
             title = classification.get("title", raw_note.title or capture_path.stem)
             tags_str = classification.get("tags", "")
             tags = [t.strip() for t in tags_str.split(",") if t.strip()]
 
-            # Generate structured content
-            body = await self._generate_note_body(raw_content, note_type, chain)
-
-            # Write the note
-            note = self._write_note(
-                title, note_type, tags, folder, body, source=f"capture:{raw_note.id}"
+            body = await generate_note_body(
+                self._vault_root, raw_content, note_type, chain, self._chat_provider
             )
 
-            # Archive the original capture now that the structured note exists
-            self._archive_capture(capture_path)
+            note = write_note(
+                self._vault_root,
+                title,
+                note_type,
+                tags,
+                folder,
+                body,
+                source=f"capture:{raw_note.id}",
+            )
+
+            archive_capture(self._vault_root, self.name, capture_path)
 
             return {
                 "action": "created",
-                "details": f"Processed capture '{capture_path.name}' → {folder}/{to_kebab(title)}.md",
+                "details": (
+                    f"Processed capture '{capture_path.name}' → "
+                    f"{folder}/{to_kebab(title)}.md"
+                ),
                 "note": note,
             }
 
@@ -136,13 +114,15 @@ class Weaver(BaseAgent):
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
             if content.strip() and self._chat_provider is not None:
-                body = await self._format_content(content, note_type, chain)
+                body = await format_content(
+                    self._vault_root, content, note_type, self._chat_provider
+                )
             elif content.strip():
                 body = content
             else:
-                body = _SKELETON_SECTIONS.get(note_type, "")
+                body = SKELETON_SECTIONS.get(note_type, "")
 
-            note = self._write_note(title, note_type, tags, folder, body)
+            note = write_note(self._vault_root, title, note_type, tags, folder, body)
 
             return {
                 "action": "created",
@@ -154,190 +134,6 @@ class Weaver(BaseAgent):
         note: Note = result["note"]
         return note
 
-    # -- Private helpers --------------------------------------------------------
-
-    async def _classify_capture(self, content: str, chain: ReadChainResult) -> dict[str, str]:
-        """Use LLM to classify a capture's type, folder, title, and tags."""
-        if self._chat_provider is None:
-            return self._classify_heuristic(content)
-
-        user_message = (
-            f"Classify this capture:\n\n---\n{content[:3000]}\n---\n\n"
-            "Respond with type, folder, title, and tags."
-        )
-
-        try:
-            response = await self._chat_provider.chat(
-                messages=[{"role": "user", "content": user_message}],
-                system=_CLASSIFY_SYSTEM,
-            )
-            parsed = _parse_classification(response)
-            if parsed.get("type") and parsed.get("title"):
-                return parsed
-        except (ProviderError, ProviderConfigError):
-            logger.warning("LLM classification failed, using heuristic", exc_info=True)
-
-        return self._classify_heuristic(content)
-
-    @staticmethod
-    def _classify_heuristic(content: str) -> dict[str, str]:
-        """Simple keyword-based fallback classification."""
-        lower = content.lower()
-        if any(kw in lower for kw in ("standup", "daily", "today", "morning", "afternoon")):
-            return {"type": "daily", "folder": "daily", "title": "Daily Log", "tags": "daily"}
-        if any(kw in lower for kw in ("project", "milestone", "sprint", "roadmap")):
-            return {
-                "type": "project",
-                "folder": "projects",
-                "title": "New Project",
-                "tags": "project",
-            }
-        if any(kw in lower for kw in ("meeting with", "spoke to", "conversation with")):
-            return {"type": "person", "folder": "people", "title": "Person Note", "tags": "person"}
-        return {"type": "topic", "folder": "topics", "title": "New Topic", "tags": "topic"}
-
-    async def _generate_note_body(
-        self, raw_content: str, note_type: str, chain: ReadChainResult
-    ) -> str:
-        """Use LLM to generate a structured note body from raw content."""
-        if self._chat_provider is None:
-            return raw_content
-
-        schema = _load_schema(self._vault_root, note_type)
-        context_hint = ""
-        if chain.prime_text:
-            context_hint = f"\n\nVault rules summary: {chain.prime_text[:500]}"
-
-        user_message = (
-            f"Schema template:\n{schema}\n\n"
-            f"Raw content to structure:\n---\n{raw_content[:4000]}\n---"
-            f"{context_hint}\n\n"
-            "Transform this into a well-structured note body following the schema."
-        )
-
-        try:
-            return await self._chat_provider.chat(
-                messages=[{"role": "user", "content": user_message}],
-                system=_CREATE_SYSTEM,
-            )
-        except (ProviderError, ProviderConfigError):
-            logger.warning("LLM note generation failed, using raw content", exc_info=True)
-            return raw_content
-
-    async def _format_content(self, content: str, note_type: str, chain: ReadChainResult) -> str:
-        """Use LLM to format user-provided content per the type schema."""
-        if self._chat_provider is None:
-            return content
-
-        schema = _load_schema(self._vault_root, note_type)
-        user_message = (
-            f"Schema template:\n{schema}\n\n"
-            f"User content:\n---\n{content[:4000]}\n---\n\n"
-            "Format this content to match the schema."
-        )
-
-        try:
-            return await self._chat_provider.chat(
-                messages=[{"role": "user", "content": user_message}],
-                system=_FORMAT_SYSTEM,
-            )
-        except (ProviderError, ProviderConfigError):
-            logger.warning("LLM formatting failed, using raw content", exc_info=True)
-            return content
-
-    def _write_note(
-        self,
-        title: str,
-        note_type: str,
-        tags: list[str],
-        folder: str,
-        body: str,
-        source: str = "manual",
-    ) -> Note:
-        """Write a note file to the vault and return the parsed Note."""
-        threads_dir = self._vault_root / "threads"
-
-        # Validate folder: reject path traversal, absolute paths, separators
-        if ".." in folder or folder.startswith("/") or "/" in folder.strip("/") or "\\" in folder:
-            logger.warning(
-                "Weaver: suspicious folder '%s' from classification — falling back to captures/",
-                folder,
-            )
-            folder = "captures"
-
-        target_dir = (threads_dir / folder).resolve()
-        if not str(target_dir).startswith(str(threads_dir.resolve())):
-            logger.warning(
-                "Weaver: folder '%s' escapes threads/ — falling back to captures/",
-                folder,
-            )
-            folder = "captures"
-            target_dir = threads_dir / folder
-
-        target_dir.mkdir(parents=True, exist_ok=True)
-
-        note_id = generate_id()
-        stem = to_kebab(title) or note_id
-        file_path = target_dir / f"{stem}.md"
-
-        # Avoid overwriting existing files
-        if file_path.exists():
-            file_path = target_dir / f"{stem}-{note_id}.md"
-
-        meta = _build_meta(note_id, title, note_type, tags, source)
-        atomic_write_text(file_path, note_to_file_content(meta, body))
-
-        logger.info("Weaver created note: %s → %s", title, file_path)
-        return parse_note(file_path)
-
-    def _archive_capture(self, capture_path: Path) -> Path:
-        """Move a processed capture into ``threads/.archive/``.
-
-        Updates the capture's frontmatter (``status=archived`` + history
-        entry) before moving the file, and records the action in the
-        Weaver changelog. Mirrors the collision pattern used by the notes
-        router: on a name clash, the destination filename is suffixed
-        with the archival timestamp.
-        """
-        archive_dir = self._vault_root / "threads" / ".archive"
-        archive_dir.mkdir(parents=True, exist_ok=True)
-
-        capture = parse_note(capture_path)
-        ts = now_iso()
-        meta = capture.model_dump(exclude={"body", "wikilinks", "file_path"})
-        meta["status"] = "archived"
-        meta["modified"] = ts
-        meta.setdefault("history", []).append(
-            {
-                "action": "archived",
-                "by": "agent:weaver",
-                "at": ts,
-                "reason": "Archived after Weaver processing",
-            },
-        )
-        atomic_write_text(capture_path, note_to_file_content(meta, capture.body))
-
-        dest = archive_dir / capture_path.name
-        if dest.exists():
-            safe_ts = ts.replace(":", "-")
-            dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
-        shutil.move(str(capture_path), str(dest))
-
-        log_action(
-            self._vault_root,
-            self.name,
-            "archived",
-            str(capture_path),
-            details=f"Archived processed capture → {dest.name}",
-            chain_status="pass",
-        )
-        logger.info("Weaver archived capture: %s → %s", capture_path.name, dest)
-        return dest
-
-
-# ---------------------------------------------------------------------------
-# Module-level factory
-# ---------------------------------------------------------------------------
 
 _weaver: Weaver | None = None
 

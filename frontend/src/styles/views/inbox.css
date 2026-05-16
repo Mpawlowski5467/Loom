@@ -1,0 +1,217 @@
+.inbox-view {
+  flex: 1;
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.inbox-list {
+  width: 380px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--rule);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg-base);
+}
+.inbox-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+.inbox-title {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.inbox-count {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-2);
+  background: var(--bg-surface);
+  border-radius: 999px;
+  padding: 1px 8px;
+  border: 1px solid var(--rule-2);
+}
+
+.inbox-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 8px 8px;
+}
+
+.inbox-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 12px 14px;
+  border-radius: var(--r-md);
+  cursor: pointer;
+  border: 1px solid transparent;
+  margin-bottom: 4px;
+  background: transparent;
+  text-align: left;
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  transition: all 160ms var(--ease);
+  animation: fadeUp 360ms var(--ease) backwards;
+}
+.inbox-card:nth-child(1) {
+  animation-delay: 50ms;
+}
+.inbox-card:nth-child(2) {
+  animation-delay: 100ms;
+}
+.inbox-card:nth-child(3) {
+  animation-delay: 150ms;
+}
+.inbox-card:nth-child(4) {
+  animation-delay: 200ms;
+}
+.inbox-card:nth-child(5) {
+  animation-delay: 250ms;
+}
+.inbox-card:hover {
+  background: var(--bg-surface);
+  padding-left: 18px;
+}
+.inbox-card[aria-current="true"] {
+  background: var(--you-bg);
+  border-color: var(--you-line);
+}
+.inbox-card-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.inbox-card-title {
+  font-family: var(--serif);
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ink);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.inbox-card-meta {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  display: flex;
+  gap: 10px;
+}
+.inbox-card-filed {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--green);
+}
+.inbox-card-filed::before {
+  content: "✓";
+}
+
+.inbox-detail {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px 36px;
+  background: var(--bg-base);
+}
+.inbox-detail-title {
+  font-family: var(--serif);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  margin-bottom: 8px;
+}
+.inbox-detail-meta {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  margin-bottom: 22px;
+  display: flex;
+  gap: 12px;
+}
+.inbox-detail-body {
+  font-family: var(--serif);
+  font-size: 14.5px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  background: var(--bg-surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: 16px 20px;
+  margin-bottom: 24px;
+}
+.inbox-detail-body p {
+  margin-bottom: 10px;
+}
+.inbox-detail-body code {
+  font-family: var(--mono);
+  font-size: 12px;
+  background: var(--bg-base);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+.inbox-detail-body pre {
+  background: var(--bg-base);
+  padding: 10px 12px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--rule);
+  overflow-x: auto;
+  margin: 10px 0;
+}
+
+.inbox-suggest {
+  border: 1px solid var(--agent-line);
+  border-radius: var(--r-md);
+  background: var(--agent-bg);
+  padding: 14px 18px;
+}
+.inbox-suggest-h {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--agent);
+  margin-bottom: 12px;
+}
+.inbox-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--ink-2);
+  flex-wrap: wrap;
+}
+.inbox-suggest-row .label {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  width: 64px;
+}
+.inbox-suggest-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 16px;
+}

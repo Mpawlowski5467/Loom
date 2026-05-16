@@ -1,0 +1,107 @@
+.palette-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 24, 21, 0.18);
+  backdrop-filter: blur(6px);
+  z-index: 100;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 12vh;
+  animation: fadeIn2 180ms var(--ease);
+}
+
+.palette {
+  width: min(620px, 92vw);
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 20px 50px rgba(26, 24, 21, 0.18);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: fadeUp 220ms var(--ease);
+}
+
+.palette-input {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  border: none;
+  outline: none;
+  background: transparent;
+  padding: 18px 22px 14px;
+  color: var(--ink);
+}
+.palette-input::placeholder {
+  color: var(--ink-3);
+}
+
+.palette-list {
+  max-height: 52vh;
+  overflow-y: auto;
+  border-top: 1px solid var(--rule);
+}
+
+.palette-item {
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+  transition: background 140ms var(--ease);
+}
+.palette-item:hover,
+.palette-item[aria-selected="true"] {
+  background: var(--bg-surface);
+}
+.palette-item-h {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.palette-item-h-l {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.palette-item-title {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.palette-item-h2 {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.palette-item-score {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+.palette-item-snippet {
+  font-family: var(--serif);
+  font-size: 13px;
+  color: var(--ink-2);
+  font-style: italic;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.palette-foot {
+  padding: 10px 22px;
+  border-top: 1px solid var(--rule);
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  display: flex;
+  justify-content: space-between;
+  background: var(--bg-surface);
+}

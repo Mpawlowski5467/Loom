@@ -1,44 +1,29 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useApp } from "../../lib/context/useApp";
 import {
-  fetchAgents,
-  fetchChangelog,
-  runAgent,
-  sendChatMessage,
-  fetchChatHistory,
   type AgentStatus,
   type ChatMessage,
+  fetchAgents,
+  fetchChangelog,
+  fetchChatHistory,
+  runAgent,
+  sendChatMessage,
 } from "../../lib/api";
+import { useApp } from "../../lib/context/useApp";
+import { ActivityLog } from "./ActivityLog";
+import { AgentTier } from "./AgentTier";
 import styles from "./BoardView.module.css";
-
-const LOOM_NAMES = new Set(["weaver", "spider", "archivist", "scribe", "sentinel"]);
-
-const SHUTTLE_TABS = ["researcher", "standup"] as const;
-const SKELETON_LOOM_COUNT = 5;
-const SKELETON_SHUTTLE_COUNT = 2;
-
-/**
- * Derive a short initial badge from an agent name, using the minimum-unique
- * prefix among all known agents (1 char if unique, otherwise 2 chars).
- */
-function getInitials(name: string, allNames: string[]): string {
-  if (!name) return "?";
-  const first = name[0]?.toLowerCase();
-  const conflicts = allNames.filter((n) => n[0]?.toLowerCase() === first);
-  if (conflicts.length <= 1) return name[0].toUpperCase();
-  return name[0].toUpperCase() + (name[1]?.toLowerCase() ?? "");
-}
-
-interface ActivityEntry {
-  time: string;
-  agent: string;
-  action: string;
-  details: string;
-}
-
-type ShuttleTab = "researcher" | "standup";
-
-const POLL_MS = 5_000;
+import { CouncilChat } from "./CouncilChat";
+import { getInitials, parseChangelogEntries } from "./helpers";
+import { ShuttleChat } from "./ShuttleChat";
+import {
+  ALL_AGENT_NAMES,
+  type ActivityEntry,
+  LOOM_NAMES,
+  POLL_MS,
+  SKELETON_LOOM_COUNT,
+  SKELETON_SHUTTLE_COUNT,
+  type ShuttleTab,
+} from "./types";
 
 export function BoardView() {
   const { addToast } = useApp();
@@ -47,7 +32,6 @@ export function BoardView() {
   const [activity, setActivity] = useState<ActivityEntry[]>([]);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
 
-  // Chat state
   const [councilInput, setCouncilInput] = useState("");
   const [councilMessages, setCouncilMessages] = useState<ChatMessage[]>([]);
   const [councilSending, setCouncilSending] = useState(false);
@@ -63,7 +47,6 @@ export function BoardView() {
   const lastSeenCountRef = useRef<Record<string, number>>({});
   const mountedRef = useRef(true);
 
-  // Fetch agents + changelog
   const poll = useCallback(async () => {
     try {
       const agentList = await fetchAgents();
@@ -71,7 +54,6 @@ export function BoardView() {
       setAgents(agentList);
       setAgentsLoading(false);
 
-      // Check for new actions and fire toasts
       const names = agentList.map((a) => a.name);
       for (const a of agentList) {
         const prev = lastSeenCountRef.current[a.name] ?? a.action_count;
@@ -85,24 +67,15 @@ export function BoardView() {
       if (mountedRef.current) setAgentsLoading(false);
     }
 
-    // Fetch recent activity from all agent changelogs
     try {
       const entries: ActivityEntry[] = [];
-      const agentNames = [
-        "weaver",
-        "spider",
-        "archivist",
-        "scribe",
-        "sentinel",
-        "researcher",
-        "standup",
-      ];
-      const results = await Promise.allSettled(agentNames.map((name) => fetchChangelog(name)));
+      const results = await Promise.allSettled(
+        ALL_AGENT_NAMES.map((name) => fetchChangelog(name)),
+      );
 
       for (const r of results) {
         if (r.status === "fulfilled" && r.value.content) {
-          const parsed = parseChangelogEntries(r.value.agent, r.value.content);
-          entries.push(...parsed);
+          entries.push(...parseChangelogEntries(r.value.agent, r.value.content));
         }
       }
 
@@ -115,7 +88,6 @@ export function BoardView() {
 
   useEffect(() => {
     mountedRef.current = true;
-    // Set initial counts so we don't toast on first load
     fetchAgents()
       .then((list) => {
         if (!mountedRef.current) return;
@@ -134,7 +106,6 @@ export function BoardView() {
     };
   }, [poll]);
 
-  // Load chat history on mount
   useEffect(() => {
     fetchChatHistory("_council", 20)
       .then((r) => setCouncilMessages(r.messages))
@@ -214,267 +185,50 @@ export function BoardView() {
         </p>
       </div>
 
-      {/* Loom Layer */}
-      <section className={styles.tierSection}>
-        <div className={styles.tierHeader}>
-          <h2 className={styles.tierTitle}>Loom Layer</h2>
-          <span className={styles.badgePurple}>System</span>
-        </div>
-        <div className={styles.divider} />
-        <div className={styles.agentGrid}>
-          {agentsLoading
-            ? Array.from({ length: SKELETON_LOOM_COUNT }, (_, i) => (
-                <SkeletonCard key={`skel-loom-${i}`} />
-              ))
-            : loomAgents.map((agent) => (
-                <AgentCard
-                  key={agent.name}
-                  agent={agent}
-                  initial={getInitials(agent.name, allAgentNames)}
-                  running={runningAgents.has(agent.name)}
-                  onRun={() => handleRunAgent(agent.name)}
-                />
-              ))}
-        </div>
-      </section>
+      <AgentTier
+        title="Loom Layer"
+        badgeLabel="System"
+        badgeClass={styles.badgePurple}
+        agents={loomAgents}
+        loading={agentsLoading}
+        skeletonCount={SKELETON_LOOM_COUNT}
+        allAgentNames={allAgentNames}
+        runningAgents={runningAgents}
+        onRun={handleRunAgent}
+      />
 
-      {/* Council Chat */}
-      <section className={styles.chatSection}>
-        <div className={styles.chatHeader}>
-          <span>Loom Council</span>
-        </div>
-        <div className={styles.chatBody}>
-          {councilMessages.length === 0 ? (
-            <p className={styles.chatEmpty}>Ask the Loom Council a question about your vault.</p>
-          ) : (
-            <div className={styles.chatMessages}>
-              {councilMessages.map((m, i) => (
-                <div
-                  key={i}
-                  className={`${styles.chatMsg} ${m.role === "user" ? styles.chatMsgUser : styles.chatMsgAgent}`}
-                >
-                  <span className={styles.chatMsgRole}>
-                    {m.role === "user" ? "You" : "Council"}
-                  </span>
-                  <span className={styles.chatMsgText}>{m.content}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className={styles.chatInputRow}>
-          <input
-            className={styles.chatInput}
-            type="text"
-            placeholder="Ask the council..."
-            value={councilInput}
-            onChange={(e) => setCouncilInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleCouncilSend()}
-            disabled={councilSending}
-          />
-          <button className={styles.chatSend} onClick={handleCouncilSend} disabled={councilSending}>
-            {councilSending ? "..." : "Send"}
-          </button>
-        </div>
-      </section>
+      <CouncilChat
+        messages={councilMessages}
+        input={councilInput}
+        sending={councilSending}
+        onInputChange={setCouncilInput}
+        onSend={handleCouncilSend}
+      />
 
-      {/* Shuttle Layer */}
-      <section className={styles.tierSection}>
-        <div className={styles.tierHeader}>
-          <h2 className={styles.tierTitle}>Shuttle Layer</h2>
-          <span className={styles.badgeAmber}>Task</span>
-        </div>
-        <div className={styles.divider} />
-        <div className={styles.agentGrid}>
-          {agentsLoading
-            ? Array.from({ length: SKELETON_SHUTTLE_COUNT }, (_, i) => (
-                <SkeletonCard key={`skel-shuttle-${i}`} />
-              ))
-            : shuttleAgents.map((agent) => (
-                <AgentCard
-                  key={agent.name}
-                  agent={agent}
-                  initial={getInitials(agent.name, allAgentNames)}
-                  running={runningAgents.has(agent.name)}
-                  onRun={() => handleRunAgent(agent.name)}
-                />
-              ))}
-        </div>
-      </section>
+      <AgentTier
+        title="Shuttle Layer"
+        badgeLabel="Task"
+        badgeClass={styles.badgeAmber}
+        agents={shuttleAgents}
+        loading={agentsLoading}
+        skeletonCount={SKELETON_SHUTTLE_COUNT}
+        allAgentNames={allAgentNames}
+        runningAgents={runningAgents}
+        onRun={handleRunAgent}
+      />
 
-      {/* Shuttle Chat */}
-      <section className={styles.chatSection}>
-        <div className={styles.chatHeader}>
-          <div className={styles.chatTabs}>
-            {SHUTTLE_TABS.map((name) => (
-              <button
-                key={name}
-                className={`${styles.chatTab} ${shuttleTab === name ? styles.chatTabActive : ""}`}
-                onClick={() => setShuttleTab(name)}
-              >
-                {getInitials(name, allAgentNames.length ? allAgentNames : [...SHUTTLE_TABS])} {name}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div className={styles.chatBody}>
-          {(shuttleMessages[shuttleTab] || []).length === 0 ? (
-            <p className={styles.chatEmpty}>Chat with {shuttleTab} directly.</p>
-          ) : (
-            <div className={styles.chatMessages}>
-              {(shuttleMessages[shuttleTab] || []).map((m, i) => (
-                <div
-                  key={i}
-                  className={`${styles.chatMsg} ${m.role === "user" ? styles.chatMsgUser : styles.chatMsgAgent}`}
-                >
-                  <span className={styles.chatMsgRole}>
-                    {m.role === "user" ? "You" : shuttleTab}
-                  </span>
-                  <span className={styles.chatMsgText}>{m.content}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-        <div className={styles.chatInputRow}>
-          <input
-            className={styles.chatInput}
-            type="text"
-            placeholder={`Ask ${shuttleTab}...`}
-            value={shuttleInput}
-            onChange={(e) => setShuttleInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleShuttleSend()}
-            disabled={shuttleSending}
-          />
-          <button className={styles.chatSend} onClick={handleShuttleSend} disabled={shuttleSending}>
-            {shuttleSending ? "..." : "Send"}
-          </button>
-        </div>
-      </section>
+      <ShuttleChat
+        tab={shuttleTab}
+        messages={shuttleMessages}
+        input={shuttleInput}
+        sending={shuttleSending}
+        allAgentNames={allAgentNames}
+        onTabChange={setShuttleTab}
+        onInputChange={setShuttleInput}
+        onSend={handleShuttleSend}
+      />
 
-      {/* Activity Log */}
-      <section className={styles.activitySection}>
-        <h2 className={styles.activityTitle}>Recent Activity</h2>
-        <div className={styles.activityTable}>
-          <div className={styles.activityHeader}>
-            <span>Time</span>
-            <span>Agent</span>
-            <span>Action</span>
-            <span>Status</span>
-          </div>
-          {activity.length === 0 ? (
-            <div className={styles.activityEmpty}>No agent activity yet</div>
-          ) : (
-            activity.map((entry, i) => (
-              <div key={i} className={styles.activityRow}>
-                <span className={styles.activityTime}>{formatTime(entry.time)}</span>
-                <span className={styles.activityAgent}>{entry.agent}</span>
-                <span className={styles.activityAction}>{entry.details || entry.action}</span>
-                <span className={styles.activityStatus}>
-                  <span className={styles.statusDot} />
-                  done
-                </span>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+      <ActivityLog activity={activity} />
     </div>
   );
-}
-
-/* -- Agent Card --------------------------------------------------------------- */
-
-function AgentCard({
-  agent,
-  initial,
-  running,
-  onRun,
-}: {
-  agent: AgentStatus;
-  initial: string;
-  running: boolean;
-  onRun: () => void;
-}) {
-  const statusLabel = running ? "Running" : "Idle";
-  const statusClass = running ? styles.badgeRunning : styles.badgeIdle;
-
-  return (
-    <div className={styles.card}>
-      <div className={styles.cardTop}>
-        <span className={styles.cardInitial}>{initial}</span>
-        <div className={styles.cardIdent}>
-          <span className={styles.cardName}>{agent.name}</span>
-          <span className={styles.cardRole}>{agent.role}</span>
-        </div>
-        <span className={statusClass}>{statusLabel}</span>
-      </div>
-      <p className={styles.cardDesc}>{agent.role}</p>
-      <div className={styles.cardStats}>
-        <span>Actions: {agent.action_count}</span>
-        <span>Last: {agent.last_action ? formatTime(agent.last_action) : "never"}</span>
-      </div>
-      <div className={styles.cardBottom}>
-        <button className={styles.runBtn} onClick={onRun} disabled={running}>
-          {running ? "Running..." : "Run"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/* -- Skeleton Card ------------------------------------------------------------ */
-
-function SkeletonCard() {
-  return (
-    <div className={`${styles.card} ${styles.skeletonCard}`} aria-hidden="true">
-      <div className={styles.cardTop}>
-        <span className={`${styles.cardInitial} ${styles.skeletonBlock}`} />
-        <div className={styles.cardIdent}>
-          <span className={`${styles.skeletonLine} ${styles.skeletonLineWide}`} />
-          <span className={`${styles.skeletonLine} ${styles.skeletonLineNarrow}`} />
-        </div>
-      </div>
-      <span className={`${styles.skeletonLine} ${styles.skeletonLineFull}`} />
-      <span className={`${styles.skeletonLine} ${styles.skeletonLineWide}`} />
-      <div className={styles.cardBottom}>
-        <span className={`${styles.skeletonLine} ${styles.skeletonLineButton}`} />
-      </div>
-    </div>
-  );
-}
-
-/* -- Helpers ------------------------------------------------------------------ */
-
-function formatTime(iso: string): string {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
-  } catch {
-    return iso;
-  }
-}
-
-function parseChangelogEntries(agent: string, content: string): ActivityEntry[] {
-  const entries: ActivityEntry[] = [];
-  const blocks = content.split(/^## /m).filter(Boolean);
-
-  for (const block of blocks) {
-    const lines = block.trim().split("\n");
-    const timeLine = lines[0]?.trim() || "";
-    let action = "";
-    let details = "";
-
-    for (const line of lines) {
-      if (line.startsWith("- **Action:**")) action = line.replace("- **Action:**", "").trim();
-      if (line.startsWith("- **Details:**")) details = line.replace("- **Details:**", "").trim();
-    }
-
-    if (timeLine && action) {
-      entries.push({ time: timeLine, agent, action, details: details || action });
-    }
-  }
-
-  return entries;
 }

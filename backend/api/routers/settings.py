@@ -8,40 +8,19 @@ import time
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from api.routers.settings_helpers import (
+    ProviderInput,
+    build_provider_from_input,
+    mask_api_key,
+    provider_type,
+)
 from core.config import GlobalConfig, ProviderConfig, settings
 from core.exceptions import ProviderConfigError
 from core.providers import reset_registry
-from core.providers.anthropic import AnthropicProvider
-from core.providers.base import (
-    AnthropicProviderConfig,
-    BaseProvider,
-    OllamaProviderConfig,
-    OpenAIProviderConfig,
-    XAIProviderConfig,
-)
-from core.providers.ollama import OllamaProvider
-from core.providers.openai import OpenAIProvider
-from core.providers.xai import XAIProvider
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api", tags=["settings"])
-
-
-# -- Request / Response models ------------------------------------------------
-
-
-class ProviderInput(BaseModel):
-    """A single provider entry from the frontend."""
-
-    name: str
-    type: str  # "cloud" | "local"
-    api_key: str = ""
-    host: str = ""
-    base_url: str = ""
-    chat_model: str = ""
-    embed_model: str = ""
-    is_default: bool = False
 
 
 class SaveProvidersRequest(BaseModel):
@@ -88,69 +67,6 @@ class TestProviderResponse(BaseModel):
     error: str = ""
 
 
-# -- Helpers ------------------------------------------------------------------
-
-
-_LOCAL_PROVIDERS = frozenset({"ollama"})
-
-
-def _provider_type(name: str) -> str:
-    return "local" if name in _LOCAL_PROVIDERS else "cloud"
-
-
-def _mask_api_key(key: str | None) -> tuple[str, bool]:
-    if not key:
-        return "", False
-    if len(key) <= 4:
-        return "…", True
-    return f"…{key[-4:]}", True
-
-
-def _build_provider_from_input(p: ProviderInput) -> BaseProvider:
-    """Build a provider instance directly from frontend-supplied config.
-
-    Bypasses the registry (and therefore disk) so unsaved keys can be
-    sanity-checked. Raises ProviderConfigError for unknown providers or
-    missing required credentials.
-    """
-    if p.name == "openai":
-        return OpenAIProvider(
-            OpenAIProviderConfig(
-                api_key=p.api_key or None,
-                chat_model=p.chat_model or "gpt-4o",
-                embed_model=p.embed_model or "text-embedding-3-small",
-            )
-        )
-    if p.name == "anthropic":
-        return AnthropicProvider(
-            AnthropicProviderConfig(
-                api_key=p.api_key or None,
-                chat_model=p.chat_model or "claude-sonnet-4-20250514",
-            )
-        )
-    if p.name == "ollama":
-        return OllamaProvider(
-            OllamaProviderConfig(
-                host=p.host or "http://localhost:11434",
-                chat_model=p.chat_model or "llama3",
-                embed_model=p.embed_model or "nomic-embed-text",
-            )
-        )
-    if p.name == "xai":
-        return XAIProvider(
-            XAIProviderConfig(
-                api_key=p.api_key or None,
-                base_url=p.base_url or "https://api.x.ai/v1",
-                chat_model=p.chat_model or "grok-3",
-                embed_model=p.embed_model or None,
-            )
-        )
-    raise ProviderConfigError(f"Unknown provider '{p.name}'.")
-
-
-# -- Endpoints ----------------------------------------------------------------
-
-
 @router.get("/settings/providers")
 async def get_providers() -> GetProvidersResponse:
     """Return the current provider configuration.
@@ -162,11 +78,11 @@ async def get_providers() -> GetProvidersResponse:
 
     out: list[ProviderOutput] = []
     for name, p in cfg.providers.items():
-        masked, has_key = _mask_api_key(p.api_key)
+        masked, has_key = mask_api_key(p.api_key)
         out.append(
             ProviderOutput(
                 name=name,
-                type=_provider_type(name),
+                type=provider_type(name),
                 api_key=masked,
                 api_key_set=has_key,
                 host=p.host or "",
@@ -221,7 +137,6 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
             if p.embed_model:
                 embed_provider = p.name
 
-        # Pick a credible fallback for when nothing is marked default.
         has_credentials = bool(api_key) or bool(pc.host)
         if fallback_chat is None and pc.chat_model and has_credentials:
             fallback_chat = p.name
@@ -268,7 +183,7 @@ async def test_provider(name: str, body: ProviderInput) -> TestProviderResponse:
 
     start = time.perf_counter()
     try:
-        provider = _build_provider_from_input(body)
+        provider = build_provider_from_input(body)
     except ProviderConfigError as exc:
         return TestProviderResponse(ok=False, latency_ms=0, error=str(exc))
 

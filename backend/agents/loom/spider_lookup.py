@@ -6,14 +6,16 @@ NoteIndex (preferred) or by scanning disk as a fallback.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import ValidationError
 
 from core.note_index import get_note_index
 from core.notes import parse_note_meta
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def resolve_title(vault_root: Path, note_id: str) -> str:

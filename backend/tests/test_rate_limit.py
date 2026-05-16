@@ -150,4 +150,6 @@ class TestRateLimitIntegration:
         """Basic sanity: /api/health responds 200 — app with limiter boots."""
         resp = client.get("/api/health")
         assert resp.status_code == 200
-        assert resp.json() == {"status": "ok"}
+        body = resp.json()
+        assert "ok" in body
+        assert "components" in body

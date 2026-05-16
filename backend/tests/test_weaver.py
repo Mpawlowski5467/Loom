@@ -7,7 +7,8 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from agents.loom.weaver import Weaver, _parse_classification
+from agents.loom.weaver import Weaver
+from agents.loom.weaver_helpers import parse_classification as _parse_classification
 from core.exceptions import ReadChainError
 from core.notes import build_frontmatter, parse_note
 

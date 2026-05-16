@@ -1,39 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useApp } from "../../lib/context/useApp";
 import {
   archiveNote,
+  type CaptureItem,
   fetchCaptures,
   processAllCaptures,
   processCapture,
-  type CaptureItem,
   type ProcessResult,
 } from "../../lib/api";
+import { useApp } from "../../lib/context/useApp";
+import { CaptureCard } from "./CaptureCard";
 import styles from "./InboxView.module.css";
-
-type FilterTab = "all" | "pending" | "processing" | "done" | "manual";
-
-const FILTER_TABS: { id: FilterTab; label: string }[] = [
-  { id: "all", label: "All" },
-  { id: "pending", label: "Pending" },
-  { id: "processing", label: "Processing" },
-  { id: "done", label: "Done" },
-  { id: "manual", label: "Manual" },
-];
-
-const SOURCE_LABELS: Record<string, string> = {
-  manual: "MN",
-};
-
-const POLL_MS = 5_000;
+import { type CaptureState, FILTER_TABS, type FilterTab, POLL_MS } from "./types";
 
 export interface InboxViewProps {
   onSelectCapture?: (noteId: string) => void;
-}
-
-// Track per-capture processing state client-side
-interface CaptureState {
-  status: "pending" | "processing" | "done";
-  result?: ProcessResult;
 }
 
 export function InboxView({ onSelectCapture }: InboxViewProps) {
@@ -67,8 +47,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
   }, [load]);
 
   const getEffectiveStatus = (capture: CaptureItem): string => {
-    // Server-side archived state always wins: once Weaver has archived the
-    // source file we never want stale client state to show it as pending.
     if (capture.status === "archived") return "done";
     const key = capture.id || capture.file_path;
     const state = captureStates[key];
@@ -86,7 +64,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
     setCaptureStates((prev) => ({ ...prev, [key]: { status: "processing" } }));
 
     try {
-      // Extract relative path from file_path
       const path = capture.file_path;
       const capturesIdx = path.indexOf("captures/");
       const relativePath = capturesIdx >= 0 ? path.substring(capturesIdx) : path;
@@ -111,7 +88,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
   const handleProcessAll = async () => {
     setProcessingAll(true);
 
-    // Mark all pending as processing
     const pendingKeys = captures
       .filter((c) => getEffectiveStatus(c) === "pending")
       .map((c) => c.id || c.file_path);
@@ -129,12 +105,10 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
         result.processed > 0 ? "success" : "info",
       );
 
-      // Update individual states from results
       setCaptureStates((prev) => {
         const next = { ...prev };
         for (const r of result.results) {
           if (r.note_id) {
-            // Find the capture that matches
             for (const key of pendingKeys) {
               if (!next[key] || next[key].status === "processing") {
                 next[key] = { status: "done", result: r };
@@ -143,7 +117,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
             }
           }
         }
-        // Reset any still-processing back to pending
         for (const key of pendingKeys) {
           if (next[key]?.status === "processing") {
             next[key] = { status: "pending" };
@@ -189,7 +162,9 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
   });
 
   const pendingCount = captures.filter((c) => getEffectiveStatus(c) === "pending").length;
-  const processingCount = captures.filter((c) => getEffectiveStatus(c) === "processing").length;
+  const processingCount = captures.filter(
+    (c) => getEffectiveStatus(c) === "processing",
+  ).length;
   const doneCount = captures.filter(
     (c) => getEffectiveStatus(c) === "done" || c.status === "archived",
   ).length;
@@ -253,121 +228,6 @@ export function InboxView({ onSelectCapture }: InboxViewProps) {
             onClick={() => capture.id && onSelectCapture?.(capture.id)}
           />
         ))}
-      </div>
-    </div>
-  );
-}
-
-/* -- Capture Card ------------------------------------------------------------- */
-
-function getStatusClass(status: string): string {
-  if (status === "processing") return styles.statusProcessing;
-  if (status === "done") return styles.statusDone;
-  return styles.statusPending;
-}
-
-function getStatusLabel(status: string, result?: ProcessResult): string {
-  if (status === "processing") return "Processing";
-  if (status === "done" && result?.note_title) {
-    return `Filed → [[${result.note_title}]]`;
-  }
-  if (status === "done") return "Done";
-  return "Pending";
-}
-
-function getSourceLabel(): string {
-  return SOURCE_LABELS.manual;
-}
-
-function formatTime(iso: string): string {
-  if (!iso) return "";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString(undefined, {
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function CaptureCard({
-  capture,
-  effectiveStatus,
-  processResult,
-  onProcess,
-  onArchive,
-  onClick,
-}: {
-  capture: CaptureItem;
-  effectiveStatus: string;
-  processResult?: ProcessResult;
-  onProcess: () => void;
-  onArchive: () => void;
-  onClick: () => void;
-}) {
-  const borderClass =
-    effectiveStatus === "processing"
-      ? styles.borderProcessing
-      : effectiveStatus === "done"
-        ? styles.borderDone
-        : styles.borderPending;
-
-  return (
-    <div className={`${styles.card} ${borderClass}`} onClick={onClick}>
-      <div className={styles.cardTop}>
-        <span className={styles.cardSourceLabel}>{getSourceLabel()}</span>
-        <div className={styles.cardIdent}>
-          <span className={styles.cardTitle}>{capture.title || "Untitled capture"}</span>
-          {capture.preview && <span className={styles.cardPreview}>{capture.preview}</span>}
-        </div>
-        <div className={styles.cardMeta}>
-          <span className={styles.cardTime}>{formatTime(capture.modified || capture.created)}</span>
-          <span className={`${styles.statusBadge} ${getStatusClass(effectiveStatus)}`}>
-            {getStatusLabel(effectiveStatus, processResult)}
-          </span>
-        </div>
-      </div>
-
-      {/* Filed-to link for processed captures */}
-      {effectiveStatus === "done" && processResult?.note_type && (
-        <div className={styles.filedInfo}>
-          <span className={styles.filedLabel}>Type: {processResult.note_type}</span>
-        </div>
-      )}
-
-      <div className={styles.cardActions}>
-        <button
-          className={styles.actionProcess}
-          onClick={(e) => {
-            e.stopPropagation();
-            onProcess();
-          }}
-          disabled={effectiveStatus === "processing" || effectiveStatus === "done"}
-        >
-          {effectiveStatus === "processing" ? "Processing..." : "Process"}
-        </button>
-        <button
-          className={styles.actionPreview}
-          onClick={(e) => {
-            e.stopPropagation();
-            onClick();
-          }}
-        >
-          Preview
-        </button>
-        <button
-          className={styles.actionArchive}
-          onClick={(e) => {
-            e.stopPropagation();
-            onArchive();
-          }}
-        >
-          Archive
-        </button>
       </div>
     </div>
   );

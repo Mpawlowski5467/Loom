@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
@@ -14,7 +14,7 @@ import type {
 } from "../data/types";
 import { agents as agentsSeed } from "../data/agents";
 import { captures as capturesSeed } from "../data/captures";
-import { changelogSeed, nextScriptedEvent, nowHMS } from "../data/changelog";
+import { changelogSeed } from "../data/changelog";
 import { councilSeed } from "../data/council";
 import { backlinksFor, noteById, notes as notesSeed } from "../data/notes";
 import { AppCtx } from "./app-ctx";
@@ -85,38 +85,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   const [agentsState] = useState<Agent[]>(agentsSeed);
-  const [changelog, setChangelog] = useState<AgentEvent[]>(changelogSeed);
-  const seqRef = useRef(0);
-
-  useEffect(() => {
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const e = nextScriptedEvent(seqRef.current++);
-      const evt: AgentEvent = {
-        ...e,
-        id: `ev_live_${Date.now()}`,
-        ts: nowHMS(),
-      };
-      setChangelog((prev) => [evt, ...prev].slice(0, 30));
-      const iconMap: Record<string, string> = {
-        spider: "🕸",
-        weaver: "🧶",
-        scribe: "✎",
-        sentinel: "🛡",
-        archivist: "📦",
-        researcher: "🔭",
-        standup: "🌅",
-      };
-      pushToast({
-        icon: iconMap[evt.agent] ?? "✦",
-        agent: evt.agent.toUpperCase(),
-        body: `${evt.action} ${evt.target}`,
-      });
-      timer = setTimeout(tick, 6000 + Math.random() * 6000);
-    };
-    timer = setTimeout(tick, 8000);
-    return () => clearTimeout(timer);
-  }, [pushToast]);
+  const [changelog] = useState<AgentEvent[]>(changelogSeed);
 
   const [council, setCouncil] = useState<CouncilMessage[]>(councilSeed);
   const postCouncilMessage = useCallback((body: string) => {

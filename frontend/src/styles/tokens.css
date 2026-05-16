@@ -1,0 +1,50 @@
+:root {
+  /* Paper surfaces — warm cream tones for three depth levels */
+  --bg-base: #f5f1e8;
+  --bg-surface: #ede8da;
+  --bg-elevated: #e3dcca;
+
+  /* Ink — warm black + two greys */
+  --ink: #1a1815;
+  --ink-2: #5c5851;
+  --ink-3: #8c877d;
+
+  /* Hairlines — use these, not solid borders */
+  --rule: rgba(26, 24, 21, 0.08);
+  --rule-2: rgba(26, 24, 21, 0.18);
+
+  /* The duotone */
+  --agent: #2d4a7c;
+  --agent-bg: rgba(45, 74, 124, 0.08);
+  --agent-line: rgba(45, 74, 124, 0.35);
+
+  --you: #a83a2c;
+  --you-bg: rgba(168, 58, 44, 0.08);
+  --you-line: rgba(168, 58, 44, 0.4);
+
+  /* Status */
+  --green: #4a6b3a;
+  --green-bg: rgba(74, 107, 58, 0.12);
+  --red: #a83a2c;
+
+  /* Node-type ink swatches */
+  --node-project: #2d4a7c;
+  --node-topic: #4a6b3a;
+  --node-people: #6b3a6b;
+  --node-daily: #8c877d;
+  --node-capture: #a8722a;
+  --node-custom: #2d6b6b;
+
+  /* Fonts */
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+
+  /* Radii */
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+
+  /* Ease */
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}

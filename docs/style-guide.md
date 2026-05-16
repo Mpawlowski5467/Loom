@@ -66,6 +66,8 @@
 ### Project Patterns
 - Views go in `frontend/views/` — one file per view (GraphView, BoardView, InboxView)
 - Reusable components go in `frontend/components/`
+- Sigma.js graph logic isolated in `frontend/lib/graph/`
+- Plate editor config isolated in `frontend/lib/editor/`
 - react-force-graph-2d graph logic isolated in `frontend/lib/graph/`
 - react-markdown rendering config isolated in `frontend/lib/editor/`
 - API calls go through a single `frontend/lib/api.ts` client

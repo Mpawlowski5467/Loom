@@ -1,3 +1,11 @@
+import { AppProvider } from "./context/AppContext";
+import { AppShell } from "./components/AppShell";
+
+function App() {
+  return (
+    <AppProvider>
+      <AppShell />
+    </AppProvider>
 import { Settings } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import "./styles/variables.css";

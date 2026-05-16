@@ -1,3 +1,15 @@
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/motion.css";
+@import "./styles/primitives.css";
+@import "./styles/layout.css";
+@import "./styles/views/splash.css";
+@import "./styles/views/graph.css";
+@import "./styles/views/thread.css";
+@import "./styles/views/inbox.css";
+@import "./styles/views/board.css";
+@import "./styles/views/palette.css";
+@import "./styles/views/toasts.css";
 *,
 *::before,
 *::after {

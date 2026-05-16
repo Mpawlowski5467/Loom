@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 from agents.loom.weaver_helpers import load_schema, parse_classification
@@ -11,15 +10,15 @@ from agents.loom.weaver_prompts import CLASSIFY_SYSTEM, CREATE_SYSTEM, FORMAT_SY
 from core.exceptions import ProviderConfigError, ProviderError
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from agents.chain import ReadChainResult
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
 
 
-async def classify_capture(
-    content: str, chat_provider: BaseProvider | None
-) -> dict[str, str]:
+async def classify_capture(content: str, chat_provider: BaseProvider | None) -> dict[str, str]:
     """Use LLM to classify a capture's type, folder, title, and tags."""
     if chat_provider is None:
         return classify_heuristic(content)

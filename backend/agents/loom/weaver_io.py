@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 import shutil
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agents.changelog import log_action
 from agents.loom.weaver_helpers import build_meta
@@ -17,6 +17,9 @@ from core.notes import (
     parse_note,
 )
 from core.notes_helpers import to_kebab
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 logger = logging.getLogger(__name__)
 

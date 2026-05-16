@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from agents.loom.spider_lookup import build_title_map
 from core.notes import Note, atomic_write_text, note_to_file_content, now_iso, parse_note
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def apply_links(
@@ -50,8 +53,6 @@ def _add_link_to_note(path: Path, link_title: str, ts: str, reason: str) -> None
 
     meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
     meta["modified"] = ts
-    meta["history"].append(
-        {"action": "linked", "by": "agent:spider", "at": ts, "reason": reason}
-    )
+    meta["history"].append({"action": "linked", "by": "agent:spider", "at": ts, "reason": reason})
 
     atomic_write_text(path, note_to_file_content(meta, new_body))

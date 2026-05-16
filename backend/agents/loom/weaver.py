@@ -86,8 +86,7 @@ class Weaver(BaseAgent):
             return {
                 "action": "created",
                 "details": (
-                    f"Processed capture '{capture_path.name}' → "
-                    f"{folder}/{to_kebab(title)}.md"
+                    f"Processed capture '{capture_path.name}' → {folder}/{to_kebab(title)}.md"
                 ),
                 "note": note,
             }

@@ -8,7 +8,6 @@ heuristic. All paths produce a normalized list of LinkCandidate.
 from __future__ import annotations
 
 import logging
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from agents.loom.spider_lookup import list_vault_notes, resolve_id, resolve_title
@@ -20,9 +19,11 @@ from agents.loom.spider_models import (
 )
 from agents.loom.spider_models import FIND_CONNECTIONS_SYSTEM as _FIND_CONNECTIONS_SYSTEM
 from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import Note
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
+    from core.notes import Note
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)

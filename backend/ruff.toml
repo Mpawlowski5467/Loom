@@ -6,3 +6,12 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF"]
 
 [lint.isort]
 known-first-party = ["api", "agents", "compiler", "index", "rules", "bridge", "core"]
+select = ["E", "F", "W", "I", "N", "UP", "B", "A", "SIM", "TCH"]
+ignore = ["E501"]
+
+[lint.isort]
+known-first-party = ["api", "core", "agents", "compiler", "index", "rules", "bridge"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

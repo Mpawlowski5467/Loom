@@ -1,0 +1,117 @@
+/* ── Dark theme (default) ──────────────────────────────────────────────── */
+
+[data-theme="dark"],
+:root {
+  /* ── Backgrounds ──────────────────────────────────────────────────────── */
+  --bg-base: #0f172a;
+  --bg-surface: #1e293b;
+  --bg-elevated: #334155;
+  --bg-inset: #0a0c10;
+  --bg-raised: #21252e;
+  --overlay: rgba(0, 0, 0, 0.7);
+
+  /* ── Borders ──────────────────────────────────────────────────────────── */
+  --border: #363b48;
+  --border-light: #272c37;
+  --border-focus: var(--accent-amber);
+
+  /* ── Text ──────────────────────────────────────────────────────────────── */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-disabled: #505562;
+  --text-on-accent: #111318;
+
+  /* ── Accents ──────────────────────────────────────────────────────────── */
+  --accent-amber: #f59e0b;
+  --accent-amber-hover: #d97706;
+  --accent-amber-active: #b45309;
+  --accent-purple: #a78bfa;
+  --accent-purple-hover: #8b6ce0;
+  --accent-purple-active: #7452c9;
+
+  /* muted variants for backgrounds */
+  --accent-amber-muted: rgba(245, 158, 11, 0.12);
+  --accent-amber-muted-hover: rgba(245, 158, 11, 0.18);
+  --accent-purple-muted: rgba(167, 139, 250, 0.12);
+  --accent-purple-muted-hover: rgba(167, 139, 250, 0.18);
+  --danger-muted: rgba(248, 113, 113, 0.12);
+  --success-muted: rgba(52, 211, 153, 0.12);
+
+  /* ── Node types ───────────────────────────────────────────────────────── */
+  --node-project: #60a5fa;
+  --node-topic: #4ade80;
+  --node-person: #c084fc;
+  --node-daily: #94a3b8;
+  --node-capture: #fbbf24;
+  --node-custom: #2dd4bf;
+
+  /* ── Status ───────────────────────────────────────────────────────────── */
+  --danger: #f87171;
+  --success: #34d399;
+
+  /* ── Graph canvas (read by JS for react-force-graph-2d canvas drawing) ── */
+  --graph-bg: #0f172a;
+  --graph-label: #8b90a0;
+  --graph-edge: rgba(139, 144, 160, 0.15);
+  --graph-edge-hover: rgba(167, 139, 250, 0.5);
+  --graph-selected: #f59e0b;
+  --graph-dimmed: rgba(139, 144, 160, 0.08);
+
+  /* ── Typography ───────────────────────────────────────────────────────── */
+  --font-ui: "Sora", sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --text-2xs: 10px;
+  --text-xs: 11px;
+  --text-sm: 12px;
+  --text-base: 13px;
+  --text-md: 14px;
+  --text-lg: 16px;
+  --text-xl: 18px;
+  --text-2xl: 22px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-relaxed: 1.65;
+
+  --weight-normal: 400;
+  --weight-medium: 500;
+  --weight-semibold: 600;
+  --weight-bold: 700;
+
+  /* ── Spacing (4px base unit) ──────────────────────────────────────────── */
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 20px;
+  --sp-6: 24px;
+  --sp-8: 32px;
+
+  /* ── Radii ──────────────────────────────────────────────────────────── */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+  --radius-xl: 14px;
+
+  /* ── Shadows — subtle inset/outset for depth ──────────────────────────── */
+  --shadow-inset: inset 0 1px 3px rgba(0, 0, 0, 0.4);
+  --shadow-raised: 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-dropdown: 0 4px 12px rgba(0, 0, 0, 0.5);
+  --shadow-modal: 0 8px 24px rgba(0, 0, 0, 0.6);
+
+  /* ── Transitions ─────────────────────────────────────────────────────── */
+  --transition-fast: 0.1s ease;
+  --transition-base: 0.15s ease;
+
+  /* ── Layout ──────────────────────────────────────────────────────────── */
+  --nav-height: 36px;
+  --status-height: 24px;
+  --tree-width: 240px;
+  --sidebar-width: 340px;
+  --sidebar-width-edit: 420px;
+
+  /* ── Dot sizes ─────────────────────────────────────────────────────── */
+  --dot-size-sm: 6px;
+  --dot-size-md: 8px;
+}

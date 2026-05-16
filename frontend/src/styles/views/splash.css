@@ -1,0 +1,79 @@
+.splash {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  transition: opacity 600ms var(--ease);
+  cursor: pointer;
+}
+.splash-2 {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.splash-loom {
+  width: min(600px, 80vw);
+  height: auto;
+  display: block;
+}
+
+.splash-warp {
+  stroke: var(--agent);
+  stroke-width: 1.4;
+  fill: none;
+  stroke-dasharray: 200;
+  stroke-dashoffset: 200;
+  animation: splashStroke 1.2s var(--ease) forwards;
+  opacity: 0.7;
+}
+.splash-weft {
+  stroke: var(--you);
+  stroke-width: 1.2;
+  fill: none;
+  stroke-dasharray: 600;
+  stroke-dashoffset: 600;
+  animation: splashStroke 1s var(--ease) forwards;
+  animation-delay: 500ms;
+  opacity: 0.85;
+}
+.splash-knot {
+  fill: var(--ink);
+  opacity: 0;
+  transform-origin: center;
+  animation: splashDot 360ms var(--ease) forwards;
+}
+.splash-wordmark {
+  font-family: var(--serif);
+  font-size: 72px;
+  font-weight: 500;
+  fill: var(--ink);
+  letter-spacing: -0.025em;
+  opacity: 0;
+  animation: inkBleed 700ms var(--ease) forwards;
+  animation-delay: 1100ms;
+}
+.splash-shuttle {
+  stroke: var(--you);
+  stroke-width: 2.2;
+  fill: none;
+  stroke-dasharray: 320;
+  stroke-dashoffset: 320;
+  animation: splashStroke 720ms var(--ease) forwards;
+  animation-delay: 1300ms;
+}
+
+.splash-tag {
+  margin-top: 28px;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  opacity: 0;
+  animation: fadeIn2 500ms var(--ease) forwards;
+  animation-delay: 1500ms;
+}

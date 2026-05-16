@@ -1,12 +1,11 @@
-import "./styles/variables.css";
-import "./App.css";
+import { AppProvider } from "./context/AppContext";
+import { AppShell } from "./components/AppShell";
 
 function App() {
   return (
-    <div className="app">
-      <h1 className="title">Loom</h1>
-      <p className="subtitle">Local-first AI memory system</p>
-    </div>
+    <AppProvider>
+      <AppShell />
+    </AppProvider>
   );
 }
 

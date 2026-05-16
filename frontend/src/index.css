@@ -1,14 +1,12 @@
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
-}
-
-body {
-  background-color: #0f172a;
-  color: #e2e8f0;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
+@import "./styles/tokens.css";
+@import "./styles/base.css";
+@import "./styles/motion.css";
+@import "./styles/primitives.css";
+@import "./styles/layout.css";
+@import "./styles/views/splash.css";
+@import "./styles/views/graph.css";
+@import "./styles/views/thread.css";
+@import "./styles/views/inbox.css";
+@import "./styles/views/board.css";
+@import "./styles/views/palette.css";
+@import "./styles/views/toasts.css";

@@ -1,0 +1,294 @@
+/* ── Buttons ───────────────────────────────────────────────────── */
+.btn {
+  font-family: var(--font);
+  font-size: 12px;
+  font-weight: 500;
+  padding: 6px 14px;
+  border-radius: var(--r-md);
+  border: 1px solid var(--rule-2);
+  background: transparent;
+  color: var(--ink-2);
+  transition: all 220ms var(--ease);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.btn:hover {
+  color: var(--ink);
+  border-color: var(--ink-3);
+  background: var(--bg-surface);
+  transform: translateY(-1px);
+}
+.btn:active {
+  transform: translateY(0);
+}
+.btn-md {
+  padding: 8px 16px;
+  font-size: 12.5px;
+}
+.btn-amber {
+  color: var(--you);
+  border-color: var(--you-line);
+}
+.btn-amber:hover {
+  background: var(--you);
+  color: #fff;
+  border-color: var(--you);
+}
+.btn-purple {
+  color: var(--agent);
+  border-color: var(--agent-line);
+}
+.btn-purple:hover {
+  background: var(--agent);
+  color: #fff;
+  border-color: var(--agent);
+}
+.btn-active {
+  background: var(--ink);
+  color: var(--bg-base);
+  border-color: var(--ink);
+}
+.btn-active:hover {
+  background: var(--ink);
+  color: var(--bg-base);
+  border-color: var(--ink);
+}
+
+.icon-btn {
+  border: none;
+  background: transparent;
+  color: var(--ink-3);
+  width: 24px;
+  height: 24px;
+  border-radius: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 180ms var(--ease);
+}
+.icon-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--ink);
+}
+
+/* ── Chips & badges ────────────────────────────────────────────── */
+.chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  padding: 2px 9px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.chip-type[data-type="project"] {
+  color: var(--node-project);
+  border-color: rgba(45, 74, 124, 0.35);
+  background: rgba(45, 74, 124, 0.06);
+}
+.chip-type[data-type="topic"] {
+  color: var(--node-topic);
+  border-color: rgba(74, 107, 58, 0.35);
+  background: rgba(74, 107, 58, 0.06);
+}
+.chip-type[data-type="people"] {
+  color: var(--node-people);
+  border-color: rgba(107, 58, 107, 0.35);
+  background: rgba(107, 58, 107, 0.06);
+}
+.chip-type[data-type="daily"] {
+  color: var(--node-daily);
+  border-color: var(--rule-2);
+  background: var(--bg-surface);
+}
+.chip-type[data-type="capture"] {
+  color: var(--node-capture);
+  border-color: rgba(168, 114, 42, 0.35);
+  background: rgba(168, 114, 42, 0.06);
+}
+.chip-type[data-type="custom"] {
+  color: var(--node-custom);
+  border-color: rgba(45, 107, 107, 0.35);
+  background: rgba(45, 107, 107, 0.06);
+}
+
+.status-badge {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  padding: 3px 8px 3px 6px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  flex-shrink: 0;
+}
+.status-badge[data-state="running"] {
+  color: var(--agent);
+  border-color: var(--agent-line);
+  background: var(--agent-bg);
+}
+.status-badge[data-state="running"] .pulse-dot {
+  background: var(--agent);
+  animation: pulseRing 2s infinite;
+}
+.status-badge[data-state="queued"] {
+  color: var(--you);
+  border-color: var(--you-line);
+  background: var(--you-bg);
+}
+.status-badge[data-state="queued"] .pulse-dot {
+  background: var(--you);
+  animation: pulse 1.6s infinite;
+}
+.status-badge[data-state="idle"] .pulse-dot {
+  background: var(--ink-3);
+}
+
+/* ── Inputs ────────────────────────────────────────────────────── */
+.input {
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  padding: 8px 12px;
+  font-family: var(--font);
+  font-size: 13px;
+  color: var(--ink);
+  transition: all 180ms var(--ease);
+  width: 100%;
+  outline: none;
+}
+.input:focus {
+  border-color: var(--ink-3);
+  background: var(--bg-base);
+}
+.input::placeholder {
+  color: var(--ink-3);
+}
+
+/* ── Mode toggle ───────────────────────────────────────────────── */
+.mode-toggle {
+  display: inline-flex;
+  gap: 0;
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  padding: 2px;
+}
+.mode-pill {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  color: var(--ink-2);
+  background: transparent;
+  border: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 220ms var(--ease);
+}
+.mode-pill:hover {
+  color: var(--ink);
+}
+.mode-pill.active {
+  background: var(--ink);
+  color: var(--bg-base);
+}
+
+/* ── Wikilink ──────────────────────────────────────────────────── */
+.wikilink {
+  color: var(--agent);
+  font-family: var(--serif);
+  font-style: italic;
+  font-weight: 500;
+  position: relative;
+  text-decoration: none;
+  padding: 0 1px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: inherit;
+  display: inline;
+}
+.wikilink::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1px;
+  background: var(--agent-line);
+  transition:
+    background 180ms ease,
+    height 180ms ease;
+}
+.wikilink:hover {
+  background: var(--agent-bg);
+}
+.wikilink:hover::after {
+  background: var(--agent);
+  height: 2px;
+}
+.wikilink.backlink {
+  display: block;
+  padding: 5px 0;
+}
+
+/* ── Dot (type indicator) ──────────────────────────────────────── */
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  display: inline-block;
+}
+.dot-project {
+  background: var(--node-project);
+}
+.dot-topic {
+  background: var(--node-topic);
+}
+.dot-people {
+  background: var(--node-people);
+}
+.dot-daily {
+  background: var(--node-daily);
+}
+.dot-capture {
+  background: var(--node-capture);
+}
+.dot-custom {
+  background: var(--node-custom);
+}
+
+/* ── kbd ───────────────────────────────────────────────────────── */
+kbd {
+  font-family: var(--mono);
+  font-size: 9.5px;
+  padding: 2px 5px;
+  border-radius: 3px;
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+}

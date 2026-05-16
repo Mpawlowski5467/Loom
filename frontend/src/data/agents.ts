@@ -7,8 +7,8 @@ export const agents: Agent[] = [
     layer: "loom",
     role: "creates notes from captures",
     icon: "🧶",
-    state: "running",
-    stats: { runs: 142, lastRun: "2m ago" },
+    state: "idle",
+    stats: { runs: 142, lastRun: "—" },
     lastAction: "filed capture 'Paper theme' → topics/",
   },
   {
@@ -17,8 +17,8 @@ export const agents: Agent[] = [
     layer: "loom",
     role: "auto-links across the vault",
     icon: "🕸",
-    state: "queued",
-    stats: { runs: 86, lastRun: "12m ago" },
+    state: "idle",
+    stats: { runs: 86, lastRun: "—" },
     lastAction: "linked [[Webhooks]] → [[Webhook retries]]",
   },
   {
@@ -28,7 +28,7 @@ export const agents: Agent[] = [
     role: "folder hygiene & cleanup",
     icon: "📦",
     state: "idle",
-    stats: { runs: 31, lastRun: "1h ago" },
+    stats: { runs: 31, lastRun: "—" },
     lastAction: "moved 2 stale captures → .archive",
   },
   {
@@ -38,7 +38,7 @@ export const agents: Agent[] = [
     role: "generates summaries",
     icon: "✎",
     state: "idle",
-    stats: { runs: 47, lastRun: "2h ago" },
+    stats: { runs: 47, lastRun: "—" },
     lastAction: "summarized [[Caching]] (228 words)",
   },
   {
@@ -47,8 +47,8 @@ export const agents: Agent[] = [
     layer: "loom",
     role: "validation & verdicts",
     icon: "🛡",
-    state: "running",
-    stats: { runs: 312, lastRun: "now" },
+    state: "idle",
+    stats: { runs: 312, lastRun: "—" },
     lastAction: "validated 3 edits, 0 blocked",
   },
   {
@@ -57,8 +57,8 @@ export const agents: Agent[] = [
     layer: "shuttle",
     role: "query + synthesize → captures",
     icon: "🔭",
-    state: "queued",
-    stats: { runs: 18, lastRun: "30m ago" },
+    state: "idle",
+    stats: { runs: 18, lastRun: "—" },
     lastAction: "drafted capture on Sigma 3 reducers",
   },
   {
@@ -68,7 +68,7 @@ export const agents: Agent[] = [
     role: "daily recap → daily/",
     icon: "🌅",
     state: "idle",
-    stats: { runs: 21, lastRun: "today" },
+    stats: { runs: 21, lastRun: "—" },
     lastAction: "wrote daily/2026-05-16",
   },
 ];

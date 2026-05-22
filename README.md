@@ -6,15 +6,7 @@
   A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
 </p>
 ```
-  ,,
-`7MM
-  MM
-  MM  ,pW"Wq.   ,pW"Wq.`7MMpMMMb.pMMMb.
-  MM 6W'   `Wb 6W'   `Wb MM    MM    MM
-  MM 8M     M8 8M     M8 MM    MM    MM
-  MM YA.   ,A9 YA.   ,A9 MM    MM    MM
-.JMML.`Ybmd9'   `Ybmd9'.JMML  JMML  JMML.
-```
+
 
 **A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.**
 

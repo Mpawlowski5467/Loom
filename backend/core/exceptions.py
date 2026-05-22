@@ -1,54 +1,79 @@
 """Custom exceptions for Loom."""
 
-from __future__ import annotations
-
 
 class LoomError(Exception):
-    """Base class for all Loom-raised errors."""
-
-    status_code: int = 500
+    """Base exception for all Loom errors."""
 
 
 class ConfigError(LoomError):
     """Raised when loading or saving config fails."""
 
-    status_code = 500
 
-
-class VaultError(LoomError):
-    """Base for vault-related errors."""
-
-    status_code = 400
-
-
-class VaultExistsError(VaultError):
+class VaultExistsError(LoomError):
     """Raised when attempting to create a vault that already exists."""
 
-    status_code = 409
-
-    def __init__(self, name: str, scaffolded: bool) -> None:
-        super().__init__(f"Vault '{name}' already exists (scaffolded={scaffolded}).")
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Vault '{name}' already exists")
         self.name = name
-        self.scaffolded = scaffolded
+
+
+class VaultNotFoundError(LoomError):
+    """Raised when a vault cannot be found."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Vault '{name}' not found")
+        self.name = name
+
+
+class InvalidVaultNameError(LoomError):
+    """Raised when a vault name is invalid."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            f"Invalid vault name '{name}'. "
+            "Must be 1-64 characters, alphanumeric, hyphens, or underscores."
+        )
+        self.name = name
+
+
+class NoteNotFoundError(LoomError):
+    """Raised when a note cannot be found."""
+
+    def __init__(self, note_id: str) -> None:
+        super().__init__(f"Note '{note_id}' not found")
+        self.note_id = note_id
+
+
+class ProviderConfigError(LoomError):
+    """Raised when provider configuration is missing or invalid."""
+
+    def __init__(self, message: str) -> None:
+        super().__init__(message)
+
+
+class ProviderError(LoomError):
+    """Raised when a provider call fails."""
+
+    def __init__(self, provider: str, message: str) -> None:
+        super().__init__(f"[{provider}] {message}")
+        self.provider = provider
 
 
 class UnknownProviderError(LoomError):
     """Raised when a provider name is not registered."""
-
-    status_code = 404
 
     def __init__(self, name: str) -> None:
         super().__init__(f"Unknown provider: {name}")
         self.name = name
 
 
-class ProviderError(LoomError):
-    """Raised when a provider request fails (auth, network, unknown)."""
+class ReadChainError(LoomError):
+    """Raised when the read-before-write chain fails for an untrusted agent."""
 
-    status_code = 502
-
-    def __init__(self, provider: str, kind: str, message: str) -> None:
-        super().__init__(f"[{provider}] {kind}: {message}")
-        self.provider = provider
-        self.kind = kind
-        self.message = message
+    def __init__(self, agent_name: str, failed_steps: list[str]) -> None:
+        steps = ", ".join(failed_steps)
+        super().__init__(
+            f"Read chain failed for agent '{agent_name}': missing required context [{steps}]"
+        )
+        self.agent_name = agent_name
+        self.failed_steps = failed_steps

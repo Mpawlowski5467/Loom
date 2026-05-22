@@ -25,7 +25,6 @@ export interface OnboardingState {
 }
 
 export interface LoomConfigPublic {
-  loom_dir: string;
   active_vault: string;
   default_provider: string;
   providers: Record<string, ProviderConfigPublic>;

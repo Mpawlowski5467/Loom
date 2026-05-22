@@ -6,7 +6,7 @@ import type {
 } from "./types";
 
 export function getVault(signal?: AbortSignal): Promise<VaultInfo> {
-  return apiClient.get<VaultInfo>("/api/vault", signal);
+  return apiClient.get<VaultInfo>("/api/vaults/active", signal);
 }
 
 export function vaultExists(
@@ -14,7 +14,7 @@ export function vaultExists(
   signal?: AbortSignal,
 ): Promise<VaultExistsResponse> {
   return apiClient.get<VaultExistsResponse>(
-    `/api/vault/exists?name=${encodeURIComponent(name)}`,
+    `/api/vaults/exists?name=${encodeURIComponent(name)}`,
     signal,
   );
 }
@@ -23,5 +23,5 @@ export function createVault(
   payload: VaultCreateRequest,
   signal?: AbortSignal,
 ): Promise<VaultInfo> {
-  return apiClient.post<VaultInfo>("/api/vault", payload, signal);
+  return apiClient.post<VaultInfo>("/api/vaults", payload, signal);
 }

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
+import { AgentBlob } from "../../components/primitives/AgentBlob";
 
 const BUBBLES: Record<string, string> = {
   weaver: "I created a capture file for your morning notes — pending your accept.",
@@ -39,7 +40,7 @@ export function RoundTableMode(): ReactNode {
                 style={{ animationDelay: `${-i * 0.5}s` }}
                 aria-hidden="true"
               >
-                {a.icon}
+                <AgentBlob agent={a.id} state={a.state} size={52} />
               </div>
               <div className="rt-name">{a.name}</div>
               <div className="rt-bubble">{BUBBLES[a.id] ?? a.lastAction}</div>

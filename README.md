@@ -1,16 +1,10 @@
-```
-                                         
-  ,,                                     
-`7MM                                     
-  MM                                     
-  MM  ,pW"Wq.   ,pW"Wq.`7MMpMMMb.pMMMb.  
-  MM 6W'   `Wb 6W'   `Wb MM    MM    MM  
-  MM 8M     M8 8M     M8 MM    MM    MM  
-  MM YA.   ,A9 YA.   ,A9 MM    MM    MM  
-.JMML.`Ybmd9'   `Ybmd9'.JMML  JMML  JMML.
-```
+<p align="center">
+  <img src="docs/assets/logo.svg" alt="Loom" width="320" />
+</p>
 
-A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
+<p align="center">
+  A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
+</p>
 
 ---
 
@@ -67,6 +61,67 @@ Python / FastAPI / React / Sigma.js / LanceDB / Plate (Slate.js)
 ### Status
 
 In development. Architecture complete, building toward MVP.
+
+---
+
+### Wireframes
+
+Early sketches of the visual language and view models. These are *wireframes, not the final UI* — the real product renders in ink-blue + brick-red duotone on warm cream paper, with serif typography from the design language.
+
+<p align="center">
+  <img src="wireframes/wireframe.png" alt="Visual vocabulary — color split, node types, views overview" width="720" />
+</p>
+
+#### Views
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="wireframes/graphview.png" alt="Graph view — constellation map" width="100%" /><br />
+      <sub><b>Graph</b> — constellation map with type-colored nodes, hub sizing, hover-highlighted neighborhoods</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="wireframes/orbitview.png" alt="Orbit view — focus-first concentric rings" width="100%" /><br />
+      <sub><b>Orbit</b> — focus-first concentric rings around a selected note</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="wireframes/threadview.png" alt="Thread view — markdown reader with edit history and backlinks" width="100%" /><br />
+      <sub><b>Thread</b> — serif-led note reader with edit history, backlinks, and local graph</sub>
+    </td>
+    <td align="center">
+      <img src="wireframes/editorview.png" alt="Editor view — split source and rendered preview" width="100%" /><br />
+      <sub><b>Editor</b> — split source/preview writing experience with wikilink autocomplete</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="wireframes/inboxview.png" alt="Inbox view — captures with Weaver suggestions" width="100%" /><br />
+      <sub><b>Inbox</b> — capture-to-note flow with Weaver suggestions for type, folder, tags, and links</sub>
+    </td>
+    <td align="center">
+      <img src="wireframes/boardview.png" alt="Board view — agent cards and activity log" width="100%" /><br />
+      <sub><b>Board</b> — agent presence: cards, round-table, and pulse modes with a live changelog</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <img src="wireframes/councilview.png" alt="Council view — transparent multi-agent chat" width="100%" /><br />
+      <sub><b>Council</b> — transparent multi-agent thread where all five Loom Layer agents answer together</sub>
+    </td>
+    <td align="center">
+      <img src="wireframes/pulseview.png" alt="Pulse view — live ECG-style agent vitals" width="100%" /><br />
+      <sub><b>Pulse</b> — live ECG-style heartbeats showing each agent's running / queued / idle state</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="wireframes/searchview.png" alt="Search palette — hybrid semantic + keyword find" width="60%" /><br />
+      <sub><b>Search</b> — Cmd/Ctrl-K palette with hybrid semantic + keyword scoring across the vault</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 

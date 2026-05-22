@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" width="520" height="220">
+  <style>
+    .ink { fill: #1a1815; }
+    .mark { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-width: 8; }
+    .echo { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-width: 8; opacity: 0.16; }
+    .word { font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif; font-weight: 500; font-size: 96px; letter-spacing: -0.025em; fill: #1a1815; }
+    .pill { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 13px; letter-spacing: 1.5px; fill: #5c5851; }
+  </style>
+
+  <!-- Loom mark: ellipse + figure-8 weave -->
+  <g transform="translate(20, 10) scale(0.9)">
+    <!-- echo -->
+    <path class="echo" d="M40 100 C 40 40, 160 40, 160 100 C 160 160, 40 160, 40 100 Z" />
+    <path class="echo" d="M100 40 C 160 100, 40 100, 100 160" />
+    <!-- foreground strokes -->
+    <path class="mark" d="M40 100 C 40 40, 160 40, 160 100 C 160 160, 40 160, 40 100 Z" />
+    <path class="mark" d="M100 40 C 160 100, 40 100, 100 160" />
+  </g>
+
+  <!-- Wordmark -->
+  <text x="220" y="140" class="word">Loom</text>
+
+  <!-- "UI" pill -->
+  <g transform="translate(440, 100)">
+    <rect x="0" y="0" width="38" height="20" rx="10" ry="10" fill="none" stroke="#8c877d" stroke-width="1" />
+    <text x="19" y="14" text-anchor="middle" class="pill">UI</text>
+  </g>
+</svg>

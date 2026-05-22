@@ -1,12 +1,7 @@
-from fastapi import FastAPI
+"""FastAPI app entry point."""
 
-app = FastAPI(title="Loom", version="0.1.0")
+from __future__ import annotations
 
-
-@app.get("/api/health")
-async def health() -> dict[str, str]:
-    """Health check endpoint."""
-    return {"status": "ok"}
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
@@ -23,9 +18,12 @@ from api.health import build_health_report
 from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
+from api.routers.config import router as config_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
+from api.routers.onboarding import router as onboarding_router
+from api.routers.providers import router as providers_router
 from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
 from api.routers.tree import router as tree_router
@@ -174,6 +172,9 @@ app.include_router(index_router)
 app.include_router(agents_router)
 app.include_router(chat_router)
 app.include_router(settings_router)
+app.include_router(config_router)
+app.include_router(onboarding_router)
+app.include_router(providers_router)
 
 
 @app.get("/api/health")

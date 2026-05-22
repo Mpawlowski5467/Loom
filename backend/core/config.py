@@ -1,29 +1,21 @@
+"""Loom configuration models.
+
+Two layers:
+
+* :class:`LoomSettings` — environment-driven app settings (env vars, ``LOOM_*``).
+* :class:`GlobalConfig` — YAML-persisted state at ``~/.loom/config.yaml``
+  (providers, active vault, UI prefs, onboarding gate).
+
+API keys live on ``ProviderConfig.api_key`` and are persisted in plain text
+under ``~/.loom/config.yaml`` (file permissions are the only protection).
+``GlobalConfig.public()`` returns a redacted view safe for the frontend.
+"""
+
+from __future__ import annotations
+
+from datetime import datetime
+from enum import StrEnum
 from pathlib import Path
-
-from pydantic import BaseModel, Field
-
-
-class ProviderConfig(BaseModel):
-    """Configuration for a single AI provider."""
-
-    api_key: str = ""
-    chat_model: str = ""
-    embed_model: str = ""
-    host: str = ""
-
-
-class LoomConfig(BaseModel):
-    """Global Loom configuration."""
-
-    loom_dir: Path = Field(default=Path.home() / ".loom")
-    active_vault: str = "default"
-    default_provider: str = "openai"
-    providers: dict[str, ProviderConfig] = Field(default_factory=dict)
-
-    @property
-    def vault_path(self) -> Path:
-        """Path to the active vault."""
-        return self.loom_dir / "vaults" / self.active_vault
 from typing import Self
 
 import yaml
@@ -78,6 +70,15 @@ settings = LoomSettings()
 # -- Persisted YAML config models ---------------------------------------------
 
 
+class ThemeName(StrEnum):
+    """Themes shipped with Loom. Paper is the default."""
+
+    paper = "paper"
+    navy = "navy"
+    forest = "forest"
+    sepia = "sepia"
+
+
 class ProviderConfig(BaseModel):
     """Configuration for a single LLM provider."""
 
@@ -85,6 +86,24 @@ class ProviderConfig(BaseModel):
     chat_model: str = "gpt-4o"
     embed_model: str | None = None
     host: str | None = None
+
+    def to_public(self) -> ProviderConfigPublic:
+        """Return a redacted view safe for the API."""
+        return ProviderConfigPublic(
+            api_key_set=bool(self.api_key),
+            chat_model=self.chat_model,
+            embed_model=self.embed_model or "",
+            host=self.host or "",
+        )
+
+
+class ProviderConfigPublic(BaseModel):
+    """Provider config without the api_key — for outbound API responses."""
+
+    api_key_set: bool
+    chat_model: str = ""
+    embed_model: str = ""
+    host: str = ""
 
 
 class RateLimitConfig(BaseModel):
@@ -94,14 +113,34 @@ class RateLimitConfig(BaseModel):
     write: str = "30/minute"
 
 
+class UIState(BaseModel):
+    """Persisted UI preferences."""
+
+    theme: ThemeName = ThemeName.paper
+
+
+class OnboardingState(BaseModel):
+    """Server-side onboarding gate.
+
+    ``completed`` is the single source of truth that gates the wizard.
+    """
+
+    completed: bool = False
+    completed_at: datetime | None = None
+    steps_done: list[str] = Field(default_factory=list)
+
+
 class GlobalConfig(BaseModel):
     """Maps to ~/.loom/config.yaml."""
 
     active_vault: str = "default"
+    default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = {}
     embed_provider: str | None = None
     chat_provider: str | None = None
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
+    ui: UIState = Field(default_factory=UIState)
+    onboarding: OnboardingState = Field(default_factory=OnboardingState)
 
     @classmethod
     def load(cls, path: Path) -> Self:
@@ -116,11 +155,31 @@ class GlobalConfig(BaseModel):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(
             yaml.safe_dump(
-                self.model_dump(exclude_none=True),
+                self.model_dump(exclude_none=True, mode="json"),
                 default_flow_style=False,
                 sort_keys=False,
             )
         )
+
+    def to_public(self) -> GlobalConfigPublic:
+        """Return a serialization-safe view (api keys redacted)."""
+        return GlobalConfigPublic(
+            active_vault=self.active_vault,
+            default_provider=self.default_provider,
+            providers={name: cfg.to_public() for name, cfg in self.providers.items()},
+            ui=self.ui,
+            onboarding=self.onboarding,
+        )
+
+
+class GlobalConfigPublic(BaseModel):
+    """Serializable, redacted view of GlobalConfig."""
+
+    active_vault: str
+    default_provider: str
+    providers: dict[str, ProviderConfigPublic]
+    ui: UIState
+    onboarding: OnboardingState
 
 
 class VaultConfig(BaseModel):

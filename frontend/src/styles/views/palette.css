@@ -1,14 +1,14 @@
 .palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26, 24, 21, 0.18);
-  backdrop-filter: blur(6px);
+  background: rgba(26, 24, 21, 0.4);
+  backdrop-filter: blur(2px);
   z-index: 100;
   display: flex;
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
-  animation: fadeIn2 180ms var(--ease);
+  animation: fadeIn 150ms var(--ease);
 }
 
 .palette {
@@ -20,7 +20,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  animation: fadeUp 220ms var(--ease);
+  animation: slideUp 200ms var(--ease);
 }
 
 .palette-input {

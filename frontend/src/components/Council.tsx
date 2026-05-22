@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
+import { AgentBlob } from "./primitives/AgentBlob";
 
 function renderInline(text: string): ReactNode {
   // Just bold the [[wikilinks]] visually as serif italic blue spans (no nav from council).
@@ -62,9 +63,13 @@ export function Council(): ReactNode {
               : m.who === "summary"
                 ? "summary"
                 : m.who.replace("agent:", "");
+          const agentId = m.who.startsWith("agent:") ? m.who.slice(6) : null;
           return (
             <div key={m.id} className={`council-msg ${cls}`}>
-              <div className="who">{label}</div>
+              <div className="who">
+                {agentId && <AgentBlob agent={agentId} state="idle" size={26} />}
+                <span className="who-label">{label}</span>
+              </div>
               <div className="bubble">{renderInline(m.body)}</div>
             </div>
           );

@@ -36,7 +36,7 @@
   letter-spacing: -0.025em;
   color: var(--ink);
   margin-bottom: 10px;
-  animation: fadeUp 400ms var(--ease);
+  animation: inkBleed 520ms var(--ease);
 }
 .thread-meta {
   display: flex;

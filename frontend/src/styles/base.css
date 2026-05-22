@@ -13,27 +13,30 @@ body,
 }
 
 body {
-  background: var(--bg-base);
+  background-color: var(--bg-base);
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(26, 24, 21, 0.018) 1px, transparent 0),
+    radial-gradient(circle at 2px 3px, rgba(26, 24, 21, 0.012) 1px, transparent 0);
+  background-size: 3px 3px, 7px 7px;
   color: var(--ink);
   font-family: var(--font);
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 ::-webkit-scrollbar {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
 }
 ::-webkit-scrollbar-track {
   background: transparent;
 }
 ::-webkit-scrollbar-thumb {
   background: var(--rule-2);
-  border-radius: 999px;
-  border: 2px solid var(--bg-base);
+  border-radius: 4px;
 }
 ::-webkit-scrollbar-thumb:hover {
   background: var(--ink-3);

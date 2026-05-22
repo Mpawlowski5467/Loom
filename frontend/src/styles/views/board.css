@@ -14,6 +14,10 @@
   background: var(--bg-base);
 }
 
+.board-mode-content {
+  animation: viewIn 420ms var(--ease);
+}
+
 .board-empty {
   flex: 1;
   display: flex;
@@ -212,12 +216,19 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 3px;
+  gap: 6px;
   cursor: pointer;
+  transition: transform 280ms var(--ease);
+}
+.rt-seat:hover {
+  transform: translate(-50%, -50%) scale(1.08);
+  z-index: 2;
 }
 .rt-icon {
-  font-size: 22px;
-  animation: drift 4s ease-in-out infinite;
+  animation: rtFloat 3.6s ease-in-out infinite;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 .rt-name {
   font-family: var(--mono);
@@ -324,6 +335,9 @@
   gap: 10px;
 }
 .council-msg .who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   font-family: var(--mono);
   font-size: 9.5px;
   font-weight: 600;
@@ -331,6 +345,9 @@
   text-transform: uppercase;
   margin-bottom: 4px;
   color: var(--ink-3);
+}
+.council-msg .who-label {
+  line-height: 1;
 }
 .council-msg.you .who {
   color: var(--you);

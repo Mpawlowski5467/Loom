@@ -3,6 +3,7 @@ import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
 import { Chip } from "../components/primitives/Chip";
 import { Wikilink } from "../components/primitives/Wikilink";
+import { AgentBlob } from "../components/primitives/AgentBlob";
 import { renderMarkdown } from "../editor/renderMarkdown";
 
 export function InboxView(): ReactNode {
@@ -22,7 +23,7 @@ export function InboxView(): ReactNode {
     setCaptureStatus(capId, "done");
     pushToast({
       icon: "🧶",
-      agent: "WEAVER",
+      agent: "weaver",
       body: `Filed ${selected?.suggestion?.title ?? "capture"} → ${selected?.suggestion?.destFolder ?? "captures"}/`,
     });
   };
@@ -38,17 +39,23 @@ export function InboxView(): ReactNode {
           <Button
             variant="purple"
             onClick={() => {
-              for (const c of captures) {
-                if (c.status !== "done") setCaptureStatus(c.id, "done");
-              }
-              pushToast({
-                icon: "⚡",
-                agent: "WEAVER",
-                body: `Processed ${pendingCount} captures`,
+              const pending = captures.filter((c) => c.status !== "done");
+              pending.forEach((c, i) => {
+                setTimeout(() => setCaptureStatus(c.id, "processing"), i * 200);
+                setTimeout(() => setCaptureStatus(c.id, "done"), i * 200 + 1400);
               });
+              setTimeout(
+                () =>
+                  pushToast({
+                    icon: "⚡",
+                    agent: "weaver",
+                    body: `Processed ${pending.length} captures`,
+                  }),
+                pending.length * 200 + 1400,
+              );
             }}
           >
-            ⚡ process all
+            + process all
           </Button>
         </div>
         <div className="inbox-scroll">
@@ -110,7 +117,7 @@ export function InboxView(): ReactNode {
           {selected.status !== "done" && selected.suggestion && (
             <div className="inbox-suggest">
               <div className="inbox-suggest-h">
-                <span aria-hidden="true">🧶</span>
+                <AgentBlob agent="weaver" state="running" size={22} />
                 Weaver suggestion
               </div>
               <div className="inbox-suggest-row">

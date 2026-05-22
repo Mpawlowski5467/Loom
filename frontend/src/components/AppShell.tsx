@@ -10,6 +10,7 @@ import { InboxView } from "../views/InboxView";
 import { BoardView } from "../views/BoardView";
 import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
+import { LoomRibbon } from "./primitives/LoomRibbon";
 
 const SPLASH_KEY = "loom.splash.seen";
 
@@ -67,11 +68,12 @@ export function AppShell(): ReactNode {
         </div>
       </div>
       <footer className="statusbar">
-        <span>loom · paper theme · v0.1</span>
+        <span>loom · paper theme · v0.3.0</span>
         <span style={{ marginLeft: "auto" }}>local-first</span>
       </footer>
       {paletteOpen && <Palette />}
       <Toasts />
+      <LoomRibbon />
     </div>
   );
 }

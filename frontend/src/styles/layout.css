@@ -37,19 +37,17 @@
   color: var(--ink);
 }
 .logo-mark {
-  width: 20px;
-  height: 20px;
-  border: 2px solid var(--ink);
-  border-radius: 50%;
-  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: var(--ink);
   animation: drift 4s ease-in-out infinite;
+  transition: transform 280ms var(--ease);
 }
-.logo-mark::after {
-  content: "";
-  position: absolute;
-  inset: 5px;
-  border: 1.5px solid var(--you);
-  border-radius: 50%;
+.logo:hover .logo-mark {
+  transform: rotate(-8deg);
 }
 
 .tabs {
@@ -283,6 +281,18 @@
 .sidebar-section h4 .count {
   font-family: var(--mono);
   color: var(--ink-2);
+}
+
+/* ── Ambient ribbon ────────────────────────────────────────────── */
+.loom-ribbon {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100vw;
+  height: 6px;
+  pointer-events: none;
+  z-index: 50;
+  opacity: 0.55;
 }
 
 /* ── Status bar ────────────────────────────────────────────────── */

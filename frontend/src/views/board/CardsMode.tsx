@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
 import { StatusBadge } from "../../components/primitives/StatusBadge";
+import { AgentBlob } from "../../components/primitives/AgentBlob";
 
 function renderTarget(target: string): ReactNode {
   const parts = target.split(/(\[\[[^\]]+\]\])/g);
@@ -31,9 +32,7 @@ export function CardsMode(): ReactNode {
   const renderCard = (a: (typeof agents)[number]) => (
     <div key={a.id} className="agent-card">
       <div className="agent-card-h">
-        <span className="agent-card-icon" aria-hidden="true">
-          {a.icon}
-        </span>
+        <AgentBlob agent={a.id} state={a.state} size={36} />
         <span className="agent-card-name">{a.name}</span>
         <StatusBadge state={a.state} />
       </div>

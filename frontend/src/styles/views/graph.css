@@ -55,6 +55,9 @@
   height: 100%;
   position: absolute;
   inset: 0;
+  animation:
+    graphFadeIn 600ms var(--ease),
+    graphBreathe 8s ease-in-out 600ms infinite;
 }
 
 .graph-stats {

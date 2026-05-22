@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
 import type { Tab } from "../../data/types";
 import { Button } from "../primitives/Button";
+import { LoomMark } from "../primitives/LoomMark";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "graph", label: "Graph" },
@@ -16,7 +17,9 @@ export function Nav(): ReactNode {
   return (
     <header className="nav">
       <div className="logo">
-        <div className="logo-mark" aria-hidden="true" />
+        <span className="logo-mark">
+          <LoomMark size={22} dur={6} loop />
+        </span>
         <span>Loom</span>
       </div>
       <div className="tabs" role="tablist" aria-label="Views">

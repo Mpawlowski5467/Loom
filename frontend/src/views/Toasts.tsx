@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
+import { AgentBlob } from "../components/primitives/AgentBlob";
 
 export function Toasts(): ReactNode {
   const { toasts, dismissToast } = useApp();
@@ -12,9 +13,13 @@ export function Toasts(): ReactNode {
           role="status"
           onClick={() => dismissToast(t.id)}
         >
-          <span className="toast-icon" aria-hidden="true">
-            {t.icon}
-          </span>
+          {t.agent ? (
+            <AgentBlob agent={t.agent} state="running" size={22} />
+          ) : (
+            <span className="toast-icon" aria-hidden="true">
+              {t.icon}
+            </span>
+          )}
           <span>
             {t.agent && <span className="agent-tag">{t.agent}</span>}
             {t.body}

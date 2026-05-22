@@ -26,9 +26,11 @@ export function BoardView(): ReactNode {
             ]}
           />
         </div>
-        {mode === "cards" && <CardsMode />}
-        {mode === "round-table" && <RoundTableMode />}
-        {mode === "pulse" && <PulseMode />}
+        <div key={mode} className="board-mode-content">
+          {mode === "cards" && <CardsMode />}
+          {mode === "round-table" && <RoundTableMode />}
+          {mode === "pulse" && <PulseMode />}
+        </div>
       </div>
       <Council />
     </div>

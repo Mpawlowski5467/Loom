@@ -1,3 +1,6 @@
+# Claude
+.claude/
+
 # Python
 __pycache__/
 *.py[cod]
@@ -29,6 +32,15 @@ frontend/build/
 # OS
 .DS_Store
 Thumbs.db
+dist/
+build/
+.venv/
+venv/
+.eggs/
+
+# Node
+node_modules/
+.next/
 
 # Environment / secrets
 .env
@@ -51,3 +63,18 @@ htmlcov/
 
 # Claude Code
 .claude/
+*.pem
+*.key
+
+# Loom vault data (user data, not source code)
+.loom/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

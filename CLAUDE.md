@@ -1,6 +1,7 @@
 # Loom
 
 A local-first AI memory system with a multi-agent backbone and a visual knowledge graph. Markdown-based vault, provider-agnostic AI, two-tier agent architecture, React + Sigma.js graph UI.
+A local-first AI memory system with a multi-agent backbone and a visual knowledge graph. Markdown-based vault, provider-agnostic AI, two-tier agent architecture, React + react-force-graph-2d graph UI.
 
 ## Stack
 
@@ -10,6 +11,11 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, Ollama)
 - **Theme**: **Paper theme** — warm cream paper aesthetic, single duotone accent. Light only in v1; dark variant is future-only and derives from the navy theme, not from inverting the paper tokens.
+- **Frontend**: React / react-force-graph-2d / Markdown textarea + react-markdown
+- **Vector DB**: LanceDB
+- **Storage**: Markdown files with YAML frontmatter
+- **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, Ollama)
+- **Theme**: Dark only (navy base `#0f172a`, amber user accent, purple agent accent)
 
 ## Repo Layout
 
@@ -23,6 +29,11 @@ loom/
 │   ├── index/         # LanceDB, embeddings, search
 │   ├── rules/         # Rules engine parser
 │   ├── bridge/        # GitHub, Email, Calendar integrations
+├── backend/           # Python — FastAPI server, agents, index
+│   ├── api/           # FastAPI routes
+│   ├── agents/loom/   # Weaver, Spider, Archivist, Scribe, Sentinel
+│   ├── agents/shuttle/ # Researcher, Standup
+│   ├── index/         # LanceDB, embeddings, search
 │   └── core/          # Vault management, file watcher, config
 ├── frontend/          # React — Graph UI
 │   ├── views/         # Graph, Board, Thread, Inbox
@@ -31,6 +42,9 @@ loom/
 ├── docs/              # Architecture docs, reference
 ├── examples/          # Example vaults, rules, schemas
 └── pyproject.toml
+│   └── lib/           # react-force-graph-2d graph logic, react-markdown config
+├── docs/              # Architecture docs, reference
+└── examples/          # Example vaults, rules, schemas
 ```
 
 ## Key Concepts
@@ -41,6 +55,8 @@ loom/
 - **Read-Before-Write**: every agent must read vault.yaml → prime.md → role rules → memory.md → _index.md → related notes BEFORE writing anything.
 - **prime.md**: user-owned constitution. Immutable to agents by default.
 - **Prompt Compiler**: centralized pipeline that optimizes all prompts before sending to LLM (pruning, compression, token counting, templates).
+- **Read-Before-Write**: every agent must read vault.yaml → prime.md → memory.md → _index.md → related notes BEFORE writing anything.
+- **prime.md**: user-owned constitution. Immutable to agents by default.
 
 ## Commands
 
@@ -81,3 +97,6 @@ Task prompts: @docs/tasks/
 - **Node swatches**: project ink-blue, topic moss `#4a6b3a`, people aubergine `#6b3a6b`, daily graphite `#8c877d`, capture ochre `#a8722a`, custom teal-ink `#2d6b6b`.
 - **Fonts**: Fraunces (serif, prose & headings), Inter (sans, UI chrome), JetBrains Mono (timestamps, tags, labels).
 - **Default ease**: `cubic-bezier(.2, .7, .3, 1)` for any transition longer than 100ms.
+- Graph: force-directed layout, react-force-graph-2d, nodes = dots with labels, edges thicken by density.
+- Color split: amber (`#f59e0b`) = user actions, purple (`#a78bfa`) = agent actions.
+- Fonts: Sora (UI), JetBrains Mono (code/timestamps).

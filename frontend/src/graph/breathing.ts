@@ -7,10 +7,15 @@ function phaseOf(id: string): number {
   return (h % 1000) / 1000 * Math.PI * 2;
 }
 
+export interface ScaleRef {
+  current: number;
+}
+
 export function startBreathing(
   sigma: Sigma,
   graph: Graph,
   baseSizes: Map<string, number>,
+  scaleRef: ScaleRef,
 ): () => void {
   let raf = 0;
   let stopped = false;
@@ -19,8 +24,9 @@ export function startBreathing(
   const tick = () => {
     if (stopped) return;
     const t = (performance.now() - start) / 1000;
+    const scale = scaleRef.current;
     graph.forEachNode((id) => {
-      const base = baseSizes.get(id) ?? 4;
+      const base = (baseSizes.get(id) ?? 4) * scale;
       const breathe = 1 + 0.06 * Math.sin(t * 0.6 + phaseOf(id));
       graph.setNodeAttribute(id, "size", base * breathe);
     });

@@ -7,22 +7,24 @@ interface LoomMarkProps {
   /** Loop the draw animation. False = play once (for splash intro). */
   loop?: boolean;
   color?: string;
+  /** Accent color for the knot at the crossing (brick red by default). */
+  accent?: string;
 }
 
-const ELLIPSE_PATH =
-  "M40 100 C 40 40, 160 40, 160 100 C 160 160, 40 160, 40 100 Z";
-const WEAVE_PATH = "M100 40 C 160 100, 40 100, 100 160";
-
-const ELLIPSE_LEN = 380;
-const WEAVE_LEN = 220;
+const FRAME_PATH =
+  "M40 100 C 40 40, 164 40, 164 100 C 164 160, 40 160, 40 100 Z";
+const THREAD_A_PATH = "M66 46 C 126 96, 78 104, 138 154";
+const THREAD_B_PATH = "M138 46 C 78 96, 126 104, 66 154";
 
 export function LoomMark({
   size = 20,
   dur = 6,
   loop = true,
   color = "currentColor",
+  accent = "#a83a2c",
 }: LoomMarkProps): ReactNode {
   const repeat = loop ? "indefinite" : "1";
+  const sw = 7;
 
   return (
     <svg
@@ -33,58 +35,91 @@ export function LoomMark({
       aria-hidden="true"
     >
       {/* Echo copy at low opacity */}
-      <g opacity="0.16">
-        <path
-          d={ELLIPSE_PATH}
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
-        <path
-          d={WEAVE_PATH}
-          fill="none"
-          stroke={color}
-          strokeWidth="6"
-          strokeLinecap="round"
-        />
+      <g
+        opacity="0.14"
+        fill="none"
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
+        <path d={FRAME_PATH} />
+        <path d={THREAD_A_PATH} />
+        <path d={THREAD_B_PATH} />
       </g>
-      {/* Animated ellipse */}
+
+      {/* Animated frame */}
       <path
-        d={ELLIPSE_PATH}
+        d={FRAME_PATH}
+        pathLength={100}
         fill="none"
         stroke={color}
-        strokeWidth="6"
+        strokeWidth={sw}
         strokeLinecap="round"
-        strokeDasharray={ELLIPSE_LEN}
+        strokeLinejoin="round"
+        strokeDasharray="100"
       >
         <animate
           attributeName="stroke-dashoffset"
-          values={`${ELLIPSE_LEN};0;0;${ELLIPSE_LEN}`}
-          keyTimes="0;0.4;0.6;1"
+          values="100;0;0;100"
+          keyTimes="0;0.35;0.7;1"
           dur={`${dur}s`}
           repeatCount={repeat}
           fill="freeze"
         />
       </path>
-      {/* Animated weave */}
+
+      {/* Thread A — top-left to bottom-right */}
       <path
-        d={WEAVE_PATH}
+        d={THREAD_A_PATH}
+        pathLength={100}
         fill="none"
         stroke={color}
-        strokeWidth="6"
+        strokeWidth={sw}
         strokeLinecap="round"
-        strokeDasharray={WEAVE_LEN}
+        strokeDasharray="100"
       >
         <animate
           attributeName="stroke-dashoffset"
-          values={`${WEAVE_LEN};${WEAVE_LEN};0;0;${WEAVE_LEN}`}
-          keyTimes="0;0.3;0.5;0.7;1"
+          values="100;100;0;0;100"
+          keyTimes="0;0.3;0.55;0.7;1"
           dur={`${dur}s`}
           repeatCount={repeat}
           fill="freeze"
         />
       </path>
+
+      {/* Thread B — top-right to bottom-left */}
+      <path
+        d={THREAD_B_PATH}
+        pathLength={100}
+        fill="none"
+        stroke={color}
+        strokeWidth={sw}
+        strokeLinecap="round"
+        strokeDasharray="100"
+      >
+        <animate
+          attributeName="stroke-dashoffset"
+          values="100;100;0;0;100"
+          keyTimes="0;0.3;0.55;0.7;1"
+          dur={`${dur}s`}
+          repeatCount={repeat}
+          fill="freeze"
+        />
+      </path>
+
+      {/* Accent knot at the crossing */}
+      <circle cx="102" cy="100" r="5.5" fill={accent} opacity="0">
+        <animate
+          attributeName="opacity"
+          values="0;0;1;1;0"
+          keyTimes="0;0.5;0.6;0.7;1"
+          dur={`${dur}s`}
+          repeatCount={repeat}
+          fill="freeze"
+        />
+      </circle>
     </svg>
   );
 }

@@ -90,18 +90,18 @@
 }
 .chip-type[data-type="project"] {
   color: var(--node-project);
-  border-color: rgba(45, 74, 124, 0.35);
-  background: rgba(45, 74, 124, 0.06);
+  border-color: color-mix(in srgb, var(--node-project) 35%, transparent);
+  background: color-mix(in srgb, var(--node-project) 6%, transparent);
 }
 .chip-type[data-type="topic"] {
   color: var(--node-topic);
-  border-color: rgba(74, 107, 58, 0.35);
-  background: rgba(74, 107, 58, 0.06);
+  border-color: color-mix(in srgb, var(--node-topic) 35%, transparent);
+  background: color-mix(in srgb, var(--node-topic) 6%, transparent);
 }
 .chip-type[data-type="people"] {
   color: var(--node-people);
-  border-color: rgba(107, 58, 107, 0.35);
-  background: rgba(107, 58, 107, 0.06);
+  border-color: color-mix(in srgb, var(--node-people) 35%, transparent);
+  background: color-mix(in srgb, var(--node-people) 6%, transparent);
 }
 .chip-type[data-type="daily"] {
   color: var(--node-daily);
@@ -110,13 +110,13 @@
 }
 .chip-type[data-type="capture"] {
   color: var(--node-capture);
-  border-color: rgba(168, 114, 42, 0.35);
-  background: rgba(168, 114, 42, 0.06);
+  border-color: color-mix(in srgb, var(--node-capture) 35%, transparent);
+  background: color-mix(in srgb, var(--node-capture) 6%, transparent);
 }
 .chip-type[data-type="custom"] {
   color: var(--node-custom);
-  border-color: rgba(45, 107, 107, 0.35);
-  background: rgba(45, 107, 107, 0.06);
+  border-color: color-mix(in srgb, var(--node-custom) 35%, transparent);
+  background: color-mix(in srgb, var(--node-custom) 6%, transparent);
 }
 
 .status-badge {

@@ -20,13 +20,13 @@
 
 @keyframes pulseRing {
   0% {
-    box-shadow: 0 0 0 0 rgba(45, 74, 124, 0.35);
+    box-shadow: 0 0 0 0 var(--agent-line);
   }
   70% {
-    box-shadow: 0 0 0 8px rgba(45, 74, 124, 0);
+    box-shadow: 0 0 0 8px var(--agent-line-fade);
   }
   100% {
-    box-shadow: 0 0 0 0 rgba(45, 74, 124, 0);
+    box-shadow: 0 0 0 0 var(--agent-line-fade);
   }
 }
 

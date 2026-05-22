@@ -1,12 +1,13 @@
 <p align="center">
-  <img src="docs/assets/logo.svg" alt="Loom" width="320" />
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/logo-dark.svg" />
+    <img src="docs/assets/logo.svg" alt="Loom" width="320" />
+  </picture>
 </p>
 
 <p align="center">
   A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
 </p>
-```
-
 
 **A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.**
 
@@ -177,6 +178,13 @@ Hard block on failure by default; trusted agents can be configured for soft-warn
 - Ollama (local chat + embed)
 - Chat and embedding providers configured independently
 
+### Onboarding wizard
+- First-run multi-step flow: Welcome → Vault Setup → Theme Picker → Provider Config
+- Live theme previews (Paper, Navy, Forest, Sepia) before commit
+- Inline "Test connection" against the picked provider — failures don't block save
+- Skip-friendly: provider step is optional, defaults pick safe models
+- Onboarding state lives in `~/.loom/config.yaml` under `onboarding.completed`
+
 ## Tech stack
 
 | Layer | Tools |
@@ -213,7 +221,7 @@ npm install
 npm run dev   # serves on http://localhost:5173
 ```
 
-Open the frontend, then go to **Settings → Providers** to add an API key. The backend reads `~/.loom/config.yaml` for global config and creates a default vault at `~/.loom/vaults/default` on first run.
+On first run the **onboarding wizard** walks you through vault name, theme, and provider setup — you can also skip the provider step and add one later from Settings. The backend reads `~/.loom/config.yaml` for global config and scaffolds a vault at `~/.loom/vaults/<name>` when the wizard completes.
 
 ### Seed an example vault
 ```bash
@@ -260,9 +268,15 @@ Loom/
 │   └── tests/
 ├── frontend/
 │   ├── src/
-│   │   ├── views/        # GraphView, BoardView, InboxView
-│   │   ├── components/   # FileTree, Sidebar, SearchDropdown, SettingsModal, ...
-│   │   └── lib/          # api/, context/, editor/, useTheme
+│   │   ├── views/        # Graph, Thread, Inbox, Board, Splash, Palette, Toasts
+│   │   ├── components/   # AppShell, MainShell, layout/, primitives/, graph/
+│   │   ├── onboarding/   # First-run wizard: Welcome, VaultSetup, ThemePicker, ProviderConfig
+│   │   ├── theme/        # applyTheme, readCssVar, theme metadata
+│   │   ├── context/      # AppContext + useLoomConfig (config + onboarding state)
+│   │   ├── api/          # client.ts, config.ts, onboarding.ts, providers.ts, vault.ts
+│   │   ├── graph/        # sigma setup, layouts, breathing, drag handlers
+│   │   ├── editor/       # markdown render + plain editing
+│   │   └── styles/       # tokens.css, base.css, views/*
 │   └── public/
 ├── docs/                 # architecture-ref.md, style-guide.md
 ├── examples/
@@ -287,6 +301,9 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `POST` | `/api/chat/send` | Talk to a Shuttle agent or the Council |
 | `GET` `POST` `PUT` | `/api/vaults` | Multi-vault management |
 | `GET` `POST` | `/api/settings/providers` | Provider config (keys masked on read) |
+| `GET` `PATCH` | `/api/config` | Global config (theme, active vault, default provider — redacted) |
+| `GET` `POST` | `/api/onboarding/status` / `/complete` | First-run wizard gate |
+| `POST` | `/api/providers/{name}/test` | Test provider credentials without saving |
 | `GET` | `/api/health` / `/api/ready` | Health + readiness probes |
 
 ## Development
@@ -312,7 +329,8 @@ In active development. What works today:
 
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel)
 - Both Shuttle Layer agents (Researcher, Standup)
-- Graph, Board, and Inbox views
+- Graph, Board, Inbox, and Thread views
+- First-run onboarding wizard (vault, theme, provider)
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
 - Provider system (OpenAI, Anthropic, xAI, Ollama)

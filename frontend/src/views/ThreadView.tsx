@@ -6,7 +6,7 @@ import { Chip } from "../components/primitives/Chip";
 import { Dot } from "../components/primitives/Dot";
 import { Wikilink } from "../components/primitives/Wikilink";
 import { Sidebar } from "../components/layout/Sidebar";
-import { MiniGraph } from "../components/Sidebar/MiniGraph";
+import { MiniGraph } from "../components/sidebar/MiniGraph";
 import { extractHeadings, renderMarkdown } from "../editor/renderMarkdown";
 
 export function ThreadView(): ReactNode {

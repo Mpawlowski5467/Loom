@@ -1,6 +1,6 @@
 """Vault management API routes."""
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from core.exceptions import (
@@ -43,6 +43,14 @@ class SetActiveRequest(BaseModel):
     name: str
 
 
+class VaultExistsResponse(BaseModel):
+    """Whether a vault with the given name has been initialized."""
+
+    name: str
+    exists: bool
+    scaffolded: bool
+
+
 # -- Endpoints ----------------------------------------------------------------
 
 
@@ -77,6 +85,20 @@ def list_vaults(
         for n in names
     ]
     return VaultListResponse(vaults=vaults, active=active)
+
+
+@router.get("/exists")
+def vault_exists(
+    name: str = Query(..., min_length=1),
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
+) -> VaultExistsResponse:
+    """Probe whether a named vault is initialized.
+
+    ``scaffolded`` reuses ``vault_exists`` semantics — the directory must
+    contain a ``vault.yaml`` for it to count as a real Loom vault.
+    """
+    exists = vm.vault_exists(name)
+    return VaultExistsResponse(name=name, exists=exists, scaffolded=exists)
 
 
 @router.get("/active")

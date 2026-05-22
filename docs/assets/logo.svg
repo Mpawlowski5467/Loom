@@ -1,28 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 220" width="520" height="220">
   <style>
     .ink { fill: #1a1815; }
-    .mark { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-width: 8; }
-    .echo { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-width: 8; opacity: 0.16; }
-    .word { font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif; font-weight: 500; font-size: 96px; letter-spacing: -0.025em; fill: #1a1815; }
-    .pill { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 13px; letter-spacing: 1.5px; fill: #5c5851; }
+    .mark { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 7; }
+    .echo { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-linejoin: round; stroke-width: 7; opacity: 0.14; }
+    .thread { stroke: #1a1815; fill: none; stroke-linecap: round; stroke-width: 7; }
+    .accent { fill: #a83a2c; }
+    .word { font-family: 'Fraunces', 'Iowan Old Style', Georgia, serif; font-weight: 500; font-size: 104px; letter-spacing: -0.03em; fill: #1a1815; }
+    .tag { font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 12px; letter-spacing: 2.4px; fill: #8c877d; text-transform: uppercase; }
   </style>
 
-  <!-- Loom mark: ellipse + figure-8 weave -->
-  <g transform="translate(20, 10) scale(0.9)">
-    <!-- echo -->
-    <path class="echo" d="M40 100 C 40 40, 160 40, 160 100 C 160 160, 40 160, 40 100 Z" />
-    <path class="echo" d="M100 40 C 160 100, 40 100, 100 160" />
-    <!-- foreground strokes -->
-    <path class="mark" d="M40 100 C 40 40, 160 40, 160 100 C 160 160, 40 160, 40 100 Z" />
-    <path class="mark" d="M100 40 C 160 100, 40 100, 100 160" />
+  <!-- Loom mark: woven threads in a soft frame -->
+  <g transform="translate(28, 28) scale(0.82)">
+    <!-- echo (offset shadow weave) -->
+    <path class="echo" d="M44 104 C 44 44, 168 44, 168 104 C 168 164, 44 164, 44 104 Z" />
+    <path class="echo" d="M70 50 C 130 100, 82 108, 142 158" />
+    <path class="echo" d="M142 50 C 82 100, 130 108, 70 158" />
+
+    <!-- frame -->
+    <path class="mark" d="M40 100 C 40 40, 164 40, 164 100 C 164 160, 40 160, 40 100 Z" />
+
+    <!-- woven threads -->
+    <path class="thread" d="M66 46 C 126 96, 78 104, 138 154" />
+    <path class="thread" d="M138 46 C 78 96, 126 104, 66 154" />
+
+    <!-- crossing knot -->
+    <circle class="accent" cx="102" cy="100" r="5.5" />
   </g>
 
   <!-- Wordmark -->
-  <text x="220" y="140" class="word">Loom</text>
+  <text x="216" y="138" class="word">Loom</text>
 
-  <!-- "UI" pill -->
-  <g transform="translate(440, 100)">
-    <rect x="0" y="0" width="38" height="20" rx="10" ry="10" fill="none" stroke="#8c877d" stroke-width="1" />
-    <text x="19" y="14" text-anchor="middle" class="pill">UI</text>
-  </g>
+  <!-- Tagline -->
+  <text x="218" y="166" class="tag">local · woven · yours</text>
 </svg>

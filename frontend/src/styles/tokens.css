@@ -1,39 +1,65 @@
-:root {
-  /* Paper surfaces — warm cream tones for three depth levels */
+/* ──────────────────────────────────────────────────────────────────
+   Loom theme tokens.
+
+   :root holds the *paper* defaults so SSR / pre-hydration paints
+   sensibly. Each .theme-* block overrides the same set of vars.
+   To add a theme: copy a block, retune the same token list.
+
+   Tokens consumed by Sigma.js (graph) live at the bottom: they are
+   read with getComputedStyle() at paint time.
+   ────────────────────────────────────────────────────────────────── */
+
+:root,
+.theme-paper {
+  /* Surfaces — warm cream */
   --bg-base: #f5f1e8;
   --bg-surface: #ede8da;
   --bg-elevated: #e3dcca;
 
-  /* Ink — warm black + two greys */
+  /* Ink */
   --ink: #1a1815;
   --ink-2: #5c5851;
   --ink-3: #8c877d;
+  --ink-rgb: 26, 24, 21;
 
-  /* Hairlines — use these, not solid borders */
-  --rule: rgba(26, 24, 21, 0.08);
-  --rule-2: rgba(26, 24, 21, 0.18);
+  /* Hairlines */
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
 
-  /* The duotone */
+  /* Duotone */
   --agent: #2d4a7c;
-  --agent-bg: rgba(45, 74, 124, 0.08);
-  --agent-line: rgba(45, 74, 124, 0.35);
+  --agent-rgb: 45, 74, 124;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
 
   --you: #a83a2c;
-  --you-bg: rgba(168, 58, 44, 0.08);
-  --you-line: rgba(168, 58, 44, 0.4);
+  --you-rgb: 168, 58, 44;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
 
   /* Status */
   --green: #4a6b3a;
   --green-bg: rgba(74, 107, 58, 0.12);
   --red: #a83a2c;
 
-  /* Node-type ink swatches */
+  /* Node-type swatches */
   --node-project: #2d4a7c;
   --node-topic: #4a6b3a;
   --node-people: #6b3a6b;
   --node-daily: #8c877d;
   --node-capture: #a8722a;
   --node-custom: #2d6b6b;
+
+  /* Graph tokens — read by sigma-setup.ts via getComputedStyle */
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(140, 135, 125, 0.18);
+
+  /* Surface elevation shadow */
+  --shadow-elev: rgba(var(--ink-rgb), 0.08);
 
   /* Fonts */
   --font: "Inter", system-ui, -apple-system, sans-serif;
@@ -47,4 +73,139 @@
 
   /* Ease */
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Navy — dark theme, derived from the navy duotone ───────────── */
+.theme-navy {
+  --bg-base: #0c1322;
+  --bg-surface: #131c2f;
+  --bg-elevated: #1d2740;
+
+  --ink: #e6e3d8;
+  --ink-2: #a8a89d;
+  --ink-3: #6b7088;
+  --ink-rgb: 230, 227, 216;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #7da7e8;
+  --agent-rgb: 125, 167, 232;
+  --agent-bg: rgba(var(--agent-rgb), 0.1);
+  --agent-line: rgba(var(--agent-rgb), 0.4);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #e8896a;
+  --you-rgb: 232, 137, 106;
+  --you-bg: rgba(var(--you-rgb), 0.1);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --green: #8ab877;
+  --green-bg: rgba(138, 184, 119, 0.12);
+  --red: #e8896a;
+
+  --node-project: #7da7e8;
+  --node-topic: #8ab877;
+  --node-people: #c89dd1;
+  --node-daily: #8c93a8;
+  --node-capture: #e0a560;
+  --node-custom: #6dc7c7;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.2);
+  --edge-color-hover: rgba(var(--you-rgb), 0.65);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.45);
+}
+
+/* ── Forest — warm-light, mossier ────────────────────────────────── */
+.theme-forest {
+  --bg-base: #f1ede0;
+  --bg-surface: #e6e2d2;
+  --bg-elevated: #d9d5c2;
+
+  --ink: #1c2418;
+  --ink-2: #4d5544;
+  --ink-3: #7d836f;
+  --ink-rgb: 28, 36, 24;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #356040;
+  --agent-rgb: 53, 96, 64;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #b04a1f;
+  --you-rgb: 176, 74, 31;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --green: #4a6b3a;
+  --green-bg: rgba(74, 107, 58, 0.14);
+  --red: #b04a1f;
+
+  --node-project: #356040;
+  --node-topic: #6b8a3a;
+  --node-people: #5e3a6b;
+  --node-daily: #7d836f;
+  --node-capture: #b06022;
+  --node-custom: #2d6b6b;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(125, 131, 111, 0.2);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
+}
+
+/* ── Sepia — warm-light, browner ─────────────────────────────────── */
+.theme-sepia {
+  --bg-base: #f1e8d8;
+  --bg-surface: #e8ddc8;
+  --bg-elevated: #ddd0b7;
+
+  --ink: #1f1813;
+  --ink-2: #5e4d3d;
+  --ink-3: #8c7860;
+  --ink-rgb: 31, 24, 19;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #4a3a7c;
+  --agent-rgb: 74, 58, 124;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #a8521c;
+  --you-rgb: 168, 82, 28;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --green: #6b6028;
+  --green-bg: rgba(107, 96, 40, 0.14);
+  --red: #a83a2c;
+
+  --node-project: #4a3a7c;
+  --node-topic: #6b6028;
+  --node-people: #6b3a6b;
+  --node-daily: #8c7860;
+  --node-capture: #b06022;
+  --node-custom: #2d6b6b;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.2);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(140, 120, 96, 0.22);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
 }

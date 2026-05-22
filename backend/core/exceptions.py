@@ -5,6 +5,10 @@ class LoomError(Exception):
     """Base exception for all Loom errors."""
 
 
+class ConfigError(LoomError):
+    """Raised when loading or saving config fails."""
+
+
 class VaultExistsError(LoomError):
     """Raised when attempting to create a vault that already exists."""
 
@@ -53,6 +57,14 @@ class ProviderError(LoomError):
     def __init__(self, provider: str, message: str) -> None:
         super().__init__(f"[{provider}] {message}")
         self.provider = provider
+
+
+class UnknownProviderError(LoomError):
+    """Raised when a provider name is not registered."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"Unknown provider: {name}")
+        self.name = name
 
 
 class ReadChainError(LoomError):

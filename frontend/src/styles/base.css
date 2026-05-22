@@ -14,10 +14,6 @@ body,
 
 body {
   background-color: var(--bg-base);
-  background-image:
-    radial-gradient(circle at 1px 1px, rgba(26, 24, 21, 0.018) 1px, transparent 0),
-    radial-gradient(circle at 2px 3px, rgba(26, 24, 21, 0.012) 1px, transparent 0);
-  background-size: 3px 3px, 7px 7px;
   color: var(--ink);
   font-family: var(--font);
   font-size: 13px;
@@ -25,6 +21,15 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+}
+
+/* Paper texture — only on the paper theme. Other themes get clean fills. */
+:root body,
+.theme-paper body {
+  background-image:
+    radial-gradient(circle at 1px 1px, rgba(var(--ink-rgb), 0.018) 1px, transparent 0),
+    radial-gradient(circle at 2px 3px, rgba(var(--ink-rgb), 0.012) 1px, transparent 0);
+  background-size: 3px 3px, 7px 7px;
 }
 
 ::-webkit-scrollbar {

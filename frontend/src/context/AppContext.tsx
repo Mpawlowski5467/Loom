@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
@@ -18,7 +18,47 @@ import { changelogSeed } from "../data/changelog";
 import { councilSeed } from "../data/council";
 import { backlinksFor, noteById, notes as notesSeed } from "../data/notes";
 import { AppCtx } from "./app-ctx";
-import type { AppContextValue } from "./app-ctx";
+import type { AppContextValue, GraphDisplay } from "./app-ctx";
+import {
+  GRAPH_DISPLAY_DEFAULTS,
+  GRAPH_DISPLAY_RANGES,
+} from "./app-ctx";
+import { useLoomConfig } from "./useLoomConfig";
+
+const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
+
+function clamp(value: number, min: number, max: number): number {
+  if (!Number.isFinite(value)) return min;
+  return Math.max(min, Math.min(max, value));
+}
+
+function loadGraphDisplay(): GraphDisplay {
+  if (typeof window === "undefined") return GRAPH_DISPLAY_DEFAULTS;
+  try {
+    const raw = window.localStorage.getItem(GRAPH_DISPLAY_KEY);
+    if (!raw) return GRAPH_DISPLAY_DEFAULTS;
+    const parsed = JSON.parse(raw) as Partial<GraphDisplay>;
+    return {
+      nodeSizeScale: clamp(
+        Number(parsed.nodeSizeScale ?? GRAPH_DISPLAY_DEFAULTS.nodeSizeScale),
+        GRAPH_DISPLAY_RANGES.nodeSizeScale.min,
+        GRAPH_DISPLAY_RANGES.nodeSizeScale.max,
+      ),
+      labelThreshold: clamp(
+        Number(parsed.labelThreshold ?? GRAPH_DISPLAY_DEFAULTS.labelThreshold),
+        GRAPH_DISPLAY_RANGES.labelThreshold.min,
+        GRAPH_DISPLAY_RANGES.labelThreshold.max,
+      ),
+      spacingScale: clamp(
+        Number(parsed.spacingScale ?? GRAPH_DISPLAY_DEFAULTS.spacingScale),
+        GRAPH_DISPLAY_RANGES.spacingScale.min,
+        GRAPH_DISPLAY_RANGES.spacingScale.max,
+      ),
+    };
+  } catch {
+    return GRAPH_DISPLAY_DEFAULTS;
+  }
+}
 
 interface ProviderProps {
   children: ReactNode;
@@ -61,6 +101,45 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     });
   }, []);
 
+  const [graphDisplay, setGraphDisplayState] =
+    useState<GraphDisplay>(loadGraphDisplay);
+  const setGraphDisplay = useCallback((patch: Partial<GraphDisplay>) => {
+    setGraphDisplayState((prev) => {
+      const merged: GraphDisplay = {
+        nodeSizeScale: clamp(
+          patch.nodeSizeScale ?? prev.nodeSizeScale,
+          GRAPH_DISPLAY_RANGES.nodeSizeScale.min,
+          GRAPH_DISPLAY_RANGES.nodeSizeScale.max,
+        ),
+        labelThreshold: clamp(
+          patch.labelThreshold ?? prev.labelThreshold,
+          GRAPH_DISPLAY_RANGES.labelThreshold.min,
+          GRAPH_DISPLAY_RANGES.labelThreshold.max,
+        ),
+        spacingScale: clamp(
+          patch.spacingScale ?? prev.spacingScale,
+          GRAPH_DISPLAY_RANGES.spacingScale.min,
+          GRAPH_DISPLAY_RANGES.spacingScale.max,
+        ),
+      };
+      return merged;
+    });
+  }, []);
+  const resetGraphDisplay = useCallback(() => {
+    setGraphDisplayState(GRAPH_DISPLAY_DEFAULTS);
+  }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        GRAPH_DISPLAY_KEY,
+        JSON.stringify(graphDisplay),
+      );
+    } catch {
+      // ignore quota / serialization failures
+    }
+  }, [graphDisplay]);
+
   const [primaryOpen, setPrimaryOpen] = useState(true);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [editing, setEditingRaw] = useState(false);
@@ -83,6 +162,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const dismissToast = useCallback((id: string) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
+
+  const loomConfig = useLoomConfig(pushToast);
 
   const [agentsState] = useState<Agent[]>(agentsSeed);
   const [changelog] = useState<AgentEvent[]>(changelogSeed);
@@ -153,6 +234,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     graphFilters,
     toggleGraphFilter,
 
+    graphDisplay,
+    setGraphDisplay,
+    resetGraphDisplay,
+
     primaryOpen,
     secondaryOpen,
     editing,
@@ -177,6 +262,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     selectedCaptureId,
     selectCapture,
     setCaptureStatus,
+
+    ...loomConfig,
   };
 
   return <AppCtx.Provider value={value}>{children}</AppCtx.Provider>;

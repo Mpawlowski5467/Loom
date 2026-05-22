@@ -6,7 +6,7 @@ export interface XY {
   y: number;
 }
 
-export function applyConstellationLayout(graph: Graph): void {
+export function applyConstellationLayout(graph: Graph): Map<string, XY> {
   // seed with golden-angle spiral so we get deterministic positions
   const phi = Math.PI * (3 - Math.sqrt(5));
   let i = 0;
@@ -26,6 +26,11 @@ export function applyConstellationLayout(graph: Graph): void {
       slowDown: 8,
     },
   });
+  const positions = new Map<string, XY>();
+  graph.forEachNode((id, attrs) => {
+    positions.set(id, { x: attrs["x"] as number, y: attrs["y"] as number });
+  });
+  return positions;
 }
 
 export function computeOrbitLayout(

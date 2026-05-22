@@ -37,7 +37,7 @@ export function Splash({ onDone }: Props): ReactNode {
 
         <div className="splash-wordmark-row">
           <span className="splash-wordmark">Loom</span>
-          <span className="splash-ui-pill">UI</span>
+          <span className="splash-version">v0.3.0</span>
         </div>
 
         <div className="splash-rail" aria-hidden="true">

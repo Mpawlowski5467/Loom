@@ -1,0 +1,439 @@
+/* ── Boot ──────────────────────────────────────────────────────── */
+.boot-screen {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: var(--bg-base);
+  color: var(--ink-3);
+  z-index: 9998;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+.boot-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-2);
+  border-top-color: var(--ink);
+  animation: rotateSlow 1.4s linear infinite;
+}
+
+/* ── Onboarding root ───────────────────────────────────────────── */
+.onb-root {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: var(--bg-base);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 24px;
+  overflow-y: auto;
+}
+
+.onb-card {
+  width: min(640px, 100%);
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 24px 60px var(--shadow-elev);
+  padding: 36px 38px 30px;
+  animation: fadeUp 360ms var(--ease);
+}
+
+.onb-progress {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+.onb-progress-dot {
+  flex: 1;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--rule-2);
+  transition: background 220ms var(--ease);
+}
+.onb-progress-dot.active {
+  background: var(--ink);
+}
+
+.onb-step {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.onb-h1 {
+  font-family: var(--serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+.onb-h2 {
+  font-family: var(--serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+}
+.onb-sub {
+  font-family: var(--serif);
+  font-style: italic;
+  color: var(--ink-2);
+  font-size: 14px;
+  line-height: 1.55;
+}
+.onb-lede {
+  font-family: var(--serif);
+  font-size: 15px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.onb-welcome {
+  text-align: center;
+  align-items: center;
+}
+.onb-welcome .onb-h1,
+.onb-welcome .onb-lede,
+.onb-welcome .onb-points {
+  text-align: left;
+  align-self: stretch;
+}
+.onb-welcome .onb-h1 {
+  text-align: center;
+}
+.onb-welcome .onb-lede {
+  text-align: center;
+}
+.onb-mark {
+  margin-bottom: 8px;
+  color: var(--ink);
+}
+
+.onb-points {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-family: var(--font);
+  color: var(--ink-2);
+  font-size: 13px;
+  line-height: 1.55;
+  padding-left: 0;
+}
+.onb-points li {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.onb-points-mark {
+  color: var(--agent);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* ── Fields ────────────────────────────────────────────────────── */
+.onb-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.onb-field-label {
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.onb-field-hint {
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.onb-field-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.onb-probe {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.onb-probe-warn {
+  color: var(--red);
+}
+
+.onb-existing {
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  padding: 16px 18px;
+  background: var(--bg-base);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.onb-existing-h {
+  font-family: var(--serif);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.onb-existing-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.onb-radio {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: var(--r-sm);
+  transition: background 140ms var(--ease);
+}
+.onb-radio:hover {
+  background: var(--bg-elevated);
+}
+.onb-radio-label {
+  font-size: 13px;
+  color: var(--ink);
+  font-weight: 500;
+}
+.onb-radio-help {
+  font-size: 12px;
+  color: var(--ink-3);
+  margin-top: 2px;
+  line-height: 1.45;
+}
+.onb-warn {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--red);
+  background: var(--you-bg);
+  border: 1px solid var(--you-line);
+  padding: 8px 10px;
+  border-radius: var(--r-sm);
+}
+
+/* ── Theme picker ──────────────────────────────────────────────── */
+.onb-theme-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.onb-theme-card {
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  padding: 10px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: all 200ms var(--ease);
+}
+.onb-theme-card:hover {
+  border-color: var(--ink-3);
+  transform: translateY(-1px);
+}
+.onb-theme-card.active {
+  border-color: var(--ink);
+  box-shadow: 0 0 0 2px var(--ink);
+}
+.onb-theme-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+.onb-theme-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+}
+.onb-theme-desc {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--ink-2);
+}
+
+.theme-swatch {
+  width: 78px;
+  height: 56px;
+  border-radius: var(--r-sm);
+  flex-shrink: 0;
+  padding: 6px;
+  border: 1px solid rgba(var(--ink-rgb), 0.06);
+}
+.theme-swatch-surface {
+  width: 100%;
+  height: 100%;
+  border-radius: 3px;
+  position: relative;
+  overflow: hidden;
+  padding: 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.theme-swatch-bar {
+  width: 70%;
+  height: 4px;
+  border-radius: 2px;
+}
+.theme-swatch-dots {
+  display: flex;
+  gap: 4px;
+}
+.theme-swatch-dots span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+/* ── Provider ─────────────────────────────────────────────────── */
+.onb-providers {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+.onb-provider-card {
+  text-align: left;
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  transition: all 180ms var(--ease);
+}
+.onb-provider-card:hover {
+  border-color: var(--ink-3);
+  transform: translateY(-1px);
+}
+.onb-provider-card.active {
+  border-color: var(--ink);
+  background: var(--bg-elevated);
+}
+.onb-provider-name {
+  font-family: var(--serif);
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.onb-provider-hint {
+  font-family: var(--font);
+  font-size: 11.5px;
+  color: var(--ink-3);
+}
+
+.onb-provider-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: 14px;
+  background: var(--bg-base);
+}
+.onb-test {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.onb-test-result {
+  font-family: var(--mono);
+  font-size: 11px;
+}
+.onb-test-ok {
+  color: var(--green);
+}
+.onb-test-fail {
+  color: var(--red);
+}
+.onb-help {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--ink-3);
+}
+.onb-submit-error {
+  font-family: var(--mono);
+  font-size: 11.5px;
+  color: var(--red);
+  border: 1px solid var(--you-line);
+  border-radius: var(--r-sm);
+  padding: 8px 10px;
+  background: var(--you-bg);
+}
+
+/* ── Actions ──────────────────────────────────────────────────── */
+.onb-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 8px;
+}
+.onb-actions .btn-md {
+  min-width: 92px;
+  justify-content: center;
+}
+
+/* ── Banners (missing provider / offline) ─────────────────────── */
+.banner {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 20px;
+  font-family: var(--font);
+  font-size: 12px;
+  border-bottom: 1px solid var(--rule-2);
+}
+.banner-icon {
+  font-family: var(--mono);
+  font-weight: 700;
+  font-size: 13px;
+  line-height: 1;
+}
+.banner-body {
+  color: inherit;
+  line-height: 1.4;
+}
+.banner-provider {
+  background: var(--you-bg);
+  color: var(--you);
+  border-bottom-color: var(--you-line);
+}
+.banner-offline {
+  background: var(--agent-bg);
+  color: var(--agent);
+  border-bottom-color: var(--agent-line);
+}
+
+/* ── A11y helpers ─────────────────────────────────────────────── */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  border: 0;
+}

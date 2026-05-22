@@ -1,0 +1,133 @@
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { useApp } from "../context/app-ctx";
+import { Nav } from "./layout/Nav";
+import { Tree } from "./layout/Tree";
+import { Splash } from "../views/Splash";
+import { GraphView } from "../views/GraphView";
+import { ThreadView } from "../views/ThreadView";
+import { InboxView } from "../views/InboxView";
+import { BoardView } from "../views/BoardView";
+import { Palette } from "../views/Palette";
+import { Toasts } from "../views/Toasts";
+import { LoomRibbon } from "./primitives/LoomRibbon";
+
+const SPLASH_KEY = "loom.splash.seen";
+
+function shouldShowSplash(): boolean {
+  if (typeof window === "undefined") return false;
+  const url = new URL(window.location.href);
+  if (url.searchParams.get("splash") === "1") return true;
+  try {
+    return !sessionStorage.getItem(SPLASH_KEY);
+  } catch {
+    return true;
+  }
+}
+
+/**
+ * The main Loom interface — nav, tree, workspace, statusbar.
+ *
+ * Rendered by AppShell once onboarding is complete. Owns the post-onboarding
+ * splash transition (the wizard handles the first-run intro itself).
+ */
+export function MainShell(): ReactNode {
+  const { tab, paletteOpen, setPaletteOpen, config, offline } = useApp();
+  const [showSplash, setShowSplash] = useState<boolean>(() => shouldShowSplash());
+
+  const dismissSplash = () => {
+    try {
+      sessionStorage.setItem(SPLASH_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setShowSplash(false);
+  };
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      const isMod = e.metaKey || e.ctrlKey;
+      if (isMod && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setPaletteOpen(!paletteOpen);
+      } else if (e.key === "Escape" && paletteOpen) {
+        setPaletteOpen(false);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [paletteOpen, setPaletteOpen]);
+
+  const themeLabel = config?.ui.theme ?? "paper";
+  const providerMissing = computeProviderMissing(config);
+
+  return (
+    <div className="app">
+      {showSplash && <Splash onDone={dismissSplash} />}
+      <Nav />
+      {providerMissing && <ProviderBanner />}
+      {offline && <OfflineBanner />}
+      <div className="app-main">
+        <Tree />
+        <div className="workspace">
+          <div className="workspace-main">
+            {tab === "graph" && <GraphView />}
+            {tab === "thread" && <ThreadView />}
+            {tab === "inbox" && <InboxView />}
+            {tab === "board" && <BoardView />}
+          </div>
+        </div>
+      </div>
+      <footer className="statusbar">
+        <span>loom · {themeLabel} theme · v0.3.0</span>
+        <span style={{ marginLeft: "auto" }}>
+          {offline ? "offline" : "local-first"}
+        </span>
+      </footer>
+      {paletteOpen && <Palette />}
+      <Toasts />
+      <LoomRibbon />
+    </div>
+  );
+}
+
+function computeProviderMissing(
+  config: ReturnType<typeof useApp>["config"],
+): boolean {
+  if (!config) return false;
+  if (!config.onboarding.completed) return false;
+  const def = config.default_provider;
+  if (!def) return true;
+  const cfg = config.providers[def];
+  if (!cfg) return true;
+  // Ollama doesn't require an api_key, only a host.
+  if (def === "ollama") return !cfg.host;
+  return !cfg.api_key_set;
+}
+
+function ProviderBanner(): ReactNode {
+  return (
+    <div className="banner banner-provider" role="status">
+      <span className="banner-icon" aria-hidden="true">
+        ⌁
+      </span>
+      <span className="banner-body">
+        No AI provider configured. Loom's agents are paused until you add one
+        from Settings.
+      </span>
+    </div>
+  );
+}
+
+function OfflineBanner(): ReactNode {
+  return (
+    <div className="banner banner-offline" role="status">
+      <span className="banner-icon" aria-hidden="true">
+        ⊘
+      </span>
+      <span className="banner-body">
+        Backend unreachable. Changes will sync when it's back.
+      </span>
+    </div>
+  );
+}

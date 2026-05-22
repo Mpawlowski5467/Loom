@@ -1,7 +1,7 @@
 .palette-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(26, 24, 21, 0.4);
+  background: rgba(var(--ink-rgb), 0.4);
   backdrop-filter: blur(2px);
   z-index: 100;
   display: flex;
@@ -16,7 +16,7 @@
   background: var(--bg-base);
   border: 1px solid var(--rule-2);
   border-radius: var(--r-lg);
-  box-shadow: 0 20px 50px rgba(26, 24, 21, 0.18);
+  box-shadow: 0 20px 50px rgba(var(--ink-rgb), 0.18);
   display: flex;
   flex-direction: column;
   overflow: hidden;

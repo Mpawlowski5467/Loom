@@ -14,7 +14,9 @@ function renderProviderConfig(
   props: Partial<Parameters<typeof ProviderConfig>[0]> = {},
 ) {
   const baseProps: Parameters<typeof ProviderConfig>[0] = {
-    provider: null,
+    providers: [],
+    chatProvider: null,
+    embedProvider: null,
     onChange: vi.fn(),
     onSubmit: vi.fn(),
     onBack: vi.fn(),
@@ -40,29 +42,37 @@ describe("ProviderConfig", () => {
   it("renders all provider options", () => {
     renderProviderConfig();
 
-    expect(screen.getByRole("radio", { name: /OpenAI/ })).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: /Anthropic/ }),
+      screen.getByRole("button", { name: /OpenAI/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /xAI/ })).toBeInTheDocument();
     expect(
-      screen.getByRole("radio", { name: /OpenRouter/ }),
+      screen.getByRole("button", { name: /Anthropic/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /Ollama/ })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /xAI/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /OpenRouter/ }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Ollama/ })).toBeInTheDocument();
   });
 
-  it("picking a provider populates defaults", async () => {
+  it("picking a provider adds it with defaults", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     renderProviderConfig({ onChange });
 
-    await user.click(screen.getByRole("radio", { name: /OpenAI/ }));
+    await user.click(screen.getByRole("button", { name: /OpenAI/ }));
 
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({
-        name: "openai",
-        chat_model: "gpt-4o-mini",
-        embed_model: "text-embedding-3-small",
+        providers: expect.arrayContaining([
+          expect.objectContaining({
+            name: "openai",
+            chat_model: "gpt-4o-mini",
+            embed_model: "text-embedding-3-small",
+          }),
+        ]),
+        chatProvider: "openai",
+        embedProvider: "openai",
       }),
     );
   });
@@ -70,13 +80,17 @@ describe("ProviderConfig", () => {
   it("test button calls testProvider with the right args", async () => {
     const user = userEvent.setup();
     renderProviderConfig({
-      provider: {
-        name: "openai",
-        api_key: "sk-test",
-        chat_model: "gpt-4o-mini",
-        embed_model: "text-embedding-3-small",
-        host: "",
-      },
+      providers: [
+        {
+          name: "openai",
+          api_key: "sk-test",
+          chat_model: "gpt-4o-mini",
+          embed_model: "text-embedding-3-small",
+          host: "",
+        },
+      ],
+      chatProvider: "openai",
+      embedProvider: "openai",
     });
 
     await user.click(screen.getByRole("button", { name: "Test connection" }));
@@ -90,7 +104,7 @@ describe("ProviderConfig", () => {
     expect(screen.getByText("OK — 12ms")).toBeInTheDocument();
   });
 
-  it("skip button clears provider and submits", async () => {
+  it("skip button clears providers and submits", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const onSubmit = vi.fn();
@@ -98,7 +112,11 @@ describe("ProviderConfig", () => {
 
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
 
-    expect(onChange).toHaveBeenCalledWith(null);
+    expect(onChange).toHaveBeenCalledWith({
+      providers: [],
+      chatProvider: null,
+      embedProvider: null,
+    });
     expect(onSubmit).toHaveBeenCalled();
   });
 });

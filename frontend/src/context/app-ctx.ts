@@ -77,6 +77,8 @@ export interface AppContextValue {
 
   agents: Agent[];
   changelog: AgentEvent[];
+  customAgents: Agent[];
+  refreshCustomAgents: () => Promise<void>;
 
   council: CouncilMessage[];
   postCouncilMessage: (body: string) => void;
@@ -84,6 +86,11 @@ export interface AppContextValue {
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;
   appendNote: (note: Note) => void;
+  updateNote: (note: Note) => void;
+  removeNote: (id: string) => void;
+
+  extraFolders: string[];
+  addFolder: (path: string) => void;
 
   captures: Capture[];
   selectedCaptureId: string | null;

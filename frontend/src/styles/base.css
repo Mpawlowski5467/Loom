@@ -12,11 +12,38 @@ body,
   height: 100%;
 }
 
+/* Appearance variables — defaults override-able by root classes set by
+   applyAppearance(). See theme/applyAppearance.ts. */
+:root {
+  --font-scale: 1;
+  --space-scale: 1;
+}
+html.font-scale-sm { --font-scale: 0.9; }
+html.font-scale-md { --font-scale: 1; }
+html.font-scale-lg { --font-scale: 1.15; }
+html.density-compact { --space-scale: 0.85; }
+html.density-cozy { --space-scale: 1; }
+html.density-comfortable { --space-scale: 1.15; }
+
+@media (prefers-reduced-motion: reduce) {
+  html.motion-auto * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+html.motion-off *,
+html.motion-off *::before,
+html.motion-off *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+}
+
 body {
   background-color: var(--bg-base);
   color: var(--ink);
   font-family: var(--font);
-  font-size: 13px;
+  font-size: calc(13px * var(--font-scale));
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;

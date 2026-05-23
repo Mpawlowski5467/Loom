@@ -6,17 +6,32 @@ import type {
   TestProviderResponse,
 } from "../../api/types";
 
+interface DraftPatch {
+  providers?: OnboardingProviderPayload[];
+  chatProvider?: string | null;
+  embedProvider?: string | null;
+}
+
 interface Props {
-  provider: OnboardingProviderPayload | null;
-  onChange: (provider: OnboardingProviderPayload | null) => void;
+  providers: OnboardingProviderPayload[];
+  chatProvider: string | null;
+  embedProvider: string | null;
+  onChange: (patch: DraftPatch) => void;
   onSubmit: () => void;
   onBack: () => void;
   submitting: boolean;
   submitError: string | null;
 }
 
+type ProviderName =
+  | "openai"
+  | "anthropic"
+  | "xai"
+  | "openrouter"
+  | "ollama";
+
 interface ProviderOption {
-  name: "openai" | "anthropic" | "xai" | "openrouter" | "ollama";
+  name: ProviderName;
   label: string;
   requiresApiKey: boolean;
   requiresHost: boolean;
@@ -72,97 +87,117 @@ const PROVIDERS: ProviderOption[] = [
   },
 ];
 
+const META_BY_NAME = new Map(PROVIDERS.map((p) => [p.name, p]));
+
+function defaultPayload(opt: ProviderOption): OnboardingProviderPayload {
+  return {
+    name: opt.name,
+    api_key: "",
+    chat_model: opt.defaultChat ?? "",
+    embed_model: opt.defaultEmbed ?? "",
+    host: opt.defaultHost ?? "",
+  };
+}
+
 export function ProviderConfig({
-  provider,
+  providers,
+  chatProvider,
+  embedProvider,
   onChange,
   onSubmit,
   onBack,
   submitting,
   submitError,
 }: Props): ReactNode {
-  const [testResult, setTestResult] = useState<TestProviderResponse | null>(
-    null,
-  );
-  const [testing, setTesting] = useState(false);
+  const [testResults, setTestResults] = useState<
+    Record<string, TestProviderResponse | null>
+  >({});
+  const [testing, setTesting] = useState<string | null>(null);
 
-  const selectedName = provider?.name as ProviderOption["name"] | undefined;
-  const selectedMeta = PROVIDERS.find((p) => p.name === selectedName);
+  const togglePicked = (opt: ProviderOption) => {
+    const exists = providers.find((p) => p.name === opt.name);
+    if (exists) {
+      const next = providers.filter((p) => p.name !== opt.name);
+      const patch: DraftPatch = { providers: next };
+      if (chatProvider === opt.name)
+        patch.chatProvider = next[0]?.name ?? null;
+      if (embedProvider === opt.name)
+        patch.embedProvider =
+          next.find((p) =>
+            META_BY_NAME.get(p.name as ProviderName)?.defaultEmbed,
+          )?.name ??
+          next[0]?.name ??
+          null;
+      onChange(patch);
+    } else {
+      const next = [...providers, defaultPayload(opt)];
+      const patch: DraftPatch = { providers: next };
+      if (!chatProvider) patch.chatProvider = opt.name;
+      if (!embedProvider && opt.defaultEmbed) patch.embedProvider = opt.name;
+      onChange(patch);
+    }
+    setTestResults((prev) => ({ ...prev, [opt.name]: null }));
+  };
 
-  const pickProvider = (option: ProviderOption) => {
-    setTestResult(null);
+  const patchProvider = (
+    name: string,
+    update: Partial<OnboardingProviderPayload>,
+  ) => {
     onChange({
-      name: option.name,
-      api_key: provider?.name === option.name ? provider.api_key ?? "" : "",
-      chat_model:
-        provider?.name === option.name
-          ? provider.chat_model ?? option.defaultChat ?? ""
-          : option.defaultChat ?? "",
-      embed_model:
-        provider?.name === option.name
-          ? provider.embed_model ?? option.defaultEmbed ?? ""
-          : option.defaultEmbed ?? "",
-      host:
-        provider?.name === option.name
-          ? provider.host ?? option.defaultHost ?? ""
-          : option.defaultHost ?? "",
+      providers: providers.map((p) =>
+        p.name === name ? { ...p, ...update } : p,
+      ),
     });
+    setTestResults((prev) => ({ ...prev, [name]: null }));
   };
 
-  const patch = (next: Partial<OnboardingProviderPayload>) => {
-    if (!provider) return;
-    onChange({ ...provider, ...next });
-    setTestResult(null);
-  };
-
-  const runTest = async () => {
-    if (!provider) return;
-    setTesting(true);
-    setTestResult(null);
+  const runTest = async (prov: OnboardingProviderPayload) => {
+    setTesting(prov.name);
     try {
-      const result = await testProvider(provider.name, {
-        api_key: provider.api_key ?? "",
-        host: provider.host ?? "",
+      const result = await testProvider(prov.name, {
+        api_key: prov.api_key ?? "",
+        host: prov.host ?? "",
       });
-      setTestResult(result);
+      setTestResults((prev) => ({ ...prev, [prov.name]: result }));
     } catch (err) {
-      setTestResult({
-        ok: false,
-        latency_ms: 0,
-        error: err instanceof Error ? err.message : "Test failed",
-      });
+      setTestResults((prev) => ({
+        ...prev,
+        [prov.name]: {
+          ok: false,
+          latency_ms: 0,
+          error: err instanceof Error ? err.message : "Test failed",
+        },
+      }));
     } finally {
-      setTesting(false);
+      setTesting(null);
     }
   };
 
   const skip = () => {
-    onChange(null);
+    onChange({ providers: [], chatProvider: null, embedProvider: null });
     onSubmit();
   };
 
-  const finish = () => {
-    onSubmit();
-  };
+  const canFinish = providers.length === 0 || (chatProvider && embedProvider);
 
   return (
     <div className="onb-step">
-      <h2 className="onb-h2">Hook up an AI provider</h2>
+      <h2 className="onb-h2">Hook up AI providers</h2>
       <p className="onb-sub">
-        Loom's agents need a model to call. You can skip this step and add one
-        later from Settings.
+        You can configure more than one. Pick the default for chat and the
+        default for embeddings — they can be different providers.
       </p>
 
-      <div className="onb-providers" role="radiogroup" aria-label="Provider">
+      <div className="onb-providers" role="group" aria-label="Provider">
         {PROVIDERS.map((opt) => {
-          const active = selectedName === opt.name;
+          const active = providers.some((p) => p.name === opt.name);
           return (
             <button
               key={opt.name}
               type="button"
-              role="radio"
-              aria-checked={active}
+              aria-pressed={active}
               className={`onb-provider-card ${active ? "active" : ""}`}
-              onClick={() => pickProvider(opt)}
+              onClick={() => togglePicked(opt)}
             >
               <div className="onb-provider-name">{opt.label}</div>
               <div className="onb-provider-hint">{opt.hint}</div>
@@ -171,80 +206,130 @@ export function ProviderConfig({
         })}
       </div>
 
-      {selectedMeta && provider && (
-        <div className="onb-provider-form">
-          {selectedMeta.requiresApiKey && (
-            <label className="onb-field">
-              <span className="onb-field-label">API key</span>
-              <input
-                className="input mono"
-                type="password"
-                autoComplete="off"
-                spellCheck={false}
-                value={provider.api_key ?? ""}
-                onChange={(e) => patch({ api_key: e.target.value })}
-                placeholder="sk-…"
-              />
-            </label>
-          )}
-          {selectedMeta.requiresHost && (
-            <label className="onb-field">
-              <span className="onb-field-label">Host</span>
-              <input
-                className="input mono"
-                type="text"
-                value={provider.host ?? ""}
-                onChange={(e) => patch({ host: e.target.value })}
-                placeholder={selectedMeta.defaultHost}
-              />
-            </label>
-          )}
+      {providers.map((prov) => {
+        const meta = META_BY_NAME.get(prov.name as ProviderName);
+        if (!meta) return null;
+        const result = testResults[prov.name] ?? null;
+        return (
+          <div key={prov.name} className="onb-provider-form">
+            <div className="onb-provider-form-h">{meta.label}</div>
+            {meta.requiresApiKey && (
+              <label className="onb-field">
+                <span className="onb-field-label">API key</span>
+                <input
+                  className="input mono"
+                  type="password"
+                  autoComplete="off"
+                  spellCheck={false}
+                  value={prov.api_key ?? ""}
+                  onChange={(e) =>
+                    patchProvider(prov.name, { api_key: e.target.value })
+                  }
+                  placeholder="sk-…"
+                />
+              </label>
+            )}
+            {meta.requiresHost && (
+              <label className="onb-field">
+                <span className="onb-field-label">Host</span>
+                <input
+                  className="input mono"
+                  type="text"
+                  value={prov.host ?? ""}
+                  onChange={(e) =>
+                    patchProvider(prov.name, { host: e.target.value })
+                  }
+                  placeholder={meta.defaultHost}
+                />
+              </label>
+            )}
+            <div className="onb-field-row">
+              <label className="onb-field">
+                <span className="onb-field-label">Chat model</span>
+                <input
+                  className="input mono"
+                  type="text"
+                  value={prov.chat_model ?? ""}
+                  onChange={(e) =>
+                    patchProvider(prov.name, { chat_model: e.target.value })
+                  }
+                  placeholder={meta.defaultChat ?? ""}
+                />
+              </label>
+              <label className="onb-field">
+                <span className="onb-field-label">Embed model</span>
+                <input
+                  className="input mono"
+                  type="text"
+                  value={prov.embed_model ?? ""}
+                  onChange={(e) =>
+                    patchProvider(prov.name, { embed_model: e.target.value })
+                  }
+                  placeholder={meta.defaultEmbed ?? "—"}
+                />
+              </label>
+            </div>
+            <div className="onb-test">
+              <button
+                className="btn btn-md"
+                type="button"
+                onClick={() => void runTest(prov)}
+                disabled={testing === prov.name}
+              >
+                {testing === prov.name ? "Testing…" : "Test connection"}
+              </button>
+              {result && (
+                <span
+                  className={`onb-test-result ${
+                    result.ok ? "onb-test-ok" : "onb-test-fail"
+                  }`}
+                >
+                  {result.ok
+                    ? `OK — ${result.latency_ms}ms`
+                    : `Failed — ${result.error ?? "unknown"}`}
+                </span>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
+      {providers.length > 0 && (
+        <div className="onb-defaults">
+          <div className="onb-defaults-h">Defaults</div>
           <div className="onb-field-row">
             <label className="onb-field">
-              <span className="onb-field-label">Chat model</span>
-              <input
+              <span className="onb-field-label">Chat provider</span>
+              <select
                 className="input mono"
-                type="text"
-                value={provider.chat_model ?? ""}
-                onChange={(e) => patch({ chat_model: e.target.value })}
-                placeholder={selectedMeta.defaultChat ?? ""}
-              />
+                value={chatProvider ?? ""}
+                onChange={(e) =>
+                  onChange({ chatProvider: e.target.value || null })
+                }
+              >
+                {providers.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {META_BY_NAME.get(p.name as ProviderName)?.label ?? p.name}
+                  </option>
+                ))}
+              </select>
             </label>
             <label className="onb-field">
-              <span className="onb-field-label">Embed model</span>
-              <input
+              <span className="onb-field-label">Embed provider</span>
+              <select
                 className="input mono"
-                type="text"
-                value={provider.embed_model ?? ""}
-                onChange={(e) => patch({ embed_model: e.target.value })}
-                placeholder={selectedMeta.defaultEmbed ?? "—"}
-              />
-            </label>
-          </div>
-          <div className="onb-test">
-            <button
-              className="btn btn-md"
-              type="button"
-              onClick={runTest}
-              disabled={testing}
-            >
-              {testing ? "Testing…" : "Test connection"}
-            </button>
-            {testResult && (
-              <span
-                className={`onb-test-result ${
-                  testResult.ok ? "onb-test-ok" : "onb-test-fail"
-                }`}
+                value={embedProvider ?? ""}
+                onChange={(e) =>
+                  onChange({ embedProvider: e.target.value || null })
+                }
               >
-                {testResult.ok
-                  ? `OK — ${testResult.latency_ms}ms`
-                  : `Failed — ${testResult.error ?? "unknown"}`}
-              </span>
-            )}
-          </div>
-          <div className="onb-help">
-            A failed test doesn't block you. Save anyway and we'll surface the
-            error in the main UI.
+                {providers.map((p) => (
+                  <option key={p.name} value={p.name}>
+                    {META_BY_NAME.get(p.name as ProviderName)?.label ?? p.name}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
         </div>
       )}
@@ -265,8 +350,8 @@ export function ProviderConfig({
         </button>
         <button
           className="btn btn-md btn-active"
-          onClick={finish}
-          disabled={submitting || !provider}
+          onClick={onSubmit}
+          disabled={submitting || !canFinish}
         >
           {submitting ? "Saving…" : "Finish →"}
         </button>

@@ -49,6 +49,8 @@ export interface Note {
   title: string;
   type: NodeType;
   folder: string;
+  /** On-disk filename like ``caching.md``. Optional in seed data. */
+  filename?: string;
   tags: string[];
   body: string;
   links: NoteId[];

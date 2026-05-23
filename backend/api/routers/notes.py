@@ -43,6 +43,7 @@ class UpdateNoteRequest(BaseModel):
     body: str | None = None
     tags: list[str] | None = None
     type: str | None = None
+    title: str | None = None
 
 
 class NoteListResponse(BaseModel):
@@ -175,6 +176,9 @@ def update_note(
         meta["tags"] = body.tags
     if body.type is not None:
         meta["type"] = body.type
+    title_changed = body.title is not None and body.title.strip() != note.title
+    if title_changed:
+        meta["title"] = body.title.strip() if body.title else note.title
 
     meta["history"].append(
         {"action": "edited", "by": "user", "at": ts, "reason": "Updated via API"},
@@ -183,7 +187,20 @@ def update_note(
     new_body = body.body if body.body is not None else note.body
     atomic_write_text(path, note_to_file_content(meta, new_body))
 
-    # Update index with new metadata
+    # If the title changed, rename the file to match the new kebab stem.
+    if title_changed:
+        new_stem = to_kebab(meta["title"]) or path.stem
+        new_path = path.with_name(f"{new_stem}.md")
+        if new_path != path:
+            if new_path.exists():
+                raise HTTPException(
+                    status_code=409,
+                    detail=f"A note already exists at {new_path.name}",
+                )
+            path.rename(new_path)
+            index.remove_file(path)
+            path = new_path
+
     index.refresh_file(path)
 
     return parse_note(path)

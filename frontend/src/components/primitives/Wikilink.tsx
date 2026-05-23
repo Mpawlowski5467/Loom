@@ -5,9 +5,10 @@ interface Props {
   target: string;
   label?: string;
   block?: boolean;
+  onOpen?: (target: string) => void;
 }
 
-export function Wikilink({ target, label, block }: Props): ReactNode {
+export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
   const { resolveWikilink, openNote, noteById } = useApp();
   const id = resolveWikilink(target);
   const note = id ? noteById(id) : undefined;
@@ -18,7 +19,10 @@ export function Wikilink({ target, label, block }: Props): ReactNode {
     <button
       className={`wikilink ${block ? "backlink" : ""}`}
       onClick={() => {
-        if (id) openNote(id);
+        if (id) {
+          onOpen?.(target);
+          openNote(id);
+        }
       }}
       disabled={unresolved}
       title={note ? `${note.type} · ${note.folder}` : `unresolved: ${target}`}

@@ -10,7 +10,14 @@ export type NodeType =
 
 export type NoteStatus = "active" | "archived";
 
-export type Tab = "graph" | "thread" | "inbox" | "board";
+export type Tab = "graph" | "thread" | "inbox" | "board" | "settings";
+
+export type SettingsSection =
+  | "appearance"
+  | "providers"
+  | "vault"
+  | "about"
+  | "danger";
 
 export type GraphMode = "constellation" | "orbit";
 

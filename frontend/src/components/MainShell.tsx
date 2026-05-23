@@ -8,6 +8,7 @@ import { GraphView } from "../views/GraphView";
 import { ThreadView } from "../views/ThreadView";
 import { InboxView } from "../views/InboxView";
 import { BoardView } from "../views/BoardView";
+import { SettingsView } from "../views/SettingsView";
 import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
@@ -32,8 +33,11 @@ function shouldShowSplash(): boolean {
  * splash transition (the wizard handles the first-run intro itself).
  */
 export function MainShell(): ReactNode {
-  const { tab, paletteOpen, setPaletteOpen, config, offline } = useApp();
-  const [showSplash, setShowSplash] = useState<boolean>(() => shouldShowSplash());
+  const { tab, setTab, paletteOpen, setPaletteOpen, config, offline } =
+    useApp();
+  const [showSplash, setShowSplash] = useState<boolean>(() =>
+    shouldShowSplash(),
+  );
 
   const dismissSplash = () => {
     try {
@@ -50,13 +54,16 @@ export function MainShell(): ReactNode {
       if (isMod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen(!paletteOpen);
+      } else if (isMod && e.key === ";") {
+        e.preventDefault();
+        setTab("settings");
       } else if (e.key === "Escape" && paletteOpen) {
         setPaletteOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, setPaletteOpen]);
+  }, [paletteOpen, setPaletteOpen, setTab]);
 
   const themeLabel = config?.ui.theme ?? "paper";
   const providerMissing = computeProviderMissing(config);
@@ -67,17 +74,23 @@ export function MainShell(): ReactNode {
       <Nav />
       {providerMissing && <ProviderBanner />}
       {offline && <OfflineBanner />}
-      <div className="app-main">
-        <Tree />
-        <div className="workspace">
-          <div className="workspace-main">
-            {tab === "graph" && <GraphView />}
-            {tab === "thread" && <ThreadView />}
-            {tab === "inbox" && <InboxView />}
-            {tab === "board" && <BoardView />}
+      {tab === "settings" ? (
+        <div className="app-main">
+          <SettingsView />
+        </div>
+      ) : (
+        <div className="app-main">
+          <Tree />
+          <div className="workspace">
+            <div className="workspace-main">
+              {tab === "graph" && <GraphView />}
+              {tab === "thread" && <ThreadView />}
+              {tab === "inbox" && <InboxView />}
+              {tab === "board" && <BoardView />}
+            </div>
           </div>
         </div>
-      </div>
+      )}
       <footer className="statusbar">
         <span>loom · {themeLabel} theme · v0.3.0</span>
         <span style={{ marginLeft: "auto" }}>

@@ -211,3 +211,9 @@ def init_searcher(
     global _searcher
     _searcher = VectorSearcher(indexer, embed_provider, graph)
     return _searcher
+
+
+def reset_searcher() -> None:
+    """Clear the global VectorSearcher."""
+    global _searcher
+    _searcher = None

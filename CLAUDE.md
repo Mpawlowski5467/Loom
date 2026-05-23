@@ -73,6 +73,30 @@ Full architecture doc: @docs/architecture-ref.md
 Style guide: @docs/style-guide.md
 Task prompts: @docs/tasks/
 
+## Implementation Status
+
+**Implemented**
+- All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
+- Both Shuttle Layer agents (Researcher, Standup)
+- 4 views: GraphView (Sigma.js), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards/round-table/pulse)
+- Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig
+- Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
+- Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
+- Provider system: OpenAI, Anthropic, xAI, Ollama — chat + embed independently configurable
+- Multi-vault management via `/api/vaults`
+- Cmd+K palette, file tree with filter bar, toasts
+- CI in `.github/workflows/`, LICENSE present
+
+**In flight**
+- Scribe daily-log generation (index works; summary tuning)
+- Sentinel full AI-assisted validation (LLM path exists with static fallback)
+- Standup calendar integration (generate() works; no calendar link)
+- Settings UI (post-onboarding theme/provider/vault management) — not yet started
+
+**Known gaps**
+- Zero frontend tests (backend has 30 test files; frontend has none)
+- No `.env.example` (README implies one exists)
+
 ## Conventions
 
 - All notes use YAML frontmatter with `id`, `title`, `type`, `tags`, `created`, `modified`, `author`, `status`, `history` fields.

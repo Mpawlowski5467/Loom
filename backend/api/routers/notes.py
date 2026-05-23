@@ -6,8 +6,6 @@ import shutil
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
-logger = logging.getLogger(__name__)
-
 from core.note_index import NoteIndex, get_note_index
 from core.notes import (
     Note,
@@ -21,6 +19,8 @@ from core.notes import (
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
 

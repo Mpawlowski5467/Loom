@@ -9,6 +9,7 @@ import type {
   CouncilWho,
   GraphMode,
   NoteId,
+  SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
@@ -19,10 +20,7 @@ import { councilSeed } from "../data/council";
 import { backlinksFor, noteById, notes as notesSeed } from "../data/notes";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
-import {
-  GRAPH_DISPLAY_DEFAULTS,
-  GRAPH_DISPLAY_RANGES,
-} from "./app-ctx";
+import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
@@ -82,6 +80,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
 
   const [tab, setTab] = useState<Tab>("graph");
+  const [settingsSection, setSettingsSection] =
+    useState<SettingsSection>("appearance");
   const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>("thr_t001");
 
   const openNote = useCallback((id: NoteId) => {
@@ -224,6 +224,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     tab,
     setTab,
+    settingsSection,
+    setSettingsSection,
     currentNoteId,
     openNote,
 

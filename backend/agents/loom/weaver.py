@@ -121,7 +121,15 @@ class Weaver(BaseAgent):
             else:
                 body = SKELETON_SECTIONS.get(note_type, "")
 
-            note = write_note(self._vault_root, title, note_type, tags, folder, body)
+            note = write_note(
+                self._vault_root,
+                title,
+                note_type,
+                tags,
+                folder,
+                body,
+                author="user",
+            )
 
             return {
                 "action": "created",

@@ -184,6 +184,26 @@
   font-size: 10.5px;
 }
 
+.settings-banner {
+  border: 1px solid var(--rule-2);
+  background: var(--bg-elevated);
+  border-radius: var(--r-md);
+  padding: 10px 14px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ink-2);
+}
+.settings-banner strong {
+  color: var(--ink);
+  font-weight: 600;
+  margin-right: 4px;
+}
+.settings-banner-warn {
+  border-color: var(--you-line);
+  background: var(--you-bg);
+  color: var(--ink);
+}
+
 .settings-provider-body {
   display: grid;
   gap: 14px;

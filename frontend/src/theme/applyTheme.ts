@@ -1,10 +1,13 @@
-import { THEMES, type ThemeName, isThemeName } from "./themes";
+import { THEMES, THEME_META, type ThemeName, isThemeName } from "./themes";
 
 const THEME_CLASS_PREFIX = "theme-";
+const MODE_ATTR = "data-theme-mode";
 const LS_KEY = "loom.theme";
 
 /**
  * Toggle the active theme by swapping ``theme-*`` classes on ``<html>``.
+ * Also sets ``data-theme-mode`` to "light" or "dark" so dark-only CSS
+ * (paper grain off, deeper shadows) can key off a single selector.
  * No-op on SSR; writes to localStorage so the next paint can start in
  * the right theme before the API responds.
  */
@@ -14,6 +17,7 @@ export function applyTheme(theme: ThemeName): void {
   for (const name of THEMES) {
     root.classList.toggle(`${THEME_CLASS_PREFIX}${name}`, name === theme);
   }
+  root.setAttribute(MODE_ATTR, THEME_META[theme].mode);
   try {
     window.localStorage.setItem(LS_KEY, theme);
   } catch {

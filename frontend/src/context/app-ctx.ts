@@ -19,18 +19,21 @@ export interface GraphDisplay {
   nodeSizeScale: number;
   labelThreshold: number;
   spacingScale: number;
+  travelerPace: number;
 }
 
 export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
   nodeSizeScale: 1.0,
   labelThreshold: 7,
   spacingScale: 1.0,
+  travelerPace: 1.0,
 };
 
 export const GRAPH_DISPLAY_RANGES = {
   nodeSizeScale: { min: 0.5, max: 2.0, step: 0.1 },
   labelThreshold: { min: 1, max: 20, step: 1 },
   spacingScale: { min: 0.5, max: 2.0, step: 0.1 },
+  travelerPace: { min: 0, max: 2.0, step: 0.1 },
 } as const;
 
 export interface AppContextValue {

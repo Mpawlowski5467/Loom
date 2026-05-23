@@ -82,6 +82,19 @@ export function DisplayControls(): ReactNode {
         readout={`${graphDisplay.spacingScale.toFixed(1)}×`}
         onChange={(v) => setGraphDisplay({ spacingScale: v })}
       />
+      <Row
+        label="Travelers"
+        value={graphDisplay.travelerPace}
+        min={GRAPH_DISPLAY_RANGES.travelerPace.min}
+        max={GRAPH_DISPLAY_RANGES.travelerPace.max}
+        step={GRAPH_DISPLAY_RANGES.travelerPace.step}
+        readout={
+          graphDisplay.travelerPace === 0
+            ? "off"
+            : `${graphDisplay.travelerPace.toFixed(1)}×`
+        }
+        onChange={(v) => setGraphDisplay({ travelerPace: v })}
+      />
       <button
         type="button"
         className="graph-display-reset"

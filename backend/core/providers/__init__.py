@@ -8,6 +8,7 @@ existing callers. Implementation is split across:
 - ``core.providers.anthropic`` — AnthropicProvider
 - ``core.providers.ollama``    — OllamaProvider
 - ``core.providers.xai``       — XAIProvider
+- ``core.providers.openrouter`` — OpenRouterProvider
 - ``core.providers.registry``  — ProviderRegistry, get/reset, FastAPI deps
 """
 
@@ -19,10 +20,12 @@ from core.providers.base import (
     BaseProvider,
     OllamaProviderConfig,
     OpenAIProviderConfig,
+    OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openrouter import OpenRouterProvider
 from core.providers.registry import (
     ChatProvider,
     EmbedProvider,
@@ -44,6 +47,8 @@ __all__ = [
     "OllamaProviderConfig",
     "OpenAIProvider",
     "OpenAIProviderConfig",
+    "OpenRouterProvider",
+    "OpenRouterProviderConfig",
     "ProviderRegistry",
     "XAIProvider",
     "XAIProviderConfig",

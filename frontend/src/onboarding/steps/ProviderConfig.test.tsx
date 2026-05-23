@@ -37,7 +37,7 @@ describe("ProviderConfig", () => {
     });
   });
 
-  it("renders four provider options", () => {
+  it("renders all provider options", () => {
     renderProviderConfig();
 
     expect(screen.getByRole("radio", { name: /OpenAI/ })).toBeInTheDocument();
@@ -45,6 +45,9 @@ describe("ProviderConfig", () => {
       screen.getByRole("radio", { name: /Anthropic/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /xAI/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("radio", { name: /OpenRouter/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /Ollama/ })).toBeInTheDocument();
   });
 

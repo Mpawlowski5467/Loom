@@ -14,22 +14,13 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@udecode/plate": "^49.0.0",
-    "@udecode/plate-basic-marks": "^49.0.0",
-    "@udecode/plate-markdown": "^49.0.0",
     "graphology": "^0.26.0",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
     "lucide-react": "^0.577.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
-    "react-force-graph-2d": "^1.29.1",
-    "react-markdown": "^10.1.0",
-    "sigma": "^3.0.2",
-    "slate": "^0.124.1",
-    "slate-history": "^0.113.1",
-    "slate-hyperscript": "^0.100.0",
-    "slate-react": "^0.124.2"
+    "sigma": "^3.0.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",

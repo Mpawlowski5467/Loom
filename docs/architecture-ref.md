@@ -28,13 +28,6 @@ Condensed reference for Claude Code. Full doc: see `ARCHITECTURE.md` in project 
 │   │   └── _council/chat/     # Loom Council chat history
 │   ├── rules/
 │   │   ├── prime.md           # constitution (user-owned, immutable to agents)
-│   │   ├── schemas/           # note templates per type
-│   │   ├── policies/          # agent behavior rules
-│   │   └── workflows/         # multi-step pipelines
-│   ├── prompts/
-│   │   ├── _compiler.yaml     # token budgets, compression config
-│   │   ├── shared/            # system preamble, output format
-│   │   └── <agent>/           # per-agent prompt templates
 │   │   └── schemas/           # note templates per type
 │   ├── prompts/
 │   │   └── shared/            # system preamble
@@ -80,11 +73,6 @@ history:
 ```
 1. vault.yaml
 2. rules/prime.md
-3. rules/<agent-role>.md
-4. agents/<self>/memory.md
-5. _index.md of target folder
-6. related [[linked]] notes
-7. THEN: act
 3. agents/<self>/memory.md
 4. _index.md of target folder
 5. related [[linked]] notes
@@ -100,18 +88,6 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 - Hybrid search: semantic + keyword/tag + graph-aware boosting
 - Tags + title embedded; other frontmatter = filters only
 - Real-time watcher for small edits, batch for heavy ops
-
-## Prompt Compiler
-
-All agent prompts pass through central compiler before LLM:
-1. Select template (markdown with YAML frontmatter, `{{variables}}`)
-2. Prune irrelevant context
-3. Rank remaining by relevance
-4. Compress long items (summarize if > threshold)
-5. Count tokens (truncate if over budget)
-6. Tag with version for tracking
-
-Templates live in `prompts/` as `.md` files. Per-agent budgets in `_compiler.yaml`.
 
 ## UI Layout
 
@@ -132,12 +108,8 @@ Templates live in `prompts/` as `.md` files. Per-agent budgets in `_compiler.yam
 - File tree: VS Code style, filter bar, drag-to-move, colored dots per type
 - Graph: Sigma.js, force-directed, drag/zoom/pan/hover-highlight/pin/filter
 - Nodes: dots + labels, size by connections, color by type, glow on hover
-- Edges: thickness by density, muted purple
-- Editor: Plate (Slate.js) WYSIWYG, toolbar, meta fields, [[wikilink]] insert
-- Graph: react-force-graph-2d, force-directed, drag/zoom/pan/hover-highlight/pin/filter
-- Nodes: dots + labels, size by connections, color by type, glow on hover
-- Edges: thickness by density, muted purple
-- Editor: Markdown textarea with toolbar, react-markdown preview, meta fields, [[wikilink]] insert
+- Edges: thickness by density, muted ink
+- Editor: custom markdown renderer ([`frontend/src/editor/renderMarkdown.tsx`](../frontend/src/editor/renderMarkdown.tsx)) with `[[wikilink]]` support and inline marks
 - Create note: modal → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
 - Auto-refresh: 5-10s interval
@@ -145,25 +117,26 @@ Templates live in `prompts/` as `.md` files. Per-agent budgets in `_compiler.yam
 
 ## Color System
 
-| Token | Hex |
-|-------|-----|
-| `--bg-base` | `#0f172a` |
-| `--bg-surface` | `#1e293b` |
-| `--bg-elevated` | `#334155` |
-| `--text-primary` | `#e2e8f0` |
-| `--text-secondary` | `#94a3b8` |
-| `--accent-amber` (user) | `#f59e0b` |
-| `--accent-purple` (agent) | `#a78bfa` |
-| `--node-project` | `#60a5fa` |
-| `--node-topic` | `#4ade80` |
-| `--node-person` | `#c084fc` |
-| `--node-daily` | `#94a3b8` |
-| `--node-capture` | `#fbbf24` |
-| `--node-custom` | `#2dd4bf` |
-| `--danger` | `#f87171` |
-| `--success` | `#34d399` |
+Default = **paper** theme. `tokens.css` also ships navy, forest, and sepia variants — same token names, different palettes.
 
-Fonts: Sora (UI), JetBrains Mono (code).
+| Token (paper) | Hex |
+|---------------|-----|
+| `--bg-base` | `#f5f1e8` |
+| `--bg-surface` | `#ede8da` |
+| `--bg-elevated` | `#e3dcca` |
+| `--ink` | `#1a1815` |
+| `--ink-2` | `#5c5851` |
+| `--ink-3` | `#8c877d` |
+| `--you` (user) | `#a83a2c` (brick red) |
+| `--agent` | `#2d4a7c` (ink blue) |
+| `--node-project` | `#2d4a7c` (ink blue) |
+| `--node-topic` | `#4a6b3a` (moss) |
+| `--node-person` | `#6b3a6b` (aubergine) |
+| `--node-daily` | `#8c877d` (graphite) |
+| `--node-capture` | `#a8722a` (ochre) |
+| `--node-custom` | `#2d6b6b` (teal ink) |
+
+Fonts: Fraunces (prose/headings), Inter (UI chrome), JetBrains Mono (timestamps/tags).
 
 ## Providers Config
 

@@ -70,10 +70,7 @@ export function GraphView(): ReactNode {
     basePositionsRef.current = applyConstellationLayout(graph);
 
     const sigma = createSigma(graph, hostRef.current);
-    sigma.setSetting(
-      "labelRenderedSizeThreshold",
-      graphDisplay.labelThreshold,
-    );
+    sigma.setSetting("labelRenderedSizeThreshold", graphDisplay.labelThreshold);
     sigmaRef.current = sigma;
     if (import.meta.env.DEV) {
       (window as unknown as { __loomGraph: unknown }).__loomGraph = {
@@ -166,12 +163,16 @@ export function GraphView(): ReactNode {
       sigma.getCamera().animatedReset({ duration: 600 });
     }, 200);
 
+    const cancelTween = () => {
+      cancelAnimationFrame(tweenRafRef.current);
+    };
+
     return () => {
       clearTimeout(reset);
       ro.disconnect();
       stopBreathRef.current?.();
       detachDrag();
-      cancelAnimationFrame(tweenRafRef.current);
+      cancelTween();
       sigma.kill();
       sigmaRef.current = null;
       graphRef.current = null;
@@ -221,10 +222,7 @@ export function GraphView(): ReactNode {
     const sigma = sigmaRef.current;
     if (!sigma) return;
     const ratio = spacingToCameraRatio(graphDisplay.spacingScale);
-    sigma.getCamera().animate(
-      { ratio, x: 0.5, y: 0.5 },
-      { duration: 300 },
-    );
+    sigma.getCamera().animate({ ratio, x: 0.5, y: 0.5 }, { duration: 300 });
   }, [graphDisplay.spacingScale]);
 
   // Mode/focus transitions: tween between constellation and orbit layouts.

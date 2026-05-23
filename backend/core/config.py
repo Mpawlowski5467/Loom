@@ -42,7 +42,7 @@ class LoomSettings(BaseSettings):
         default=["http://localhost:5173"],
         description=(
             "Allowed CORS origins for the API. Override via LOOM_CORS_ORIGINS "
-            "(JSON list, e.g. '[\"http://localhost:5173\",\"http://localhost:4173\"]')."
+            '(JSON list, e.g. \'["http://localhost:5173","http://localhost:4173"]\').'
         ),
     )
 
@@ -153,13 +153,15 @@ class GlobalConfig(BaseModel):
     def save(self, path: Path) -> None:
         """Write to a YAML file, creating parent directories as needed."""
         path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
+        tmp_path = path.with_suffix(f"{path.suffix}.tmp")
+        tmp_path.write_text(
             yaml.safe_dump(
                 self.model_dump(exclude_none=True, mode="json"),
                 default_flow_style=False,
                 sort_keys=False,
-            )
+            ),
         )
+        tmp_path.replace(path)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""

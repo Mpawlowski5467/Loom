@@ -52,6 +52,14 @@ class VectorIndexer:
             self._db = lancedb.connect(str(self._db_path))
         return self._db
 
+    def close(self) -> None:
+        """Release the cached LanceDB connection if the driver exposes close."""
+        db = self._db
+        self._db = None
+        close = getattr(db, "close", None)
+        if callable(close):
+            close()
+
     def open_table(self) -> lancedb.table.Table:
         """Return the chunks table. Raises if it does not yet exist."""
         return self.get_db().open_table(TABLE_NAME)
@@ -179,3 +187,11 @@ def init_indexer(loom_dir: Path, embed_provider: BaseProvider) -> VectorIndexer:
     global _indexer
     _indexer = VectorIndexer(loom_dir, embed_provider)
     return _indexer
+
+
+def reset_indexer() -> None:
+    """Close and clear the global VectorIndexer."""
+    global _indexer
+    if _indexer is not None:
+        _indexer.close()
+    _indexer = None

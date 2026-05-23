@@ -11,17 +11,17 @@ interface Props {
   onBack: () => void;
 }
 
-/**
- * Theme picker — hover to preview, click to commit. The preview is real:
- * we apply the theme class to ``<html>`` so the surrounding wizard
- * recolours too. Restored on unmount.
- */
-export function ThemePicker({
+interface ThemePickerGridProps {
+  selected: ThemeName;
+  onChange: (theme: ThemeName) => void;
+  className?: string;
+}
+
+export function ThemePickerGrid({
   selected,
   onChange,
-  onNext,
-  onBack,
-}: Props): ReactNode {
+  className = "onb-theme-grid",
+}: ThemePickerGridProps): ReactNode {
   const committedRef = useRef<ThemeName>(selected);
 
   useEffect(() => {
@@ -30,8 +30,6 @@ export function ThemePicker({
 
   useEffect(() => {
     return () => {
-      // If the user navigates away without committing, restore the last
-      // committed theme so nothing visually leaks.
       applyTheme(committedRef.current);
     };
   }, []);
@@ -45,38 +43,53 @@ export function ThemePicker({
   };
 
   return (
+    <div className={className} role="radiogroup" aria-label="Theme">
+      {THEMES.map((name) => {
+        const meta = THEME_META[name];
+        const active = selected === name;
+        return (
+          <button
+            key={name}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            className={`onb-theme-card ${active ? "active" : ""}`}
+            onMouseEnter={() => preview(name)}
+            onFocus={() => preview(name)}
+            onMouseLeave={restore}
+            onBlur={restore}
+            onClick={() => commit(name)}
+          >
+            <ThemeSwatch theme={name} />
+            <div className="onb-theme-meta">
+              <div className="onb-theme-name">{meta.label}</div>
+              <div className="onb-theme-desc">{meta.description}</div>
+            </div>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/**
+ * Theme picker — hover to preview, click to commit. The preview is real:
+ * we apply the theme class to ``<html>`` so the surrounding wizard
+ * recolours too. Restored on unmount.
+ */
+export function ThemePicker({
+  selected,
+  onChange,
+  onNext,
+  onBack,
+}: Props): ReactNode {
+  return (
     <div className="onb-step">
       <h2 className="onb-h2">Pick a look</h2>
       <p className="onb-sub">
-        Loom ships with four themes. You can change this any time from
-        Settings.
+        Loom ships with four themes. You can change this any time from Settings.
       </p>
-      <div className="onb-theme-grid" role="radiogroup" aria-label="Theme">
-        {THEMES.map((name) => {
-          const meta = THEME_META[name];
-          const active = selected === name;
-          return (
-            <button
-              key={name}
-              type="button"
-              role="radio"
-              aria-checked={active}
-              className={`onb-theme-card ${active ? "active" : ""}`}
-              onMouseEnter={() => preview(name)}
-              onFocus={() => preview(name)}
-              onMouseLeave={restore}
-              onBlur={restore}
-              onClick={() => commit(name)}
-            >
-              <ThemeSwatch theme={name} />
-              <div className="onb-theme-meta">
-                <div className="onb-theme-name">{meta.label}</div>
-                <div className="onb-theme-desc">{meta.description}</div>
-              </div>
-            </button>
-          );
-        })}
-      </div>
+      <ThemePickerGrid selected={selected} onChange={onChange} />
       <div className="onb-actions">
         <button className="btn btn-md" onClick={onBack}>
           ← Back

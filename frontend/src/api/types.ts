@@ -70,8 +70,16 @@ export interface ModelsResponse {
 export interface VaultInfo {
   name: string;
   path: string;
-  exists: boolean;
-  scaffolded: boolean;
+  is_active: boolean;
+}
+
+export interface ActiveVaultResponse {
+  name: string;
+}
+
+export interface VaultListResponse {
+  vaults: VaultInfo[];
+  active: string;
 }
 
 export interface VaultExistsResponse {
@@ -83,6 +91,12 @@ export interface VaultExistsResponse {
 export interface VaultCreateRequest {
   name: string;
   overwrite?: boolean;
+}
+
+export interface ArchiveVaultResponse {
+  archived_name: string;
+  archived_path: string;
+  new_active: string | null;
 }
 
 export interface OnboardingProviderPayload {

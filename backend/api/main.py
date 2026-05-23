@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -19,6 +20,7 @@ from api.routers.agents import router as agents_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
+from api.routers.diagnostics import router as diagnostics_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
@@ -130,6 +132,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
     import asyncio
 
+    app.state.started_at = datetime.now(UTC)
     vault_dir = settings.active_vault_dir
     if vault_dir.exists():
         _init_vector_index(vault_dir)
@@ -175,6 +178,7 @@ app.include_router(settings_router)
 app.include_router(config_router)
 app.include_router(onboarding_router)
 app.include_router(providers_router)
+app.include_router(diagnostics_router)
 
 
 @app.get("/api/health")

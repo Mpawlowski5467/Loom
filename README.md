@@ -336,9 +336,14 @@ In active development. What works today:
 - File watcher, rate limiting, health/readiness probes
 
 In flight:
+- Settings UI — post-onboarding theme/provider/vault management
 - Scribe's daily-log generation (index works; daily summary being tuned)
 - Sentinel's full AI-assisted validation
 - Standup calendar integration
+
+Known gaps:
+- Frontend test suite — backend has thorough pytest coverage; frontend has none yet
+- `.env.example` referenced in setup is not in the repo yet
 
 See [`docs/architecture-ref.md`](docs/architecture-ref.md) for the full design and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

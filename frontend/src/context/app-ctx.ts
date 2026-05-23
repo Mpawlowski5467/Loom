@@ -1,8 +1,5 @@
 import { createContext, useContext } from "react";
-import type {
-  LoomConfigPublic,
-  OnboardingCompleteRequest,
-} from "../api/types";
+import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
 import type { ThemeName } from "../theme/themes";
 import type {
   Agent,
@@ -13,6 +10,7 @@ import type {
   GraphMode,
   Note,
   NoteId,
+  SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
@@ -44,6 +42,8 @@ export interface AppContextValue {
 
   tab: Tab;
   setTab: (t: Tab) => void;
+  settingsSection: SettingsSection;
+  setSettingsSection: (s: SettingsSection) => void;
   currentNoteId: NoteId | null;
   openNote: (id: NoteId) => void;
 

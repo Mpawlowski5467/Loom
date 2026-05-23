@@ -145,6 +145,12 @@
   text-transform: uppercase;
   color: var(--ink-3);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-pane-h .spacer {
+  flex: 1;
 }
 .editor-textarea {
   flex: 1;

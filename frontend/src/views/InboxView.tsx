@@ -36,27 +36,6 @@ export function InboxView(): ReactNode {
             Captures
             <span className="inbox-count">{pendingCount}</span>
           </span>
-          <Button
-            variant="purple"
-            onClick={() => {
-              const pending = captures.filter((c) => c.status !== "done");
-              pending.forEach((c, i) => {
-                setTimeout(() => setCaptureStatus(c.id, "processing"), i * 200);
-                setTimeout(() => setCaptureStatus(c.id, "done"), i * 200 + 1400);
-              });
-              setTimeout(
-                () =>
-                  pushToast({
-                    icon: "⚡",
-                    agent: "weaver",
-                    body: `Processed ${pending.length} captures`,
-                  }),
-                pending.length * 200 + 1400,
-              );
-            }}
-          >
-            + process all
-          </Button>
         </div>
         <div className="inbox-scroll">
           {captures.map((c) => {
@@ -148,7 +127,6 @@ export function InboxView(): ReactNode {
                 <Button variant="amber" size="md" onClick={() => accept(selected.id)}>
                   accept & file
                 </Button>
-                <Button>edit suggestion</Button>
                 <Button onClick={() => setCaptureStatus(selected.id, "done")}>skip</Button>
               </div>
             </div>

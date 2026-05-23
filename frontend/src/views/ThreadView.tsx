@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -8,6 +8,7 @@ import { Wikilink } from "../components/primitives/Wikilink";
 import { Sidebar } from "../components/layout/Sidebar";
 import { MiniGraph } from "../components/sidebar/MiniGraph";
 import { extractHeadings, renderMarkdown } from "../editor/renderMarkdown";
+import { backendNoteToFrontend, updateNote as apiUpdateNote } from "../api/notes";
 
 export function ThreadView(): ReactNode {
   const {
@@ -21,15 +22,56 @@ export function ThreadView(): ReactNode {
     editing,
     setEditing,
     openNote,
+    updateNote,
+    pushToast,
   } = useApp();
 
   const note = currentNoteId ? noteById(currentNoteId) ?? null : null;
   const [draft, setDraft] = useState<string>(note?.body ?? "");
   const [lastSeed, setLastSeed] = useState<string | null>(note?.id ?? null);
+  const [saving, setSaving] = useState(false);
   if ((note?.id ?? null) !== lastSeed) {
     setLastSeed(note?.id ?? null);
     setDraft(note?.body ?? "");
   }
+
+  const dirty = !!note && draft !== note.body;
+  const canSave = dirty && !saving;
+
+  const save = async () => {
+    if (!note || !canSave) return;
+    setSaving(true);
+    try {
+      const record = await apiUpdateNote(note.id, { body: draft });
+      updateNote(backendNoteToFrontend(record));
+      pushToast({
+        icon: "✓",
+        agent: "weaver",
+        body: `Saved [[${record.title}]]`,
+      });
+      setEditing(false);
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: `Save failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   if (!note) {
     return (
@@ -87,7 +129,20 @@ export function ThreadView(): ReactNode {
         {editing ? (
           <div className="editor-split">
             <div className="editor-source">
-              <div className="editor-pane-h">SOURCE · MARKDOWN</div>
+              <div className="editor-pane-h">
+                SOURCE · MARKDOWN
+                <span className="spacer" />
+                <Button
+                  variant="active"
+                  size="sm"
+                  onClick={() => void save()}
+                  disabled={!canSave}
+                  aria-label="Save note (⌘S)"
+                  title="⌘S"
+                >
+                  {saving ? "saving…" : "save"}
+                </Button>
+              </div>
               <textarea
                 className="editor-textarea"
                 value={draft}

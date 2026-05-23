@@ -84,6 +84,7 @@ export interface AppContextValue {
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;
   appendNote: (note: Note) => void;
+  updateNote: (note: Note) => void;
 
   captures: Capture[];
   selectedCaptureId: string | null;

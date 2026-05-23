@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
-import type { NodeType, Note, Tab } from "../data/types";
-import type { NoteRecord } from "../api/notes";
+import type { Tab } from "../data/types";
+import { backendNoteToFrontend } from "../api/notes";
 import { Nav } from "./layout/Nav";
 import { Tree } from "./layout/Tree";
 import { Splash } from "../views/Splash";
@@ -25,49 +25,6 @@ const TAB_LABELS: Record<Tab, string> = {
   board: "Board",
   settings: "Settings",
 };
-
-const NODE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
-  "project",
-  "topic",
-  "people",
-  "daily",
-  "capture",
-  "custom",
-]);
-
-/**
- * Convert a backend NoteRecord to the frontend Note shape used by the
- * graph / tree / thread view. The backend uses "person" while the frontend
- * NodeType is "people"; unknown types fall through to "custom".
- */
-function backendNoteToFrontend(record: NoteRecord): Note {
-  const rawType = record.type === "person" ? "people" : record.type;
-  const type: NodeType = NODE_TYPES.has(rawType as NodeType)
-    ? (rawType as NodeType)
-    : "custom";
-  // file_path looks like ".../threads/<folder>/<file>.md" — pull the folder.
-  const parts = record.file_path.split("/threads/")[1]?.split("/") ?? [];
-  const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
-  return {
-    id: record.id,
-    title: record.title,
-    type,
-    folder,
-    tags: record.tags,
-    body: record.body,
-    links: record.links,
-    history: record.history.map((h) => ({
-      action: h.action as Note["history"][number]["action"],
-      by: h.by as Note["history"][number]["by"],
-      at: h.at,
-      reason: h.reason,
-    })),
-    created: record.created,
-    modified: record.modified,
-    status: record.status === "archived" ? "archived" : "active",
-    source: record.source,
-  };
-}
 
 function shouldShowSplash(): boolean {
   if (typeof window === "undefined") return false;

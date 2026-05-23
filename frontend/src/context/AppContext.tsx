@@ -102,6 +102,15 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       prev.some((n) => n.id === note.id) ? prev : [...prev, note],
     );
   }, []);
+  const updateNote = useCallback((note: Note) => {
+    setNotes((prev) => {
+      const idx = prev.findIndex((n) => n.id === note.id);
+      if (idx === -1) return [...prev, note];
+      const next = prev.slice();
+      next[idx] = note;
+      return next;
+    });
+  }, []);
   const noteById = useCallback(
     (id: string): Note | undefined => notes.find((n) => n.id === id),
     [notes],
@@ -332,6 +341,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     newNoteOpen,
     setNewNoteOpen,
     appendNote,
+    updateNote,
 
     captures,
     selectedCaptureId,

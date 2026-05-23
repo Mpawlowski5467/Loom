@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -8,6 +8,12 @@ import { Wikilink } from "../components/primitives/Wikilink";
 import { Sidebar } from "../components/layout/Sidebar";
 import { MiniGraph } from "../components/sidebar/MiniGraph";
 import { extractHeadings, renderMarkdown } from "../editor/renderMarkdown";
+import {
+  archiveNote as apiArchiveNote,
+  backendNoteToFrontend,
+  updateNote as apiUpdateNote,
+} from "../api/notes";
+import { Trash2 } from "lucide-react";
 
 export function ThreadView(): ReactNode {
   const {
@@ -21,15 +27,60 @@ export function ThreadView(): ReactNode {
     editing,
     setEditing,
     openNote,
+    updateNote,
+    removeNote,
+    pushToast,
+    setTab,
   } = useApp();
+  const [editingTitle, setEditingTitle] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
 
   const note = currentNoteId ? noteById(currentNoteId) ?? null : null;
   const [draft, setDraft] = useState<string>(note?.body ?? "");
   const [lastSeed, setLastSeed] = useState<string | null>(note?.id ?? null);
+  const [saving, setSaving] = useState(false);
   if ((note?.id ?? null) !== lastSeed) {
     setLastSeed(note?.id ?? null);
     setDraft(note?.body ?? "");
   }
+
+  const dirty = !!note && draft !== note.body;
+  const canSave = dirty && !saving;
+
+  const save = async () => {
+    if (!note || !canSave) return;
+    setSaving(true);
+    try {
+      const record = await apiUpdateNote(note.id, { body: draft });
+      updateNote(backendNoteToFrontend(record));
+      pushToast({
+        icon: "✓",
+        agent: "weaver",
+        body: `Saved [[${record.title}]]`,
+      });
+      setEditing(false);
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: `Save failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!editing) return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "s") {
+        e.preventDefault();
+        void save();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  });
 
   if (!note) {
     return (
@@ -43,6 +94,58 @@ export function ThreadView(): ReactNode {
     );
   }
 
+  const beginTitleEdit = () => {
+    setTitleDraft(note.title);
+    setEditingTitle(true);
+  };
+
+  const saveTitle = async () => {
+    const next = titleDraft.trim();
+    if (!next || next === note.title) {
+      setEditingTitle(false);
+      return;
+    }
+    try {
+      const record = await apiUpdateNote(note.id, { title: next });
+      updateNote(backendNoteToFrontend(record));
+      pushToast({
+        icon: "✎",
+        agent: "weaver",
+        body: `Renamed to [[${record.title}]]`,
+      });
+      setEditingTitle(false);
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: err instanceof Error ? err.message : "Rename failed",
+      });
+    }
+  };
+
+  const deleteNote = async () => {
+    const ok = window.confirm(
+      `Archive "${note.title}"? It moves to threads/.archive/.`,
+    );
+    if (!ok) return;
+    try {
+      await apiArchiveNote(note.id);
+      removeNote(note.id);
+      pushToast({
+        icon: "📦",
+        agent: "archivist",
+        body: `Archived [[${note.title}]]`,
+      });
+      setTab("graph");
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: err instanceof Error ? err.message : "Archive failed",
+      });
+    }
+  };
+
   const headings = extractHeadings(note.body);
   const back = backlinksFor(note.id);
   const related = Array.from(new Set([...note.links, ...back])).slice(0, 6);
@@ -51,7 +154,39 @@ export function ThreadView(): ReactNode {
     <div className="thread-view">
       <div className="thread-main">
         <header className="thread-header">
-          <h1 className="thread-title">{note.title}</h1>
+          {editingTitle ? (
+            <input
+              className="thread-title-input"
+              value={titleDraft}
+              autoFocus
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={() => void saveTitle()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void saveTitle();
+                }
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  setEditingTitle(false);
+                }
+              }}
+              aria-label="Note title"
+            />
+          ) : (
+            <h1
+              className="thread-title"
+              onClick={beginTitleEdit}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") beginTitleEdit();
+              }}
+              title="Click to rename"
+            >
+              {note.title}
+            </h1>
+          )}
           <div className="thread-meta">
             <Chip type={note.type}>{note.type}</Chip>
             {note.tags.map((t) => (
@@ -65,6 +200,13 @@ export function ThreadView(): ReactNode {
               aria-pressed={editing}
             >
               ✎ edit
+            </Button>
+            <Button
+              onClick={() => void deleteNote()}
+              aria-label="Archive note"
+              title="Archive note"
+            >
+              <Trash2 size={13} aria-hidden="true" />
             </Button>
             <Button
               variant={primaryOpen ? "active" : "default"}
@@ -87,7 +229,20 @@ export function ThreadView(): ReactNode {
         {editing ? (
           <div className="editor-split">
             <div className="editor-source">
-              <div className="editor-pane-h">SOURCE · MARKDOWN</div>
+              <div className="editor-pane-h">
+                SOURCE · MARKDOWN
+                <span className="spacer" />
+                <Button
+                  variant="active"
+                  size="sm"
+                  onClick={() => void save()}
+                  disabled={!canSave}
+                  aria-label="Save note (⌘S)"
+                  title="⌘S"
+                >
+                  {saving ? "saving…" : "save"}
+                </Button>
+              </div>
               <textarea
                 className="editor-textarea"
                 value={draft}

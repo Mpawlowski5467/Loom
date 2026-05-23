@@ -32,16 +32,26 @@ class OnboardingProviderPayload(BaseModel):
 
 
 class OnboardingCompleteRequest(BaseModel):
-    """All state captured by the wizard."""
+    """All state captured by the wizard.
+
+    Accepts both the legacy single-provider shape (``provider``) and the
+    new multi-provider shape (``providers`` + ``chat_provider`` /
+    ``embed_provider``). New clients should send ``providers``; the
+    server treats ``provider`` as a one-element list for backwards
+    compatibility.
+    """
 
     theme: ThemeName = ThemeName.paper
     vault_name: str = "default"
     overwrite_existing_vault: bool = False
     provider: OnboardingProviderPayload | None = None
+    providers: list[OnboardingProviderPayload] = []
+    chat_provider: str | None = None
+    embed_provider: str | None = None
     steps_done: list[str] = []
 
 
-_KNOWN_PROVIDERS = {"openai", "anthropic", "xai", "ollama"}
+_KNOWN_PROVIDERS = {"openai", "anthropic", "xai", "ollama", "openrouter"}
 
 
 @router.get("/status", response_model=OnboardingState)
@@ -91,8 +101,12 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
 
     config.active_vault = payload.vault_name
 
-    if payload.provider is not None:
-        prov = payload.provider
+    # Normalize legacy single-provider shape into the new providers list.
+    providers = list(payload.providers)
+    if payload.provider is not None and not providers:
+        providers = [payload.provider]
+
+    for prov in providers:
         if prov.name not in _KNOWN_PROVIDERS:
             raise HTTPException(
                 status.HTTP_400_BAD_REQUEST,
@@ -105,13 +119,22 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
             embed_model=prov.embed_model if prov.embed_model is not None else existing.embed_model,
             host=prov.host if prov.host is not None else existing.host,
         )
-        config.default_provider = prov.name
-        # Wire the picked provider into the runtime defaults so agents/indexer
-        # can find it without a second pass through the Settings UI.
-        if prov.chat_model:
-            config.chat_provider = prov.name
-        if prov.embed_model:
-            config.embed_provider = prov.name
+
+    if providers:
+        chat_pick = payload.chat_provider or next(
+            (p.name for p in providers if p.chat_model), providers[0].name
+        )
+        embed_pick = payload.embed_provider or next(
+            (p.name for p in providers if p.embed_model), chat_pick
+        )
+        if chat_pick not in _KNOWN_PROVIDERS or embed_pick not in _KNOWN_PROVIDERS:
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
+                detail="Default chat/embed provider must be one of the configured providers.",
+            )
+        config.default_provider = chat_pick
+        config.chat_provider = chat_pick
+        config.embed_provider = embed_pick
 
     config.onboarding = OnboardingState(
         completed=True,

@@ -136,6 +136,20 @@
   background: var(--bg-base);
   overflow-y: auto;
 }
+.thread-title-input {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--ink);
+  background: var(--bg-base);
+  border: 1px solid var(--agent);
+  border-radius: var(--r-sm);
+  padding: 4px 10px;
+  outline: none;
+  width: 100%;
+  max-width: 600px;
+}
+
 .editor-pane-h {
   padding: 10px 22px;
   border-bottom: 1px solid var(--rule);
@@ -145,6 +159,12 @@
   text-transform: uppercase;
   color: var(--ink-3);
   flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.editor-pane-h .spacer {
+  flex: 1;
 }
 .editor-textarea {
   flex: 1;

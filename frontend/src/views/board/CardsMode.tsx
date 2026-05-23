@@ -1,7 +1,15 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
+import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import { StatusBadge } from "../../components/primitives/StatusBadge";
 import { AgentBlob } from "../../components/primitives/AgentBlob";
+import { AddAgentModal } from "./AddAgentModal";
+import {
+  deleteCustomAgent,
+  type AgentRegistryRecord,
+} from "../../api/agentsRegistry";
+import type { Agent } from "../../data/types";
 
 function renderTarget(target: string): ReactNode {
   const parts = target.split(/(\[\[[^\]]+\]\])/g);
@@ -25,16 +33,53 @@ function renderTarget(target: string): ReactNode {
 }
 
 export function CardsMode(): ReactNode {
-  const { agents, changelog } = useApp();
-  const loom = agents.filter((a) => a.layer === "loom");
-  const shuttle = agents.filter((a) => a.layer === "shuttle");
+  const {
+    agents,
+    changelog,
+    customAgents,
+    refreshCustomAgents,
+    pushToast,
+  } = useApp();
+  const customIds = new Set(customAgents.map((a) => a.id));
+  const merged: Agent[] = [
+    ...agents.filter((a) => !customIds.has(a.id)),
+    ...customAgents,
+  ];
+  const loom = merged.filter((a) => a.layer === "loom");
+  const shuttle = merged.filter((a) => a.layer === "shuttle");
 
-  const renderCard = (a: (typeof agents)[number]) => (
+  const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
+
+  const handleDelete = async (a: Agent) => {
+    const ok = window.confirm(`Delete custom agent "${a.name}"?`);
+    if (!ok) return;
+    try {
+      await deleteCustomAgent(a.id);
+      await refreshCustomAgents();
+      pushToast({
+        icon: "🗑",
+        agent: "archivist",
+        body: `Deleted agent ${a.name}`,
+      });
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: err instanceof Error ? err.message : "Delete failed",
+      });
+    }
+  };
+
+  const isCustom = (a: Agent) => customIds.has(a.id);
+
+  const renderCard = (a: Agent) => (
     <div key={a.id} className="agent-card">
       <div className="agent-card-h">
         <AgentBlob agent={a.id} state={a.state} size={36} />
         <span className="agent-card-name">{a.name}</span>
         <StatusBadge state={a.state} />
+        {!isCustom(a) && <span className="agent-card-lock" title="System agent">🔒</span>}
       </div>
       <div className="agent-card-role">{a.role}</div>
       <div className="agent-card-stats">
@@ -44,7 +89,49 @@ export function CardsMode(): ReactNode {
         <span>last: {a.stats.lastRun}</span>
       </div>
       <div className="agent-card-last">{a.lastAction}</div>
+      {isCustom(a) && (
+        <div className="agent-card-actions">
+          <button
+            type="button"
+            className="btn btn-md"
+            onClick={() =>
+              setEditing({
+                id: a.id,
+                name: a.name,
+                layer: "shuttle",
+                role: a.role,
+                icon: a.icon,
+                system_prompt: "",
+                system: false,
+              })
+            }
+            aria-label={`Edit ${a.name}`}
+          >
+            <Pencil size={13} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="btn btn-md"
+            onClick={() => void handleDelete(a)}
+            aria-label={`Delete ${a.name}`}
+          >
+            <Trash2 size={13} aria-hidden="true" />
+          </button>
+        </div>
+      )}
     </div>
+  );
+
+  const addCard = (
+    <button
+      key="__add"
+      type="button"
+      className="agent-card agent-card--add"
+      onClick={() => setAdding(true)}
+    >
+      <Plus size={18} aria-hidden="true" />
+      <span>Add agent</span>
+    </button>
   );
 
   return (
@@ -53,7 +140,10 @@ export function CardsMode(): ReactNode {
       <div className="agents-grid">{loom.map(renderCard)}</div>
 
       <div className="section-divider">Shuttle Layer · outbound</div>
-      <div className="agents-grid">{shuttle.map(renderCard)}</div>
+      <div className="agents-grid">
+        {shuttle.map(renderCard)}
+        {addCard}
+      </div>
 
       <div className="section-divider">Recent activity</div>
       <div className="changelog">
@@ -70,6 +160,26 @@ export function CardsMode(): ReactNode {
           </div>
         ))}
       </div>
+
+      {adding && (
+        <AddAgentModal
+          onClose={() => setAdding(false)}
+          onSaved={async () => {
+            await refreshCustomAgents();
+            setAdding(false);
+          }}
+        />
+      )}
+      {editing && (
+        <AddAgentModal
+          existing={editing}
+          onClose={() => setEditing(null)}
+          onSaved={async () => {
+            await refreshCustomAgents();
+            setEditing(null);
+          }}
+        />
+      )}
     </div>
   );
 }

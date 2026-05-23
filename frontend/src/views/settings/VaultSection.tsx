@@ -1,14 +1,18 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Eye, FolderOpen, Plus } from "lucide-react";
+import { Eye, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import {
+  archiveVault,
   createVault,
   listVaults,
+  renameVault,
   revealVault,
   setActiveVault,
 } from "../../api/vault";
 import type { VaultInfo } from "../../api/types";
 import { useApp } from "../../context/app-ctx";
+
+const VAULT_NAME_RE = /^[A-Za-z0-9_-]+$/;
 
 export function VaultSection(): ReactNode {
   const { refreshConfig } = useApp();
@@ -17,6 +21,9 @@ export function VaultSection(): ReactNode {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [renaming, setRenaming] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  const [renameError, setRenameError] = useState<string | null>(null);
 
   const load = async () => {
     const result = await listVaults();
@@ -72,6 +79,64 @@ export function VaultSection(): ReactNode {
     }
   };
 
+  const beginRename = (vault: VaultInfo) => {
+    setRenaming(vault.name);
+    setRenameDraft(vault.name);
+    setRenameError(null);
+  };
+
+  const submitRename = async (oldName: string) => {
+    const next = renameDraft.trim();
+    if (!next) {
+      setRenameError("Name required");
+      return;
+    }
+    if (!VAULT_NAME_RE.test(next)) {
+      setRenameError("Letters, digits, dashes, underscores only");
+      return;
+    }
+    if (next === oldName) {
+      setRenaming(null);
+      return;
+    }
+    setBusy(true);
+    try {
+      await renameVault(oldName, next);
+      await refreshConfig();
+      await load();
+      setRenaming(null);
+      setMessage(`Renamed ${oldName} → ${next}`);
+    } catch (err) {
+      setRenameError(err instanceof Error ? err.message : "Rename failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const deleteVault = async (vault: string) => {
+    const typed = window.prompt(
+      `Archive vault "${vault}"? This moves it to ~/.loom/vaults/.archive/. ` +
+        `Type the vault name to confirm:`,
+    );
+    if (typed === null) return;
+    if (typed !== vault) {
+      setMessage("Vault name did not match — not archived.");
+      return;
+    }
+    setBusy(true);
+    setMessage(null);
+    try {
+      await archiveVault(vault);
+      await refreshConfig();
+      await load();
+      setMessage(`Archived ${vault}.`);
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Archive failed");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <div className="settings-panel">
       <div className="settings-kicker">Vault</div>
@@ -98,36 +163,109 @@ export function VaultSection(): ReactNode {
         </button>
       </div>
       <div className="settings-vault-list">
-        {vaults.map((vault) => (
-          <article key={vault.name} className="settings-vault-card">
-            <div>
-              <div className="settings-vault-name">
-                <FolderOpen size={15} aria-hidden="true" />
-                {vault.name}
+        {vaults.map((vault) => {
+          const isActive = vault.name === active;
+          const isRenaming = renaming === vault.name;
+          return (
+            <article key={vault.name} className="settings-vault-card">
+              <div>
+                {isRenaming ? (
+                  <div className="settings-vault-rename">
+                    <input
+                      className="input"
+                      value={renameDraft}
+                      autoFocus
+                      onChange={(e) => setRenameDraft(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter")
+                          void submitRename(vault.name);
+                        if (e.key === "Escape") setRenaming(null);
+                      }}
+                      aria-invalid={renameError !== null}
+                    />
+                    {renameError && (
+                      <div className="tree-new-folder-error">
+                        {renameError}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <>
+                    <div className="settings-vault-name">
+                      <FolderOpen size={15} aria-hidden="true" />
+                      {vault.name}
+                    </div>
+                    <div className="settings-vault-path">{vault.path}</div>
+                  </>
+                )}
               </div>
-              <div className="settings-vault-path">{vault.path}</div>
-            </div>
-            <div className="settings-vault-actions">
-              <button
-                className="btn btn-md"
-                type="button"
-                onClick={() => void switchVault(vault.name)}
-                disabled={busy || vault.name === active}
-              >
-                {vault.name === active ? "Active" : "Switch"}
-              </button>
-              <button
-                className="btn btn-md"
-                type="button"
-                title="Linux folder reveal depends on your desktop environment."
-                onClick={() => void reveal(vault.name)}
-              >
-                <Eye size={14} aria-hidden="true" />
-                Reveal
-              </button>
-            </div>
-          </article>
-        ))}
+              <div className="settings-vault-actions">
+                {isRenaming ? (
+                  <>
+                    <button
+                      className="btn btn-md btn-active"
+                      type="button"
+                      onClick={() => void submitRename(vault.name)}
+                      disabled={busy}
+                    >
+                      Save
+                    </button>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      onClick={() => setRenaming(null)}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      onClick={() => void switchVault(vault.name)}
+                      disabled={busy || isActive}
+                    >
+                      {isActive ? "Active" : "Switch"}
+                    </button>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      title="Linux folder reveal depends on your desktop environment."
+                      onClick={() => void reveal(vault.name)}
+                    >
+                      <Eye size={14} aria-hidden="true" />
+                      Reveal
+                    </button>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      onClick={() => beginRename(vault)}
+                      disabled={busy}
+                    >
+                      <Pencil size={14} aria-hidden="true" />
+                      Rename
+                    </button>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      onClick={() => void deleteVault(vault.name)}
+                      disabled={busy || isActive}
+                      title={
+                        isActive
+                          ? "Switch to another vault first"
+                          : "Archive vault"
+                      }
+                    >
+                      <Trash2 size={14} aria-hidden="true" />
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
+            </article>
+          );
+        })}
       </div>
       {message && <div className="settings-inline-status">{message}</div>}
     </div>

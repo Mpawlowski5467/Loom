@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -5,6 +6,7 @@ import { Chip } from "../components/primitives/Chip";
 import { Wikilink } from "../components/primitives/Wikilink";
 import { AgentBlob } from "../components/primitives/AgentBlob";
 import { renderMarkdown } from "../editor/renderMarkdown";
+import { EditSuggestionModal } from "./EditSuggestionModal";
 
 export function InboxView(): ReactNode {
   const {
@@ -14,7 +16,10 @@ export function InboxView(): ReactNode {
     setCaptureStatus,
     noteById,
     pushToast,
+    appendNote,
+    openNote,
   } = useApp();
+  const [editing, setEditing] = useState(false);
 
   const selected = captures.find((c) => c.id === selectedCaptureId) ?? captures[0];
   const pendingCount = captures.filter((c) => c.status !== "done").length;
@@ -36,27 +41,6 @@ export function InboxView(): ReactNode {
             Captures
             <span className="inbox-count">{pendingCount}</span>
           </span>
-          <Button
-            variant="purple"
-            onClick={() => {
-              const pending = captures.filter((c) => c.status !== "done");
-              pending.forEach((c, i) => {
-                setTimeout(() => setCaptureStatus(c.id, "processing"), i * 200);
-                setTimeout(() => setCaptureStatus(c.id, "done"), i * 200 + 1400);
-              });
-              setTimeout(
-                () =>
-                  pushToast({
-                    icon: "⚡",
-                    agent: "weaver",
-                    body: `Processed ${pending.length} captures`,
-                  }),
-                pending.length * 200 + 1400,
-              );
-            }}
-          >
-            + process all
-          </Button>
         </div>
         <div className="inbox-scroll">
           {captures.map((c) => {
@@ -148,7 +132,7 @@ export function InboxView(): ReactNode {
                 <Button variant="amber" size="md" onClick={() => accept(selected.id)}>
                   accept & file
                 </Button>
-                <Button>edit suggestion</Button>
+                <Button onClick={() => setEditing(true)}>edit suggestion</Button>
                 <Button onClick={() => setCaptureStatus(selected.id, "done")}>skip</Button>
               </div>
             </div>
@@ -164,6 +148,25 @@ export function InboxView(): ReactNode {
             </div>
           )}
         </div>
+      )}
+
+      {editing && selected && (
+        <EditSuggestionModal
+          capture={selected}
+          onClose={() => setEditing(false)}
+          onAccepted={(note, record) => {
+            appendNote(note);
+            setCaptureStatus(selected.id, "done");
+            pushToast({
+              icon: "🧶",
+              agent: "weaver",
+              body: `Filed [[${record.title}]] → ${
+                record.file_path.split("/threads/")[1] ?? record.file_path
+              }`,
+            });
+            openNote(note.id);
+          }}
+        />
       )}
     </div>
   );

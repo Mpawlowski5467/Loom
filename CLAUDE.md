@@ -1,50 +1,45 @@
 # Loom
 
 A local-first AI memory system with a multi-agent backbone and a visual knowledge graph. Markdown-based vault, provider-agnostic AI, two-tier agent architecture, React + Sigma.js graph UI.
-A local-first AI memory system with a multi-agent backbone and a visual knowledge graph. Markdown-based vault, provider-agnostic AI, two-tier agent architecture, React + react-force-graph-2d graph UI.
 
 ## Stack
 
 - **Backend**: Python 3.11+ / FastAPI
-- **Frontend**: React / Sigma.js / Plate (Slate.js)
+- **Frontend**: React + TypeScript / Sigma.js (graph) / hand-rolled markdown renderer
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, Ollama)
-- **Theme**: **Paper theme** — warm cream paper aesthetic, single duotone accent. Light only in v1; dark variant is future-only and derives from the navy theme, not from inverting the paper tokens.
-- **Frontend**: React / react-force-graph-2d / Markdown textarea + react-markdown
-- **Vector DB**: LanceDB
-- **Storage**: Markdown files with YAML frontmatter
-- **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, Ollama)
-- **Theme**: Dark only (navy base `#0f172a`, amber user accent, purple agent accent)
+- **Theme**: Paper theme — warm cream paper aesthetic, single duotone accent. Paper is the default; navy/forest/sepia variants also ship in tokens.css.
 
 ## Repo Layout
 
 ```
 loom/
-├── backend/           # Python — FastAPI server, agents, index, rules, bridge
-│   ├── api/           # FastAPI routes
-│   ├── agents/loom/   # Weaver, Spider, Archivist, Scribe, Sentinel
-│   ├── agents/shuttle/ # Researcher, Standup
-│   ├── compiler/      # Prompt Compiler pipeline
-│   ├── index/         # LanceDB, embeddings, search
-│   ├── rules/         # Rules engine parser
-│   ├── bridge/        # GitHub, Email, Calendar integrations
-├── backend/           # Python — FastAPI server, agents, index
-│   ├── api/           # FastAPI routes
-│   ├── agents/loom/   # Weaver, Spider, Archivist, Scribe, Sentinel
-│   ├── agents/shuttle/ # Researcher, Standup
-│   ├── index/         # LanceDB, embeddings, search
-│   └── core/          # Vault management, file watcher, config
-├── frontend/          # React — Graph UI
-│   ├── views/         # Graph, Board, Thread, Inbox
-│   ├── components/    # File tree, sidebar, agent cards, editor
-│   └── lib/           # Sigma.js graph logic, Plate config
-├── docs/              # Architecture docs, reference
-├── examples/          # Example vaults, rules, schemas
+├── backend/                  # Python — FastAPI server, agents, index
+│   ├── api/                  # FastAPI routes
+│   ├── agents/loom/          # Weaver, Spider, Archivist, Scribe, Sentinel
+│   ├── agents/shuttle/       # Researcher, Standup
+│   ├── core/                 # Vault management, file watcher, config
+│   ├── index/                # LanceDB, embeddings, search
+│   ├── scripts/              # Maintenance scripts
+│   └── tests/                # pytest
+├── frontend/
+│   └── src/
+│       ├── api/              # HTTP clients (config, vaults, providers, …)
+│       ├── components/       # Layout, primitives, shared components
+│       ├── context/          # AppContext, useLoomConfig
+│       ├── data/             # Seed / sample data for dev
+│       ├── editor/           # Custom markdown renderer (wikilinks, inline marks)
+│       ├── graph/            # Sigma.js setup, layout, interactions
+│       ├── onboarding/       # First-run wizard
+│       ├── styles/           # tokens.css + view stylesheets
+│       ├── theme/            # Theme tokens + runtime swap
+│       └── views/            # GraphView, BoardView, ThreadView, InboxView
+├── docs/                     # Architecture docs, reference
+├── examples/                 # Example vaults, rules, schemas
+├── scripts/                  # Repo-level scripts
+├── wireframes/               # Reference UI mockups
 └── pyproject.toml
-│   └── lib/           # react-force-graph-2d graph logic, react-markdown config
-├── docs/              # Architecture docs, reference
-└── examples/          # Example vaults, rules, schemas
 ```
 
 ## Key Concepts
@@ -52,9 +47,6 @@ loom/
 - **Vault**: multi-vault markdown filesystem at `~/.loom/vaults/`. Fixed core folders (daily, projects, topics, people, captures) + user custom folders.
 - **Wikilinks**: all inter-note links use `[[note-name]]` syntax.
 - **Two-tier agents**: Loom Layer (system: Weaver, Spider, Archivist, Scribe, Sentinel) manages the vault. Shuttle Layer (task: Researcher, Standup) produces content into `captures/`, Loom agents process it.
-- **Read-Before-Write**: every agent must read vault.yaml → prime.md → role rules → memory.md → _index.md → related notes BEFORE writing anything.
-- **prime.md**: user-owned constitution. Immutable to agents by default.
-- **Prompt Compiler**: centralized pipeline that optimizes all prompts before sending to LLM (pruning, compression, token counting, templates).
 - **Read-Before-Write**: every agent must read vault.yaml → prime.md → memory.md → _index.md → related notes BEFORE writing anything.
 - **prime.md**: user-owned constitution. Immutable to agents by default.
 
@@ -97,6 +89,3 @@ Task prompts: @docs/tasks/
 - **Node swatches**: project ink-blue, topic moss `#4a6b3a`, people aubergine `#6b3a6b`, daily graphite `#8c877d`, capture ochre `#a8722a`, custom teal-ink `#2d6b6b`.
 - **Fonts**: Fraunces (serif, prose & headings), Inter (sans, UI chrome), JetBrains Mono (timestamps, tags, labels).
 - **Default ease**: `cubic-bezier(.2, .7, .3, 1)` for any transition longer than 100ms.
-- Graph: force-directed layout, react-force-graph-2d, nodes = dots with labels, edges thicken by density.
-- Color split: amber (`#f59e0b`) = user actions, purple (`#a78bfa`) = agent actions.
-- Fonts: Sora (UI), JetBrains Mono (code/timestamps).

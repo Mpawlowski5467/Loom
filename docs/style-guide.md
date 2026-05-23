@@ -59,19 +59,17 @@
 - CSS classes: kebab-case
 
 ### Styling
-- CSS Modules (`.module.css`) for component-scoped styles
-- CSS variables for all colors from the Loom color system — never hardcode hex values
-- Dark theme only — no light/dark toggle logic needed
+- CSS Modules (`.module.css`) for component-scoped styles where they exist; view-level styles under `frontend/src/styles/views/`
+- All colors come from `tokens.css` CSS variables — never hardcode hex values
+- Paper theme is the default; navy/forest/sepia ship in `tokens.css` under `.theme-*` classes. New colors must be added to every theme block.
 
 ### Project Patterns
-- Views go in `frontend/views/` — one file per view (GraphView, BoardView, InboxView)
-- Reusable components go in `frontend/components/`
-- Sigma.js graph logic isolated in `frontend/lib/graph/`
-- Plate editor config isolated in `frontend/lib/editor/`
-- react-force-graph-2d graph logic isolated in `frontend/lib/graph/`
-- react-markdown rendering config isolated in `frontend/lib/editor/`
-- API calls go through a single `frontend/lib/api.ts` client
-- Use `fetch` or a lightweight wrapper — no axios
+- Views go in `frontend/src/views/` — one file per view (GraphView, BoardView, InboxView, ThreadView)
+- Reusable components go in `frontend/src/components/`
+- Sigma.js graph logic isolated in `frontend/src/graph/`
+- Markdown rendering lives in `frontend/src/editor/renderMarkdown.tsx`
+- API calls go through clients in `frontend/src/api/` (one file per resource, shared error handling in `client.ts`)
+- Use `fetch` via the shared client — no axios
 
 ### State Management
 - React Context for global state (active vault, current note, sidebar state)

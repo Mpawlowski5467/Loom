@@ -281,7 +281,8 @@ class TestWeaverCreateFromModal:
         assert note.title == "Test Topic"
         assert note.type == "topic"
         assert "test" in note.tags
-        assert note.author == "agent:weaver"
+        # Modal-initiated → the user is the author; Weaver is just the formatter.
+        assert note.author == "user"
         # Should have skeleton sections
         assert "## Summary" in note.body
 
@@ -345,11 +346,11 @@ class TestWeaverCreateFromModal:
         assert note.tags == ["a", "b"]
         assert note.created  # non-empty
         assert note.modified  # non-empty
-        assert note.author == "agent:weaver"
+        assert note.author == "user"
         assert note.status == "active"
         assert len(note.history) >= 1
         assert note.history[0].action == "created"
-        assert note.history[0].by == "agent:weaver"
+        assert note.history[0].by == "user"
 
     @pytest.mark.asyncio
     async def test_filename_is_kebab_case(self, tmp_path: Path):

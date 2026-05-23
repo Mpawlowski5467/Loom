@@ -81,6 +81,10 @@ export interface AppContextValue {
   council: CouncilMessage[];
   postCouncilMessage: (body: string) => void;
 
+  newNoteOpen: boolean;
+  setNewNoteOpen: (open: boolean) => void;
+  appendNote: (note: Note) => void;
+
   captures: Capture[];
   selectedCaptureId: string | null;
   selectCapture: (id: string | null) => void;

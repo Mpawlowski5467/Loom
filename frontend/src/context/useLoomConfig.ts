@@ -2,17 +2,14 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { getConfig, patchConfig } from "../api/config";
 import { completeOnboarding as completeOnboardingApi } from "../api/onboarding";
 import { ApiError } from "../api/client";
-import type {
-  LoomConfigPublic,
-  OnboardingCompleteRequest,
-} from "../api/types";
+import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
 import type { Toast } from "../data/types";
 import { applyTheme, readInitialTheme } from "../theme/applyTheme";
 import type { ThemeName } from "../theme/themes";
 
 type PushToast = (toast: Omit<Toast, "id">) => void;
 
-interface UseLoomConfigResult {
+export interface UseLoomConfigResult {
   theme: ThemeName;
   setTheme: (t: ThemeName) => Promise<void>;
   config: LoomConfigPublic | null;

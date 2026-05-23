@@ -343,7 +343,6 @@ In flight:
 
 Known gaps:
 - Frontend test suite — backend has thorough pytest coverage; frontend has none yet
-- `.env.example` referenced in setup is not in the repo yet
 
 See [`docs/architecture-ref.md`](docs/architecture-ref.md) for the full design and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

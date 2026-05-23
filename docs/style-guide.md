@@ -85,6 +85,13 @@ components/
 │   └── index.ts          # re-export
 ```
 
+### Frontend Testing
+- Test files colocated next to source: `Foo.tsx` -> `Foo.test.tsx`
+- Pure utility functions: `utils.ts` -> `utils.test.ts`
+- Use Testing Library queries: `getByRole` > `getByText` > `getByTestId` (last resort)
+- Mock HTTP via `vi.fn()` spies on the API client; never hit real network
+- Test behavior, not implementation: render, interact, assert visible output. Skip snapshot tests.
+
 ---
 
 ## Shared Conventions

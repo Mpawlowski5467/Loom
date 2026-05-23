@@ -74,7 +74,9 @@ describe("OnboardingFlow", () => {
         theme: "paper",
         vault_name: "default",
         overwrite_existing_vault: false,
-        provider: null,
+        providers: [],
+        chat_provider: null,
+        embed_provider: null,
         steps_done: ["welcome", "vault", "theme", "provider"],
       }),
     );

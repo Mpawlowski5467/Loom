@@ -97,6 +97,19 @@
   line-height: 1.6;
 }
 
+.settings-subhead {
+  margin-top: 32px;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.settings-segmented {
+  display: inline-flex;
+  gap: 6px;
+}
+
 .settings-theme-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));

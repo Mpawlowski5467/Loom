@@ -59,3 +59,39 @@ class TestActiveVault:
     def test_set_nonexistent_404(self, client: TestClient) -> None:
         resp = client.put("/api/vaults/active", json={"name": "nope"})
         assert resp.status_code == 404
+
+
+class TestRenameVault:
+    """PATCH /api/vaults/{name}"""
+
+    def test_rename_inactive(self, client: TestClient) -> None:
+        client.post("/api/vaults", json={"name": "first"})
+        client.post("/api/vaults", json={"name": "second"})
+        # 'first' is active (init_vault sets first as active). Rename inactive.
+        resp = client.patch("/api/vaults/second", json={"new_name": "beta"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["name"] == "beta"
+        assert data["is_active"] is False
+
+    def test_rename_active_updates_config(self, client: TestClient) -> None:
+        client.post("/api/vaults", json={"name": "only"})
+        resp = client.patch("/api/vaults/only", json={"new_name": "renamed"})
+        assert resp.status_code == 200
+        assert resp.json()["is_active"] is True
+        assert client.get("/api/vaults/active").json()["name"] == "renamed"
+
+    def test_rename_conflict(self, client: TestClient) -> None:
+        client.post("/api/vaults", json={"name": "first"})
+        client.post("/api/vaults", json={"name": "second"})
+        resp = client.patch("/api/vaults/first", json={"new_name": "second"})
+        assert resp.status_code == 409
+
+    def test_rename_missing_404(self, client: TestClient) -> None:
+        resp = client.patch("/api/vaults/ghost", json={"new_name": "real"})
+        assert resp.status_code == 404
+
+    def test_rename_invalid_name_422(self, client: TestClient) -> None:
+        client.post("/api/vaults", json={"name": "test"})
+        resp = client.patch("/api/vaults/test", json={"new_name": "bad name!"})
+        assert resp.status_code == 422

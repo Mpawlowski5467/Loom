@@ -18,7 +18,9 @@ interface OnboardingDraft {
   theme: ThemeName;
   vaultName: string;
   overwriteExistingVault: boolean;
-  provider: OnboardingProviderPayload | null;
+  providers: OnboardingProviderPayload[];
+  chatProvider: string | null;
+  embedProvider: string | null;
 }
 
 export function OnboardingFlow(): ReactNode {
@@ -28,7 +30,9 @@ export function OnboardingFlow(): ReactNode {
     theme,
     vaultName: "default",
     overwriteExistingVault: false,
-    provider: null,
+    providers: [],
+    chatProvider: null,
+    embedProvider: null,
   });
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
@@ -57,7 +61,9 @@ export function OnboardingFlow(): ReactNode {
         theme: draft.theme,
         vault_name: draft.vaultName.trim() || "default",
         overwrite_existing_vault: draft.overwriteExistingVault,
-        provider: draft.provider,
+        providers: draft.providers,
+        chat_provider: draft.chatProvider,
+        embed_provider: draft.embedProvider,
         steps_done: STEP_ORDER,
       };
       await completeOnboarding(payload);
@@ -116,8 +122,10 @@ export function OnboardingFlow(): ReactNode {
         )}
         {step === "provider" && (
           <ProviderConfig
-            provider={draft.provider}
-            onChange={(p) => updateDraft({ provider: p })}
+            providers={draft.providers}
+            chatProvider={draft.chatProvider}
+            embedProvider={draft.embedProvider}
+            onChange={(patch) => updateDraft(patch)}
             onSubmit={submit}
             onBack={back}
             submitting={submitting}

@@ -111,6 +111,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       return next;
     });
   }, []);
+  const removeNote = useCallback((id: string) => {
+    setNotes((prev) => prev.filter((n) => n.id !== id));
+  }, []);
   const noteById = useCallback(
     (id: string): Note | undefined => notes.find((n) => n.id === id),
     [notes],
@@ -240,6 +243,33 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
   const [changelog] = useState<AgentEvent[]>(demo ? changelogSeed : []);
 
+  const [customAgents, setCustomAgents] = useState<Agent[]>([]);
+  const refreshCustomAgents = useCallback(async () => {
+    try {
+      const { listAgentRegistry } = await import("../api/agentsRegistry");
+      const list = await listAgentRegistry();
+      const custom: Agent[] = list
+        .filter((a) => !a.system)
+        .map((a) => ({
+          id: a.id,
+          name: a.name,
+          layer: a.layer,
+          role: a.role,
+          icon: a.icon,
+          state: "idle",
+          stats: { runs: 0, lastRun: "—" },
+          lastAction: "",
+        }));
+      setCustomAgents(custom);
+    } catch {
+      // Backend unreachable — leave the list as-is.
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshCustomAgents();
+  }, [refreshCustomAgents]);
+
   const [council, setCouncil] = useState<CouncilMessage[]>(
     demo ? councilSeed : [],
   );
@@ -293,6 +323,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     );
   }, []);
 
+  const [extraFolders, setExtraFolders] = useState<string[]>([]);
+  const addFolder = useCallback((path: string) => {
+    setExtraFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
+  }, []);
+
   const value: AppContextValue = {
     notes,
     wikilinkMap,
@@ -334,6 +369,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     agents: agentsState,
     changelog,
+    customAgents,
+    refreshCustomAgents,
 
     council,
     postCouncilMessage,
@@ -342,11 +379,15 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setNewNoteOpen,
     appendNote,
     updateNote,
+    removeNote,
 
     captures,
     selectedCaptureId,
     selectCapture,
     setCaptureStatus,
+
+    extraFolders,
+    addFolder,
 
     ...loomConfig,
   };

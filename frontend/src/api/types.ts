@@ -111,7 +111,11 @@ export interface OnboardingCompleteRequest {
   theme: ThemeName;
   vault_name: string;
   overwrite_existing_vault?: boolean;
-  provider: OnboardingProviderPayload | null;
+  /** Legacy single-provider shape — keep null when sending ``providers``. */
+  provider?: OnboardingProviderPayload | null;
+  providers?: OnboardingProviderPayload[];
+  chat_provider?: string | null;
+  embed_provider?: string | null;
   steps_done: string[];
 }
 

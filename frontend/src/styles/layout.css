@@ -150,6 +150,152 @@
   background: var(--agent);
 }
 
+.vault-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding-right: 12px;
+}
+.vault-badge-row .vault-badge {
+  margin-bottom: 0;
+}
+
+.tree-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--ink-3);
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  transition: all 160ms var(--ease);
+}
+.tree-icon-btn:hover:not(:disabled) {
+  background: var(--bg-surface);
+  border-color: var(--rule-2);
+  color: var(--ink);
+}
+.tree-icon-btn:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+
+.tree-new-folder {
+  margin: 0 12px 12px 4px;
+}
+.tree-new-folder-input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 5px 8px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--ink);
+  outline: none;
+}
+.tree-new-folder-input:focus {
+  border-color: var(--agent);
+}
+.tree-new-folder-input[aria-invalid="true"] {
+  border-color: var(--you);
+}
+.tree-new-folder-error {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--you);
+  margin-top: 4px;
+}
+
+.tree-empty {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  padding: 4px 10px 6px 8px;
+  font-style: italic;
+}
+
+.tree-section-wrap {
+  border-left: 2px solid transparent;
+  padding-left: 0;
+  transition: border-color 120ms var(--ease), background 120ms var(--ease);
+}
+.tree-section-wrap.drop {
+  border-left-color: var(--agent);
+  background: var(--bg-surface);
+}
+
+.tree-row.drag {
+  opacity: 0.4;
+}
+.tree-row--rename {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px 4px 8px;
+}
+
+.tree-rename-input {
+  flex: 1;
+  font-family: var(--mono);
+  font-size: 12px;
+  padding: 3px 6px;
+  border: 1px solid var(--agent);
+  border-radius: var(--r-sm);
+  background: var(--bg-base);
+  color: var(--ink);
+  outline: none;
+}
+.tree-rename-input[aria-invalid="true"] {
+  border-color: var(--you);
+}
+
+.tree-context-menu {
+  position: fixed;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  z-index: 1000;
+  min-width: 140px;
+  font-family: var(--font);
+  font-size: 12.5px;
+}
+.tree-context-menu li {
+  margin: 0;
+  padding: 0;
+}
+.tree-context-menu button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 12px;
+  color: var(--ink-2);
+  cursor: pointer;
+  font: inherit;
+}
+.tree-context-menu button:hover {
+  background: var(--bg-surface);
+  color: var(--ink);
+}
+.tree-context-menu button.danger {
+  color: var(--you);
+}
+.tree-context-menu button.danger:hover {
+  background: var(--you-bg);
+}
+
 .tree-section {
   font-family: var(--mono);
   font-size: 10px;

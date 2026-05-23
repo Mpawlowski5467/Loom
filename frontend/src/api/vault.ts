@@ -65,3 +65,15 @@ export function archiveVault(
     signal,
   );
 }
+
+export function renameVault(
+  name: string,
+  newName: string,
+  signal?: AbortSignal,
+): Promise<VaultInfo> {
+  return apiClient.patch<VaultInfo>(
+    `/api/vaults/${encodeURIComponent(name)}`,
+    { new_name: newName },
+    signal,
+  );
+}

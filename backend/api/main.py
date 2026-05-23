@@ -17,6 +17,7 @@ from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 from api.exception_handlers import register_exception_handlers
 from api.health import build_health_report
 from api.routers.agents import router as agents_router
+from api.routers.agents_registry import router as agents_registry_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
@@ -173,6 +174,7 @@ app.include_router(search_router)
 app.include_router(captures_router)
 app.include_router(index_router)
 app.include_router(agents_router)
+app.include_router(agents_registry_router)
 app.include_router(chat_router)
 app.include_router(settings_router)
 app.include_router(config_router)

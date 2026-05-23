@@ -75,6 +75,12 @@ class ArchiveVaultResponse(BaseModel):
     new_active: str | None
 
 
+class RenameVaultRequest(BaseModel):
+    """Request body for renaming a vault."""
+
+    new_name: str
+
+
 # -- Endpoints ----------------------------------------------------------------
 
 
@@ -211,6 +217,43 @@ def archive_vault(
         archived_path=str(archived_path),
         new_active=new_active,
     )
+
+
+@router.patch("/{name}", response_model=VaultResponse)
+def rename_vault(
+    name: str,
+    body: RenameVaultRequest,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> VaultResponse:
+    """Rename a vault folder; update active-vault config if needed."""
+    try:
+        vm.validate_vault_name(name)
+        vm.validate_vault_name(body.new_name)
+    except InvalidVaultNameError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    if not vm.vault_exists(name):
+        raise HTTPException(status_code=404, detail=f"Vault not found: {name}")
+    if vm.vault_exists(body.new_name):
+        raise HTTPException(
+            status_code=409,
+            detail=f"Vault '{body.new_name}' already exists",
+        )
+
+    old_active = vm.get_active_vault()
+    source = vm.vault_path(name)
+    if _should_release_handles(name, old_active, source):
+        _release_active_handles()
+
+    dst = vm.vault_path(body.new_name)
+    shutil.move(str(source), str(dst))
+
+    if old_active == name:
+        vm.set_active_vault(body.new_name)
+        is_active = True
+    else:
+        is_active = False
+
+    return VaultResponse(name=body.new_name, path=str(dst), is_active=is_active)
 
 
 def _should_release_handles(name: str, active: str, source: Path) -> bool:

@@ -9,8 +9,6 @@
   A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
 </p>
 
-**A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.**
-
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![React](https://img.shields.io/badge/react-19-61dafb)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -28,7 +26,7 @@ You write captures; agents do the structuring, linking, summarizing, and validat
 
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
 - **Multi-agent, not single-prompt.** Seven specialized agents in two tiers (Loom Layer manages the vault; Shuttle Layer produces content) collaborate via a shared *read-before-write* discipline.
-- **Visual by default.** A `react-force-graph-2d` canvas shows your notes as a living network — drag, zoom, filter by type or tag.
+- **Visual by default.** A `Sigma.js` + `graphology` canvas shows your notes as a living network — drag, zoom, filter by type or tag.
 - **Provider-agnostic.** Plug in OpenAI, Anthropic, xAI, or a local Ollama model. Chat and embedding providers are independent.
 
 ## Architecture at a glance
@@ -146,7 +144,8 @@ Hard block on failure by default; trusted agents can be configured for soft-warn
 ## Features
 
 ### Knowledge graph
-- Force-directed `react-force-graph-2d` layout with drag, zoom, pan
+- Force-directed Sigma.js 3 + graphology layout with drag, zoom, pan
+- Orbit mode: focus-first concentric rings around a selected node
 - Hover highlights neighbors; edge thickness scales with link density
 - Filter by note type or tag; click-to-select syncs with the file tree
 - ETags + `Last-Modified` for cheap refresh
@@ -191,8 +190,8 @@ Hard block on failure by default; trusted agents can be configured for soft-warn
 |---|---|
 | Backend | Python 3.11+, FastAPI, Pydantic v2, Uvicorn |
 | Frontend | React 19, TypeScript 5.9, Vite |
-| Graph | `react-force-graph-2d` |
-| Editor | `react-markdown` + textarea, `@udecode/plate` (optional rich mode) |
+| Graph | Sigma.js 3 + graphology (force-atlas2 layout) |
+| Editor | Custom Markdown renderer (`frontend/src/editor/renderMarkdown.tsx`) with `[[wikilink]]` support |
 | Vector DB | LanceDB + PyArrow |
 | AI | OpenAI / Anthropic SDKs, `httpx` for xAI / Ollama |
 | File sync | `watchdog` |
@@ -221,7 +220,7 @@ npm install
 npm run dev   # serves on http://localhost:5173
 ```
 
-On first run the **onboarding wizard** walks you through vault name, theme, and provider setup — you can also skip the provider step and add one later from Settings. The backend reads `~/.loom/config.yaml` for global config and scaffolds a vault at `~/.loom/vaults/<name>` when the wizard completes.
+On first run the **onboarding wizard** walks you through vault name, theme, and provider setup. The provider step is optional and can be added later by editing `~/.loom/config.yaml` directly (a Settings UI is in progress). The backend reads `~/.loom/config.yaml` for global config and scaffolds a vault at `~/.loom/vaults/<name>` when the wizard completes.
 
 ### Seed an example vault
 ```bash
@@ -229,7 +228,7 @@ On first run the **onboarding wizard** walks you through vault name, theme, and 
 cp -r examples/demo-vault ~/.loom/vaults/demo
 ```
 
-Then switch to it from **Settings → General → Active vault**.
+Then switch to it via `PUT /api/vaults/active` with `{"name": "demo"}` (or re-run the onboarding wizard with `demo` as the vault name).
 
 ## Configuration
 
@@ -343,67 +342,65 @@ In flight:
 
 See [`docs/architecture-ref.md`](docs/architecture-ref.md) for the full design and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 
-## License
-
-### Wireframes
+## Wireframes
 
 Early sketches of the visual language and view models. These are *wireframes, not the final UI* — the real product renders in ink-blue + brick-red duotone on warm cream paper, with serif typography from the design language.
 
 <p align="center">
-  <img src="wireframes/wireframe.png" alt="Visual vocabulary — color split, node types, views overview" width="720" />
+  <img src="docs/wireframes/wireframe.png" alt="Visual vocabulary — color split, node types, views overview" width="720" />
 </p>
 
-#### Views
+### Views
 
 <table>
   <tr>
     <td align="center" width="50%">
-      <img src="wireframes/graphview.png" alt="Graph view — constellation map" width="100%" /><br />
+      <img src="docs/wireframes/graphview.png" alt="Graph view — constellation map" width="100%" /><br />
       <sub><b>Graph</b> — constellation map with type-colored nodes, hub sizing, hover-highlighted neighborhoods</sub>
     </td>
     <td align="center" width="50%">
-      <img src="wireframes/orbitview.png" alt="Orbit view — focus-first concentric rings" width="100%" /><br />
+      <img src="docs/wireframes/orbitview.png" alt="Orbit view — focus-first concentric rings" width="100%" /><br />
       <sub><b>Orbit</b> — focus-first concentric rings around a selected note</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="wireframes/threadview.png" alt="Thread view — markdown reader with edit history and backlinks" width="100%" /><br />
+      <img src="docs/wireframes/threadview.png" alt="Thread view — markdown reader with edit history and backlinks" width="100%" /><br />
       <sub><b>Thread</b> — serif-led note reader with edit history, backlinks, and local graph</sub>
     </td>
     <td align="center">
-      <img src="wireframes/editorview.png" alt="Editor view — split source and rendered preview" width="100%" /><br />
+      <img src="docs/wireframes/editorview.png" alt="Editor view — split source and rendered preview" width="100%" /><br />
       <sub><b>Editor</b> — split source/preview writing experience with wikilink autocomplete</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="wireframes/inboxview.png" alt="Inbox view — captures with Weaver suggestions" width="100%" /><br />
+      <img src="docs/wireframes/inboxview.png" alt="Inbox view — captures with Weaver suggestions" width="100%" /><br />
       <sub><b>Inbox</b> — capture-to-note flow with Weaver suggestions for type, folder, tags, and links</sub>
     </td>
     <td align="center">
-      <img src="wireframes/boardview.png" alt="Board view — agent cards and activity log" width="100%" /><br />
+      <img src="docs/wireframes/boardview.png" alt="Board view — agent cards and activity log" width="100%" /><br />
       <sub><b>Board</b> — agent presence: cards, round-table, and pulse modes with a live changelog</sub>
     </td>
   </tr>
   <tr>
     <td align="center">
-      <img src="wireframes/councilview.png" alt="Council view — transparent multi-agent chat" width="100%" /><br />
+      <img src="docs/wireframes/councilview.png" alt="Council view — transparent multi-agent chat" width="100%" /><br />
       <sub><b>Council</b> — transparent multi-agent thread where all five Loom Layer agents answer together</sub>
     </td>
     <td align="center">
-      <img src="wireframes/pulseview.png" alt="Pulse view — live ECG-style agent vitals" width="100%" /><br />
+      <img src="docs/wireframes/pulseview.png" alt="Pulse view — live ECG-style agent vitals" width="100%" /><br />
       <sub><b>Pulse</b> — live ECG-style heartbeats showing each agent's running / queued / idle state</sub>
     </td>
   </tr>
   <tr>
     <td align="center" colspan="2">
-      <img src="wireframes/searchview.png" alt="Search palette — hybrid semantic + keyword find" width="60%" /><br />
+      <img src="docs/wireframes/searchview.png" alt="Search palette — hybrid semantic + keyword find" width="60%" /><br />
       <sub><b>Search</b> — Cmd/Ctrl-K palette with hybrid semantic + keyword scoring across the vault</sub>
     </td>
   </tr>
 </table>
 
----
+## License
 
-More documentation coming soon.
+MIT — see [LICENSE](LICENSE) (when added).

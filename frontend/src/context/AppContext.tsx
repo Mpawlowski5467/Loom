@@ -52,6 +52,11 @@ function loadGraphDisplay(): GraphDisplay {
         GRAPH_DISPLAY_RANGES.spacingScale.min,
         GRAPH_DISPLAY_RANGES.spacingScale.max,
       ),
+      travelerPace: clamp(
+        Number(parsed.travelerPace ?? GRAPH_DISPLAY_DEFAULTS.travelerPace),
+        GRAPH_DISPLAY_RANGES.travelerPace.min,
+        GRAPH_DISPLAY_RANGES.travelerPace.max,
+      ),
     };
   } catch {
     return GRAPH_DISPLAY_DEFAULTS;
@@ -120,6 +125,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           patch.spacingScale ?? prev.spacingScale,
           GRAPH_DISPLAY_RANGES.spacingScale.min,
           GRAPH_DISPLAY_RANGES.spacingScale.max,
+        ),
+        travelerPace: clamp(
+          patch.travelerPace ?? prev.travelerPace,
+          GRAPH_DISPLAY_RANGES.travelerPace.min,
+          GRAPH_DISPLAY_RANGES.travelerPace.max,
         ),
       };
       return merged;

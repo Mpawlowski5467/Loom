@@ -84,7 +84,9 @@ class VaultManager:
         if not vaults_dir.exists():
             return []
         return sorted(
-            d.name for d in vaults_dir.iterdir() if d.is_dir() and (d / "vault.yaml").exists()
+            d.name
+            for d in vaults_dir.iterdir()
+            if d.is_dir() and ".archived-" not in d.name and (d / "vault.yaml").exists()
         )
 
     def get_active_vault(self) -> str:
@@ -102,6 +104,8 @@ class VaultManager:
 
     def vault_exists(self, name: str) -> bool:
         """Check whether a vault with the given name exists."""
+        if ".archived-" in name:
+            return False
         return (self._vault_root(name) / "vault.yaml").exists()
 
     def active_vault_dir(self) -> Path:
@@ -119,6 +123,10 @@ class VaultManager:
     def vault_path(self, name: str) -> Path:
         """Return the root path for a vault by name."""
         return self._settings.vaults_dir / name
+
+    def validate_vault_name(self, name: str) -> None:
+        """Raise if a vault name is invalid."""
+        self._validate_name(name)
 
     # -- Path validation / safe construction ----------------------------------
 

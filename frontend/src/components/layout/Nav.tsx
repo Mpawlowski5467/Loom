@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Settings } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import type { Tab } from "../../data/types";
 import { Button } from "../primitives/Button";
@@ -40,6 +41,16 @@ export function Nav(): ReactNode {
         <span aria-hidden="true">⌕</span>
         <span>search vault…</span>
         <kbd>⌘K</kbd>
+      </button>
+      <button
+        className="icon-btn nav-settings"
+        type="button"
+        aria-label="Open settings"
+        aria-pressed={tab === "settings"}
+        title="Settings (⌘;)"
+        onClick={() => setTab("settings")}
+      >
+        <Settings size={15} strokeWidth={1.7} aria-hidden="true" />
       </button>
       <Button variant="amber" size="md">
         + new

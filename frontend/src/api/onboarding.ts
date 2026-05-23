@@ -21,3 +21,9 @@ export function completeOnboarding(
     signal,
   );
 }
+
+export function resetOnboarding(
+  signal?: AbortSignal,
+): Promise<LoomConfigPublic> {
+  return apiClient.post<LoomConfigPublic>("/api/onboarding/reset", {}, signal);
+}

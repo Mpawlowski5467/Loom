@@ -50,6 +50,15 @@ async def get_status() -> OnboardingState:
     return GlobalConfig.load(settings.config_path).onboarding
 
 
+@router.post("/reset", response_model=GlobalConfigPublic)
+async def reset_onboarding() -> GlobalConfigPublic:
+    """Mark onboarding incomplete without deleting vault or provider data."""
+    config = GlobalConfig.load(settings.config_path)
+    config.onboarding = OnboardingState(completed=False, completed_at=None, steps_done=[])
+    config.save(settings.config_path)
+    return config.to_public()
+
+
 @router.post("/complete", response_model=GlobalConfigPublic)
 async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfigPublic:
     """Persist everything the wizard collected: theme, vault, provider, gate.

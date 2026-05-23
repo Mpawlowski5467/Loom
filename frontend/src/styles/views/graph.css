@@ -186,6 +186,12 @@
     graphBreathe 8s ease-in-out 600ms infinite;
 }
 
+/* Travelers inherit color via stroke="currentColor"; pin it to --agent so
+   dark themes get a brighter line than the paper-era hardcoded navy. */
+.graph-travelers {
+  color: var(--agent);
+}
+
 .graph-stats {
   position: absolute;
   right: 16px;
@@ -199,6 +205,45 @@
   color: var(--ink-2);
   pointer-events: none;
   z-index: 1;
+}
+
+.graph-scene-caption {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  pointer-events: none;
+  z-index: 1;
+  animation: graphSceneFadeIn 700ms var(--ease);
+}
+.graph-scene-kicker {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+.graph-scene-name {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 12px;
+  color: var(--ink);
+}
+@keyframes graphSceneFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .graph-empty {

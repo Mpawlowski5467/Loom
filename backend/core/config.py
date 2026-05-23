@@ -77,6 +77,10 @@ class ThemeName(StrEnum):
     navy = "navy"
     forest = "forest"
     sepia = "sepia"
+    slate = "slate"
+    carbon = "carbon"
+    iris = "iris"
+    lagoon = "lagoon"
 
 
 class ProviderConfig(BaseModel):

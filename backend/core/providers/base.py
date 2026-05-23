@@ -40,6 +40,17 @@ class XAIProviderConfig(BaseModel):
     embed_model: str | None = None
 
 
+class OpenRouterProviderConfig(BaseModel):
+    """OpenRouter (OpenAI-compatible aggregator) provider settings.
+
+    Chat-only — OpenRouter does not expose an embeddings endpoint.
+    """
+
+    api_key: str | None = None
+    base_url: str = "https://openrouter.ai/api/v1"
+    chat_model: str = "openai/gpt-4o-mini"
+
+
 class BaseProvider(ABC):
     """Unified interface for AI providers."""
 

@@ -15,10 +15,12 @@ from core.providers.base import (
     BaseProvider,
     OllamaProviderConfig,
     OpenAIProviderConfig,
+    OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
 
 if TYPE_CHECKING:
@@ -29,6 +31,7 @@ _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
     "anthropic": AnthropicProviderConfig,
     "ollama": OllamaProviderConfig,
     "xai": XAIProviderConfig,
+    "openrouter": OpenRouterProviderConfig,
 }
 
 _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
@@ -36,6 +39,7 @@ _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
     "anthropic": AnthropicProvider,
     "ollama": OllamaProvider,
     "xai": XAIProvider,
+    "openrouter": OpenRouterProvider,
 }
 
 

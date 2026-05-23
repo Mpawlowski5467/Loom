@@ -1,6 +1,11 @@
 import type { SettingsProviderInput } from "../../api/settings";
 
-export type ProviderName = "openai" | "anthropic" | "xai" | "ollama";
+export type ProviderName =
+  | "openai"
+  | "anthropic"
+  | "xai"
+  | "openrouter"
+  | "ollama";
 
 export interface ProviderMeta {
   name: ProviderName;
@@ -54,6 +59,24 @@ export const PROVIDERS: ProviderMeta[] = [
     defaultEmbed: "",
     defaultHost: "",
     chatModels: ["grok-3", "grok-2-latest"],
+    embedModels: [],
+    supportsEmbed: false,
+  },
+  {
+    name: "openrouter",
+    label: "OpenRouter",
+    type: "cloud",
+    defaultChat: "openai/gpt-4o-mini",
+    defaultEmbed: "",
+    defaultHost: "",
+    chatModels: [
+      "openai/gpt-4o-mini",
+      "openai/gpt-4o",
+      "anthropic/claude-3.5-sonnet",
+      "anthropic/claude-3.5-haiku",
+      "meta-llama/llama-3.3-70b-instruct",
+      "google/gemini-2.0-flash-001",
+    ],
     embedModels: [],
     supportsEmbed: false,
   },

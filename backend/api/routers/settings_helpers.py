@@ -9,10 +9,12 @@ from core.providers.base import (
     BaseProvider,
     OllamaProviderConfig,
     OpenAIProviderConfig,
+    OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
 
 _LOCAL_PROVIDERS = frozenset({"ollama"})
@@ -80,6 +82,14 @@ def build_provider_from_input(p: ProviderInput) -> BaseProvider:
                 base_url=p.base_url or "https://api.x.ai/v1",
                 chat_model=p.chat_model or "grok-3",
                 embed_model=p.embed_model or None,
+            )
+        )
+    if p.name == "openrouter":
+        return OpenRouterProvider(
+            OpenRouterProviderConfig(
+                api_key=p.api_key or None,
+                base_url=p.base_url or "https://openrouter.ai/api/v1",
+                chat_model=p.chat_model or "openai/gpt-4o-mini",
             )
         )
     raise ProviderConfigError(f"Unknown provider '{p.name}'.")

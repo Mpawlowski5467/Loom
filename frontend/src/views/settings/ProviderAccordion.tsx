@@ -151,27 +151,30 @@ function ModelSelect(props: {
   disabled?: boolean;
   onChange: (value: string) => void;
 }): ReactNode {
-  const options =
-    props.value && !props.options.includes(props.value)
-      ? [props.value, ...props.options]
-      : props.options;
+  // Datalist combobox: keeps the suggested list a click away while allowing
+  // arbitrary model slugs (especially useful for OpenRouter's catalog).
+  const listId = `model-list-${props.label.replace(/\s+/g, "-").toLowerCase()}`;
   return (
     <label className="settings-field">
       <span className="settings-field-label">{props.label}</span>
-      <select
+      <input
         className="input mono"
-        value={props.value}
+        type="text"
+        list={props.disabled ? undefined : listId}
+        value={props.disabled ? "" : props.value}
+        placeholder={props.disabled ? "Unavailable" : "model name"}
         disabled={props.disabled}
+        autoComplete="off"
+        spellCheck={false}
         onChange={(e) => props.onChange(e.target.value)}
-      >
-        {props.disabled && <option value="">Unavailable</option>}
-        {!props.disabled &&
-          options.map((option) => (
-            <option key={option} value={option}>
-              {option}
-            </option>
+      />
+      {!props.disabled && props.options.length > 0 && (
+        <datalist id={listId}>
+          {props.options.map((option) => (
+            <option key={option} value={option} />
           ))}
-      </select>
+        </datalist>
+      )}
     </label>
   );
 }

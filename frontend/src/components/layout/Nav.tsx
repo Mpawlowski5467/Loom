@@ -1,8 +1,7 @@
 import type { ReactNode } from "react";
-import { Settings } from "lucide-react";
+import { NotebookPen, Settings } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import type { Tab } from "../../data/types";
-import { Button } from "../primitives/Button";
 import { LoomMark } from "../primitives/LoomMark";
 
 const TABS: { value: Tab; label: string }[] = [
@@ -13,7 +12,7 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 
 export function Nav(): ReactNode {
-  const { tab, setTab, setPaletteOpen } = useApp();
+  const { tab, setTab, setPaletteOpen, setNewNoteOpen } = useApp();
 
   return (
     <header className="nav">
@@ -52,9 +51,15 @@ export function Nav(): ReactNode {
       >
         <Settings size={15} strokeWidth={1.7} aria-hidden="true" />
       </button>
-      <Button variant="amber" size="md">
-        + new
-      </Button>
+      <button
+        className="icon-btn nav-new"
+        type="button"
+        aria-label="New note"
+        title="New note (⌘N)"
+        onClick={() => setNewNoteOpen(true)}
+      >
+        <NotebookPen size={16} strokeWidth={1.7} aria-hidden="true" />
+      </button>
     </header>
   );
 }

@@ -32,6 +32,7 @@ def write_note(
     folder: str,
     body: str,
     source: str = "manual",
+    author: str = "agent:weaver",
 ) -> Note:
     """Write a note file to the vault and return the parsed Note."""
     threads_dir = vault_root / "threads"
@@ -61,7 +62,7 @@ def write_note(
     if file_path.exists():
         file_path = target_dir / f"{stem}-{note_id}.md"
 
-    meta = build_meta(note_id, title, note_type, tags, source)
+    meta = build_meta(note_id, title, note_type, tags, source, author)
     atomic_write_text(file_path, note_to_file_content(meta, body))
 
     logger.info("Weaver created note: %s → %s", title, file_path)

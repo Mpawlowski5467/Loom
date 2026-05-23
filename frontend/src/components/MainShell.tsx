@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
+import type { NodeType, Note, Tab } from "../data/types";
+import type { NoteRecord } from "../api/notes";
 import { Nav } from "./layout/Nav";
 import { Tree } from "./layout/Tree";
 import { Splash } from "../views/Splash";
@@ -9,11 +11,63 @@ import { ThreadView } from "../views/ThreadView";
 import { InboxView } from "../views/InboxView";
 import { BoardView } from "../views/BoardView";
 import { SettingsView } from "../views/SettingsView";
+import { NewNoteModal } from "../views/NewNoteModal";
 import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
 
 const SPLASH_KEY = "loom.splash.seen";
+
+const TAB_LABELS: Record<Tab, string> = {
+  graph: "Graph",
+  thread: "Thread",
+  inbox: "Inbox",
+  board: "Board",
+  settings: "Settings",
+};
+
+const NODE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
+  "project",
+  "topic",
+  "people",
+  "daily",
+  "capture",
+  "custom",
+]);
+
+/**
+ * Convert a backend NoteRecord to the frontend Note shape used by the
+ * graph / tree / thread view. The backend uses "person" while the frontend
+ * NodeType is "people"; unknown types fall through to "custom".
+ */
+function backendNoteToFrontend(record: NoteRecord): Note {
+  const rawType = record.type === "person" ? "people" : record.type;
+  const type: NodeType = NODE_TYPES.has(rawType as NodeType)
+    ? (rawType as NodeType)
+    : "custom";
+  // file_path looks like ".../threads/<folder>/<file>.md" — pull the folder.
+  const parts = record.file_path.split("/threads/")[1]?.split("/") ?? [];
+  const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
+  return {
+    id: record.id,
+    title: record.title,
+    type,
+    folder,
+    tags: record.tags,
+    body: record.body,
+    links: record.links,
+    history: record.history.map((h) => ({
+      action: h.action as Note["history"][number]["action"],
+      by: h.by as Note["history"][number]["by"],
+      at: h.at,
+      reason: h.reason,
+    })),
+    created: record.created,
+    modified: record.modified,
+    status: record.status === "archived" ? "archived" : "active",
+    source: record.source,
+  };
+}
 
 function shouldShowSplash(): boolean {
   if (typeof window === "undefined") return false;
@@ -33,8 +87,19 @@ function shouldShowSplash(): boolean {
  * splash transition (the wizard handles the first-run intro itself).
  */
 export function MainShell(): ReactNode {
-  const { tab, setTab, paletteOpen, setPaletteOpen, config, offline } =
-    useApp();
+  const {
+    tab,
+    setTab,
+    paletteOpen,
+    setPaletteOpen,
+    newNoteOpen,
+    setNewNoteOpen,
+    appendNote,
+    openNote,
+    config,
+    offline,
+    pushToast,
+  } = useApp();
   const [showSplash, setShowSplash] = useState<boolean>(() =>
     shouldShowSplash(),
   );
@@ -54,6 +119,9 @@ export function MainShell(): ReactNode {
       if (isMod && e.key.toLowerCase() === "k") {
         e.preventDefault();
         setPaletteOpen(!paletteOpen);
+      } else if (isMod && e.key.toLowerCase() === "n") {
+        e.preventDefault();
+        setNewNoteOpen(true);
       } else if (isMod && e.key === ";") {
         e.preventDefault();
         setTab("settings");
@@ -63,7 +131,13 @@ export function MainShell(): ReactNode {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, setPaletteOpen, setTab]);
+  }, [paletteOpen, setPaletteOpen, setNewNoteOpen, setTab]);
+
+  useEffect(() => {
+    const vault = config?.active_vault?.trim() || "no vault";
+    const view = TAB_LABELS[tab] ?? tab;
+    document.title = `Loom — ${vault} — ${view}`;
+  }, [tab, config?.active_vault]);
 
   const themeLabel = config?.ui.theme ?? "paper";
   const providerMissing = computeProviderMissing(config);
@@ -98,6 +172,23 @@ export function MainShell(): ReactNode {
         </span>
       </footer>
       {paletteOpen && <Palette />}
+      {newNoteOpen && (
+        <NewNoteModal
+          onClose={() => setNewNoteOpen(false)}
+          onCreated={(record) => {
+            const note = backendNoteToFrontend(record);
+            appendNote(note);
+            openNote(note.id);
+            pushToast({
+              icon: "✎",
+              agent: "weaver",
+              body: `Created [[${record.title}]] in ${
+                record.file_path.split("/threads/")[1] ?? record.file_path
+              }`,
+            });
+          }}
+        />
+      )}
       <Toasts />
       <LoomRibbon />
     </div>

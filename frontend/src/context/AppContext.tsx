@@ -8,6 +8,7 @@ import type {
   CouncilMessage,
   CouncilWho,
   GraphMode,
+  Note,
   NoteId,
   SettingsSection,
   Tab,
@@ -17,13 +18,39 @@ import { agents as agentsSeed } from "../data/agents";
 import { captures as capturesSeed } from "../data/captures";
 import { changelogSeed } from "../data/changelog";
 import { councilSeed } from "../data/council";
-import { backlinksFor, noteById, notes as notesSeed } from "../data/notes";
+import { notes as notesSeed } from "../data/notes";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
+
+/**
+ * Demo data toggle — OFF by default so a fresh visit shows the new-user UI.
+ * Enable for screenshots / dev by appending ``?demo=1`` to the URL; the
+ * preference is persisted to ``localStorage["loom.demoMode"]`` so it
+ * survives reloads until the user opts out with ``?demo=0``.
+ */
+const DEMO_LS_KEY = "loom.demoMode";
+
+function readDemoMode(): boolean {
+  if (typeof window === "undefined") return false;
+  try {
+    const qs = new URLSearchParams(window.location.search).get("demo");
+    if (qs === "1") {
+      window.localStorage.setItem(DEMO_LS_KEY, "1");
+      return true;
+    }
+    if (qs === "0") {
+      window.localStorage.removeItem(DEMO_LS_KEY);
+      return false;
+    }
+    return window.localStorage.getItem(DEMO_LS_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
 
 function clamp(value: number, min: number, max: number): number {
   if (!Number.isFinite(value)) return min;
@@ -68,7 +95,22 @@ interface ProviderProps {
 }
 
 export function AppProvider({ children }: ProviderProps): ReactNode {
-  const notes = notesSeed;
+  const demo = useMemo(() => readDemoMode(), []);
+  const [notes, setNotes] = useState<Note[]>(() => (demo ? notesSeed : []));
+  const appendNote = useCallback((note: Note) => {
+    setNotes((prev) =>
+      prev.some((n) => n.id === note.id) ? prev : [...prev, note],
+    );
+  }, []);
+  const noteById = useCallback(
+    (id: string): Note | undefined => notes.find((n) => n.id === id),
+    [notes],
+  );
+  const backlinksFor = useCallback(
+    (id: string): string[] =>
+      notes.filter((n) => n.links.includes(id)).map((n) => n.id),
+    [notes],
+  );
 
   const wikilinkMap = useMemo(() => {
     const m = new Map<string, NoteId>();
@@ -175,10 +217,23 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const loomConfig = useLoomConfig(pushToast);
 
-  const [agentsState] = useState<Agent[]>(agentsSeed);
-  const [changelog] = useState<AgentEvent[]>(changelogSeed);
+  // Agents are part of the program (Weaver, Spider, …). Identities always
+  // show; runtime stats / lastAction are only populated in demo mode.
+  const [agentsState] = useState<Agent[]>(
+    demo
+      ? agentsSeed
+      : agentsSeed.map((a) => ({
+          ...a,
+          state: "idle",
+          stats: { runs: 0, lastRun: "—" },
+          lastAction: "",
+        })),
+  );
+  const [changelog] = useState<AgentEvent[]>(demo ? changelogSeed : []);
 
-  const [council, setCouncil] = useState<CouncilMessage[]>(councilSeed);
+  const [council, setCouncil] = useState<CouncilMessage[]>(
+    demo ? councilSeed : [],
+  );
   const postCouncilMessage = useCallback((body: string) => {
     if (!body.trim()) return;
     const youMsg: CouncilMessage = {
@@ -215,9 +270,13 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     });
   }, []);
 
-  const [captures, setCaptures] = useState<Capture[]>(capturesSeed);
+  const [newNoteOpen, setNewNoteOpen] = useState(false);
+
+  const [captures, setCaptures] = useState<Capture[]>(
+    demo ? capturesSeed : [],
+  );
   const [selectedCaptureId, selectCapture] = useState<string | null>(
-    capturesSeed[0]?.id ?? null,
+    demo ? capturesSeed[0]?.id ?? null : null,
   );
   const setCaptureStatus = useCallback((id: string, s: CaptureStatus) => {
     setCaptures((prev) =>
@@ -269,6 +328,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     council,
     postCouncilMessage,
+
+    newNoteOpen,
+    setNewNoteOpen,
+    appendNote,
 
     captures,
     selectedCaptureId,

@@ -41,9 +41,17 @@ def build_meta(
     note_type: str,
     tags: list[str],
     source: str = "manual",
+    author: str = "agent:weaver",
 ) -> dict[str, Any]:
-    """Build a complete frontmatter metadata dict for a Weaver-authored note."""
+    """Build a complete frontmatter metadata dict for a newly-written note.
+
+    ``author`` attributes the create action. Defaults to ``agent:weaver`` for
+    autonomous capture-processing; pass ``user`` (or another agent name) when
+    the creation was user-initiated so the history entry doesn't misattribute.
+    """
     ts = now_iso()
+    is_user = author == "user"
+    reason = "Initial creation" if is_user else "Created by Weaver agent"
     return {
         "id": note_id,
         "title": title,
@@ -51,16 +59,16 @@ def build_meta(
         "tags": tags,
         "created": ts,
         "modified": ts,
-        "author": "agent:weaver",
+        "author": author,
         "source": source,
         "links": [],
         "status": "active",
         "history": [
             {
                 "action": "created",
-                "by": "agent:weaver",
+                "by": author,
                 "at": ts,
-                "reason": "Created by Weaver agent",
+                "reason": reason,
             },
         ],
     }

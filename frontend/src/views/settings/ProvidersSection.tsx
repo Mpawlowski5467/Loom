@@ -66,6 +66,13 @@ export function ProvidersSection(): ReactNode {
     [providers],
   );
 
+  const embedProviderMissing = useMemo(() => {
+    if (configuredNames.length === 0) return false;
+    return !configuredNames.some(
+      (name) => PROVIDER_BY_NAME.get(name)?.supportsEmbed,
+    );
+  }, [configuredNames]);
+
   const patchProvider = (name: ProviderName, patch: Partial<ProviderForm>) => {
     setProviders((prev) => ({
       ...prev,
@@ -160,6 +167,13 @@ export function ProvidersSection(): ReactNode {
         value={defaultProvider}
         onChange={selectDefault}
       />
+      {embedProviderMissing && (
+        <div className="settings-banner settings-banner-warn" role="status">
+          <strong>No embedding provider.</strong> The configured providers are
+          chat-only — Loom's index will fail. Add OpenAI or Ollama to enable
+          search and graph linking.
+        </div>
+      )}
       <div className="settings-provider-list">
         {PROVIDERS.map((meta) => (
           <ProviderAccordion

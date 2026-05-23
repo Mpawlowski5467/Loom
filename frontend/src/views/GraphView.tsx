@@ -53,6 +53,9 @@ export function GraphView(): ReactNode {
   const travelerLinesRef = useRef<
     Array<{ el: SVGLineElement; s: string; t: string }>
   >([]);
+  const travelerMaskCirclesRef = useRef<Map<string, SVGCircleElement>>(
+    new Map(),
+  );
   const lensGroupRef = useRef<SVGGElement | null>(null);
   const lensMaskRef = useRef<SVGCircleElement | null>(null);
   const lensClipCircleRef = useRef<SVGCircleElement | null>(null);
@@ -197,21 +200,52 @@ export function GraphView(): ReactNode {
     const noteMap = new Map(notes.map((n) => [n.id, n]));
     if (overlay) {
       while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
+
+      // Build a mask that punches a hole at every node so traveler lines
+      // never appear inside a node's disk (including pass-through hits on
+      // unrelated nodes mid-edge). Per-node circles are positioned in
+      // viewport coords each frame inside tickTravelers.
+      const defs = document.createElementNS(SVG_NS, "defs");
+      const maskId = `loom-trav-mask-${Math.random().toString(36).slice(2, 9)}`;
+      const trMask = document.createElementNS(SVG_NS, "mask");
+      trMask.setAttribute("id", maskId);
+      trMask.setAttribute("maskUnits", "userSpaceOnUse");
+      const maskBg = document.createElementNS(SVG_NS, "rect");
+      maskBg.setAttribute("x", "0");
+      maskBg.setAttribute("y", "0");
+      maskBg.setAttribute("width", "100%");
+      maskBg.setAttribute("height", "100%");
+      maskBg.setAttribute("fill", "white");
+      trMask.appendChild(maskBg);
+      const maskCircles = new Map<string, SVGCircleElement>();
+      graph.forEachNode((id) => {
+        const c = document.createElementNS(SVG_NS, "circle");
+        c.setAttribute("fill", "black");
+        c.setAttribute("r", "0");
+        trMask.appendChild(c);
+        maskCircles.set(id, c);
+      });
+      defs.appendChild(trMask);
+      travelerMaskCirclesRef.current = maskCircles;
+
+      const travG = document.createElementNS(SVG_NS, "g");
+      travG.setAttribute("mask", `url(#${maskId})`);
       const lines: typeof travelerLinesRef.current = [];
       graph.forEachEdge((_edgeId, _attr, source, target) => {
         const line = document.createElementNS(SVG_NS, "line");
-        line.setAttribute("stroke", "#2d4a7c");
+        line.setAttribute("stroke", "currentColor");
         line.setAttribute("stroke-width", "2.0");
         line.setAttribute("stroke-linecap", "round");
         line.setAttribute("opacity", "0.92");
-        overlay.appendChild(line);
+        travG.appendChild(line);
         lines.push({ el: line, s: source, t: target });
       });
+      overlay.appendChild(defs);
+      overlay.appendChild(travG);
       travelerLinesRef.current = lines;
 
       // Lens DOM (built once per effect; siblings after the travelers so it
       // paints on top in z-order).
-      const defs = document.createElementNS(SVG_NS, "defs");
       const clipId = `loom-lens-clip-${Math.random().toString(36).slice(2, 9)}`;
       const clipPath = document.createElementNS(SVG_NS, "clipPath");
       clipPath.setAttribute("id", clipId);
@@ -219,7 +253,6 @@ export function GraphView(): ReactNode {
       clipCircle.setAttribute("r", "0");
       clipPath.appendChild(clipCircle);
       defs.appendChild(clipPath);
-      overlay.appendChild(defs);
 
       const lensG = document.createElementNS(SVG_NS, "g");
       lensG.setAttribute("display", "none");
@@ -339,6 +372,18 @@ export function GraphView(): ReactNode {
 
     const SEG_LEN = 14;
     const BASE_SPEED = 0.18;
+    const NODE_MARGIN = 2;
+    // Sigma 3's scaleSize() converts logical node sizes to viewport pixels at
+    // the current camera ratio. Older versions don't expose it — fall back to
+    // its formula so the trim still tracks zoom.
+    const scaleSize: (size: number) => number =
+      typeof (sigma as unknown as { scaleSize?: (s: number) => number })
+        .scaleSize === "function"
+        ? (sigma as unknown as { scaleSize: (s: number) => number }).scaleSize.bind(
+            sigma,
+          )
+        : (s: number) => s / Math.sqrt(sigma.getCamera().ratio);
+
     const tickTravelers = () => {
       const lines = travelerLinesRef.current;
       const hovered = hoveredRef.current;
@@ -366,11 +411,28 @@ export function GraphView(): ReactNode {
           el.setAttribute("opacity", "0");
           continue;
         }
+
+        // Trim the travel range to the gap between the two node disks, so the
+        // segment never overlaps a node's pixel radius and the dots stay
+        // visually solid.
+        const sRadius =
+          scaleSize(graph.getNodeAttribute(s, "size") as number) + NODE_MARGIN;
+        const tRadius =
+          scaleSize(graph.getNodeAttribute(t, "size") as number) + NODE_MARGIN;
+        const travStart = Math.min(len, sRadius);
+        const travEnd = Math.max(travStart, len - tRadius);
+        const travLen = travEnd - travStart;
+        if (travLen < 1) {
+          el.setAttribute("opacity", "0");
+          continue;
+        }
+
         const ux = dx / len;
         const uy = dy / len;
         const phase = ((now / 1000) * BASE_SPEED * pace + i * 0.1) % 1;
-        const segStart = Math.max(0, phase * len - SEG_LEN / 2);
-        const segEnd = Math.min(len, phase * len + SEG_LEN / 2);
+        const center = travStart + phase * travLen;
+        const segStart = Math.max(travStart, center - SEG_LEN / 2);
+        const segEnd = Math.min(travEnd, center + SEG_LEN / 2);
         el.setAttribute("x1", String(p1.x + ux * segStart));
         el.setAttribute("y1", String(p1.y + uy * segStart));
         el.setAttribute("x2", String(p1.x + ux * segEnd));
@@ -394,6 +456,27 @@ export function GraphView(): ReactNode {
           el.setAttribute("stroke-width", "2.0");
         }
       }
+
+      // Update the per-node mask circles so travelers don't render inside
+      // any node's disk — including unrelated nodes the edge passes through.
+      // Filtered (hidden) nodes get r=0 so they don't mask empty space.
+      const maskCircles = travelerMaskCirclesRef.current;
+      graph.forEachNode((id, attr) => {
+        const c = maskCircles.get(id);
+        if (!c) return;
+        if (filters.size > 0 && !filters.has(attr["noteType"] as string)) {
+          c.setAttribute("r", "0");
+          return;
+        }
+        const p = sigma.graphToViewport({
+          x: attr["x"] as number,
+          y: attr["y"] as number,
+        });
+        const r = scaleSize(attr["size"] as number) + NODE_MARGIN;
+        c.setAttribute("cx", String(p.x));
+        c.setAttribute("cy", String(p.y));
+        c.setAttribute("r", String(r));
+      });
 
       // --- Lens --------------------------------------------------------------
       // Pick the focused node: nearest to viewport center (skipping filtered).

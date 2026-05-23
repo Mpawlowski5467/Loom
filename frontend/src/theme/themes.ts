@@ -3,14 +3,38 @@
  * here without a matching `.theme-<name>` block is a runtime no-op.
  */
 
-export type ThemeName = "paper" | "navy" | "forest" | "sepia";
+export type ThemeName =
+  | "paper"
+  | "navy"
+  | "forest"
+  | "sepia"
+  | "slate"
+  | "carbon"
+  | "iris"
+  | "lagoon";
 
-export const THEMES: ThemeName[] = ["paper", "navy", "forest", "sepia"];
+export const THEMES: ThemeName[] = [
+  "paper",
+  "navy",
+  "forest",
+  "sepia",
+  "slate",
+  "carbon",
+  "iris",
+  "lagoon",
+];
+
+export type ThemeMode = "light" | "dark";
 
 export interface ThemeMeta {
   name: ThemeName;
   label: string;
   description: string;
+  /**
+   * "dark" themes get ``data-theme-mode="dark"`` on <html> so any
+   * dark-only CSS (paper grain off, deeper shadows) kicks in.
+   */
+  mode: ThemeMode;
   /** A preview of the cardinal colors for the swatch chip in pickers. */
   swatch: {
     bgBase: string;
@@ -33,6 +57,7 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
     name: "paper",
     label: "Paper",
     description: "Warm cream — Loom's default.",
+    mode: "light",
     swatch: {
       bgBase: "#f5f1e8",
       bgSurface: "#ede8da",
@@ -46,6 +71,7 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
     name: "navy",
     label: "Navy",
     description: "Dark mode, blue-leaning.",
+    mode: "dark",
     swatch: {
       bgBase: "#0c1322",
       bgSurface: "#131c2f",
@@ -59,6 +85,7 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
     name: "forest",
     label: "Forest",
     description: "Warm light, moss-toned ink.",
+    mode: "light",
     swatch: {
       bgBase: "#f1ede0",
       bgSurface: "#e6e2d2",
@@ -72,6 +99,7 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
     name: "sepia",
     label: "Sepia",
     description: "Warm light, ochre-shifted.",
+    mode: "light",
     swatch: {
       bgBase: "#f1e8d8",
       bgSurface: "#e8ddc8",
@@ -79,6 +107,62 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       agent: "#4a3a7c",
       you: "#a8521c",
       node: "#6b6028",
+    },
+  },
+  slate: {
+    name: "slate",
+    label: "Slate",
+    description: "Light, cool stone — desaturated.",
+    mode: "light",
+    swatch: {
+      bgBase: "#ecece6",
+      bgSurface: "#e0e0d9",
+      ink: "#1a1d20",
+      agent: "#1e3a8a",
+      you: "#c2410c",
+      node: "#15803d",
+    },
+  },
+  carbon: {
+    name: "carbon",
+    label: "Carbon",
+    description: "Dark, true black — terminal feel.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#0a0a0a",
+      bgSurface: "#161616",
+      ink: "#ededed",
+      agent: "#7eed90",
+      you: "#f06c9b",
+      node: "#9becff",
+    },
+  },
+  iris: {
+    name: "iris",
+    label: "Iris",
+    description: "Dark, eggplant with lavender and mint.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#1a1224",
+      bgSurface: "#261a35",
+      ink: "#f0e6f5",
+      agent: "#b89dff",
+      you: "#74e8c0",
+      node: "#ff8da8",
+    },
+  },
+  lagoon: {
+    name: "lagoon",
+    label: "Lagoon",
+    description: "Dark, deep petrol with coral and butter.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#0d1f24",
+      bgSurface: "#142e36",
+      ink: "#e8f0f0",
+      agent: "#ff8a7a",
+      you: "#f5d56b",
+      node: "#7ddcb4",
     },
   },
 };

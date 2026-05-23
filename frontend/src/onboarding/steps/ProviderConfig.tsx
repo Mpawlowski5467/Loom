@@ -16,7 +16,7 @@ interface Props {
 }
 
 interface ProviderOption {
-  name: "openai" | "anthropic" | "xai" | "ollama";
+  name: "openai" | "anthropic" | "xai" | "openrouter" | "ollama";
   label: string;
   requiresApiKey: boolean;
   requiresHost: boolean;
@@ -51,6 +51,14 @@ const PROVIDERS: ProviderOption[] = [
     requiresHost: false,
     hint: "console.x.ai for keys.",
     defaultChat: "grok-2-latest",
+  },
+  {
+    name: "openrouter",
+    label: "OpenRouter",
+    requiresApiKey: true,
+    requiresHost: false,
+    hint: "openrouter.ai/keys — one key, every model.",
+    defaultChat: "openai/gpt-4o-mini",
   },
   {
     name: "ollama",

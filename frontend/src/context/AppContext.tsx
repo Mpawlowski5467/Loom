@@ -19,12 +19,28 @@ import { captures as capturesSeed } from "../data/captures";
 import { changelogSeed } from "../data/changelog";
 import { councilSeed } from "../data/council";
 import { notes as notesSeed } from "../data/notes";
+import { backendCaptureToFrontend, listCaptures } from "../api/captures";
+import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
+const GRAPH_FILTERS_KEY = "loom.graphFilters";
+
+function loadGraphFilters(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = window.localStorage.getItem(GRAPH_FILTERS_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return new Set();
+    return new Set(parsed.filter((v): v is string => typeof v === "string"));
+  } catch {
+    return new Set();
+  }
+}
 
 /**
  * Demo data toggle — OFF by default so a fresh visit shows the new-user UI.
@@ -150,7 +166,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const [graphMode, setGraphMode] = useState<GraphMode>("constellation");
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
-  const [graphFilters, setGraphFilters] = useState<Set<string>>(new Set());
+  const [graphFilters, setGraphFilters] = useState<Set<string>>(loadGraphFilters);
   const toggleGraphFilter = useCallback((t: string) => {
     setGraphFilters((prev) => {
       const next = new Set(prev);
@@ -159,6 +175,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       return next;
     });
   }, []);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(
+        GRAPH_FILTERS_KEY,
+        JSON.stringify([...graphFilters]),
+      );
+    } catch {
+      // ignore quota / serialization failures
+    }
+  }, [graphFilters]);
 
   const [graphDisplay, setGraphDisplayState] =
     useState<GraphDisplay>(loadGraphDisplay);
@@ -317,6 +344,58 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [selectedCaptureId, selectCapture] = useState<string | null>(
     demo ? capturesSeed[0]?.id ?? null : null,
   );
+
+  useEffect(() => {
+    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) return;
+    const ctrl = new AbortController();
+
+    void loadAllNotes(ctrl.signal)
+      .then((records) => {
+        if (ctrl.signal.aborted) return;
+        const loaded = backendNotesToFrontend(records);
+        setNotes(loaded);
+        setCurrentNoteId((current) => {
+          if (current && loaded.some((n) => n.id === current)) return current;
+          return loaded[0]?.id ?? null;
+        });
+      })
+      .catch((err) => {
+        if ((err as DOMException)?.name === "AbortError") return;
+        pushToast({
+          icon: "!",
+          agent: "loom",
+          body: err instanceof Error ? err.message : "Failed to load notes",
+        });
+      });
+
+    void listCaptures(ctrl.signal)
+      .then((records) => {
+        if (ctrl.signal.aborted) return;
+        const loaded = records.map(backendCaptureToFrontend);
+        setCaptures(loaded);
+        selectCapture((current) => {
+          if (current && loaded.some((c) => c.id === current)) return current;
+          return loaded[0]?.id ?? null;
+        });
+      })
+      .catch((err) => {
+        if ((err as DOMException)?.name === "AbortError") return;
+        pushToast({
+          icon: "!",
+          agent: "loom",
+          body: err instanceof Error ? err.message : "Failed to load captures",
+        });
+      });
+
+    return () => ctrl.abort();
+  }, [
+    demo,
+    loomConfig.config?.active_vault,
+    loomConfig.offline,
+    loomConfig.onboardingComplete,
+    pushToast,
+  ]);
+
   const setCaptureStatus = useCallback((id: string, s: CaptureStatus) => {
     setCaptures((prev) =>
       prev.map((c) => (c.id === id ? { ...c, status: s } : c)),

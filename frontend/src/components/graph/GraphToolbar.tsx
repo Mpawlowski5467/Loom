@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { Download } from "lucide-react";
 import type { GraphMode, NodeType } from "../../data/types";
 import { ModeToggle } from "../primitives/ModeToggle";
 import { Popover } from "../primitives/Popover";
@@ -15,11 +16,14 @@ const TYPE_FILTERS: { type: NodeType; label: string }[] = [
   { type: "custom", label: "custom" },
 ];
 
+export type ExportFormat = "png" | "svg" | "json";
+
 interface Props {
   graphMode: GraphMode;
   setGraphMode: (m: GraphMode) => void;
   graphFilters: Set<string>;
   toggleGraphFilter: (t: string) => void;
+  onExport?: (format: ExportFormat) => void;
 }
 
 export function GraphToolbar({
@@ -27,9 +31,28 @@ export function GraphToolbar({
   setGraphMode,
   graphFilters,
   toggleGraphFilter,
+  onExport,
 }: Props): ReactNode {
   const [displayOpen, setDisplayOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const exportRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!exportOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (!exportRef.current?.contains(e.target as Node)) {
+        setExportOpen(false);
+      }
+    };
+    window.addEventListener("mousedown", onDown);
+    return () => window.removeEventListener("mousedown", onDown);
+  }, [exportOpen]);
+
+  const handleExport = (format: ExportFormat) => {
+    setExportOpen(false);
+    onExport?.(format);
+  };
 
   return (
     <div className="graph-toolbar">
@@ -56,6 +79,50 @@ export function GraphToolbar({
             { value: "orbit", icon: "◎", label: "orbit" },
           ]}
         />
+        <div ref={exportRef} className="graph-export">
+          <button
+            type="button"
+            className="graph-display-trigger"
+            aria-label="Export graph"
+            aria-haspopup="menu"
+            aria-expanded={exportOpen}
+            onClick={() => setExportOpen((v) => !v)}
+            disabled={!onExport}
+          >
+            <Download size={14} aria-hidden="true" />
+          </button>
+          {exportOpen && (
+            <ul className="graph-export-menu" role="menu">
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleExport("png")}
+                >
+                  PNG
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleExport("svg")}
+                >
+                  SVG
+                </button>
+              </li>
+              <li>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => handleExport("json")}
+                >
+                  JSON
+                </button>
+              </li>
+            </ul>
+          )}
+        </div>
         <button
           ref={triggerRef}
           type="button"

@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import type { Tab } from "../data/types";
-import { backendNoteToFrontend } from "../api/notes";
+import { backendNoteToFrontend, titleMapFromNotes } from "../api/notes";
 import { Nav } from "./layout/Nav";
 import { Tree } from "./layout/Tree";
 import { Splash } from "../views/Splash";
@@ -51,6 +51,7 @@ export function MainShell(): ReactNode {
     setPaletteOpen,
     newNoteOpen,
     setNewNoteOpen,
+    notes,
     appendNote,
     openNote,
     config,
@@ -133,7 +134,7 @@ export function MainShell(): ReactNode {
         <NewNoteModal
           onClose={() => setNewNoteOpen(false)}
           onCreated={(record) => {
-            const note = backendNoteToFrontend(record);
+            const note = backendNoteToFrontend(record, titleMapFromNotes(notes));
             appendNote(note);
             openNote(note.id);
             pushToast({

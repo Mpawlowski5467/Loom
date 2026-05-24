@@ -1,6 +1,29 @@
 """Integration tests for vault API endpoints."""
 
+import io
+import tarfile
+from pathlib import Path
+
 from starlette.testclient import TestClient
+
+from core.notes import note_to_file_content
+
+
+def _write_note(vault_root: Path, note_id: str, title: str) -> None:
+    path = vault_root / "threads" / "topics" / f"{note_id}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        note_to_file_content(
+            {
+                "id": note_id,
+                "title": title,
+                "type": "topic",
+                "tags": [],
+                "history": [],
+            },
+            "Body",
+        )
+    )
 
 
 class TestCreateVault:
@@ -56,9 +79,45 @@ class TestActiveVault:
         assert resp.status_code == 200
         assert client.get("/api/vaults/active").json()["name"] == "second"
 
+    def test_set_active_rebuilds_note_index(
+        self, client: TestClient, vault_manager, note_index
+    ) -> None:
+        client.post("/api/vaults", json={"name": "first"})
+        client.post("/api/vaults", json={"name": "second"})
+        _write_note(vault_manager.vault_path("first"), "thr_first", "First Note")
+        _write_note(vault_manager.vault_path("second"), "thr_second", "Second Note")
+        note_index.build(vault_manager.vault_path("first") / "threads")
+
+        resp = client.put("/api/vaults/active", json={"name": "second"})
+
+        assert resp.status_code == 200
+        notes = client.get("/api/notes").json()["notes"]
+        assert [n["title"] for n in notes] == ["Second Note"]
+
     def test_set_nonexistent_404(self, client: TestClient) -> None:
         resp = client.put("/api/vaults/active", json={"name": "nope"})
         assert resp.status_code == 404
+
+
+class TestExportVault:
+    """GET /api/vaults/{name}/export"""
+
+    def test_export_contains_restorable_vault_parts(
+        self, client: TestClient, vault_manager
+    ) -> None:
+        client.post("/api/vaults", json={"name": "test"})
+        _write_note(vault_manager.vault_path("test"), "thr_export", "Exported")
+
+        resp = client.get("/api/vaults/test/export")
+
+        assert resp.status_code == 200
+        with tarfile.open(fileobj=io.BytesIO(resp.content), mode="r:gz") as tar:
+            names = set(tar.getnames())
+        assert "test/vault.yaml" in names
+        assert "test/threads/topics/thr_export.md" in names
+        assert "test/agents/weaver/config.yaml" in names
+        assert "test/rules/prime.md" in names
+        assert "test/prompts/shared/system-preamble.md" in names
 
 
 class TestRenameVault:

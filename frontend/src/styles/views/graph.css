@@ -48,6 +48,45 @@
   color: var(--bg-base);
 }
 
+.graph-export {
+  position: relative;
+}
+
+.graph-export-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  min-width: 100px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  box-shadow: 0 8px 24px var(--shadow-elev);
+  z-index: 10;
+}
+.graph-export-menu li {
+  margin: 0;
+  padding: 0;
+}
+.graph-export-menu button {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 6px 14px;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+}
+.graph-export-menu button:hover {
+  background: var(--bg-surface);
+  color: var(--ink);
+}
+
 .graph-display-popover {
   position: absolute;
   top: calc(100% + 6px);

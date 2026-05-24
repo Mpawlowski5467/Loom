@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -20,9 +20,80 @@ export function InboxView(): ReactNode {
     openNote,
   } = useApp();
   const [editing, setEditing] = useState(false);
+  const [search, setSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+
+  const filteredCaptures = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return captures;
+    return captures.filter(
+      (c) =>
+        c.title.toLowerCase().includes(q) ||
+        c.body.toLowerCase().includes(q) ||
+        c.folder.toLowerCase().includes(q),
+    );
+  }, [captures, search]);
 
   const selected = captures.find((c) => c.id === selectedCaptureId) ?? captures[0];
   const pendingCount = captures.filter((c) => c.status !== "done").length;
+
+  const filteredIds = useMemo(
+    () => filteredCaptures.map((c) => c.id),
+    [filteredCaptures],
+  );
+  const allSelected =
+    filteredIds.length > 0 && filteredIds.every((id) => selectedIds.has(id));
+  const someSelected =
+    !allSelected && filteredIds.some((id) => selectedIds.has(id));
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (allSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of filteredIds) next.delete(id);
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const id of filteredIds) next.add(id);
+        return next;
+      });
+    }
+  };
+
+  const selectionCount = selectedIds.size;
+
+  const skipSelected = () => {
+    if (selectionCount === 0) return;
+    selectedIds.forEach((id) => setCaptureStatus(id, "done"));
+    pushToast({
+      icon: "↷",
+      agent: "weaver",
+      body: `Skipped ${selectionCount} capture${selectionCount === 1 ? "" : "s"}`,
+    });
+    setSelectedIds(new Set());
+  };
+
+  const processSelected = () => {
+    if (selectionCount === 0) return;
+    selectedIds.forEach((id) => setCaptureStatus(id, "processing"));
+    pushToast({
+      icon: "🧶",
+      agent: "weaver",
+      body: `Processing ${selectionCount} capture${selectionCount === 1 ? "" : "s"}`,
+    });
+    setSelectedIds(new Set());
+  };
 
   const accept = (capId: string) => {
     setCaptureStatus(capId, "done");
@@ -42,10 +113,60 @@ export function InboxView(): ReactNode {
             <span className="inbox-count">{pendingCount}</span>
           </span>
         </div>
+        <div className="inbox-search-row">
+          <input
+            type="search"
+            className="inbox-search"
+            placeholder="Search captures…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label="Search captures"
+          />
+        </div>
+        <div className="inbox-bulk-row">
+          <label className="inbox-bulk-check">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              ref={(el) => {
+                if (el) el.indeterminate = someSelected;
+              }}
+              onChange={toggleAll}
+              disabled={filteredIds.length === 0}
+              aria-label="Select all"
+            />
+            <span>
+              {selectionCount > 0
+                ? `${selectionCount} selected`
+                : `${filteredIds.length} of ${captures.length}`}
+            </span>
+          </label>
+          <div className="inbox-bulk-actions">
+            <Button
+              size="sm"
+              onClick={skipSelected}
+              disabled={selectionCount === 0}
+            >
+              Skip
+            </Button>
+            <Button
+              variant="amber"
+              size="sm"
+              onClick={processSelected}
+              disabled={selectionCount === 0}
+            >
+              Process
+            </Button>
+          </div>
+        </div>
         <div className="inbox-scroll">
-          {captures.map((c) => {
+          {filteredCaptures.length === 0 && (
+            <div className="inbox-empty">No matching captures</div>
+          )}
+          {filteredCaptures.map((c) => {
             const isActive = selected?.id === c.id;
             const filed = c.status === "done";
+            const isChecked = selectedIds.has(c.id);
             return (
               <div
                 key={c.id}
@@ -61,28 +182,38 @@ export function InboxView(): ReactNode {
                   }
                 }}
               >
-                <div className="inbox-card-h">
-                  <span className="inbox-card-title">{c.title}</span>
-                  {!filed && (
-                    <span
-                      className="status-badge"
-                      data-state={c.status === "processing" ? "running" : "queued"}
-                    >
-                      <span className="pulse-dot" />
-                      {c.status}
-                    </span>
+                <input
+                  type="checkbox"
+                  className="inbox-card-check"
+                  checked={isChecked}
+                  onChange={() => toggleOne(c.id)}
+                  onClick={(e) => e.stopPropagation()}
+                  aria-label={`Select ${c.title}`}
+                />
+                <div className="inbox-card-body">
+                  <div className="inbox-card-h">
+                    <span className="inbox-card-title">{c.title}</span>
+                    {!filed && (
+                      <span
+                        className="status-badge"
+                        data-state={c.status === "processing" ? "running" : "queued"}
+                      >
+                        <span className="pulse-dot" />
+                        {c.status}
+                      </span>
+                    )}
+                  </div>
+                  <div className="inbox-card-meta">
+                    <span>{c.folder}/</span>
+                    <span>·</span>
+                    <span>{c.receivedAt.slice(11, 16)} · {c.receivedAt.slice(5, 10)}</span>
+                  </div>
+                  {filed && c.filedAs && noteById(c.filedAs) && (
+                    <div className="inbox-card-filed">
+                      filed as <Wikilink target={noteById(c.filedAs)!.title} />
+                    </div>
                   )}
                 </div>
-                <div className="inbox-card-meta">
-                  <span>{c.folder}/</span>
-                  <span>·</span>
-                  <span>{c.receivedAt.slice(11, 16)} · {c.receivedAt.slice(5, 10)}</span>
-                </div>
-                {filed && c.filedAs && noteById(c.filedAs) && (
-                  <div className="inbox-card-filed">
-                    filed as <Wikilink target={noteById(c.filedAs)!.title} />
-                  </div>
-                )}
               </div>
             );
           })}

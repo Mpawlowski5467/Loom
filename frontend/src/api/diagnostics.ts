@@ -6,6 +6,8 @@ export interface DiagnosticsResponse {
   vault_path: string;
   providers_configured: string[];
   started_at: string;
+  build_date: string | null;
+  log_path: string;
 }
 
 export interface HealthResponse {

@@ -33,12 +33,16 @@ export function AboutSection(): ReactNode {
     setMessage("Vault path copied.");
   };
 
+  const frontendVersion =
+    (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
+
   return (
     <div className="settings-panel">
       <div className="settings-kicker">About</div>
       <h1 className="settings-title">Diagnostics</h1>
       <div className="settings-diagnostics-grid">
         <InfoRow label="Version" value={diagnostics?.app_version ?? "…"} />
+        <InfoRow label="Frontend" value={frontendVersion} />
         <InfoRow label="Python" value={diagnostics?.python_version ?? "…"} />
         <InfoRow
           label="Started"
@@ -46,6 +50,16 @@ export function AboutSection(): ReactNode {
             diagnostics
               ? new Date(diagnostics.started_at).toLocaleString()
               : "…"
+          }
+        />
+        <InfoRow
+          label="Built"
+          value={
+            diagnostics?.build_date
+              ? new Date(diagnostics.build_date).toLocaleString()
+              : diagnostics
+                ? "Unknown"
+                : "…"
           }
         />
         <InfoRow
@@ -66,6 +80,12 @@ export function AboutSection(): ReactNode {
           <div className="settings-field-label">Vault path</div>
           <div className="settings-vault-path">
             {diagnostics?.vault_path ?? "Loading…"}
+          </div>
+        </div>
+        <div>
+          <div className="settings-field-label">Logs</div>
+          <div className="settings-vault-path">
+            {diagnostics?.log_path ?? "Loading…"}
           </div>
         </div>
         <button

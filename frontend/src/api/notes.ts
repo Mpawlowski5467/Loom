@@ -18,6 +18,15 @@ export interface NoteRecord {
   wikilinks: string[];
 }
 
+export type NoteMetaRecord = Omit<NoteRecord, "body" | "wikilinks">;
+
+export interface NoteListResponse {
+  notes: NoteMetaRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface CreateNotePayload {
   title: string;
   type?: string;
@@ -28,6 +37,44 @@ export interface CreateNotePayload {
 
 export function createNote(payload: CreateNotePayload): Promise<NoteRecord> {
   return apiClient.post<NoteRecord>("/api/notes", payload);
+}
+
+export function listNoteRecords(
+  offset = 0,
+  limit = 200,
+  signal?: AbortSignal,
+): Promise<NoteListResponse> {
+  return apiClient.get<NoteListResponse>(
+    `/api/notes?offset=${offset}&limit=${limit}`,
+    signal,
+  );
+}
+
+export function getNote(id: string, signal?: AbortSignal): Promise<NoteRecord> {
+  return apiClient.get<NoteRecord>(
+    `/api/notes/${encodeURIComponent(id)}`,
+    signal,
+  );
+}
+
+export async function loadAllNotes(signal?: AbortSignal): Promise<NoteRecord[]> {
+  const limit = 200;
+  const records: NoteRecord[] = [];
+  let offset = 0;
+  let total = Number.POSITIVE_INFINITY;
+
+  while (offset < total) {
+    const page = await listNoteRecords(offset, limit, signal);
+    total = page.total;
+    const full = await Promise.all(
+      page.notes.map((n) => getNote(n.id, signal)),
+    );
+    records.push(...full);
+    offset += page.notes.length;
+    if (page.notes.length === 0) break;
+  }
+
+  return records;
 }
 
 export interface UpdateNotePayload {
@@ -126,7 +173,18 @@ const NODE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
   "custom",
 ]);
 
-export function backendNoteToFrontend(record: NoteRecord): Note {
+export function titleMapFromNotes(notes: Note[]): Map<string, string> {
+  return new Map(notes.map((n) => [n.title.toLowerCase(), n.id]));
+}
+
+export function titleMapFromRecords(records: NoteRecord[]): Map<string, string> {
+  return new Map(records.map((n) => [n.title.toLowerCase(), n.id]));
+}
+
+export function backendNoteToFrontend(
+  record: NoteRecord,
+  titleToId: Map<string, string> = new Map(),
+): Note {
   const rawType = record.type === "person" ? "people" : record.type;
   const type: NodeType = NODE_TYPES.has(rawType as NodeType)
     ? (rawType as NodeType)
@@ -134,6 +192,7 @@ export function backendNoteToFrontend(record: NoteRecord): Note {
   const parts = record.file_path.split("/threads/")[1]?.split("/") ?? [];
   const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
   const filename = parts[parts.length - 1] ?? `${record.id}.md`;
+  const links = resolveLinkIds(record, titleToId);
   return {
     id: record.id,
     title: record.title,
@@ -142,7 +201,7 @@ export function backendNoteToFrontend(record: NoteRecord): Note {
     filename,
     tags: record.tags,
     body: record.body,
-    links: record.links,
+    links,
     history: record.history.map((h) => ({
       action: h.action as Note["history"][number]["action"],
       by: h.by as Note["history"][number]["by"],
@@ -154,4 +213,30 @@ export function backendNoteToFrontend(record: NoteRecord): Note {
     status: record.status === "archived" ? "archived" : "active",
     source: record.source,
   };
+}
+
+export function backendNotesToFrontend(records: NoteRecord[]): Note[] {
+  const titleToId = titleMapFromRecords(records);
+  return records.map((record) => backendNoteToFrontend(record, titleToId));
+}
+
+function resolveLinkIds(
+  record: NoteRecord,
+  titleToId: Map<string, string>,
+): string[] {
+  const ids = new Set<string>();
+
+  for (const raw of record.links) {
+    const mapped = titleToId.get(raw.toLowerCase());
+    ids.add(mapped ?? raw);
+  }
+
+  for (const raw of record.wikilinks) {
+    const target = raw.split("|")[0]!.trim().toLowerCase();
+    const id = titleToId.get(target);
+    if (id) ids.add(id);
+  }
+
+  ids.delete(record.id);
+  return [...ids];
 }

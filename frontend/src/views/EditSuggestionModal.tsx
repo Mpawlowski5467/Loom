@@ -1,9 +1,11 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Capture, NodeType } from "../data/types";
+import { useApp } from "../context/app-ctx";
 import {
   createNote,
   backendNoteToFrontend,
+  titleMapFromNotes,
   type NoteRecord,
 } from "../api/notes";
 
@@ -26,6 +28,7 @@ export function EditSuggestionModal({
   onClose,
   onAccepted,
 }: Props): ReactNode {
+  const { notes } = useApp();
   const sug = capture.suggestion;
   const initialType: string = sug?.type === "people" ? "person" : sug?.type ?? "topic";
   const [title, setTitle] = useState(sug?.title ?? capture.title);
@@ -54,7 +57,7 @@ export function EditSuggestionModal({
         folder,
         content: capture.body,
       });
-      const frontend = backendNoteToFrontend(record);
+      const frontend = backendNoteToFrontend(record, titleMapFromNotes(notes));
       onAccepted(frontend, record);
       onClose();
     } catch (err) {

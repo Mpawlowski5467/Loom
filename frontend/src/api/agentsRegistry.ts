@@ -42,3 +42,19 @@ export function deleteCustomAgent(id: string): Promise<void> {
     `/api/agents/registry/${encodeURIComponent(id)}`,
   );
 }
+
+export interface BubbleResponse {
+  agent_id: string;
+  bubble: string;
+  cached: boolean;
+}
+
+export function getAgentBubble(
+  id: string,
+  signal?: AbortSignal,
+): Promise<BubbleResponse> {
+  return apiClient.get<BubbleResponse>(
+    `/api/agents/registry/${encodeURIComponent(id)}/bubble`,
+    signal,
+  );
+}

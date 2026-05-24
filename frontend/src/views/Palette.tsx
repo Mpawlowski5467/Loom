@@ -2,19 +2,73 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Dot } from "../components/primitives/Dot";
-import { searchNotes } from "../api/search";
+import {
+  recentNotes,
+  searchNotesRemote,
+  type SearchResult,
+} from "../api/search";
+import { ApiError } from "../api/client";
+
+const SEARCH_DEBOUNCE_MS = 150;
+
+type RemoteOutcome =
+  | { kind: "ok"; query: string; results: SearchResult[] }
+  | { kind: "error"; query: string };
 
 export function Palette(): ReactNode {
   const { notes, openNote, setPaletteOpen } = useApp();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
+  const [outcome, setOutcome] = useState<RemoteOutcome | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
 
-  const results = useMemo(() => searchNotes(q, notes, 10), [q, notes]);
+  const recent = useMemo(() => recentNotes(notes, 8), [notes]);
+  const trimmed = q.trim();
 
   useEffect(() => {
     inputRef.current?.focus();
   }, []);
+
+  useEffect(() => {
+    if (!trimmed) return;
+    const ctrl = new AbortController();
+    const timer = window.setTimeout(() => {
+      void searchNotesRemote(trimmed, 10, ctrl.signal)
+        .then((results) => {
+          if (ctrl.signal.aborted) return;
+          setOutcome({ kind: "ok", query: trimmed, results });
+        })
+        .catch((err) => {
+          if ((err as DOMException)?.name === "AbortError") return;
+          if (!(err instanceof ApiError)) {
+            console.error("palette search failed", err);
+          }
+          setOutcome({ kind: "error", query: trimmed });
+        });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      window.clearTimeout(timer);
+      ctrl.abort();
+    };
+  }, [trimmed]);
+
+  const currentOutcome =
+    outcome && outcome.query === trimmed ? outcome : null;
+  const isLoading = Boolean(trimmed) && currentOutcome === null;
+
+  const results: SearchResult[] = !trimmed
+    ? recent
+    : currentOutcome?.kind === "ok"
+      ? currentOutcome.results
+      : [];
+
+  const footLabel = !trimmed
+    ? "recent"
+    : isLoading
+      ? "searching…"
+      : currentOutcome?.kind === "error"
+        ? "offline"
+        : "backend search";
 
   const onQueryChange = (v: string) => {
     setQ(v);
@@ -64,11 +118,23 @@ export function Palette(): ReactNode {
           }}
         />
         <div className="palette-list" role="listbox">
-          {results.length === 0 && (
+          {isLoading && (
             <div className="palette-item" style={{ color: "var(--ink-3)" }}>
-              <em>no matches</em>
+              <em>searching…</em>
             </div>
           )}
+          {currentOutcome?.kind === "error" && (
+            <div className="palette-item" style={{ color: "var(--ink-3)" }}>
+              <em>search unavailable — backend offline</em>
+            </div>
+          )}
+          {!isLoading &&
+            currentOutcome?.kind !== "error" &&
+            results.length === 0 && (
+              <div className="palette-item" style={{ color: "var(--ink-3)" }}>
+                <em>no matches</em>
+              </div>
+            )}
           {results.map((r, i) => (
             <div
               key={r.note_id}
@@ -94,7 +160,7 @@ export function Palette(): ReactNode {
         </div>
         <div className="palette-foot">
           <span>↑↓ navigate · ↵ open · esc close</span>
-          <span>{q ? "semantic · LanceDB" : "recent"}</span>
+          <span>{footLabel}</span>
         </div>
       </div>
     </div>

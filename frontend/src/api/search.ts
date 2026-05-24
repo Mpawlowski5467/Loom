@@ -1,4 +1,5 @@
 import type { Note, NodeType } from "../data/types";
+import { apiClient } from "./client";
 
 export interface SearchResult {
   note_id: string;
@@ -9,74 +10,77 @@ export interface SearchResult {
   type: NodeType;
 }
 
-function snippetFor(body: string, lowerQuery: string): string {
-  const idx = body.toLowerCase().indexOf(lowerQuery);
-  if (idx < 0) {
-    return body.replace(/\n+/g, " ").slice(0, 110);
-  }
-  const start = Math.max(0, idx - 24);
-  const end = Math.min(body.length, idx + 90);
-  let s = body.slice(start, end).replace(/\n+/g, " ");
-  if (start > 0) s = "…" + s;
-  if (end < body.length) s = s + "…";
-  return s;
+interface BackendSearchHit {
+  id: string;
+  title: string;
+  type: string;
+  tags: string[];
+  snippet: string;
+  score: number;
+  heading: string;
 }
 
-function bestHeading(body: string, lowerQuery: string): string | undefined {
-  const headings: string[] = [];
-  for (const line of body.split("\n")) {
-    if (line.startsWith("## ")) headings.push(line.slice(3).trim());
-  }
-  for (const h of headings) {
-    if (h.toLowerCase().includes(lowerQuery)) return h;
-  }
-  return headings[0];
+interface BackendSearchResponse {
+  query: string;
+  results: BackendSearchHit[];
+  mode: "semantic" | "keyword";
 }
 
-export function searchNotes(
+const NODE_TYPES: ReadonlySet<NodeType> = new Set([
+  "project",
+  "topic",
+  "people",
+  "daily",
+  "capture",
+  "custom",
+]);
+
+function narrowType(t: string): NodeType {
+  return (NODE_TYPES as Set<string>).has(t) ? (t as NodeType) : "custom";
+}
+
+export async function searchNotesRemote(
   query: string,
-  notes: Note[],
   limit = 10,
-): SearchResult[] {
-  if (!query.trim()) {
-    return notes
-      .slice()
-      .sort((a, b) => b.modified.localeCompare(a.modified))
-      .slice(0, 8)
-      .map((n) => ({
-        note_id: n.id,
-        title: n.title,
-        heading: bestHeading(n.body, "") ?? "",
-        snippet: snippetFor(n.body, ""),
-        score: 0.5 + Math.random() * 0.4,
-        type: n.type,
-      }));
+  signal?: AbortSignal,
+): Promise<SearchResult[]> {
+  const params = new URLSearchParams({ q: query });
+  const resp = await apiClient.get<BackendSearchResponse>(
+    `/api/search?${params.toString()}`,
+    signal,
+  );
+  return resp.results.slice(0, limit).map((hit) => ({
+    note_id: hit.id,
+    title: hit.title,
+    heading: hit.heading,
+    snippet: hit.snippet,
+    score: hit.score,
+    type: narrowType(hit.type),
+  }));
+}
+
+function snippetFor(body: string): string {
+  return body.replace(/\n+/g, " ").slice(0, 110);
+}
+
+function firstHeading(body: string): string {
+  for (const line of body.split("\n")) {
+    if (line.startsWith("## ")) return line.slice(3).trim();
   }
-  const lower = query.toLowerCase();
-  const results: SearchResult[] = [];
-  for (const n of notes) {
-    let score = 0;
-    if (n.title.toLowerCase().includes(lower)) score += 0.5;
-    if (n.body.toLowerCase().includes(lower)) score += 0.05;
-    for (const t of n.tags) {
-      if (t.toLowerCase().includes(lower)) score += 0.15;
-    }
-    for (const line of n.body.split("\n")) {
-      if (line.startsWith("## ") && line.toLowerCase().includes(lower)) {
-        score += 0.3;
-        break;
-      }
-    }
-    if (score > 0) {
-      results.push({
-        note_id: n.id,
-        title: n.title,
-        heading: bestHeading(n.body, lower) ?? "",
-        snippet: snippetFor(n.body, lower),
-        score: Math.min(0.99, score + Math.random() * 0.05),
-        type: n.type,
-      });
-    }
-  }
-  return results.sort((a, b) => b.score - a.score).slice(0, limit);
+  return "";
+}
+
+export function recentNotes(notes: Note[], limit = 8): SearchResult[] {
+  return notes
+    .slice()
+    .sort((a, b) => b.modified.localeCompare(a.modified))
+    .slice(0, limit)
+    .map((n) => ({
+      note_id: n.id,
+      title: n.title,
+      heading: firstHeading(n.body),
+      snippet: snippetFor(n.body),
+      score: 0,
+      type: n.type,
+    }));
 }

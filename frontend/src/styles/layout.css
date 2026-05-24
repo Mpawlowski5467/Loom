@@ -128,6 +128,28 @@
   font-family: var(--font);
 }
 
+.tree-filter {
+  padding: 0 12px 10px 4px;
+}
+.tree-filter-input {
+  width: 100%;
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 5px 10px;
+  border: 1px solid var(--rule-2);
+  border-radius: 999px;
+  background: var(--bg-surface);
+  color: var(--ink);
+  outline: none;
+  transition: border-color 160ms var(--ease);
+}
+.tree-filter-input::placeholder {
+  color: var(--ink-3);
+}
+.tree-filter-input:focus {
+  border-color: var(--agent);
+}
+
 .vault-badge {
   display: inline-flex;
   align-items: center;
@@ -304,6 +326,40 @@
   text-transform: uppercase;
   color: var(--ink-3);
   padding: 14px 12px 6px 4px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.tree-section-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border: none;
+  background: transparent;
+  padding: 0;
+  color: var(--ink-3);
+  cursor: pointer;
+}
+.tree-section-chevron:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+.tree-section-chevron:hover:not(:disabled) {
+  color: var(--ink);
+}
+.tree-section-chevron .chevron {
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  transition: transform 160ms var(--ease);
+}
+.tree-section-chevron .chevron.open {
+  transform: rotate(90deg);
+}
+.tree-section-name {
+  display: inline-block;
 }
 
 .tree-row {

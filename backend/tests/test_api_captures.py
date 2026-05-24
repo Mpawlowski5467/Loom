@@ -95,6 +95,7 @@ class TestGetCaptures:
         assert item["author"] == "user"
         assert item["status"] == "active"
         assert item["preview"]  # non-empty preview
+        assert "cool new feature" in item["body"]
         assert item["file_path"]  # non-empty file path
 
     def test_capture_preview_content(self, client: TestClient, seeded_captures: Path) -> None:

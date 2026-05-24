@@ -30,6 +30,7 @@ class CaptureItem(BaseModel):
     source: str = ""
     status: str = "active"
     preview: str = ""
+    body: str = ""
     file_path: str = ""
 
 
@@ -85,6 +86,7 @@ def _list_captures(captures_dir: Path) -> list[CaptureItem]:
                     source=note.source,
                     status=note.status,
                     preview=_extract_preview(note.body),
+                    body=note.body,
                     file_path=note.file_path,
                 )
             )

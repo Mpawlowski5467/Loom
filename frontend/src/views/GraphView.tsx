@@ -1,9 +1,15 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
 import { useApp } from "../context/app-ctx";
 import { GraphToolbar } from "../components/graph/GraphToolbar";
+import type { ExportFormat } from "../components/graph/GraphToolbar";
+import {
+  exportGraphJson,
+  exportGraphPng,
+  exportGraphSvg,
+} from "../graph/export";
 import { startBreathing } from "../graph/breathing";
 import {
   applyConstellationLayout,
@@ -39,6 +45,7 @@ export function GraphView(): ReactNode {
     toggleGraphFilter,
     graphDisplay,
     theme,
+    pushToast,
   } = useApp();
 
   const hostRef = useRef<HTMLDivElement | null>(null);
@@ -722,6 +729,30 @@ export function GraphView(): ReactNode {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [graphMode, graphFocusId, notes]);
 
+  const handleExport = useCallback(
+    (format: ExportFormat) => {
+      const sigma = sigmaRef.current;
+      const graph = graphRef.current;
+      if (!sigma || !graph) return;
+      try {
+        if (format === "png") {
+          void exportGraphPng(sigma);
+        } else if (format === "svg") {
+          exportGraphSvg(sigma, graph);
+        } else {
+          exportGraphJson(graph);
+        }
+      } catch (err) {
+        pushToast({
+          icon: "⚠",
+          agent: "sentinel",
+          body: err instanceof Error ? err.message : "Export failed",
+        });
+      }
+    },
+    [pushToast],
+  );
+
   return (
     <div className="graph-view">
       <GraphToolbar
@@ -729,6 +760,7 @@ export function GraphView(): ReactNode {
         setGraphMode={setGraphMode}
         graphFilters={graphFilters}
         toggleGraphFilter={toggleGraphFilter}
+        onExport={handleExport}
       />
       <div className="graph-canvas">
         <div ref={hostRef} className="sigma-container" />

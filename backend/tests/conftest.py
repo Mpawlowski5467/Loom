@@ -36,6 +36,13 @@ def client(vault_manager: VaultManager, note_index: NoteIndex) -> TestClient:
     app.dependency_overrides[get_vault_manager] = lambda: vault_manager
     app.dependency_overrides[get_note_index] = lambda: note_index
     yield TestClient(app)
+    from core.watcher import stop_watcher
+    from index.indexer import reset_indexer
+    from index.searcher import reset_searcher
+
+    stop_watcher()
+    reset_searcher()
+    reset_indexer()
     app.dependency_overrides.clear()
 
 

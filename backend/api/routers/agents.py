@@ -8,6 +8,7 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 
+from core.note_index import NoteIndex, get_note_index
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
 
@@ -128,6 +129,7 @@ def list_agents() -> list[AgentStatus]:
 async def spider_scan(
     request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str = Query("", description="Scan a single note by ID (omit for full vault)"),
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> SpiderScanResult:
     """Trigger Spider to find connections. Returns scored candidates and linking decisions."""
     from agents.loom.spider import get_spider
@@ -138,15 +140,13 @@ async def spider_scan(
 
     if note_id:
         # Single-note scan: resolve note path from ID
-        from core.note_index import get_note_index
         from core.notes import parse_note_meta
 
         note_path = None
-        index = get_note_index()
         if index.size > 0:
             entry = index.get_by_id(note_id)
             if entry is not None:
-                note_path = entry.path
+                note_path = entry.file_path
         if note_path is None:
             # Fallback: scan disk
             vm = get_vault_manager()

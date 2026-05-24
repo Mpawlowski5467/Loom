@@ -23,6 +23,8 @@ class DiagnosticsResponse(BaseModel):
     vault_path: str
     providers_configured: list[str]
     started_at: datetime
+    build_date: datetime | None
+    log_path: str
 
 
 @router.get("/diagnostics", response_model=DiagnosticsResponse)
@@ -41,13 +43,18 @@ async def get_diagnostics(request: Request) -> DiagnosticsResponse:
             name for name, provider in config.providers.items() if provider.api_key or provider.host
         ],
         started_at=started_at,
+        build_date=_build_date(),
+        log_path=str(settings.loom_home / "logs"),
     )
 
 
+def _pyproject_path() -> Path:
+    return Path(__file__).resolve().parents[2] / "pyproject.toml"
+
+
 def _app_version() -> str:
-    pyproject = Path(__file__).resolve().parents[2] / "pyproject.toml"
     try:
-        data = tomllib.loads(pyproject.read_text())
+        data = tomllib.loads(_pyproject_path().read_text())
         project = data.get("project", {})
         version = project.get("version")
         if isinstance(version, str):
@@ -55,3 +62,16 @@ def _app_version() -> str:
     except (OSError, tomllib.TOMLDecodeError):
         pass
     return "0.0.0"
+
+
+def _build_date() -> datetime | None:
+    """Best-effort build/install timestamp.
+
+    No CI artifact ships with this repo, so we read the mtime of
+    pyproject.toml — it's the closest stable proxy for "when this build was
+    cut" without adding a build step.
+    """
+    try:
+        return datetime.fromtimestamp(_pyproject_path().stat().st_mtime, tz=UTC)
+    except OSError:
+        return None

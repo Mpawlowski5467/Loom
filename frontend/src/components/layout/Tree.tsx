@@ -46,6 +46,25 @@ const RESERVED_FOLDERS = new Set([
 
 const DRAG_MIME = "application/x-loom-path";
 
+const TREE_EXPANDED_KEY = "loom.treeExpanded";
+
+function loadExpanded(): Record<string, boolean> {
+  if (typeof window === "undefined") return {};
+  try {
+    const raw = window.localStorage.getItem(TREE_EXPANDED_KEY);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return {};
+    const out: Record<string, boolean> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "boolean") out[k] = v;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 interface ContextMenuState {
   x: number;
   y: number;
@@ -85,9 +104,32 @@ export function Tree(): ReactNode {
   const [renameDraft, setRenameDraft] = useState("");
   const [renameError, setRenameError] = useState<string | null>(null);
 
+  const [filter, setFilter] = useState("");
+  const filterLower = filter.trim().toLowerCase();
+
+  const [expanded, setExpanded] = useState<Record<string, boolean>>(loadExpanded);
+  const isExpanded = (folder: string) =>
+    expanded[folder] !== undefined ? expanded[folder]! : true;
+  const toggleExpanded = (folder: string) => {
+    setExpanded((prev) => ({ ...prev, [folder]: !isExpanded(folder) }));
+  };
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(TREE_EXPANDED_KEY, JSON.stringify(expanded));
+    } catch {
+      // ignore quota / serialization failures
+    }
+  }, [expanded]);
+
   const sections = useMemo<Section[]>(() => {
+    const filtered = filterLower
+      ? notes.filter((n) => n.title.toLowerCase().includes(filterLower))
+      : notes;
+
     const byFolder = new Map<string, Note[]>();
-    for (const n of notes) {
+    for (const n of filtered) {
       const arr = byFolder.get(n.folder) ?? [];
       arr.push(n);
       byFolder.set(n.folder, arr);
@@ -98,6 +140,8 @@ export function Tree(): ReactNode {
 
     for (const f of FOLDER_ORDER) {
       const arr = byFolder.get(f.folder);
+      // When filtering, hide folders with no matches. Otherwise keep the
+      // previous behavior of hiding sections that are entirely empty.
       if (!arr || arr.length === 0) continue;
       seen.add(f.folder);
       out.push({
@@ -115,6 +159,9 @@ export function Tree(): ReactNode {
       if (seen.has(folder)) continue;
       seen.add(folder);
       const arr = byFolder.get(folder) ?? [];
+      // Empty custom folders disappear under an active filter; keep them
+      // visible when there's no filter so users can drop notes into them.
+      if (filterLower && arr.length === 0) continue;
       const type: NodeType = FOLDER_TYPE_BY_NAME.get(folder) ?? "custom";
       out.push({
         folder,
@@ -124,7 +171,7 @@ export function Tree(): ReactNode {
     }
 
     return out;
-  }, [notes, extraFolders]);
+  }, [notes, extraFolders, filterLower]);
 
   const linkCount = useMemo(() => {
     const m = new Map<string, number>();
@@ -349,6 +396,16 @@ export function Tree(): ReactNode {
 
   return (
     <aside className="tree" role="tree">
+      <div className="tree-filter">
+        <input
+          type="search"
+          className="tree-filter-input"
+          placeholder="Filter notes…"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value)}
+          aria-label="Filter notes by title"
+        />
+      </div>
       <div className="vault-badge-row">
         <div className="vault-badge">loom-vault</div>
         <button
@@ -401,6 +458,9 @@ export function Tree(): ReactNode {
         const isDropping = dropTarget === s.folder;
         const folderEditable = !RESERVED_FOLDERS.has(s.folder);
         const folderRenaming = rename?.path === s.folder;
+        // While a filter is active, force every matching folder open so the
+        // user can see the matches without manually expanding each section.
+        const open = filterLower ? true : isExpanded(s.folder);
         return (
           <div
             key={s.folder}
@@ -448,12 +508,27 @@ export function Tree(): ReactNode {
                   openContextMenu(e, { kind: "folder", path: s.folder })
                 }
               >
-                {s.folder}
+                <button
+                  type="button"
+                  className="tree-section-chevron"
+                  aria-label={open ? "Collapse folder" : "Expand folder"}
+                  aria-expanded={open}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleExpanded(s.folder);
+                  }}
+                  disabled={!!filterLower}
+                >
+                  <span className={`chevron ${open ? "open" : ""}`}>▸</span>
+                </button>
+                <span className="tree-section-name">{s.folder}</span>
               </div>
             )}
 
-            {s.notes.length === 0 && <div className="tree-empty">empty</div>}
-            {s.notes.map((n) => {
+            {open && s.notes.length === 0 && (
+              <div className="tree-empty">empty</div>
+            )}
+            {open && s.notes.map((n) => {
               const notePath = notePathOf(n);
               const isRowRenaming = rename?.path === notePath;
               const isDraggingRow = dragSource === notePath;

@@ -11,6 +11,7 @@ import { extractHeadings, renderMarkdown } from "../editor/renderMarkdown";
 import {
   archiveNote as apiArchiveNote,
   backendNoteToFrontend,
+  titleMapFromNotes,
   updateNote as apiUpdateNote,
 } from "../api/notes";
 import { Trash2 } from "lucide-react";
@@ -18,6 +19,7 @@ import { Trash2 } from "lucide-react";
 export function ThreadView(): ReactNode {
   const {
     currentNoteId,
+    notes,
     noteById,
     backlinksFor,
     primaryOpen,
@@ -52,7 +54,7 @@ export function ThreadView(): ReactNode {
     setSaving(true);
     try {
       const record = await apiUpdateNote(note.id, { body: draft });
-      updateNote(backendNoteToFrontend(record));
+      updateNote(backendNoteToFrontend(record, titleMapFromNotes(notes)));
       pushToast({
         icon: "✓",
         agent: "weaver",
@@ -107,7 +109,7 @@ export function ThreadView(): ReactNode {
     }
     try {
       const record = await apiUpdateNote(note.id, { title: next });
-      updateNote(backendNoteToFrontend(record));
+      updateNote(backendNoteToFrontend(record, titleMapFromNotes(notes)));
       pushToast({
         icon: "✎",
         agent: "weaver",

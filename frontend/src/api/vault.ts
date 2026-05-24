@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { API_BASE, apiClient } from "./client";
 import type {
   ActiveVaultResponse,
   ArchiveVaultResponse,
@@ -76,4 +76,19 @@ export function renameVault(
     { new_name: newName },
     signal,
   );
+}
+
+export function hardDeleteVault(
+  name: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  return apiClient.delete<void>(
+    `/api/vaults/${encodeURIComponent(name)}?hard=true`,
+    signal,
+  );
+}
+
+export function vaultExportUrl(name: string): string {
+  // Browser-driven download; the apiClient is JSON-only.
+  return `${API_BASE}/api/vaults/${encodeURIComponent(name)}/export`;
 }

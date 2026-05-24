@@ -1,18 +1,29 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { Archive, RotateCcw, Trash2 } from "lucide-react";
+import { Archive, Download, RotateCcw, Skull, Trash2 } from "lucide-react";
 import { resetOnboarding } from "../../api/onboarding";
-import { archiveVault } from "../../api/vault";
+import { archiveVault, hardDeleteVault, vaultExportUrl } from "../../api/vault";
 import { useApp } from "../../context/app-ctx";
 import { TypedConfirmModal } from "./TypedConfirmModal";
 
-type Action = "reset" | "cache" | "archive";
+type Action = "reset" | "cache" | "archive" | "delete";
 
 export function DangerZoneSection(): ReactNode {
   const { config, refreshConfig } = useApp();
   const [action, setAction] = useState<Action | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const vaultName = config?.active_vault ?? "";
+
+  const exportVault = () => {
+    if (!vaultName) return;
+    const link = document.createElement("a");
+    link.href = vaultExportUrl(vaultName);
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setMessage(`Exporting ${vaultName}…`);
+  };
 
   const confirm = async () => {
     if (action === "reset") {
@@ -28,6 +39,11 @@ export function DangerZoneSection(): ReactNode {
       const result = await archiveVault(vaultName);
       await refreshConfig();
       setMessage(`Archived ${result.archived_name}.`);
+    }
+    if (action === "delete" && vaultName) {
+      await hardDeleteVault(vaultName);
+      await refreshConfig();
+      setMessage(`Permanently deleted ${vaultName}.`);
     }
   };
 
@@ -51,6 +67,17 @@ export function DangerZoneSection(): ReactNode {
           onClick={() => setAction("cache")}
         />
         <DangerAction
+          icon={<Download size={15} aria-hidden="true" />}
+          title="Export vault"
+          body={
+            vaultName
+              ? `Download a restorable tarball of ${vaultName}.`
+              : "No vault loaded."
+          }
+          disabled={!vaultName}
+          onClick={exportVault}
+        />
+        <DangerAction
           icon={<Archive size={15} aria-hidden="true" />}
           title="Archive current vault"
           body={
@@ -60,6 +87,17 @@ export function DangerZoneSection(): ReactNode {
           }
           disabled={!vaultName}
           onClick={() => setAction("archive")}
+        />
+        <DangerAction
+          icon={<Skull size={15} aria-hidden="true" />}
+          title="Permanently delete vault"
+          body={
+            vaultName
+              ? `Erase ${vaultName} from disk. Nothing is recoverable — export first.`
+              : "No vault loaded."
+          }
+          disabled={!vaultName}
+          onClick={() => setAction("delete")}
         />
       </div>
       {message && <div className="settings-inline-status">{message}</div>}
@@ -115,6 +153,15 @@ function actionConfig(action: Action, vaultName: string) {
       phrase: "CLEAR CACHE",
       label: "Clear cache",
       body: "This clears local browser storage and reloads Loom.",
+    };
+  }
+  if (action === "delete") {
+    return {
+      phrase: vaultName,
+      label: "Permanently delete",
+      body:
+        `This permanently erases ${vaultName} from disk. ` +
+        "Nothing is recoverable. Type the vault name to confirm.",
     };
   }
   return {

@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import logging
 import secrets
+import time
 from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
+from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
@@ -36,7 +38,12 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "loom",
         "role": "creates notes from captures",
         "icon": "🧶",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Weaver, the Loom agent that turns captures into proper "
+            "notes. You read the capture, decide on type/folder/title, and "
+            "weave links to related vault notes. Speak in first person, terse "
+            "and concrete, like a craftsperson at a desk."
+        ),
     },
     {
         "id": "spider",
@@ -44,7 +51,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "loom",
         "role": "auto-links across the vault",
         "icon": "🕸",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Spider, the Loom agent that auto-links notes across the "
+            "vault. You track wikilinks, surface candidate connections, and "
+            "weigh confidence. Speak quietly, with an eye for patterns."
+        ),
     },
     {
         "id": "archivist",
@@ -52,7 +63,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "loom",
         "role": "folder hygiene & cleanup",
         "icon": "📦",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Archivist, the Loom agent responsible for folder hygiene, "
+            "moves, renames, and archival. You keep the vault tidy. Speak "
+            "plainly, slightly bureaucratic but kind."
+        ),
     },
     {
         "id": "scribe",
@@ -60,7 +75,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "loom",
         "role": "generates summaries",
         "icon": "✎",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Scribe, the Loom agent that writes summaries and daily "
+            "logs. You distill threads down to their essence. Speak with the "
+            "warmth of someone keeping a journal."
+        ),
     },
     {
         "id": "sentinel",
@@ -68,7 +87,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "loom",
         "role": "validates edits before commit",
         "icon": "👁",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Sentinel, the Loom agent that validates edits before "
+            "they land. You catch duplicates, broken links, and schema drift. "
+            "Speak watchful and concise."
+        ),
     },
     {
         "id": "researcher",
@@ -76,7 +99,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "shuttle",
         "role": "queries the web and synthesizes",
         "icon": "🔎",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Researcher, a Shuttle agent. You answer questions using "
+            "the vault and external sources, drafting captures for review. "
+            "Speak curious and direct."
+        ),
     },
     {
         "id": "standup",
@@ -84,7 +111,11 @@ SYSTEM_AGENTS: list[dict] = [
         "layer": "shuttle",
         "role": "daily recap & planning",
         "icon": "📋",
-        "system_prompt": "",
+        "system_prompt": (
+            "You are Standup, a Shuttle agent. You produce daily recaps from "
+            "changelogs and surface what shifted. Speak like a clear-headed "
+            "morning briefing."
+        ),
     },
 ]
 
@@ -167,9 +198,7 @@ def create_custom(
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> AgentRecord:
     existing = _load_custom(vm)
-    slug_base = "".join(
-        ch.lower() if ch.isalnum() else "-" for ch in body.name
-    ).strip("-")
+    slug_base = "".join(ch.lower() if ch.isalnum() else "-" for ch in body.name).strip("-")
     if not slug_base:
         raise HTTPException(status_code=400, detail="Name must contain letters or digits")
     agent_id = slug_base
@@ -226,3 +255,81 @@ def delete_custom(
         raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
     _save_custom(vm, filtered)
     return None
+
+
+# -- Round-Table bubble cache -------------------------------------------------
+
+_BUBBLE_TTL_SECONDS = 300
+_bubble_cache: dict[tuple[str, str], tuple[float, str]] = {}
+
+
+class BubbleResponse(BaseModel):
+    agent_id: str
+    bubble: str
+    cached: bool
+
+
+def _find_agent(vm: VaultManager, agent_id: str) -> dict | None:
+    for a in SYSTEM_AGENTS:
+        if a["id"] == agent_id:
+            return a
+    for a in _load_custom(vm):
+        if a.get("id") == agent_id:
+            return a
+    return None
+
+
+@router.get("/{agent_id}/bubble", response_model=BubbleResponse)
+@limiter.limit(READ_LIMIT)
+async def get_bubble(
+    request: Request,  # noqa: ARG001 — required by slowapi
+    agent_id: str,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> BubbleResponse:
+    """Return a one-sentence agent take on the current vault state.
+
+    Cached per (agent, vault) for ~5 minutes so the Round-Table view doesn't
+    burn tokens on every render.
+    """
+    agent = _find_agent(vm, agent_id)
+    if agent is None:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+    vault_name = vm.get_active_vault()
+    key = (agent_id, vault_name)
+    now = time.monotonic()
+    cached = _bubble_cache.get(key)
+    if cached and now - cached[0] < _BUBBLE_TTL_SECONDS:
+        return BubbleResponse(agent_id=agent_id, bubble=cached[1], cached=True)
+
+    from core.providers import get_chat_provider
+
+    try:
+        provider = get_chat_provider()
+    except (ProviderConfigError, ProviderError):
+        # Provider not configured — return a graceful default so the UI still
+        # has something to show in the bubble.
+        fallback = f"{agent.get('role', 'on duty')}."
+        return BubbleResponse(agent_id=agent_id, bubble=fallback, cached=False)
+
+    system = agent.get("system_prompt") or (f"You are {agent.get('name', agent_id)}, a Loom agent.")
+    user = (
+        "In one sentence, what's your current view on the state of the vault? "
+        "Keep it under 18 words. Write in first person, no preamble."
+    )
+
+    try:
+        reply = await provider.chat(
+            messages=[{"role": "user", "content": user}],
+            system=system,
+        )
+    except (ProviderError, ProviderConfigError) as exc:
+        logger.warning("bubble generation failed for %s: %s", agent_id, exc)
+        fallback = f"{agent.get('role', 'on duty')}."
+        return BubbleResponse(agent_id=agent_id, bubble=fallback, cached=False)
+
+    text = reply.strip().splitlines()[0] if reply else ""
+    if not text:
+        text = f"{agent.get('role', 'on duty')}."
+    _bubble_cache[key] = (now, text)
+    return BubbleResponse(agent_id=agent_id, bubble=text, cached=False)

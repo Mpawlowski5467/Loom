@@ -1,9 +1,9 @@
 """Vector index management API routes."""
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
-from core.config import settings
+from core.vault import VaultManager, get_vault_manager
 from index.indexer import get_indexer
 
 router = APIRouter(prefix="/api/index", tags=["index"])
@@ -38,18 +38,22 @@ def index_status() -> IndexStatus:
 
 
 @router.post("/reindex")
-async def reindex_vault() -> ReindexResult:
+async def reindex_vault(
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> ReindexResult:
     """Trigger a full reindex of the vault."""
-    return await _do_reindex()
+    return await _do_reindex(vm)
 
 
 @router.post("/rebuild")
-async def rebuild_index() -> ReindexResult:
+async def rebuild_index(
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> ReindexResult:
     """Rebuild the index from scratch (alias for reindex)."""
-    return await _do_reindex()
+    return await _do_reindex(vm)
 
 
-async def _do_reindex() -> ReindexResult:
+async def _do_reindex(vm: VaultManager) -> ReindexResult:
     """Shared reindex logic."""
     indexer = get_indexer()
     if indexer is None:
@@ -57,6 +61,6 @@ async def _do_reindex() -> ReindexResult:
             status_code=503,
             detail="Vector indexer not initialized. Configure an embed provider in ~/.loom/config.yaml.",
         )
-    threads_dir = settings.active_vault_dir / "threads"
+    threads_dir = vm.active_threads_dir()
     total = await indexer.reindex_vault(threads_dir)
     return ReindexResult(chunks_indexed=total)

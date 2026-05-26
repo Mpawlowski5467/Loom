@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Annotated
+import logging
+import time
+from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends
 
@@ -11,19 +13,6 @@ from core.activity import get_activity
 from core.config import GlobalConfig, settings
 from core.exceptions import ProviderConfigError
 from core.providers.anthropic import AnthropicProvider
-from core.traces import TraceRecord, get_caller, get_trace_store
-
-_COUNCIL_AGENTS = ("weaver", "spider", "archivist", "scribe", "sentinel")
-
-
-def _agents_for_caller(caller: str) -> tuple[str, ...]:
-    """Map a trace caller label to the agent(s) that should pulse during the call."""
-    if not caller:
-        return ()
-    if caller == "council":
-        return _COUNCIL_AGENTS
-    # Caller may be 'weaver:capture', 'researcher', etc. Take the prefix.
-    return (caller.split(":", 1)[0],)
 from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
@@ -36,6 +25,22 @@ from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
+from core.traces import TraceRecord, get_caller, get_trace_store
+
+logger = logging.getLogger(__name__)
+
+_COUNCIL_AGENTS = ("weaver", "spider", "archivist", "scribe", "sentinel")
+
+
+def _agents_for_caller(caller: str) -> tuple[str, ...]:
+    """Map a trace caller label to the agent(s) that should pulse during the call."""
+    if not caller:
+        return ()
+    if caller == "council":
+        return _COUNCIL_AGENTS
+    # Caller may be 'weaver:capture', 'researcher', etc. Take the prefix.
+    return (caller.split(":", 1)[0],)
+
 
 if TYPE_CHECKING:
     from pydantic import BaseModel
@@ -77,15 +82,14 @@ class ProviderRegistry:
         return config_cls.model_validate(raw.model_dump(exclude_none=True))
 
     def get(self, name: str) -> BaseProvider:
-        """Return a cached provider instance by name."""
+        """Return a cached provider instance by name, wrapped with tracing."""
         if name not in self._providers:
             cfg = self._resolve_config(name)
             provider_cls = _PROVIDER_CLASS_MAP[name]
             # Each provider class takes its specific *ProviderConfig in __init__;
             # BaseProvider itself takes none, so mypy can't see the call signature.
             instance = provider_cls(cfg)  # type: ignore[call-arg]
-            _install_chat_tracer(instance)
-            self._providers[name] = instance
+            self._providers[name] = TracedProvider(instance, provider_name=name)
         return self._providers[name]
 
     def get_embed_provider(self) -> BaseProvider:
@@ -166,22 +170,54 @@ EmbedProvider = Annotated[BaseProvider, Depends(get_embed_provider)]
 ChatProvider = Annotated[BaseProvider, Depends(get_chat_provider)]
 
 
-def _install_chat_tracer(provider: BaseProvider) -> None:
-    """Wrap ``provider.chat`` to record each call into the trace store."""
-    import time
+def unwrap_provider(provider: BaseProvider) -> BaseProvider:
+    """Return the underlying provider, peeling off any TracedProvider wrapping.
 
-    original = provider.chat
+    Production code should not need this — call ``provider.chat()`` /
+    ``provider.embed()`` directly and the wrapper handles tracing. Tests
+    that need to assert on the concrete provider class use it to skip the
+    wrapper.
+    """
+    inner = getattr(provider, "_inner", None)
+    return inner if isinstance(inner, BaseProvider) else provider
 
-    async def traced_chat(messages, system=""):  # type: ignore[no-untyped-def]
+
+class TracedProvider(BaseProvider):
+    """Wraps a BaseProvider to record every chat() call into the trace store.
+
+    Replaces an earlier monkey-patch on the provider's ``chat`` method. Embed
+    calls pass through untraced; chat calls record duration, caller, model,
+    messages, and response (or error) to the in-memory ring buffer and drive
+    per-agent activity pulses.
+
+    Any other attribute is forwarded to the wrapped provider so callers that
+    rely on provider-specific attributes (e.g. ``name``, ``close``) keep
+    working.
+    """
+
+    def __init__(self, inner: BaseProvider, provider_name: str = "") -> None:
+        self._inner = inner
+        self._provider_name = provider_name or getattr(
+            inner, "name", inner.__class__.__name__
+        )
+
+    # BaseProvider API -------------------------------------------------------
+
+    async def chat(
+        self,
+        messages: list[dict[str, Any]],
+        system: str = "",
+    ) -> str:
         start = time.perf_counter()
         response_text = ""
         error_text = ""
         activity = get_activity()
-        pulsing = _agents_for_caller(get_caller())
+        caller = get_caller()
+        pulsing = _agents_for_caller(caller)
         for a in pulsing:
             activity.begin(a)
         try:
-            response_text = await original(messages=messages, system=system)
+            response_text = await self._inner.chat(messages=messages, system=system)
             return response_text
         except Exception as exc:
             error_text = str(exc)
@@ -189,26 +225,56 @@ def _install_chat_tracer(provider: BaseProvider) -> None:
         finally:
             for a in pulsing:
                 activity.end(a)
-            duration_ms = int((time.perf_counter() - start) * 1000)
-            model = (
-                getattr(provider, "_chat_model", None)
-                or getattr(provider, "chat_model", None)
-                or ""
+            self._record_trace(
+                messages=messages,
+                system=system,
+                response_text=response_text,
+                error_text=error_text,
+                duration_ms=int((time.perf_counter() - start) * 1000),
+                caller=caller,
             )
-            try:
-                get_trace_store().add(
-                    TraceRecord(
-                        provider=getattr(provider, "name", provider.__class__.__name__),
-                        model=str(model),
-                        messages=list(messages),
-                        system=system,
-                        response=response_text,
-                        duration_ms=duration_ms,
-                        error=error_text,
-                        caller=get_caller(),
-                    )
-                )
-            except Exception:  # pragma: no cover - tracing must never break a chat call
-                pass
 
-    provider.chat = traced_chat  # type: ignore[method-assign]
+    async def embed(self, text: str) -> list[float]:
+        return await self._inner.embed(text)
+
+    # Pass-through -----------------------------------------------------------
+
+    def __getattr__(self, name: str) -> Any:
+        # Called only when the attribute is not found on TracedProvider.
+        # Avoid recursion on _inner before __init__ has set it.
+        if name == "_inner":
+            raise AttributeError(name)
+        return getattr(self._inner, name)
+
+    # Internal ---------------------------------------------------------------
+
+    def _record_trace(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        system: str,
+        response_text: str,
+        error_text: str,
+        duration_ms: int,
+        caller: str,
+    ) -> None:
+        model = (
+            getattr(self._inner, "_chat_model", None)
+            or getattr(self._inner, "chat_model", None)
+            or ""
+        )
+        try:
+            get_trace_store().add(
+                TraceRecord(
+                    provider=self._provider_name,
+                    model=str(model),
+                    messages=list(messages),
+                    system=system,
+                    response=response_text,
+                    duration_ms=duration_ms,
+                    error=error_text,
+                    caller=caller,
+                )
+            )
+        except Exception:  # pragma: no cover - tracing must never break a chat call
+            logger.debug("Failed to record trace", exc_info=True)

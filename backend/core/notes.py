@@ -129,13 +129,44 @@ def note_to_file_content(meta: dict[str, Any], body: str) -> str:
     return build_frontmatter(meta) + "\n" + body
 
 
-def atomic_write_text(path: Path, content: str, encoding: str = "utf-8") -> None:
+def atomic_write_text(
+    path: Path,
+    content: str,
+    encoding: str = "utf-8",
+    *,
+    mark_graph_dirty: bool = True,
+) -> None:
     """Write ``content`` to ``path`` atomically.
 
     Writes to a temp file in the same directory then ``os.replace``s it onto
     ``path``. This prevents readers (e.g. the file watcher's indexer) from
     observing partially-written content during concurrent edits.
+
+    If ``mark_graph_dirty`` is True (default) and the path is inside a Loom
+    vault (recognised by the presence of a ``.loom`` directory above it),
+    the graph dirty-flag is set so the next graph read rebuilds.
     """
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(content, encoding=encoding)
     os.replace(tmp, path)
+
+    if mark_graph_dirty:
+        loom_dir = _find_loom_dir(path)
+        if loom_dir is not None:
+            # Local import keeps notes.py free of side-effecting imports.
+            from core.graph_state import mark_dirty
+
+            mark_dirty(loom_dir)
+
+
+def _find_loom_dir(path: Path) -> Path | None:
+    """Walk up from ``path`` looking for a sibling ``.loom`` directory.
+
+    Returns the ``.loom`` path if found, else None. Used to scope graph
+    dirty-flagging to the right vault when a note is written.
+    """
+    for ancestor in path.resolve().parents:
+        candidate = ancestor / ".loom"
+        if candidate.is_dir():
+            return candidate
+    return None

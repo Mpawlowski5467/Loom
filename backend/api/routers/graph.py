@@ -7,6 +7,7 @@ from email.utils import format_datetime, parsedate_to_datetime
 from fastapi import APIRouter, Depends, Header, Query, Response
 
 from core.graph import VaultGraph, build_graph, load_graph, save_graph
+from core.graph_state import clear_dirty, is_dirty
 from core.vault import VaultManager, get_vault_manager
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
@@ -61,12 +62,17 @@ def get_graph(
     tdir = vm.active_threads_dir()
     loom_dir = vm.active_loom_dir()
 
-    # Try cached graph first; rebuild if missing
-    graph = load_graph(loom_dir)
-    if graph is None:
+    # If the dirty flag is set, an agent (or other writer) has signalled
+    # that the cached graph no longer reflects the vault. Rebuild eagerly
+    # so callers never observe a known-stale snapshot.
+    cached = load_graph(loom_dir)
+    if cached is None or is_dirty(loom_dir):
         graph = build_graph(tdir)
         if tdir.exists():
             save_graph(graph, loom_dir)
+            clear_dirty(loom_dir)
+    else:
+        graph = cached
 
     etag = _compute_etag(graph.updated_at, note_type, tag)
     last_modified = _http_date(graph.updated_at)

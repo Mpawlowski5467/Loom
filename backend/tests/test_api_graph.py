@@ -118,6 +118,55 @@ class TestGetGraph:
         assert data["nodes"] == []
         assert data["edges"] == []
 
+    def test_dirty_flag_triggers_rebuild(
+        self, client: TestClient, seeded_graph_vault: Path
+    ) -> None:
+        """When the dirty marker is set, the next GET rebuilds and clears it.
+
+        Simulates: agent writes a note → mark_dirty() → user opens the graph
+        view → fresh graph is served, not the cached stale one.
+        """
+        from core.graph_state import is_dirty, mark_dirty
+
+        # Prime the cache.
+        client.get("/api/graph")
+
+        loom_dir = seeded_graph_vault / ".loom"
+        assert loom_dir.is_dir()
+
+        # Add a new note directly on disk to mimic an out-of-band write
+        # (e.g., a CLI script) — without marking dirty, the API would
+        # happily serve its stale cached graph.
+        new_note = seeded_graph_vault / "threads" / "topics" / "rust.md"
+        new_note.write_text(
+            "---\n"
+            "id: thr_gra999\n"
+            'title: "Rust"\n'
+            "type: topic\n"
+            "tags: [lang]\n"
+            'created: "2026-01-01T00:00:00+00:00"\n'
+            'modified: "2026-01-01T00:00:00+00:00"\n'
+            "author: user\n"
+            "status: active\n"
+            "history: []\n"
+            "---\n\n## About\n\nA systems lang.\n",
+            encoding="utf-8",
+        )
+
+        # Without dirty, cached graph still has 3 nodes.
+        before = client.get("/api/graph").json()
+        assert len(before["nodes"]) == 3
+
+        # Mark dirty → next read should rebuild and pick up the new note.
+        mark_dirty(loom_dir)
+        assert is_dirty(loom_dir) is True
+
+        after = client.get("/api/graph").json()
+        assert len(after["nodes"]) == 4
+        assert any(n["id"] == "thr_gra999" for n in after["nodes"])
+        # Flag should be cleared after the rebuild.
+        assert is_dirty(loom_dir) is False
+
 
 # ---------------------------------------------------------------------------
 # GET /api/graph — filtering

@@ -7,10 +7,18 @@ export interface ChatMessageResponse {
   agent: string;
 }
 
+export interface AgentContribution {
+  agent: string;
+  content: string;
+  trace_id: string;
+  error: string;
+}
+
 export interface SendMessageResponse {
   user_message: ChatMessageResponse;
   assistant_message: ChatMessageResponse;
   trace_id: string;
+  agent_contributions: AgentContribution[];
 }
 
 export interface ChatHistoryResponse {

@@ -30,10 +30,12 @@ from core.providers.registry import (
     ChatProvider,
     EmbedProvider,
     ProviderRegistry,
+    TracedProvider,
     get_chat_provider,
     get_embed_provider,
     get_registry,
     reset_registry,
+    unwrap_provider,
 )
 from core.providers.xai import XAIProvider
 
@@ -50,10 +52,12 @@ __all__ = [
     "OpenRouterProvider",
     "OpenRouterProviderConfig",
     "ProviderRegistry",
+    "TracedProvider",
     "XAIProvider",
     "XAIProviderConfig",
     "get_chat_provider",
     "get_embed_provider",
     "get_registry",
     "reset_registry",
+    "unwrap_provider",
 ]

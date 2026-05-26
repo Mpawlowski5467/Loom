@@ -12,6 +12,7 @@ from core.providers import (
     OpenAIProvider,
     ProviderRegistry,
     XAIProvider,
+    unwrap_provider,
 )
 
 
@@ -63,7 +64,7 @@ class TestRegistryGetValid:
 
         provider = registry.get("ollama")
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
         assert provider.name == "ollama"
 
     @patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test-key"})
@@ -74,7 +75,7 @@ class TestRegistryGetValid:
 
         provider = registry.get("openai")
 
-        assert isinstance(provider, OpenAIProvider)
+        assert isinstance(unwrap_provider(provider), OpenAIProvider)
         assert provider.name == "openai"
 
     @patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"})
@@ -85,7 +86,7 @@ class TestRegistryGetValid:
 
         provider = registry.get("anthropic")
 
-        assert isinstance(provider, AnthropicProvider)
+        assert isinstance(unwrap_provider(provider), AnthropicProvider)
         assert provider.name == "anthropic"
 
     @patch.dict("os.environ", {"XAI_API_KEY": "xai-test-key"})
@@ -96,7 +97,7 @@ class TestRegistryGetValid:
 
         provider = registry.get("xai")
 
-        assert isinstance(provider, XAIProvider)
+        assert isinstance(unwrap_provider(provider), XAIProvider)
         assert provider.name == "xai"
 
 
@@ -155,7 +156,7 @@ class TestProviderResolution:
         with patch.object(registry, "_default_name", return_value="ollama"):
             provider = registry.get_embed_provider()
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
     def test_get_chat_provider_falls_back_to_default(self) -> None:
         """get_chat_provider() uses the default provider when no explicit chat_provider."""
@@ -165,7 +166,7 @@ class TestProviderResolution:
         with patch.object(registry, "_default_name", return_value="ollama"):
             provider = registry.get_chat_provider()
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
     def test_explicit_embed_provider(self) -> None:
         """get_embed_provider() uses the explicit embed_provider when set."""
@@ -177,7 +178,7 @@ class TestProviderResolution:
 
         provider = registry.get_embed_provider()
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
     def test_explicit_chat_provider(self) -> None:
         """get_chat_provider() uses the explicit chat_provider when set."""
@@ -189,7 +190,7 @@ class TestProviderResolution:
 
         provider = registry.get_chat_provider()
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
 
 # ---------------------------------------------------------------------------
@@ -232,7 +233,7 @@ class TestProviderApiKeyValidation:
 
         provider = registry.get("ollama")
 
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
 
 # ---------------------------------------------------------------------------
@@ -247,7 +248,7 @@ class TestOllamaClientReuse:
         registry = ProviderRegistry(cfg)
 
         provider = registry.get("ollama")
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
         # The internal client should be the same object on repeated access
         client1 = provider._client
@@ -260,6 +261,120 @@ class TestOllamaClientReuse:
 # ---------------------------------------------------------------------------
 
 
+class TestTracedProviderWrapper:
+    @pytest.mark.asyncio
+    async def test_chat_records_trace(self) -> None:
+        """A chat call through the wrapped provider gets recorded into the trace store."""
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+        from core.traces import get_trace_store
+
+        class FakeProvider(BaseProvider):
+            name = "fake"
+            chat_model = "fake-model"
+
+            async def embed(self, text: str) -> list[float]:
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return "fake response"
+
+        wrapped = TracedProvider(FakeProvider(), provider_name="fake")
+
+        store = get_trace_store()
+        before = len(store.list(limit=10))
+
+        result = await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert result == "fake response"
+        after = store.list(limit=10)
+        assert len(after) == before + 1
+        latest = after[0]
+        assert latest.provider == "fake"
+        assert latest.model == "fake-model"
+        assert latest.response == "fake response"
+        assert latest.error == ""
+
+    @pytest.mark.asyncio
+    async def test_chat_error_still_recorded(self) -> None:
+        """When the inner provider raises, the wrapper still records the trace with error."""
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+        from core.traces import get_trace_store
+
+        class ExplodingProvider(BaseProvider):
+            name = "boom"
+            chat_model = "boom-model"
+
+            async def embed(self, text: str) -> list[float]:
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                raise RuntimeError("kaboom")
+
+        wrapped = TracedProvider(ExplodingProvider(), provider_name="boom")
+        store = get_trace_store()
+        before = len(store.list(limit=10))
+
+        with pytest.raises(RuntimeError, match="kaboom"):
+            await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        after = store.list(limit=10)
+        assert len(after) == before + 1
+        assert after[0].error == "kaboom"
+
+    @pytest.mark.asyncio
+    async def test_embed_passes_through_untraced(self) -> None:
+        """embed() goes straight to the inner provider; no trace is recorded."""
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+        from core.traces import get_trace_store
+
+        class FakeProvider(BaseProvider):
+            name = "fake"
+            chat_model = "fake-model"
+            embed_call_count = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                self.embed_call_count += 1
+                return [1.0, 2.0, 3.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return ""
+
+        inner = FakeProvider()
+        wrapped = TracedProvider(inner, provider_name="fake")
+
+        store = get_trace_store()
+        before = len(store.list(limit=10))
+
+        vec = await wrapped.embed("hello")
+
+        assert vec == [1.0, 2.0, 3.0]
+        assert inner.embed_call_count == 1
+        # Embed must NOT have added a trace record.
+        assert len(store.list(limit=10)) == before
+
+    def test_forwards_unknown_attributes_to_inner(self) -> None:
+        """Attribute access falls through to the inner provider."""
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class FakeProvider(BaseProvider):
+            name = "fancy"
+            custom_attr = "custom_value"
+
+            async def embed(self, text: str) -> list[float]:
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return ""
+
+        wrapped = TracedProvider(FakeProvider(), provider_name="fancy")
+        assert wrapped.custom_attr == "custom_value"
+        assert wrapped.name == "fancy"
+
+
 class TestRegistryClose:
     @pytest.mark.asyncio
     async def test_close_calls_provider_close(self) -> None:
@@ -268,7 +383,7 @@ class TestRegistryClose:
         registry = ProviderRegistry(cfg)
 
         provider = registry.get("ollama")
-        assert isinstance(provider, OllamaProvider)
+        assert isinstance(unwrap_provider(provider), OllamaProvider)
 
         # Patch the close method
         close_called = False

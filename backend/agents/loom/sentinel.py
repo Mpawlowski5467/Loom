@@ -63,13 +63,27 @@ reasons:
 
 @dataclass
 class ValidationResult:
-    """Result of a Sentinel validation check."""
+    """Result of a Sentinel validation check.
+
+    ``modes`` records which validation paths actually executed:
+    - ``"deterministic"``: static field/schema/history checks
+    - ``"llm"``: LLM-assisted policy review
+    - ``"llm_unavailable"``: LLM path was attempted but the provider was
+      missing or errored — verdict is deterministic-only
+    Combined as e.g. ``["deterministic", "llm"]`` or ``["deterministic", "llm_unavailable"]``.
+    """
 
     status: str = "passed"  # passed, failed, warning
     reasons: list[str] = field(default_factory=list)
     agent_name: str = ""
     action: str = ""
     target: str = ""
+    modes: list[str] = field(default_factory=list)
+
+    @property
+    def mode_summary(self) -> str:
+        """Human-readable summary of which validation paths ran (e.g. ``'deterministic+llm'``)."""
+        return "+".join(self.modes) if self.modes else "none"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -78,6 +92,8 @@ class ValidationResult:
             "agent_name": self.agent_name,
             "action": self.action,
             "target": self.target,
+            "modes": list(self.modes),
+            "mode_summary": self.mode_summary,
         }
 
 
@@ -105,7 +121,8 @@ class Sentinel(BaseAgent):
         """
         validation = ValidationResult(agent_name=agent_name, action=action, target=str(target))
 
-        # 1. Check chain completion
+        # 1. Check chain completion (deterministic)
+        validation.modes.append("deterministic")
         if not chain_result.success:
             failed = [s.name for s in chain_result.failed_required]
             validation.status = "failed"
@@ -123,16 +140,23 @@ class Sentinel(BaseAgent):
         # 3. LLM-assisted validation if provider available
         if self._chat_provider is not None and chain_result.prime_text:
             llm_result = await self._llm_validate(agent_name, action, target, chain_result)
+            # Carry the LLM mode tag from the inner call (either "llm" on success
+            # or "llm_unavailable" if the provider call failed).
+            validation.modes.extend(llm_result.modes)
             if llm_result.status == "failed":
                 validation.status = "failed"
             elif llm_result.status == "warning" and validation.status == "passed":
                 validation.status = "warning"
             validation.reasons.extend(llm_result.reasons)
+        elif self._chat_provider is None:
+            validation.modes.append("llm_unavailable")
+            validation.reasons.append("LLM validation skipped: no chat provider configured")
 
         if not validation.reasons:
             validation.reasons.append("All checks passed")
 
-        # Log the validation result
+        # Log the validation result with the mode summary so readers can tell
+        # whether the LLM path actually ran.
         from agents.changelog import log_action
 
         log_action(
@@ -140,7 +164,10 @@ class Sentinel(BaseAgent):
             self.name,
             "validated",
             str(target),
-            details=f"[{validation.status}] {agent_name}/{action}: {'; '.join(validation.reasons)}",
+            details=(
+                f"[{validation.status}|{validation.mode_summary}] "
+                f"{agent_name}/{action}: {'; '.join(validation.reasons)}"
+            ),
             chain_status="pass",
         )
 
@@ -220,15 +247,20 @@ class Sentinel(BaseAgent):
         )
 
         if self._chat_provider is None:
+            result.modes.append("llm_unavailable")
             return result
         try:
             resp = await self._chat_provider.chat(
                 messages=[{"role": "user", "content": user_msg}],
                 system=_VALIDATE_SYSTEM,
             )
-            return self._parse_validation_response(resp, agent_name, action, str(target))
+            parsed = self._parse_validation_response(resp, agent_name, action, str(target))
+            parsed.modes.append("llm")
+            return parsed
         except (ProviderError, ProviderConfigError):
             logger.warning("LLM validation failed", exc_info=True)
+            result.modes.append("llm_unavailable")
+            result.reasons.append("LLM validation errored; deterministic checks only")
             return result
 
     @staticmethod

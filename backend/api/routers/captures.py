@@ -52,6 +52,7 @@ class ProcessResult(BaseModel):
     linked: list[str] = Field(default_factory=list)
     suggested: list[str] = Field(default_factory=list)
     validation: str = ""
+    validation_mode: str = ""
 
 
 class ProcessAllResult(BaseModel):
@@ -152,6 +153,7 @@ async def process_capture(
         linked: list[str] = []
         suggested: list[str] = []
         validation_status = ""
+        validation_mode = ""
         try:
             from agents.loom.spider import get_spider
 
@@ -177,6 +179,7 @@ async def process_capture(
                     "weaver", "created", note_path, weaver_chain
                 )
                 validation_status = validation.status
+                validation_mode = validation.mode_summary
         except Exception:
             logger.warning("Sentinel validation failed for new note", exc_info=True)
 
@@ -189,6 +192,7 @@ async def process_capture(
             linked=linked,
             suggested=suggested,
             validation=validation_status,
+            validation_mode=validation_mode,
         )
     except Exception as exc:
         logger.warning("Capture processing failed", exc_info=True)

@@ -10,13 +10,12 @@ from agents.changelog import log_action
 from agents.loom.weaver_helpers import build_meta
 from core.notes import (
     Note,
-    atomic_write_text,
     generate_id,
-    note_to_file_content,
     now_iso,
     parse_note,
 )
 from core.notes_helpers import to_kebab
+from core.vault_io import write_note as _vault_write_note
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -63,7 +62,7 @@ def write_note(
         file_path = target_dir / f"{stem}-{note_id}.md"
 
     meta = build_meta(note_id, title, note_type, tags, source, author)
-    atomic_write_text(file_path, note_to_file_content(meta, body))
+    _vault_write_note(vault_root, file_path, meta, body)
 
     logger.info("Weaver created note: %s → %s", title, file_path)
     return parse_note(file_path)
@@ -92,7 +91,7 @@ def archive_capture(vault_root: Path, agent_name: str, capture_path: Path) -> Pa
             "reason": "Archived after Weaver processing",
         },
     )
-    atomic_write_text(capture_path, note_to_file_content(meta, capture.body))
+    _vault_write_note(vault_root, capture_path, meta, capture.body)
 
     dest = archive_dir / capture_path.name
     if dest.exists():

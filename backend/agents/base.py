@@ -260,26 +260,33 @@ class BaseAgent(ABC):
         self._state.last_action = now_iso()
         self._state.save()
 
-        # Check memory threshold
+        # Check memory threshold. Reset the counter *before* awaiting so that
+        # a second concurrent action doesn't also pass the threshold and
+        # queue up a redundant summarization. summarize_memory itself is
+        # serialized by a lock per (vault, agent).
         if (
             self._state.actions_since_summary >= self._memory_cadence
             and self._chat_provider is not None
         ):
+            prior_count = self._state.actions_since_summary
             logger.info(
                 "Agent %s hit memory threshold (%d actions since last summary) — summarizing",
                 self.name,
-                self._state.actions_since_summary,
+                prior_count,
             )
+            self._state.actions_since_summary = 0
+            self._state.save()
             try:
                 await summarize_memory(self._vault_root, self.name, self._chat_provider)
-                self._state.actions_since_summary = 0
-                self._state.save()
             except Exception:
                 logger.warning(
-                    "Memory summarization failed for agent %s",
+                    "Memory summarization failed for agent %s — restoring counter",
                     self.name,
                     exc_info=True,
                 )
+                # Restore so the next action retries the summarization.
+                self._state.actions_since_summary = prior_count
+                self._state.save()
 
         return action_result
 

@@ -147,7 +147,8 @@ class TestProcessCapture:
         mock_note.file_path = "/tmp/threads/topics/processed.md"
 
         mock_weaver = MagicMock()
-        mock_weaver.process_capture = AsyncMock(return_value=mock_note)
+        # Router calls process_capture_full(), which returns (note, chain).
+        mock_weaver.process_capture_full = AsyncMock(return_value=(mock_note, None))
 
         with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
             resp = client.post(
@@ -167,7 +168,7 @@ class TestProcessCapture:
     ) -> None:
         """POST /api/captures/process where weaver returns None means empty capture."""
         mock_weaver = MagicMock()
-        mock_weaver.process_capture = AsyncMock(return_value=None)
+        mock_weaver.process_capture_full = AsyncMock(return_value=(None, None))
 
         with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
             resp = client.post(
@@ -185,7 +186,7 @@ class TestProcessCapture:
     ) -> None:
         """POST /api/captures/process returns error when weaver raises."""
         mock_weaver = MagicMock()
-        mock_weaver.process_capture = AsyncMock(side_effect=RuntimeError("LLM call failed"))
+        mock_weaver.process_capture_full = AsyncMock(side_effect=RuntimeError("LLM call failed"))
 
         with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
             resp = client.post(

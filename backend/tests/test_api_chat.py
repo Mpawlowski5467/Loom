@@ -89,6 +89,113 @@ class TestSendMessageCouncil:
         assert data["assistant_message"]["role"] == "council"
         assert data["assistant_message"]["content"] == "Council response text."
 
+    def test_council_fans_out_to_all_loom_agents(
+        self, client: TestClient, vault_manager, note_index, tmp_path: Path
+    ) -> None:
+        """Council should make 5 per-agent calls + 1 aggregator call (6 total).
+
+        Each per-agent contribution should appear in agent_contributions
+        and the aggregator's output should drive assistant_message.content.
+        """
+        _seed_notes(vault_manager, note_index, [])
+        chat = _init_chat(tmp_path)
+
+        # Return a different response for each call so we can identify them.
+        responses = iter(
+            [
+                "weaver says: create [[new-note]]",
+                "spider says: link to [[existing]]",
+                "archivist says: archive old stuff",
+                "scribe says: today was active",
+                "sentinel says: looks good",
+                "council voice: synthesised reply",
+            ]
+        )
+
+        async def fake_chat(messages, system=""):  # noqa: ARG001
+            return next(responses)
+
+        mock_provider = AsyncMock()
+        mock_provider.chat = fake_chat
+
+        with (
+            patch("agents.chat.get_chat_history", return_value=chat),
+            patch("core.providers.get_chat_provider", return_value=mock_provider),
+        ):
+            resp = client.post(
+                "/api/chat/send",
+                json={"message": "How is my vault?", "agent": "_council"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+
+        # Synthesised voice is the *last* (6th) call.
+        assert data["assistant_message"]["content"] == "council voice: synthesised reply"
+
+        # Five per-agent contributions, one per Loom agent.
+        contributions = data["agent_contributions"]
+        assert len(contributions) == 5
+        names = [c["agent"] for c in contributions]
+        assert set(names) == {"weaver", "spider", "archivist", "scribe", "sentinel"}
+
+        # Contributions match the order of the fan-out (defined by _COUNCIL_PERSONAS).
+        by_agent = {c["agent"]: c["content"] for c in contributions}
+        assert by_agent["weaver"] == "weaver says: create [[new-note]]"
+        assert by_agent["spider"] == "spider says: link to [[existing]]"
+        assert by_agent["archivist"] == "archivist says: archive old stuff"
+        assert by_agent["scribe"] == "scribe says: today was active"
+        assert by_agent["sentinel"] == "sentinel says: looks good"
+
+    def test_council_contribution_error_does_not_break_aggregation(
+        self, client: TestClient, vault_manager, note_index, tmp_path: Path
+    ) -> None:
+        """If one agent's call errors, the aggregator still runs and gets the rest."""
+        from core.exceptions import ProviderError
+
+        _seed_notes(vault_manager, note_index, [])
+        chat = _init_chat(tmp_path)
+
+        # Personas are dispatched in dict insertion order:
+        # weaver, spider, archivist, scribe, sentinel.
+        # Make Spider error; the rest succeed; the aggregator gets the 6th call.
+        responses = [
+            ("ok", "weaver content"),
+            ("err", ProviderError("fake", "spider down")),
+            ("ok", "archivist content"),
+            ("ok", "scribe content"),
+            ("ok", "sentinel content"),
+            ("ok", "aggregated reply"),
+        ]
+        it = iter(responses)
+
+        async def fake_chat(messages, system=""):  # noqa: ARG001
+            kind, val = next(it)
+            if kind == "err":
+                raise val
+            return val
+
+        mock_provider = AsyncMock()
+        mock_provider.chat = fake_chat
+
+        with (
+            patch("agents.chat.get_chat_history", return_value=chat),
+            patch("core.providers.get_chat_provider", return_value=mock_provider),
+        ):
+            resp = client.post(
+                "/api/chat/send",
+                json={"message": "Status?", "agent": "_council"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["assistant_message"]["content"] == "aggregated reply"
+        contributions = {c["agent"]: c for c in data["agent_contributions"]}
+        # ProviderError formats as "[provider] message".
+        assert "spider down" in contributions["spider"]["error"]
+        assert contributions["spider"]["content"] == ""
+        assert contributions["weaver"]["content"] == "weaver content"
+
 
 # ---------------------------------------------------------------------------
 # POST /api/chat/send — invalid agent

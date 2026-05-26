@@ -348,16 +348,30 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     try {
       const reply = await sendChatMessage(body, "_council");
+      // Render per-agent contributions first (one bubble each), then the
+      // synthesised council voice last. Silent or errored contributions
+      // are skipped — the synthesised voice already accounts for them.
+      const baseTs = Date.now();
+      const contributionMessages: CouncilMessage[] = reply.agent_contributions
+        .filter((c) => c.content.trim().length > 0)
+        .map((c, idx) => ({
+          id: `cm_${baseTs}_${c.agent}_${idx}`,
+          who: `agent:${c.agent}` as CouncilWho,
+          body: c.content,
+          at: reply.assistant_message.timestamp,
+          traceId: c.trace_id || undefined,
+        }));
+      const synthesisMessage: CouncilMessage = {
+        id: `cm_${baseTs}_reply`,
+        who: "agent:council" as CouncilWho,
+        body: reply.assistant_message.content,
+        at: reply.assistant_message.timestamp,
+        traceId: reply.trace_id || undefined,
+      };
       setCouncil((prev) =>
         prev
           .filter((m) => m.id !== pendingId)
-          .concat({
-            id: `cm_${Date.now()}_reply`,
-            who: "agent:council" as CouncilWho,
-            body: reply.assistant_message.content,
-            at: reply.assistant_message.timestamp,
-            traceId: reply.trace_id || undefined,
-          }),
+          .concat(...contributionMessages, synthesisMessage),
       );
     } catch (err) {
       setCouncil((prev) =>

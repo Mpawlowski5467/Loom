@@ -1,5 +1,6 @@
 """Tests for agents/memory.py — agent memory summarization."""
 
+import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
@@ -182,6 +183,74 @@ class TestSummarizeMemory:
         call_kwargs = chat_mock.chat.call_args.kwargs
         user_msg = call_kwargs["messages"][0]["content"]
         assert "graph-databases" in user_msg
+
+
+class TestConcurrencyLock:
+    @pytest.mark.asyncio
+    async def test_concurrent_calls_serialize(self, tmp_path: Path):
+        """Two concurrent summarize_memory calls must not both call the LLM.
+
+        The second caller acquires the asyncio lock after the first finishes
+        and sees a freshly-written memory.md, so it should either skip the
+        LLM call or run cleanly without corrupting state.
+        """
+        root = _setup_agent(tmp_path, num_entries=8)
+
+        chat_call_count = 0
+        chat_done = asyncio.Event()
+        first_started = asyncio.Event()
+
+        async def slow_chat(messages, system=""):  # noqa: ARG001
+            nonlocal chat_call_count
+            chat_call_count += 1
+            first_started.set()
+            # Hold the chat call open long enough for the second caller
+            # to definitely try to acquire the lock.
+            await asyncio.sleep(0.05)
+            chat_done.set()
+            return "## Patterns\n\nWork.\n"
+
+        chat_mock = AsyncMock()
+        chat_mock.chat = slow_chat
+
+        results = await asyncio.gather(
+            summarize_memory(root, "weaver", chat_mock),
+            summarize_memory(root, "weaver", chat_mock),
+        )
+
+        # Both calls returned without raising. The memory file is intact.
+        memory_path = root / "agents" / "weaver" / "memory.md"
+        assert memory_path.exists()
+        memory = memory_path.read_text(encoding="utf-8")
+        assert "# Memory" in memory
+        # Lock file should not be left behind.
+        assert not (root / "agents" / "weaver" / "memory.md.lock").exists()
+        # At least one summarization happened; results list is well-formed.
+        assert len(results) == 2
+
+    @pytest.mark.asyncio
+    async def test_stale_lock_reclaimed(self, tmp_path: Path):
+        """A lock file older than _STALE_LOCK_SECONDS gets reclaimed."""
+        import os
+        import time
+
+        from agents.memory import _STALE_LOCK_SECONDS
+
+        root = _setup_agent(tmp_path, num_entries=8)
+        lock_path = root / "agents" / "weaver" / "memory.md.lock"
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path.write_text("99999\n", encoding="utf-8")
+        # Backdate the lock so it counts as stale.
+        old = time.time() - (_STALE_LOCK_SECONDS + 60)
+        os.utime(lock_path, (old, old))
+
+        chat_mock = AsyncMock()
+        chat_mock.chat = AsyncMock(return_value="## Summary\n\nOK.\n")
+
+        result = await summarize_memory(root, "weaver", chat_mock)
+
+        assert "Summary" in result
+        assert not lock_path.exists()
 
 
 class TestParseMemory:

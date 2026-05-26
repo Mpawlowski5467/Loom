@@ -468,6 +468,56 @@ class TestSentinel:
         content = files[0].read_text(encoding="utf-8")
         assert "validated" in content
 
+    @pytest.mark.asyncio
+    async def test_reports_mode_deterministic_only_when_no_provider(self, tmp_path: Path):
+        """Without a chat provider, modes show deterministic+llm_unavailable."""
+        root = _setup_vault(tmp_path)
+        sentinel = Sentinel(root, chat_provider=None)
+
+        from agents.chain import ReadChain
+
+        chain = ReadChain(root)
+        chain_result = chain.execute("weaver", root / "threads" / "topics" / "alpha-topic.md")
+
+        result = await sentinel.validate_action(
+            "weaver", "created", root / "threads" / "topics" / "alpha-topic.md", chain_result
+        )
+
+        assert "deterministic" in result.modes
+        assert "llm_unavailable" in result.modes
+        assert "llm" not in result.modes
+        # The changelog details should contain the mode summary so readers
+        # can tell which validation actually ran.
+        changelog_dir = root / ".loom" / "changelog" / "sentinel"
+        content = next(changelog_dir.glob("*.md")).read_text(encoding="utf-8")
+        assert "deterministic+llm_unavailable" in content
+
+    @pytest.mark.asyncio
+    async def test_reports_mode_llm_when_provider_succeeds(self, tmp_path: Path):
+        """With a working chat provider, modes include 'llm'."""
+        from unittest.mock import AsyncMock
+
+        root = _setup_vault(tmp_path)
+        provider = AsyncMock()
+        provider.chat = AsyncMock(
+            return_value="status: passed\nreasons:\n- Content respects principles\n"
+        )
+        sentinel = Sentinel(root, chat_provider=provider)
+
+        from agents.chain import ReadChain
+
+        chain = ReadChain(root)
+        chain_result = chain.execute("weaver", root / "threads" / "topics" / "alpha-topic.md")
+
+        result = await sentinel.validate_action(
+            "weaver", "created", root / "threads" / "topics" / "alpha-topic.md", chain_result
+        )
+
+        assert "deterministic" in result.modes
+        assert "llm" in result.modes
+        assert "llm_unavailable" not in result.modes
+        assert result.mode_summary == "deterministic+llm"
+
 
 # =============================================================================
 # Pipeline test

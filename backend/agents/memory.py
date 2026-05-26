@@ -11,8 +11,11 @@ and produces a condensed memory.md that:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import os
 import re
+import time
 from typing import TYPE_CHECKING
 
 from agents.changelog import log_action
@@ -26,6 +29,26 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RECENT_ENTRIES_TO_KEEP = 5
+
+# Stale-lock threshold: if a .lock file is older than this, assume the
+# process that wrote it died and reclaim the lock. Summarization itself
+# takes seconds; 5 minutes is generous.
+_STALE_LOCK_SECONDS = 300
+
+# Per-agent asyncio locks, keyed by (vault_root_str, agent_name). Prevents
+# two coroutines in the same process from running summarize_memory against
+# the same agent concurrently. A file lock on disk handles the cross-process
+# case.
+_ASYNC_LOCKS: dict[tuple[str, str], asyncio.Lock] = {}
+
+
+def _get_async_lock(vault_root: Path, agent_name: str) -> asyncio.Lock:
+    key = (str(vault_root), agent_name)
+    lock = _ASYNC_LOCKS.get(key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _ASYNC_LOCKS[key] = lock
+    return lock
 
 # -- Entry boundary pattern: each entry starts with "## <ISO timestamp>" -----
 _ENTRY_RE = re.compile(r"(?=^## \d{4}-\d{2}-\d{2}T)", re.MULTILINE)
@@ -57,6 +80,11 @@ async def summarize_memory(
 ) -> str:
     """Read recent logs, summarize via chat, and update memory.md.
 
+    Serialized per (vault, agent) by an asyncio lock (intra-process) and a
+    file lock (cross-process). If another caller is already summarizing,
+    this call waits and then returns an empty string — the other call's
+    write is authoritative.
+
     The new memory.md has two sections:
     1. An LLM-generated summary of older content (condensed)
     2. The most recent raw entries preserved verbatim
@@ -67,8 +95,31 @@ async def summarize_memory(
         chat_provider: The chat LLM provider for summarization.
 
     Returns:
-        The generated summary text.
+        The generated summary text, or "" if a concurrent summarization
+        handled this round.
     """
+    async with _get_async_lock(vault_root, agent_name):
+        lock_path = vault_root / "agents" / agent_name / "memory.md.lock"
+        if not _acquire_file_lock(lock_path):
+            logger.info(
+                "Another process is summarizing memory for %s; skipping",
+                agent_name,
+            )
+            return ""
+        try:
+            return await _summarize_memory_inner(
+                vault_root, agent_name, chat_provider
+            )
+        finally:
+            _release_file_lock(lock_path)
+
+
+async def _summarize_memory_inner(
+    vault_root: Path,
+    agent_name: str,
+    chat_provider: BaseProvider,
+) -> str:
+    """Actual summarization work, run under the locks held by summarize_memory."""
     # Collect recent log entries
     logs_dir = vault_root / "agents" / agent_name / "logs"
     log_text = _collect_recent_logs(logs_dir)
@@ -232,3 +283,47 @@ def _collect_recent_logs(logs_dir: Path, max_files: int = 5) -> str:
         except (OSError, ValueError):
             continue
     return "\n\n".join(parts)
+
+
+def _acquire_file_lock(lock_path: Path) -> bool:
+    """Try to create lock_path exclusively. Returns True on success.
+
+    If an existing lock is older than _STALE_LOCK_SECONDS, we assume the
+    writer died and reclaim it.
+    """
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        # O_EXCL means "fail if it exists" — atomic on POSIX filesystems.
+        fd = os.open(str(lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, f"{os.getpid()}\n".encode())
+        os.close(fd)
+        return True
+    except FileExistsError:
+        # Existing lock — check if it's stale.
+        try:
+            age = time.time() - lock_path.stat().st_mtime
+        except OSError:
+            return False
+        if age > _STALE_LOCK_SECONDS:
+            logger.warning(
+                "Reclaiming stale memory lock at %s (age %.0fs)",
+                lock_path,
+                age,
+            )
+            try:
+                lock_path.unlink()
+            except OSError:
+                return False
+            return _acquire_file_lock(lock_path)
+        return False
+    except OSError:
+        return False
+
+
+def _release_file_lock(lock_path: Path) -> None:
+    try:
+        lock_path.unlink()
+    except OSError:
+        # Lock might have been removed by stale reclaim from another process;
+        # nothing to do.
+        pass

@@ -76,7 +76,7 @@ class Spider(BaseAgent):
             report.skipped = sum(1 for c in candidates if c.decision == "skipped")
 
             if to_link:
-                linked_titles = apply_links(
+                linked_titles = await apply_links(
                     self._vault_root, note_path, note, [c.title for c in to_link]
                 )
                 report.auto_linked = linked_titles

@@ -32,6 +32,8 @@ class PipelineResult:
         self.index_updated: bool = False
         self.validation: ValidationResult | None = None
         self.errors: list[str] = []
+        # Sentinel enforcement: capture is archived unless verdict==failed.
+        self.capture_archived: bool = False
 
     @property
     def success(self) -> bool:
@@ -46,6 +48,7 @@ class PipelineResult:
             "index_updated": self.index_updated,
             "validation": self.validation.to_dict() if self.validation else None,
             "errors": self.errors,
+            "capture_archived": self.capture_archived,
         }
 
 
@@ -158,6 +161,21 @@ class AgentRunner:
             except Exception as exc:
                 logger.warning("Sentinel failed during pipeline run", exc_info=True)
                 result.errors.append(f"Sentinel failed: {exc}")
+
+        # Step 5: Sentinel enforcement on the capture. Archive unless the
+        # verdict was "failed" — in that case the capture stays put so the
+        # user notices it needs manual review. Weaver itself no longer
+        # archives so this gate is the single decision point.
+        verdict = result.validation.status if result.validation else ""
+        if verdict != "failed":
+            try:
+                from agents.loom.weaver_io import archive_capture
+
+                archive_capture(self._vault_root, "weaver", capture_path)
+                result.capture_archived = True
+            except Exception as exc:
+                logger.warning("Capture archive failed during pipeline", exc_info=True)
+                result.errors.append(f"Archive failed: {exc}")
 
         return result
 

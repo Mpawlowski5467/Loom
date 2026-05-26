@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import contextvars
 import json
 import logging
 import secrets
@@ -112,17 +113,25 @@ def get_trace_store() -> TraceStore:
     return _store
 
 
-_caller_ctx = threading.local()
+# Caller tagging uses ContextVar (not threading.local) because Loom runs on
+# a single-threaded asyncio event loop where many coroutines share the same
+# OS thread. With threading.local, a concurrent request could read another
+# request's caller label — that exact bug caused bubble calls to be tagged
+# as the running captures pipeline. ContextVar is per-task, so each
+# coroutine sees only its own caller.
+_caller_var: "contextvars.ContextVar[str]" = contextvars.ContextVar(
+    "loom_trace_caller", default=""
+)
 
 
 def set_caller(label: str) -> None:
-    """Tag subsequent provider calls on this thread with a caller label."""
-    _caller_ctx.label = label
+    """Tag subsequent provider calls in this task with a caller label."""
+    _caller_var.set(label)
 
 
 def get_caller() -> str:
-    return getattr(_caller_ctx, "label", "")
+    return _caller_var.get()
 
 
 def clear_caller() -> None:
-    _caller_ctx.label = ""
+    _caller_var.set("")

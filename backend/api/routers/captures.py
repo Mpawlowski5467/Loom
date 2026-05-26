@@ -53,6 +53,12 @@ class ProcessResult(BaseModel):
     suggested: list[str] = Field(default_factory=list)
     validation: str = ""
     validation_mode: str = ""
+    # Sentinel enforcement outcomes — distinct from the raw verdict so
+    # the UI can render the right affordance.
+    capture_archived: bool = False  # False on failed → capture stays in inbox
+    review_required: bool = False  # True on failed; UI surfaces the note
+    flagged: bool = False  # True on warning; note ships but is annotated
+    validation_reasons: list[str] = Field(default_factory=list)
 
 
 class ProcessAllResult(BaseModel):
@@ -154,6 +160,7 @@ async def process_capture(
         suggested: list[str] = []
         validation_status = ""
         validation_mode = ""
+        validation_reasons: list[str] = []
         try:
             from agents.loom.spider import get_spider
 
@@ -180,8 +187,34 @@ async def process_capture(
                 )
                 validation_status = validation.status
                 validation_mode = validation.mode_summary
+                validation_reasons = list(validation.reasons)
         except Exception:
             logger.warning("Sentinel validation failed for new note", exc_info=True)
+
+        # Sentinel enforcement. Three outcomes:
+        #   passed  → archive capture, ship the note clean
+        #   warning → archive capture, annotate the new note as "flagged"
+        #   failed  → keep capture in inbox marked review_required;
+        #             the note exists but the user is warned to check it
+        capture_archived = False
+        review_required = False
+        flagged = False
+        if validation_status == "failed":
+            review_required = True
+            _annotate_note_review_required(note_path, validation_reasons)
+            _flag_capture_for_review(capture_path, validation_reasons)
+        else:
+            # passed or warning (or no sentinel) → archive the capture.
+            try:
+                from agents.loom.weaver_io import archive_capture
+
+                archive_capture(vm.active_vault_dir(), "weaver", capture_path)
+                capture_archived = True
+            except Exception:
+                logger.warning("Capture archive failed", exc_info=True)
+            if validation_status == "warning":
+                flagged = True
+                _annotate_note_flagged(note_path, validation_reasons)
 
         return ProcessResult(
             processed=True,
@@ -193,12 +226,59 @@ async def process_capture(
             suggested=suggested,
             validation=validation_status,
             validation_mode=validation_mode,
+            validation_reasons=validation_reasons,
+            capture_archived=capture_archived,
+            review_required=review_required,
+            flagged=flagged,
         )
     except Exception as exc:
         logger.warning("Capture processing failed", exc_info=True)
         return ProcessResult(processed=False, error=str(exc))
     finally:
         clear_caller()
+
+
+def _annotate_note_review_required(note_path: Path, reasons: list[str]) -> None:
+    """Mark a Sentinel-failed note with ``review_required: true`` in frontmatter."""
+    _annotate_frontmatter(
+        note_path,
+        {"review_required": True, "review_reasons": reasons},
+    )
+
+
+def _annotate_note_flagged(note_path: Path, reasons: list[str]) -> None:
+    """Mark a Sentinel-warning note with ``flagged: true`` in frontmatter."""
+    _annotate_frontmatter(
+        note_path,
+        {"flagged": True, "flag_reasons": reasons},
+    )
+
+
+def _flag_capture_for_review(capture_path: Path, reasons: list[str]) -> None:
+    """Mark a capture that Sentinel rejected so the inbox shows the warning."""
+    _annotate_frontmatter(
+        capture_path,
+        {"review_required": True, "review_reasons": reasons},
+    )
+
+
+def _annotate_frontmatter(path: Path, fields: dict) -> None:
+    """Read a note, merge ``fields`` into frontmatter, write atomically.
+
+    Best-effort: failure is logged but does not raise — the user-visible
+    flow (note created, capture maybe archived) is more important than
+    the annotation.
+    """
+    try:
+        from core.notes import atomic_write_text, build_frontmatter
+
+        note = parse_note(path)
+        meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
+        meta.update(fields)
+        new_content = build_frontmatter(meta) + "\n" + note.body
+        atomic_write_text(path, new_content)
+    except Exception:
+        logger.warning("Failed to annotate %s", path, exc_info=True)
 
 
 @router.post("/process-all")

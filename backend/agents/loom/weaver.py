@@ -12,9 +12,11 @@ import logging
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
-from agents.loom.weaver_io import archive_capture, write_note
+from agents.loom.weaver_io import write_note
 from agents.loom.weaver_llm import classify_capture, format_content, generate_note_body
 from agents.loom.weaver_prompts import SKELETON_SECTIONS
+from agents.loom.weaver_tags import snap_tags
+from core.note_index import get_note_index
 from core.notes import Note, parse_note
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 
@@ -72,7 +74,18 @@ class Weaver(BaseAgent):
             folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
             title = classification.get("title", raw_note.title or capture_path.stem)
             tags_str = classification.get("tags", "")
-            tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+            raw_tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+            # Snap LLM tags to existing vault vocabulary so typos like
+            # 'rafter' → 'raft' don't leak into frontmatter. New vocabulary
+            # passes through unchanged.
+            vault_tags = get_note_index().get_tag_set()
+            tags, snapped = snap_tags(raw_tags, vault_tags)
+            if snapped:
+                logger.info(
+                    "Weaver snapped tags for %s: %s",
+                    capture_path.name,
+                    ", ".join(f"{a!r}→{b!r}" for a, b in snapped),
+                )
 
             body = await generate_note_body(
                 self._vault_root, raw_content, note_type, chain, self._chat_provider
@@ -88,8 +101,10 @@ class Weaver(BaseAgent):
                 source=f"capture:{raw_note.id}",
             )
 
-            archive_capture(self._vault_root, self.name, capture_path)
-
+            # NOTE: We deliberately do NOT archive the capture here. The
+            # caller (captures router) does that conditionally after
+            # Sentinel validates — a failed verdict keeps the capture in
+            # the inbox so the user notices the auto-process needs review.
             return {
                 "action": "created",
                 "details": (

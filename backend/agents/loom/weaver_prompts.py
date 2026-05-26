@@ -33,30 +33,41 @@ CREATE_SYSTEM = """\
 You are the Weaver agent in a knowledge management system. Your job is to
 transform raw content into a well-structured vault note.
 
-Given a raw capture and a schema template, produce the note body (markdown only,
-no frontmatter — that's handled separately).
+OUTPUT FORMAT: Return ONLY the markdown body. No frontmatter (no `---` blocks).
+No prose before or after. No explanations. No vault rules. No constitution
+text. Start directly with the first `## ` heading from the schema.
 
-Rules:
-- Follow the schema's expected sections exactly
-- Use ## headers for sections as specified in the schema
-- Use [[wikilinks]] for any references to people, projects, or topics
-- Keep the content faithful to the source material — don't invent facts
-- Be concise but preserve all important information
-- If the source references specific people, projects, or concepts, wrap them
-  in [[double brackets]]
+REQUIRED:
+- Output MUST contain every `## ` heading from the schema template, in the
+  same order, even if a section is brief.
+- Every section header MUST be `## ` (level-2). Do not use `#` or `###`.
+- Wrap references to other notes in [[wikilinks]] using kebab-case slugs
+  (e.g. [[helix-internship]], not [[Helix Internship]]).
+- Keep content faithful to the source — do not invent facts.
+
+FORBIDDEN:
+- Do NOT include YAML frontmatter (no `---` delimiters, no `id:`/`title:`/etc).
+- Do NOT include the vault constitution, prime.md text, or any rules text.
+- Do NOT include meta-commentary like "Here is the note:" or "I have structured…".
+- Do NOT include the schema template itself in the output.
 """
 
 # System prompt for formatting modal content per schema
 FORMAT_SYSTEM = """\
-You are the Weaver agent. The user has provided content for a new note.
+You are the Weaver agent. The user provided content for a new note.
 Format it to match the schema template for the note type.
 
-Rules:
-- Organize the content under the schema's expected ## sections
-- Use [[wikilinks]] for references to other notes
-- Don't add information that isn't in the original content
-- Keep it concise and well-structured
-- Return only the markdown body (no frontmatter)
+OUTPUT FORMAT: Return ONLY the markdown body. Start directly with the first
+`## ` heading. No frontmatter, no `---` blocks, no commentary, no vault rules.
+
+REQUIRED:
+- Output MUST contain every `## ` heading from the schema, in order.
+- Use [[kebab-case-slug]] wikilinks for references to other notes.
+- Keep faithful to source content; do not invent facts.
+
+FORBIDDEN:
+- No YAML frontmatter, no prime.md text, no schema template echo.
+- No "Here's the note:" prefix.
 """
 
 # Default schema section templates for skeleton notes

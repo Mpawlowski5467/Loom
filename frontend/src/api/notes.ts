@@ -178,7 +178,18 @@ export function titleMapFromNotes(notes: Note[]): Map<string, string> {
 }
 
 export function titleMapFromRecords(records: NoteRecord[]): Map<string, string> {
-  return new Map(records.map((n) => [n.title.toLowerCase(), n.id]));
+  const map = new Map<string, string>();
+  for (const n of records) {
+    const slug = n.file_path
+      .split("/")
+      .pop()
+      ?.replace(/\.md$/i, "")
+      .toLowerCase();
+    if (slug && !map.has(slug)) map.set(slug, n.id);
+    const title = n.title?.toLowerCase();
+    if (title && !map.has(title)) map.set(title, n.id);
+  }
+  return map;
 }
 
 export function backendNoteToFrontend(
@@ -225,15 +236,16 @@ function resolveLinkIds(
   titleToId: Map<string, string>,
 ): string[] {
   const ids = new Set<string>();
+  const normalize = (raw: string) =>
+    raw.split("|", 1)[0]!.split("#", 1)[0]!.trim().toLowerCase();
 
   for (const raw of record.links) {
-    const mapped = titleToId.get(raw.toLowerCase());
-    ids.add(mapped ?? raw);
+    const id = titleToId.get(normalize(raw));
+    if (id) ids.add(id);
   }
 
   for (const raw of record.wikilinks) {
-    const target = raw.split("|")[0]!.trim().toLowerCase();
-    const id = titleToId.get(target);
+    const id = titleToId.get(normalize(raw));
     if (id) ids.add(id);
   }
 

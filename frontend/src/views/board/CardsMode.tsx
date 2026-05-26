@@ -35,6 +35,7 @@ function renderTarget(target: string): ReactNode {
 export function CardsMode(): ReactNode {
   const {
     agents,
+    agentActivity,
     changelog,
     customAgents,
     refreshCustomAgents,
@@ -73,18 +74,23 @@ export function CardsMode(): ReactNode {
 
   const isCustom = (a: Agent) => customIds.has(a.id);
 
-  const renderCard = (a: Agent) => (
+  const renderCard = (a: Agent) => {
+    const live = agentActivity[a.name.toLowerCase()];
+    const liveState: Agent["state"] =
+      live?.state === "running" ? "running" : a.state;
+    const liveRuns = live?.action_count ?? a.stats.runs;
+    return (
     <div key={a.id} className="agent-card">
       <div className="agent-card-h">
-        <AgentBlob agent={a.id} state={a.state} size={36} />
+        <AgentBlob agent={a.id} state={liveState} size={36} />
         <span className="agent-card-name">{a.name}</span>
-        <StatusBadge state={a.state} />
+        <StatusBadge state={liveState} />
         {!isCustom(a) && <span className="agent-card-lock" title="System agent">🔒</span>}
       </div>
       <div className="agent-card-role">{a.role}</div>
       <div className="agent-card-stats">
         <span>
-          <b>{a.stats.runs}</b> runs
+          <b>{liveRuns}</b> runs
         </span>
         <span>last: {a.stats.lastRun}</span>
       </div>
@@ -120,7 +126,8 @@ export function CardsMode(): ReactNode {
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const addCard = (
     <button

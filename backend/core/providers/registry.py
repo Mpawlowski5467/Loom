@@ -7,9 +7,23 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import Depends
 
+from core.activity import get_activity
 from core.config import GlobalConfig, settings
 from core.exceptions import ProviderConfigError
 from core.providers.anthropic import AnthropicProvider
+from core.traces import TraceRecord, get_caller, get_trace_store
+
+_COUNCIL_AGENTS = ("weaver", "spider", "archivist", "scribe", "sentinel")
+
+
+def _agents_for_caller(caller: str) -> tuple[str, ...]:
+    """Map a trace caller label to the agent(s) that should pulse during the call."""
+    if not caller:
+        return ()
+    if caller == "council":
+        return _COUNCIL_AGENTS
+    # Caller may be 'weaver:capture', 'researcher', etc. Take the prefix.
+    return (caller.split(":", 1)[0],)
 from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
@@ -69,7 +83,9 @@ class ProviderRegistry:
             provider_cls = _PROVIDER_CLASS_MAP[name]
             # Each provider class takes its specific *ProviderConfig in __init__;
             # BaseProvider itself takes none, so mypy can't see the call signature.
-            self._providers[name] = provider_cls(cfg)  # type: ignore[call-arg]
+            instance = provider_cls(cfg)  # type: ignore[call-arg]
+            _install_chat_tracer(instance)
+            self._providers[name] = instance
         return self._providers[name]
 
     def get_embed_provider(self) -> BaseProvider:
@@ -148,3 +164,51 @@ def get_chat_provider() -> BaseProvider:
 
 EmbedProvider = Annotated[BaseProvider, Depends(get_embed_provider)]
 ChatProvider = Annotated[BaseProvider, Depends(get_chat_provider)]
+
+
+def _install_chat_tracer(provider: BaseProvider) -> None:
+    """Wrap ``provider.chat`` to record each call into the trace store."""
+    import time
+
+    original = provider.chat
+
+    async def traced_chat(messages, system=""):  # type: ignore[no-untyped-def]
+        start = time.perf_counter()
+        response_text = ""
+        error_text = ""
+        activity = get_activity()
+        pulsing = _agents_for_caller(get_caller())
+        for a in pulsing:
+            activity.begin(a)
+        try:
+            response_text = await original(messages=messages, system=system)
+            return response_text
+        except Exception as exc:
+            error_text = str(exc)
+            raise
+        finally:
+            for a in pulsing:
+                activity.end(a)
+            duration_ms = int((time.perf_counter() - start) * 1000)
+            model = (
+                getattr(provider, "_chat_model", None)
+                or getattr(provider, "chat_model", None)
+                or ""
+            )
+            try:
+                get_trace_store().add(
+                    TraceRecord(
+                        provider=getattr(provider, "name", provider.__class__.__name__),
+                        model=str(model),
+                        messages=list(messages),
+                        system=system,
+                        response=response_text,
+                        duration_ms=duration_ms,
+                        error=error_text,
+                        caller=get_caller(),
+                    )
+                )
+            except Exception:  # pragma: no cover - tracing must never break a chat call
+                pass
+
+    provider.chat = traced_chat  # type: ignore[method-assign]

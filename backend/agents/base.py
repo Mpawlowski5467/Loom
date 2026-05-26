@@ -16,6 +16,7 @@ import yaml
 from agents.chain import ReadChain, ReadChainResult
 from agents.changelog import log_action
 from agents.memory import summarize_memory
+from core.activity import get_activity
 from core.exceptions import ReadChainError
 from core.note_index import get_note_index
 from core.notes import now_iso
@@ -168,6 +169,18 @@ class BaseAgent(ABC):
         Raises:
             ReadChainError: If the chain fails for an untrusted agent.
         """
+        activity = get_activity()
+        activity.begin(self.name)
+        try:
+            return await self._execute_with_chain_inner(target_path, action_fn)
+        finally:
+            activity.end(self.name)
+
+    async def _execute_with_chain_inner(
+        self,
+        target_path: Path,
+        action_fn: Callable[[ReadChainResult], Awaitable[dict[str, Any]]],
+    ) -> dict[str, Any]:
         # Guard: agents cannot modify prime.md
         if self._is_prime_path(target_path):
             logger.error("Agent %s attempted to modify prime.md — BLOCKED", self.name)

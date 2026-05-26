@@ -6,7 +6,12 @@ import logging
 from typing import TYPE_CHECKING
 
 from agents.loom.weaver_helpers import load_schema, parse_classification
-from agents.loom.weaver_prompts import CLASSIFY_SYSTEM, CREATE_SYSTEM, FORMAT_SYSTEM
+from agents.loom.weaver_prompts import (
+    CLASSIFY_SYSTEM,
+    CREATE_SYSTEM,
+    FORMAT_SYSTEM,
+    SKELETON_SECTIONS,
+)
 from core.exceptions import ProviderConfigError, ProviderError
 
 if TYPE_CHECKING:
@@ -16,6 +21,23 @@ if TYPE_CHECKING:
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
+
+
+def _required_headings(vault_root: Path, note_type: str) -> str:
+    """Return required ## headings as a numbered directive list.
+
+    Prefers the on-disk schema (`rules/schemas/<type>.md`) and falls back
+    to the built-in SKELETON_SECTIONS so the LLM is never told "no schema".
+    """
+    raw = load_schema(vault_root, note_type) or SKELETON_SECTIONS.get(note_type, "")
+    headings: list[str] = []
+    for line in raw.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            headings.append(stripped[3:].strip())
+    if not headings:
+        return ""
+    return "\n".join(f"{i + 1}. ## {h}" for i, h in enumerate(headings))
 
 
 async def classify_capture(content: str, chat_provider: BaseProvider | None) -> dict[str, str]:
@@ -63,23 +85,22 @@ async def generate_note_body(
     vault_root: Path,
     raw_content: str,
     note_type: str,
-    chain: ReadChainResult,
+    chain: ReadChainResult,  # noqa: ARG001 — read for compliance, not injected into prompt
     chat_provider: BaseProvider | None,
 ) -> str:
     """Use LLM to generate a structured note body from raw content."""
     if chat_provider is None:
         return raw_content
 
-    schema = load_schema(vault_root, note_type)
-    context_hint = ""
-    if chain.prime_text:
-        context_hint = f"\n\nVault rules summary: {chain.prime_text[:500]}"
+    headings = _required_headings(vault_root, note_type)
 
     user_message = (
-        f"Schema template:\n{schema}\n\n"
-        f"Raw content to structure:\n---\n{raw_content[:4000]}\n---"
-        f"{context_hint}\n\n"
-        "Transform this into a well-structured note body following the schema."
+        "Produce the markdown body for the new note.\n\n"
+        f"Required ## headings — use these EXACT headings in this EXACT order, "
+        f"and use NO other ## headings:\n{headings}\n\n"
+        f"Source content:\n---\n{raw_content[:4000]}\n---\n\n"
+        "Return only the body. Start with the first `## ` heading. "
+        "Every required heading must appear, even if its section is one line."
     )
 
     try:
@@ -102,11 +123,14 @@ async def format_content(
     if chat_provider is None:
         return content
 
-    schema = load_schema(vault_root, note_type)
+    headings = _required_headings(vault_root, note_type)
     user_message = (
-        f"Schema template:\n{schema}\n\n"
+        "Format this user content into the required note structure.\n\n"
+        f"Required ## headings — use these EXACT headings in this EXACT order, "
+        f"and use NO other ## headings:\n{headings}\n\n"
         f"User content:\n---\n{content[:4000]}\n---\n\n"
-        "Format this content to match the schema."
+        "Return only the body. Start with the first `## ` heading. "
+        "Every required heading must appear, even if its section is one line."
     )
 
     try:

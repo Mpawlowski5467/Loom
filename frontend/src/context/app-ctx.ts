@@ -1,4 +1,5 @@
 import { createContext, useContext } from "react";
+import type { AgentActivity } from "../api/activity";
 import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
 import type { ThemeName } from "../theme/themes";
 import type {
@@ -76,12 +77,13 @@ export interface AppContextValue {
   dismissToast: (id: string) => void;
 
   agents: Agent[];
+  agentActivity: Record<string, AgentActivity>;
   changelog: AgentEvent[];
   customAgents: Agent[];
   refreshCustomAgents: () => Promise<void>;
 
   council: CouncilMessage[];
-  postCouncilMessage: (body: string) => void;
+  postCouncilMessage: (body: string) => Promise<void>;
 
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;

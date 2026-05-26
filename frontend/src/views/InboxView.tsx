@@ -7,6 +7,7 @@ import { Wikilink } from "../components/primitives/Wikilink";
 import { AgentBlob } from "../components/primitives/AgentBlob";
 import { renderMarkdown } from "../editor/renderMarkdown";
 import { EditSuggestionModal } from "./EditSuggestionModal";
+import { processCapture } from "../api/captures";
 
 export function InboxView(): ReactNode {
   const {
@@ -84,15 +85,77 @@ export function InboxView(): ReactNode {
     setSelectedIds(new Set());
   };
 
-  const processSelected = () => {
+  const processSelected = async () => {
     if (selectionCount === 0) return;
-    selectedIds.forEach((id) => setCaptureStatus(id, "processing"));
+    const targets = captures.filter((c) => selectedIds.has(c.id));
+    targets.forEach((c) => setCaptureStatus(c.id, "processing"));
     pushToast({
       icon: "🧶",
       agent: "weaver",
-      body: `Processing ${selectionCount} capture${selectionCount === 1 ? "" : "s"}`,
+      body: `Processing ${targets.length} capture${targets.length === 1 ? "" : "s"}`,
     });
     setSelectedIds(new Set());
+
+    let ok = 0;
+    let fail = 0;
+    for (const c of targets) {
+      const relPath = c.filePath
+        ? c.filePath.split("/threads/")[1] ?? c.filePath
+        : `${c.folder}/${c.id}.md`;
+      try {
+        const result = await processCapture(relPath);
+        if (result.processed) {
+          ok++;
+          setCaptureStatus(c.id, "done");
+          pushToast({
+            icon: "🧶",
+            agent: "weaver",
+            body: `Filed "${result.note_title}" → ${result.note_type ?? "note"}`,
+          });
+          const linkCount = result.linked?.length ?? 0;
+          const suggCount = result.suggested?.length ?? 0;
+          if (linkCount + suggCount > 0) {
+            pushToast({
+              icon: "🕸",
+              agent: "spider",
+              body: `${linkCount} linked, ${suggCount} suggested`,
+            });
+          }
+          if (result.validation) {
+            const v = result.validation;
+            pushToast({
+              icon: v === "passed" ? "✓" : v === "warning" ? "⚠" : "✗",
+              agent: "sentinel",
+              body: `Validation: ${v}`,
+            });
+          }
+        } else {
+          fail++;
+          setCaptureStatus(c.id, "pending");
+          pushToast({
+            icon: "⚠",
+            agent: "weaver",
+            body: `Skipped "${c.title}": ${result.error ?? "unknown error"}`,
+          });
+        }
+      } catch (err) {
+        fail++;
+        setCaptureStatus(c.id, "pending");
+        pushToast({
+          icon: "⚠",
+          agent: "weaver",
+          body: `Failed "${c.title}": ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+    }
+
+    if (targets.length > 1) {
+      pushToast({
+        icon: ok > 0 ? "✓" : "⚠",
+        agent: "weaver",
+        body: `Done — ${ok} filed, ${fail} failed`,
+      });
+    }
   };
 
   const accept = (capId: string) => {

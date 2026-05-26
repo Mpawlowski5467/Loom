@@ -142,6 +142,20 @@ class NoteIndex:
         with self._lock:
             return set(self._by_title.keys())
 
+    def get_tag_set(self) -> set[str]:
+        """Return the union of all tags across indexed notes, lowercased.
+
+        Used by Weaver to snap LLM-generated tags to existing vault
+        vocabulary (catches typos like 'rafter' for 'raft').
+        """
+        with self._lock:
+            tags: set[str] = set()
+            for entry in self._by_id.values():
+                for t in entry.tags:
+                    if t:
+                        tags.add(t.lower())
+            return tags
+
     # -- Internal helpers -----------------------------------------------------
 
     def _parse_entry(self, path: Path) -> IndexEntry | None:

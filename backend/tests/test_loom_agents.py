@@ -189,6 +189,68 @@ class TestSpider:
         total = await spider.scan_vault()
         assert total >= 0  # May vary based on existing links
 
+    @pytest.mark.asyncio
+    async def test_does_not_duplicate_link_across_kebab_and_title_case(
+        self, tmp_path: Path
+    ):
+        """Regression: Spider used to append [[Title Case]] even when the body
+        already contained [[kebab-case]] for the same note. The duplicate
+        check compared raw wikilink strings; after lowercasing, ``inventory
+        sync refactor`` ≠ ``inventory-sync-refactor``, so the check always
+        failed and Spider re-appended the same link on every scan.
+
+        The fix resolves wikilinks to *file paths* before comparing.
+        """
+        from agents.loom.spider_linker import apply_links
+
+        root = _setup_vault(tmp_path)
+
+        # Write a source note that already references the target via the
+        # kebab-case form embedded in the body. Also pre-add the backlink
+        # on the target so we exercise the "both sides already linked"
+        # case — that's where the bug was visible.
+        _write_note(
+            root,
+            "topics",
+            "dup-source.md",
+            {
+                "id": "thr_dups01",
+                "title": "Dup Source",
+                "type": "topic",
+                "tags": ["x"],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "## About\n\nSee [[alpha-topic]] for context.\n",
+        )
+        # Add the reverse link to alpha-topic so both sides are pre-wired.
+        alpha_path = root / "threads" / "topics" / "alpha-topic.md"
+        alpha = parse_note(alpha_path)
+        alpha_path.write_text(
+            alpha_path.read_text().rstrip() + "\n\n[[dup-source]]\n",
+            encoding="utf-8",
+        )
+
+        source_path = root / "threads" / "topics" / "dup-source.md"
+        source_note = parse_note(source_path)
+        source_body_before = source_note.body
+        alpha_body_before = parse_note(alpha_path).body
+
+        # Spider wants to add [[Alpha Topic]] — same target, different spelling.
+        added = await apply_links(root, source_path, source_note, ["Alpha Topic"])
+
+        # Both directions are already linked, so nothing should change.
+        assert added == []
+        assert parse_note(source_path).body == source_body_before, (
+            "Forward link was duplicated:\n" + parse_note(source_path).body
+        )
+        assert parse_note(alpha_path).body == alpha_body_before, (
+            "Backlink was duplicated:\n" + parse_note(alpha_path).body
+        )
+
 
 # =============================================================================
 # Archivist tests
@@ -572,3 +634,68 @@ class TestPipeline:
         # Spider may or may not find links depending on heuristic
         assert result.index_updated
         assert result.validation is not None
+        # Default sentinel verdict (no LLM) is 'passed' — capture should
+        # have been archived by the runner's enforcement step.
+        assert result.capture_archived
+        assert not capture_path.exists()
+
+    @pytest.mark.asyncio
+    async def test_failed_sentinel_keeps_capture_in_inbox(self, tmp_path: Path):
+        """Regression: when Sentinel returns 'failed' the capture must NOT
+        be archived. It stays in captures/ so the user sees it needs review."""
+        from unittest.mock import AsyncMock, patch
+
+        from agents.loom.archivist import init_archivist
+        from agents.loom.scribe import init_scribe
+        from agents.loom.sentinel import init_sentinel
+        from agents.loom.spider import init_spider
+        from agents.loom.weaver import init_weaver
+        from agents.runner import AgentRunner
+
+        root = _setup_vault(tmp_path)
+        capture_path = _write_note(
+            root,
+            "captures",
+            "cap-fail.md",
+            {
+                "id": "thr_cfail0",
+                "title": "Will fail",
+                "type": "capture",
+                "tags": ["inbox"],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "source": "manual",
+                "status": "active",
+                "history": [],
+            },
+            "Capture that Sentinel will fail.\n",
+        )
+
+        init_weaver(root, chat_provider=None)
+        init_spider(root, chat_provider=None)
+        init_archivist(root, chat_provider=None)
+        init_scribe(root, chat_provider=None)
+        init_sentinel(root, chat_provider=None)
+
+        runner = AgentRunner(root)
+
+        # Force sentinel to return 'failed' by patching validate_action.
+        fake_validation = ValidationResult(
+            status="failed",
+            reasons=["mock failure for test"],
+            agent_name="weaver",
+            action="created",
+        )
+        with patch.object(
+            Sentinel, "validate_action", new=AsyncMock(return_value=fake_validation)
+        ):
+            result = await runner.run_pipeline(capture_path)
+
+        # Note still got created — we can't un-call the LLM. But the
+        # capture stays in inbox so the user can see something's wrong.
+        assert result.note is not None
+        assert result.validation is not None
+        assert result.validation.status == "failed"
+        assert not result.capture_archived
+        assert capture_path.exists(), "Capture should stay in inbox on Sentinel-failed"

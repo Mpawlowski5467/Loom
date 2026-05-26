@@ -318,7 +318,13 @@ async def get_bubble(
         "Keep it under 18 words. Write in first person, no preamble."
     )
 
+    # Tag the trace so the bubble call shows up as e.g. "bubble:weaver"
+    # in TraceFeed instead of empty-caller. Distinct from "weaver" (the
+    # captures pipeline) so the two paths are unambiguous in the log.
+    from core.traces import clear_caller, set_caller
+
     try:
+        set_caller(f"bubble:{agent_id}")
         reply = await provider.chat(
             messages=[{"role": "user", "content": user}],
             system=system,
@@ -327,6 +333,8 @@ async def get_bubble(
         logger.warning("bubble generation failed for %s: %s", agent_id, exc)
         fallback = f"{agent.get('role', 'on duty')}."
         return BubbleResponse(agent_id=agent_id, bubble=fallback, cached=False)
+    finally:
+        clear_caller()
 
     text = reply.strip().splitlines()[0] if reply else ""
     if not text:

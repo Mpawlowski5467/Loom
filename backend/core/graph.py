@@ -41,8 +41,9 @@ def build_graph(threads_dir: Path) -> VaultGraph:
 
     md_files = [p for p in threads_dir.rglob("*.md") if ".archive" not in p.parts]
 
-    # First pass: parse all notes, index by title (lowered) for wikilink resolution
-    notes_by_title: dict[str, str] = {}  # lowercase title -> note id
+    # First pass: parse all notes; index by filename slug AND title so wikilinks
+    # written either way ([[jordan-park]] or [[Jordan Park]]) resolve.
+    notes_by_key: dict[str, str] = {}  # lowercase slug-or-title -> note id
     nodes: list[GraphNode] = []
     note_links: dict[str, list[str]] = {}  # note id -> list of wikilink targets (raw)
 
@@ -60,16 +61,21 @@ def build_graph(threads_dir: Path) -> VaultGraph:
                 link_count=len(note.wikilinks),
             )
         )
-        notes_by_title[note.title.lower()] = note.id
+        slug = md_path.stem.lower()
+        notes_by_key.setdefault(slug, note.id)
+        if note.title:
+            notes_by_key.setdefault(note.title.lower(), note.id)
         note_links[note.id] = note.wikilinks
 
-    # Second pass: resolve wikilinks to note ids and build edges
+    # Second pass: resolve wikilinks to note ids and build edges.
+    # Strip [[alias|target]] and [[note#anchor]] decorations before lookup.
     edges: list[GraphEdge] = []
     seen_edges: set[tuple[str, str]] = set()
 
     for source_id, links in note_links.items():
         for link_text in links:
-            target_id = notes_by_title.get(link_text.lower())
+            target = link_text.split("|", 1)[0].split("#", 1)[0].strip().lower()
+            target_id = notes_by_key.get(target)
             if target_id and target_id != source_id:
                 pair = (source_id, target_id)
                 if pair not in seen_edges:

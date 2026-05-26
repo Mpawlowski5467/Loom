@@ -146,6 +146,10 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
     cfg.providers = providers
     cfg.chat_provider = chat_provider or fallback_chat
     cfg.embed_provider = embed_provider or fallback_embed
+    # Keep legacy default_provider in sync so the UI's "no provider configured"
+    # check (which still reads default_provider) clears once chat is wired up.
+    if cfg.chat_provider:
+        cfg.default_provider = cfg.chat_provider
 
     cfg.save(config_path)
     logger.info(

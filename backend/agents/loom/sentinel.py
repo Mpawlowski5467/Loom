@@ -31,29 +31,33 @@ REQUIRED_META_FIELDS = ["id", "title", "type", "tags", "created", "modified", "a
 
 _VALIDATE_SYSTEM = """\
 You are the Sentinel agent in a knowledge management system. Your job is to
-validate whether an agent's action complies with vault rules.
+judge whether a note's CONTENT complies with vault principles in prime.md.
 
-Given:
-- The vault constitution (prime.md)
-- The agent action details
-- The resulting note content
+CONTEXT YOU CAN TRUST (do NOT re-litigate these):
+- The agent's read-before-write chain has already been verified to have run.
+  Do NOT flag "read chain not completed" — that is checked separately.
+- The note's frontmatter fields and schema sections are checked separately.
+  Do NOT flag missing sections or missing required fields.
+- The folder/type pairing is checked separately. Do NOT flag directory issues.
 
-Check for:
-1. Does the action comply with prime.md rules?
-2. Does the note match its type schema?
-3. Are there any policy violations?
-4. Was the read chain completed?
+WHAT YOU SHOULD JUDGE (and only these):
+- Atomic-note principle violations (one concept per note).
+- Vault rule violations the deterministic checks can't see, e.g. the body
+  contains prime.md text verbatim, or invents facts not in the source, or
+  duplicates an existing note.
+- Tone / privacy / safety concerns from prime.md.
 
-Respond with:
-status: passed|failed|warning
-reasons:
-- <reason 1>
-- <reason 2>
-
-If everything is fine, respond:
+Be strict but not pedantic. If the content is fine on the qualitative axes
+above, respond:
 status: passed
 reasons:
-- All checks passed
+- Content respects prime.md principles
+
+Otherwise:
+status: failed|warning
+reasons:
+- <one short, specific reason>
+- <another if needed>
 """
 
 
@@ -206,10 +210,13 @@ class Sentinel(BaseAgent):
                 target_content = target.read_text(encoding="utf-8")[:3000]
 
         user_msg = (
-            f"Agent: {agent_name}\nAction: {action}\nTarget: {target}\n\n"
-            f"Prime.md:\n{chain_result.prime_text[:2000]}\n\n"
-            f"Note content:\n{target_content}\n\n"
-            "Validate this action."
+            f"Agent: {agent_name} performed action: {action}\n"
+            f"Target: {target}\n"
+            f"Read chain status: completed (verified)\n\n"
+            f"Vault principles (prime.md):\n{chain_result.prime_text[:2000]}\n\n"
+            f"Note content as written:\n---\n{target_content}\n---\n\n"
+            "Judge the CONTENT against the principles. Ignore structural "
+            "concerns — those are checked elsewhere."
         )
 
         if self._chat_provider is None:

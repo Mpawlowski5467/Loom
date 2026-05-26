@@ -15,6 +15,7 @@ from pydantic import BaseModel
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import WRITE_LIMIT, limiter
+from core.traces import clear_caller, set_caller
 from core.vault import VaultManager, VaultPathError, get_vault_manager
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
@@ -48,6 +49,7 @@ class SendMessageResponse(BaseModel):
 
     user_message: ChatMessageResponse
     assistant_message: ChatMessageResponse
+    trace_id: str = ""
 
 
 class ChatHistoryResponse(BaseModel):
@@ -101,9 +103,16 @@ async def send_message(
     role = "assistant" if body.agent in SHUTTLE_AGENTS else "council"
     assistant_msg = chat.save_message(body.agent, role, reply_text)
 
+    # The most recent trace was the one this reply produced.
+    from core.traces import get_trace_store
+
+    recent = get_trace_store().list(limit=1)
+    trace_id = recent[0].id if recent else ""
+
     return SendMessageResponse(
         user_message=ChatMessageResponse(**user_msg.to_dict()),
         assistant_message=ChatMessageResponse(**assistant_msg.to_dict()),
+        trace_id=trace_id,
     )
 
 
@@ -259,6 +268,9 @@ async def _council_reply(
     )
 
     try:
+        set_caller("council")
         return await provider.chat(messages=messages, system=system)
     except (ProviderError, ProviderConfigError) as exc:
         return f"Council response failed: {exc}"
+    finally:
+        clear_caller()

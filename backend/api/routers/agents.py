@@ -8,6 +8,7 @@ import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, ValidationError
 
+from core.activity import get_activity
 from core.note_index import NoteIndex, get_note_index
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
@@ -118,6 +119,25 @@ def list_agents() -> list[AgentStatus]:
     if runner is None:
         return []
     return [AgentStatus(**a) for a in runner.list_agents()]
+
+
+class AgentActivityEntry(BaseModel):
+    """Live activity record for one agent."""
+
+    name: str
+    state: str  # "running" | "idle"
+    inflight: int
+    action_count: int
+    last_started_age_s: float | None = None
+    last_finished_age_s: float | None = None
+    pulse: list[float] = []
+
+
+@router.get("/agents/activity")
+def agents_activity() -> list[AgentActivityEntry]:
+    """Live per-agent activity snapshot (polled by the Pulse view)."""
+    snap = get_activity().snapshot()
+    return [AgentActivityEntry(name=name, **data) for name, data in snap.items()]
 
 
 # NOTE: Static paths (/agents/spider/scan, /agents/researcher/query, etc.)

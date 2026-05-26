@@ -78,6 +78,7 @@ export interface Capture {
   body: string;
   receivedAt: string;
   status: CaptureStatus;
+  filePath?: string;
   suggestion?: CaptureSuggestion;
   filedAs?: NoteId;
 }
@@ -112,6 +113,8 @@ export interface CouncilMessage {
   who: CouncilWho;
   body: string;
   at: string;
+  traceId?: string;
+  pending?: boolean;
 }
 
 export interface Toast {

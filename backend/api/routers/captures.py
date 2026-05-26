@@ -49,6 +49,9 @@ class ProcessResult(BaseModel):
     note_type: str = ""
     target_path: str = ""
     error: str = ""
+    linked: list[str] = Field(default_factory=list)
+    suggested: list[str] = Field(default_factory=list)
+    validation: str = ""
 
 
 class ProcessAllResult(BaseModel):
@@ -135,21 +138,63 @@ async def process_capture(
     if not capture_path.exists():
         raise HTTPException(status_code=404, detail=f"Capture not found: {body.capture_path}")
 
+    from core.traces import clear_caller, set_caller
+
     try:
-        note = await weaver.process_capture(capture_path)
+        set_caller("weaver")
+        note, weaver_chain = await weaver.process_capture_full(capture_path)
         if note is None:
             return ProcessResult(processed=False, error="Empty capture, skipped")
         index.refresh_file(Path(note.file_path))
+        note_path = Path(note.file_path)
+
+        # Chain: Spider links the new note, then Sentinel validates.
+        linked: list[str] = []
+        suggested: list[str] = []
+        validation_status = ""
+        try:
+            from agents.loom.spider import get_spider
+
+            spider = get_spider()
+            if spider is not None:
+                clear_caller()
+                set_caller("spider")
+                spider_report = await spider.scan_and_report(note_path)
+                linked = list(spider_report.auto_linked)
+                suggested = list(spider_report.suggested)
+                index.refresh_file(note_path)
+        except Exception:
+            logger.warning("Spider scan failed for new note", exc_info=True)
+
+        try:
+            from agents.loom.sentinel import get_sentinel
+
+            sentinel = get_sentinel()
+            if sentinel is not None and weaver_chain is not None:
+                clear_caller()
+                set_caller("sentinel")
+                validation = await sentinel.validate_action(
+                    "weaver", "created", note_path, weaver_chain
+                )
+                validation_status = validation.status
+        except Exception:
+            logger.warning("Sentinel validation failed for new note", exc_info=True)
+
         return ProcessResult(
             processed=True,
             note_id=note.id,
             note_title=note.title,
             note_type=note.type,
             target_path=note.file_path,
+            linked=linked,
+            suggested=suggested,
+            validation=validation_status,
         )
     except Exception as exc:
         logger.warning("Capture processing failed", exc_info=True)
         return ProcessResult(processed=False, error=str(exc))
+    finally:
+        clear_caller()
 
 
 @router.post("/process-all")

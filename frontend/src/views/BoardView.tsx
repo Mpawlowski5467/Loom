@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { BoardMode } from "../data/types";
 import { ModeToggle } from "../components/primitives/ModeToggle";
 import { Council } from "../components/Council";
+import { TraceFeed } from "../components/TraceFeed";
 import { CardsMode } from "./board/CardsMode";
 import { RoundTableMode } from "./board/RoundTableMode";
 import { PulseMode } from "./board/PulseMode";
@@ -31,6 +32,18 @@ export function BoardView(): ReactNode {
           {mode === "round-table" && <RoundTableMode />}
           {mode === "pulse" && <PulseMode />}
         </div>
+      </div>
+      <div
+        style={{
+          width: 280,
+          flexShrink: 0,
+          padding: "12px 12px 12px 0",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 0,
+        }}
+      >
+        <TraceFeed />
       </div>
       <Council />
     </div>

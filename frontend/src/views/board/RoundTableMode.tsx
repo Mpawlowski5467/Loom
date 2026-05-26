@@ -45,7 +45,7 @@ function saveCache(cache: Record<string, CacheEntry>): void {
 }
 
 export function RoundTableMode(): ReactNode {
-  const { agents } = useApp();
+  const { agents, agentActivity } = useApp();
   const [bubbles, setBubbles] = useState<Record<string, string>>(() => {
     const cache = loadCache();
     const now = Date.now();
@@ -117,7 +117,15 @@ export function RoundTableMode(): ReactNode {
                 style={{ animationDelay: `${-i * 0.5}s` }}
                 aria-hidden="true"
               >
-                <AgentBlob agent={a.id} state={a.state} size={52} />
+                <AgentBlob
+                  agent={a.id}
+                  state={
+                    agentActivity[a.name.toLowerCase()]?.state === "running"
+                      ? "running"
+                      : a.state
+                  }
+                  size={52}
+                />
               </div>
               <div className="rt-name">{a.name}</div>
               <div className="rt-bubble">{bubble}</div>

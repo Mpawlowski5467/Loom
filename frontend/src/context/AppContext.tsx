@@ -21,6 +21,9 @@ import { councilSeed } from "../data/council";
 import { notes as notesSeed } from "../data/notes";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
+import { sendChatMessage } from "../api/chat";
+import type { AgentActivity } from "../api/activity";
+import { fetchAgentActivity } from "../api/activity";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
@@ -270,6 +273,31 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
   const [changelog] = useState<AgentEvent[]>(demo ? changelogSeed : []);
 
+  const [agentActivity, setAgentActivity] = useState<
+    Record<string, AgentActivity>
+  >({});
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    const tick = async () => {
+      try {
+        const items = await fetchAgentActivity();
+        if (cancelled) return;
+        const next: Record<string, AgentActivity> = {};
+        for (const a of items) next[a.name] = a;
+        setAgentActivity(next);
+      } catch {
+        // best-effort; backend may be cold during dev restarts
+      }
+      if (!cancelled) timer = window.setTimeout(tick, 1000);
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
+
   const [customAgents, setCustomAgents] = useState<Agent[]>([]);
   const refreshCustomAgents = useCallback(async () => {
     try {
@@ -300,7 +328,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [council, setCouncil] = useState<CouncilMessage[]>(
     demo ? councilSeed : [],
   );
-  const postCouncilMessage = useCallback((body: string) => {
+  const postCouncilMessage = useCallback(async (body: string) => {
     if (!body.trim()) return;
     const youMsg: CouncilMessage = {
       id: `cm_${Date.now()}`,
@@ -308,32 +336,41 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       body,
       at: new Date().toISOString(),
     };
-    setCouncil((prev) => [...prev, youMsg]);
-    const replies: { who: CouncilWho; body: string; delay: number }[] = [
-      {
-        who: "agent:weaver",
-        body: "Noted. I'll check captures for anything relevant and report back.",
-        delay: 900,
-      },
-      {
-        who: "agent:sentinel",
-        body: "I'll keep an eye on incoming edits for that.",
-        delay: 1800,
-      },
-    ];
-    replies.forEach((r, i) => {
-      setTimeout(() => {
-        setCouncil((prev) => [
-          ...prev,
-          {
-            id: `cm_${Date.now()}_${i}`,
-            who: r.who,
-            body: r.body,
+    const pendingId = `cm_${Date.now()}_pending`;
+    const pendingMsg: CouncilMessage = {
+      id: pendingId,
+      who: "agent:council" as CouncilWho,
+      body: "…thinking",
+      at: new Date().toISOString(),
+      pending: true,
+    };
+    setCouncil((prev) => [...prev, youMsg, pendingMsg]);
+
+    try {
+      const reply = await sendChatMessage(body, "_council");
+      setCouncil((prev) =>
+        prev
+          .filter((m) => m.id !== pendingId)
+          .concat({
+            id: `cm_${Date.now()}_reply`,
+            who: "agent:council" as CouncilWho,
+            body: reply.assistant_message.content,
+            at: reply.assistant_message.timestamp,
+            traceId: reply.trace_id || undefined,
+          }),
+      );
+    } catch (err) {
+      setCouncil((prev) =>
+        prev
+          .filter((m) => m.id !== pendingId)
+          .concat({
+            id: `cm_${Date.now()}_err`,
+            who: "agent:council" as CouncilWho,
+            body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
             at: new Date().toISOString(),
-          },
-        ]);
-      }, r.delay);
-    });
+          }),
+      );
+    }
   }, []);
 
   const [newNoteOpen, setNewNoteOpen] = useState(false);
@@ -447,6 +484,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     dismissToast,
 
     agents: agentsState,
+    agentActivity,
     changelog,
     customAgents,
     refreshCustomAgents,

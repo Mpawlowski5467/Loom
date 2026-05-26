@@ -39,17 +39,24 @@ class Weaver(BaseAgent):
         return "Note creator: classifies captures and generates structured vault notes"
 
     async def process_capture(self, capture_path: Path) -> Note:
-        """Process a raw capture into a structured vault note.
+        """Process a raw capture into a structured vault note."""
+        note, _ = await self.process_capture_full(capture_path)
+        return note  # type: ignore[return-value]
 
-        1. Runs read chain targeting captures/.
-        2. Classifies the capture (type, folder, title, tags).
-        3. Generates structured note body per schema.
-        4. Writes the new note to the target folder.
-        5. Returns the created Note.
+    async def process_capture_full(
+        self, capture_path: Path
+    ) -> tuple[Note | None, ReadChainResult | None]:
+        """Like process_capture but also returns Weaver's chain result.
+
+        Downstream agents (Sentinel) need this so their validation can
+        reflect the chain Weaver actually ran, instead of a freshly-built
+        one that looks like the chain was skipped.
         """
         captures_dir = capture_path.parent
+        captured_chain: dict[str, Any] = {}
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
+            captured_chain["chain"] = chain
             raw_note = parse_note(capture_path)
             raw_content = raw_note.body.strip()
 
@@ -92,7 +99,7 @@ class Weaver(BaseAgent):
             }
 
         result = await self.execute_with_chain(captures_dir, _action)
-        return result.get("note")  # type: ignore[return-value]
+        return result.get("note"), captured_chain.get("chain")
 
     async def create_from_modal(
         self,

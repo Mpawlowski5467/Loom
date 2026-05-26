@@ -28,6 +28,7 @@ from api.routers.onboarding import router as onboarding_router
 from api.routers.providers import router as providers_router
 from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
+from api.routers.traces import router as traces_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import router as vaults_router
 from api.runtime import initialize_vault_runtime
@@ -87,6 +88,7 @@ app.include_router(config_router)
 app.include_router(onboarding_router)
 app.include_router(providers_router)
 app.include_router(diagnostics_router)
+app.include_router(traces_router)
 
 
 @app.get("/api/health")

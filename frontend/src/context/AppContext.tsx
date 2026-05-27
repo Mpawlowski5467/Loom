@@ -21,7 +21,7 @@ import { councilSeed } from "../data/council";
 import { notes as notesSeed } from "../data/notes";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
-import { sendChatMessage } from "../api/chat";
+import { loadChatHistory, sendChatMessage } from "../api/chat";
 import type { AgentActivity } from "../api/activity";
 import { fetchAgentActivity } from "../api/activity";
 import { fetchChangelogFeed } from "../api/changelog";
@@ -360,6 +360,34 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [council, setCouncil] = useState<CouncilMessage[]>(
     demo ? councilSeed : [],
   );
+  // Load persisted council history once on mount so a page refresh doesn't
+  // wipe the conversation. Skip in demo mode where seed messages are intentional.
+  useEffect(() => {
+    if (demo) return;
+    let cancelled = false;
+    void loadChatHistory("_council", 50)
+      .then((res) => {
+        if (cancelled || res.messages.length === 0) return;
+        setCouncil(
+          res.messages.map((m, i) => ({
+            id: `cm_hist_${i}_${m.timestamp}`,
+            who:
+              m.role === "user"
+                ? "you"
+                : ("agent:council" as CouncilWho),
+            body: m.content,
+            at: m.timestamp,
+          })),
+        );
+      })
+      .catch(() => {
+        // best-effort; empty council is the safe default
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [demo]);
+
   const postCouncilMessage = useCallback(async (body: string) => {
     if (!body.trim()) return;
     const youMsg: CouncilMessage = {

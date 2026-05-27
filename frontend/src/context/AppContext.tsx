@@ -408,30 +408,28 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     try {
       const reply = await sendChatMessage(body, "_council");
-      // Render per-agent contributions first (one bubble each), then the
-      // synthesised council voice last. Silent or errored contributions
-      // are skipped — the synthesised voice already accounts for them.
-      const baseTs = Date.now();
-      const contributionMessages: CouncilMessage[] = reply.agent_contributions
-        .filter((c) => c.content.trim().length > 0)
-        .map((c, idx) => ({
-          id: `cm_${baseTs}_${c.agent}_${idx}`,
-          who: `agent:${c.agent}` as CouncilWho,
+      // One council turn = one message with per-agent contributions nested
+      // inside it. Silent contributions are dropped (the synthesised voice
+      // already accounts for them); errors are kept so the user sees what
+      // broke.
+      const contributions = reply.agent_contributions
+        .filter((c) => c.content.trim().length > 0 || c.error)
+        .map((c) => ({
+          agent: c.agent,
           body: c.content,
-          at: reply.assistant_message.timestamp,
           traceId: c.trace_id || undefined,
+          error: c.error || undefined,
         }));
-      const synthesisMessage: CouncilMessage = {
-        id: `cm_${baseTs}_reply`,
+      const councilMessage: CouncilMessage = {
+        id: `cm_${Date.now()}_reply`,
         who: "agent:council" as CouncilWho,
         body: reply.assistant_message.content,
         at: reply.assistant_message.timestamp,
         traceId: reply.trace_id || undefined,
+        contributions: contributions.length > 0 ? contributions : undefined,
       };
       setCouncil((prev) =>
-        prev
-          .filter((m) => m.id !== pendingId)
-          .concat(...contributionMessages, synthesisMessage),
+        prev.filter((m) => m.id !== pendingId).concat(councilMessage),
       );
     } catch (err) {
       setCouncil((prev) =>

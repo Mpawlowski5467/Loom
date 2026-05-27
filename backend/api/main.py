@@ -45,9 +45,15 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
     import asyncio
 
+    from core.traces import get_trace_store
+
     app.state.started_at = datetime.now(UTC)
-    vault_dir = get_vault_manager().active_vault_dir()
+    vm = get_vault_manager()
+    vault_dir = vm.active_vault_dir()
     initialize_vault_runtime(vault_dir, loop=asyncio.get_running_loop())
+    # Mirror traces to disk so they survive restarts and we can page back
+    # beyond the 500-item in-memory ring buffer.
+    get_trace_store().set_disk_dir(vm.active_loom_dir() / "traces")
     yield
     stop_watcher()
     try:

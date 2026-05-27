@@ -2,12 +2,23 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query
+import json
+import logging
+import re
+from datetime import date, timedelta
+from pathlib import Path
+
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 
 from core.traces import get_trace_store
+from core.vault import VaultManager, get_vault_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/traces", tags=["traces"])
+
+_DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class TraceSummary(BaseModel):
@@ -62,11 +73,127 @@ def list_traces(
     ]
 
 
+def _traces_disk_dir(vm: VaultManager) -> Path:
+    return vm.active_loom_dir() / "traces"
+
+
+def _read_trace_file(path: Path) -> dict | None:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        logger.debug("Failed to read trace file %s", path, exc_info=True)
+        return None
+
+
+def _list_dates_with_traces(traces_dir: Path) -> list[str]:
+    """Return sorted (newest first) YYYY-MM-DD directory names containing traces."""
+    if not traces_dir.exists():
+        return []
+    dates = [
+        d.name
+        for d in traces_dir.iterdir()
+        if d.is_dir() and _DATE_RE.match(d.name)
+    ]
+    dates.sort(reverse=True)
+    return dates
+
+
+@router.get("/disk", response_model=list[TraceSummary])
+def list_traces_disk(
+    target_date: str = Query("", alias="date", description="YYYY-MM-DD; defaults to today"),
+    caller: str | None = Query(None, description="Filter by caller label"),
+    limit: int = Query(100, ge=1, le=1000),
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> list[TraceSummary]:
+    """Read traces persisted to disk for one calendar day.
+
+    Used to page back beyond the 500-item in-memory ring buffer when the
+    user clicks "Load older" in the TraceFeed.
+    """
+    if target_date and not _DATE_RE.match(target_date):
+        raise HTTPException(status_code=400, detail="date must be YYYY-MM-DD")
+    if not target_date:
+        target_date = date.today().isoformat()
+
+    day_dir = _traces_disk_dir(vm) / target_date
+    if not day_dir.exists():
+        return []
+
+    records: list[dict] = []
+    for f in day_dir.glob("*.json"):
+        rec = _read_trace_file(f)
+        if rec is None:
+            continue
+        if caller is not None and rec.get("caller", "") != caller:
+            continue
+        records.append(rec)
+
+    records.sort(key=lambda r: r.get("timestamp", ""), reverse=True)
+    records = records[:limit]
+    return [
+        TraceSummary(
+            id=str(r.get("id", "")),
+            timestamp=str(r.get("timestamp", "")),
+            provider=str(r.get("provider", "")),
+            model=str(r.get("model", "")),
+            caller=str(r.get("caller", "")),
+            duration_ms=int(r.get("duration_ms", 0)),
+            error=str(r.get("error", "")),
+            response_preview=_preview(str(r.get("response", ""))),
+        )
+        for r in records
+    ]
+
+
+class DiskDateList(BaseModel):
+    dates: list[str]
+
+
+@router.get("/disk/dates", response_model=DiskDateList)
+def list_trace_dates(
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> DiskDateList:
+    """List YYYY-MM-DD directories that have persisted traces (newest first)."""
+    return DiskDateList(dates=_list_dates_with_traces(_traces_disk_dir(vm)))
+
+
+def _find_on_disk(traces_dir: Path, trace_id: str) -> dict | None:
+    """Look for a single trace_id by scanning recent date folders (newest first)."""
+    if not traces_dir.exists():
+        return None
+    # The trace id has no embedded date, so we have to scan. Limit to the
+    # most recent ~30 days so a deep history doesn't blow the request budget.
+    today = date.today()
+    for offset in range(0, 30):
+        day = (today - timedelta(days=offset)).isoformat()
+        candidate = traces_dir / day / f"{trace_id}.json"
+        if candidate.exists():
+            return _read_trace_file(candidate)
+    # Fall back to scanning whatever dates exist on disk.
+    for day_name in _list_dates_with_traces(traces_dir):
+        try:
+            candidate = traces_dir / day_name / f"{trace_id}.json"
+        except (OSError, ValueError):
+            continue
+        if candidate.exists():
+            return _read_trace_file(candidate)
+    return None
+
+
 @router.get("/{trace_id}", response_model=TraceDetail)
-def get_trace(trace_id: str) -> TraceDetail:
-    """Return the full record for one trace."""
+def get_trace(
+    trace_id: str,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> TraceDetail:
+    """Return the full record for one trace, falling back to disk on a miss."""
     rec = get_trace_store().get(trace_id)
-    if rec is None:
-        raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")
-    d = rec.to_dict()
-    return TraceDetail(**d)
+    if rec is not None:
+        return TraceDetail(**rec.to_dict())
+    disk_rec = _find_on_disk(_traces_disk_dir(vm), trace_id)
+    if disk_rec is not None:
+        # Normalise legacy/missing fields so the response model accepts them.
+        disk_rec.setdefault("messages", [])
+        disk_rec.setdefault("system", "")
+        disk_rec.setdefault("error", "")
+        return TraceDetail(**disk_rec)
+    raise HTTPException(status_code=404, detail=f"Trace {trace_id} not found")

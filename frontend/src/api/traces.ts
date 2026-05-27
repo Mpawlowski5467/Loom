@@ -41,3 +41,23 @@ export function listTraces(
   if (caller) params.set("caller", caller);
   return apiClient.get<TraceSummary[]>(`/api/traces?${params}`);
 }
+
+/** Read traces persisted on disk for one calendar day (YYYY-MM-DD). */
+export function listTracesDisk(
+  date: string,
+  caller?: string,
+  limit: number = 100,
+): Promise<TraceSummary[]> {
+  const params = new URLSearchParams({ date, limit: String(limit) });
+  if (caller) params.set("caller", caller);
+  return apiClient.get<TraceSummary[]>(`/api/traces/disk?${params}`);
+}
+
+export interface TraceDateList {
+  dates: string[];
+}
+
+/** List YYYY-MM-DD folders that have on-disk traces (newest first). */
+export function listTraceDates(): Promise<TraceDateList> {
+  return apiClient.get<TraceDateList>("/api/traces/disk/dates");
+}

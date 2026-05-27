@@ -12,7 +12,13 @@ import {
 import type { Agent } from "../../data/types";
 
 function renderTarget(target: string): ReactNode {
-  const parts = target.split(/(\[\[[^\]]+\]\])/g);
+  // Backend may send a bare path like "topics/raft.md" or a wrapped wikilink.
+  // Wrap bare paths so they pick up the styling.
+  const wrapped =
+    target.includes("[[") || !target
+      ? target
+      : `[[${target.replace(/\.md$/i, "")}]]`;
+  const parts = wrapped.split(/(\[\[[^\]]+\]\])/g);
   return parts.map((p, i) => {
     if (p.startsWith("[[") && p.endsWith("]]")) {
       return (
@@ -30,6 +36,19 @@ function renderTarget(target: string): ReactNode {
     }
     return <span key={i}>{p}</span>;
   });
+}
+
+function formatRelativeTime(iso: string): string {
+  const t = Date.parse(iso);
+  if (Number.isNaN(t)) return iso;
+  const secs = Math.max(0, Math.floor((Date.now() - t) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
 export function CardsMode(): ReactNode {
@@ -154,9 +173,21 @@ export function CardsMode(): ReactNode {
 
       <div className="section-divider">Recent activity</div>
       <div className="changelog">
+        {changelog.length === 0 && (
+          <div
+            style={{
+              padding: "12px 4px",
+              fontSize: 12,
+              color: "var(--ink-3)",
+              fontStyle: "italic",
+            }}
+          >
+            No agent activity yet. Process a capture or send a council message.
+          </div>
+        )}
         {changelog.slice(0, 15).map((ev) => (
-          <div key={ev.id} className="changelog-row">
-            <span className="changelog-ts">{ev.ts}</span>
+          <div key={ev.id} className="changelog-row" title={ev.ts}>
+            <span className="changelog-ts">{formatRelativeTime(ev.ts)}</span>
             <span className="changelog-agent">{ev.agent}</span>
             <span>
               {ev.action} {renderTarget(ev.target)}

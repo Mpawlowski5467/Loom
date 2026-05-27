@@ -1,111 +1,142 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
 import { AgentBlob } from "../../components/primitives/AgentBlob";
-import { getAgentBubble } from "../../api/agentsRegistry";
+import { TraceModal } from "../../components/TraceModal";
+import { askAgent } from "../../api/agentsRegistry";
 
-const FALLBACK_BUBBLES: Record<string, string> = {
-  weaver: "I created a capture file for your morning notes — pending your accept.",
-  spider: "Linked Webhooks → Webhook retries (high confidence).",
-  archivist: "Nothing to archive. Captures pile has 5 unprocessed items.",
-  scribe: "Summary queue: 2 notes over the threshold.",
-  sentinel: "3 edits validated clean. One duplicate-title warning.",
-  researcher: "Drafted a capture on Sigma 3 reducers.",
-  standup: "Daily recap written to daily.",
-};
-
-const CACHE_TTL_MS = 5 * 60 * 1000;
-const CACHE_KEY = "loom.roundTableBubbles";
-
-interface CacheEntry {
-  bubble: string;
-  fetchedAt: number;
-}
-
-function loadCache(): Record<string, CacheEntry> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(CACHE_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    return parsed as Record<string, CacheEntry>;
-  } catch {
-    return {};
-  }
-}
-
-function saveCache(cache: Record<string, CacheEntry>): void {
-  if (typeof window === "undefined") return;
-  try {
-    window.localStorage.setItem(CACHE_KEY, JSON.stringify(cache));
-  } catch {
-    // ignore quota / serialization failures
-  }
+interface SeatReply {
+  status: "idle" | "thinking" | "done" | "error";
+  text: string;
+  traceId?: string;
 }
 
 export function RoundTableMode(): ReactNode {
   const { agents, agentActivity } = useApp();
-  const [bubbles, setBubbles] = useState<Record<string, string>>(() => {
-    const cache = loadCache();
-    const now = Date.now();
-    const out: Record<string, string> = {};
-    for (const [id, entry] of Object.entries(cache)) {
-      if (now - entry.fetchedAt < CACHE_TTL_MS) out[id] = entry.bubble;
-    }
-    return out;
-  });
+  const loomAgents = agents.filter((a) => a.layer === "loom");
 
-  useEffect(() => {
-    const cache = loadCache();
-    const now = Date.now();
-    const stale = agents.filter((a) => {
-      const entry = cache[a.id];
-      return !entry || now - entry.fetchedAt >= CACHE_TTL_MS;
-    });
-    if (stale.length === 0) return;
+  const [question, setQuestion] = useState("");
+  const [asked, setAsked] = useState("");
+  const [replies, setReplies] = useState<Record<string, SeatReply>>({});
+  const [openTraceId, setOpenTraceId] = useState<string | null>(null);
 
-    let cancelled = false;
-    void Promise.allSettled(
-      stale.map((a) => getAgentBubble(a.id).then((res) => ({ a, res }))),
-    ).then((results) => {
-      if (cancelled) return;
-      const nextCache = loadCache();
-      const ts = Date.now();
-      const patch: Record<string, string> = {};
-      for (const r of results) {
-        if (r.status !== "fulfilled") continue;
-        const { a, res } = r.value;
-        nextCache[a.id] = { bubble: res.bubble, fetchedAt: ts };
-        patch[a.id] = res.bubble;
-      }
-      saveCache(nextCache);
-      if (Object.keys(patch).length > 0) {
-        setBubbles((prev) => ({ ...prev, ...patch }));
-      }
-    });
+  const askAll = async () => {
+    const q = question.trim();
+    if (!q) return;
+    setAsked(q);
+    setQuestion("");
+    // Seed every Loom seat as "thinking"
+    setReplies(
+      Object.fromEntries(
+        loomAgents.map((a) => [a.id, { status: "thinking", text: "" }]),
+      ),
+    );
 
-    return () => {
-      cancelled = true;
-    };
-  }, [agents]);
+    await Promise.allSettled(
+      loomAgents.map(async (a) => {
+        try {
+          const res = await askAgent(a.id, q);
+          setReplies((prev) => ({
+            ...prev,
+            [a.id]: {
+              status: res.error ? "error" : "done",
+              text: res.error || res.reply,
+              traceId: res.trace_id || undefined,
+            },
+          }));
+        } catch (err) {
+          setReplies((prev) => ({
+            ...prev,
+            [a.id]: {
+              status: "error",
+              text: err instanceof Error ? err.message : "request failed",
+            },
+          }));
+        }
+      }),
+    );
+  };
 
   return (
     <div className="round-table-mode">
       <div className="rt-stage">
         <div className="rt-table" />
-        <div className="rt-question">
-          <div className="label">your question</div>
-          <div className="q">what's the state of my vault?</div>
+        <div
+          className="rt-question"
+          style={{ display: "flex", flexDirection: "column", gap: 8 }}
+        >
+          <div className="label">ask the round table</div>
+          {asked && <div className="q">{asked}</div>}
+          <div
+            style={{
+              display: "flex",
+              gap: 6,
+              alignItems: "center",
+              pointerEvents: "auto",
+              width: "min(420px, 70%)",
+            }}
+          >
+            <input
+              type="text"
+              className="input"
+              placeholder="what should the agents weigh in on?"
+              value={question}
+              onChange={(e) => setQuestion(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  void askAll();
+                }
+              }}
+              style={{
+                flex: 1,
+                fontSize: 12,
+                padding: "4px 8px",
+                borderRadius: 4,
+                border: "1px solid rgba(26,24,21,0.15)",
+                background: "var(--bg-surface)",
+                color: "var(--ink)",
+                fontFamily: "var(--sans, Inter, system-ui)",
+              }}
+            />
+            <button
+              type="button"
+              onClick={() => void askAll()}
+              disabled={!question.trim()}
+              style={{
+                fontSize: 11,
+                padding: "4px 10px",
+                borderRadius: 4,
+                border: "1px solid rgba(26,24,21,0.2)",
+                background: question.trim() ? "var(--agent)" : "var(--bg-elevated)",
+                color: question.trim() ? "white" : "var(--ink-3)",
+                cursor: question.trim() ? "pointer" : "not-allowed",
+                fontFamily: "var(--sans)",
+              }}
+            >
+              ask
+            </button>
+          </div>
         </div>
-        {agents.map((a, i) => {
-          const theta = (i / agents.length) * Math.PI * 2 - Math.PI / 2;
-          const rx = 38; // %
-          const ry = 30; // %
+        {loomAgents.map((a, i) => {
+          const theta =
+            (i / loomAgents.length) * Math.PI * 2 - Math.PI / 2;
+          const rx = 38;
+          const ry = 30;
           const left = 50 + Math.cos(theta) * rx;
           const top = 50 + Math.sin(theta) * ry;
-          const bubble =
-            bubbles[a.id] ?? FALLBACK_BUBBLES[a.id] ?? a.lastAction;
+          const reply = replies[a.id];
+          const live = agentActivity[a.name.toLowerCase()];
+          const isThinking = reply?.status === "thinking";
+          const blobState =
+            isThinking || live?.state === "running" ? "running" : a.state;
+
+          let bubble: string;
+          if (isThinking) bubble = "…thinking";
+          else if (reply?.status === "done") bubble = reply.text;
+          else if (reply?.status === "error") bubble = `⚠ ${reply.text}`;
+          else bubble = "(waiting for question)";
+
           return (
             <div
               key={a.id}
@@ -117,22 +148,55 @@ export function RoundTableMode(): ReactNode {
                 style={{ animationDelay: `${-i * 0.5}s` }}
                 aria-hidden="true"
               >
-                <AgentBlob
-                  agent={a.id}
-                  state={
-                    agentActivity[a.name.toLowerCase()]?.state === "running"
-                      ? "running"
-                      : a.state
-                  }
-                  size={52}
-                />
+                <AgentBlob agent={a.id} state={blobState} size={52} />
               </div>
-              <div className="rt-name">{a.name}</div>
-              <div className="rt-bubble">{bubble}</div>
+              <div className="rt-name">
+                {a.name}
+                {reply?.traceId && (
+                  <button
+                    type="button"
+                    onClick={() => setOpenTraceId(reply.traceId!)}
+                    title="View raw LLM call"
+                    style={{
+                      marginLeft: 6,
+                      background: "transparent",
+                      border: "1px solid rgba(26,24,21,0.15)",
+                      color: "var(--ink-2)",
+                      borderRadius: 3,
+                      fontSize: 9,
+                      fontFamily: "var(--mono, monospace)",
+                      padding: "1px 4px",
+                      cursor: "pointer",
+                    }}
+                  >
+                    raw
+                  </button>
+                )}
+              </div>
+              <div
+                className="rt-bubble"
+                style={
+                  isThinking
+                    ? { opacity: 0.55, fontStyle: "italic" }
+                    : reply?.status === "error"
+                      ? { color: "var(--you)" }
+                      : !reply
+                        ? { opacity: 0.4, fontStyle: "italic" }
+                        : undefined
+                }
+              >
+                {bubble}
+              </div>
             </div>
           );
         })}
       </div>
+      {openTraceId && (
+        <TraceModal
+          traceId={openTraceId}
+          onClose={() => setOpenTraceId(null)}
+        />
+      )}
     </div>
   );
 }

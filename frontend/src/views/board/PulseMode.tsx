@@ -4,15 +4,15 @@ import { useApp } from "../../context/app-ctx";
 
 type LiveState = "running" | "idle";
 
-function seedFor(id: string): number {
-  let h = 0;
-  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
-  return h % 1000;
+function strokeFor(state: LiveState, hasRecentActivity: boolean): string {
+  if (state === "running") return "var(--agent)";
+  if (hasRecentActivity) return "var(--ink-2)";
+  return "var(--ink-3)";
 }
 
-function strokeFor(state: LiveState): string {
-  return state === "running" ? "var(--agent)" : "var(--ink-3)";
-}
+const WIDTH = 600;
+const MIDLINE = 18;
+const AMPLITUDE = 14;
 
 export function PulseMode(): ReactNode {
   const { agents, agentActivity } = useApp();
@@ -21,35 +21,45 @@ export function PulseMode(): ReactNode {
   useEffect(() => {
     let raf = 0;
     let stopped = false;
-    const start = performance.now();
     const tick = () => {
       if (stopped) return;
-      const t = (performance.now() - start) / 1000;
+      const t = performance.now() / 1000;
       for (const a of agents) {
         const el = polylineRefs.current[a.id];
         if (!el) continue;
         const live = agentActivity[a.name.toLowerCase()];
         const state: LiveState = live?.state === "running" ? "running" : "idle";
-        const realPulse = live?.pulse ?? [];
-        const seed = seedFor(a.id);
+        const pulse = live?.pulse ?? [];
+        const recentActivity = pulse.some((v) => v > 0.05);
+
         const pts: string[] = [];
-        for (let i = 0; i < 80; i++) {
-          const x = (i / 79) * 600;
-          // Background ambient curve so idle rows still look alive
-          const base = Math.sin(t * 0.4 - i * 0.18 - seed * 0.07) * 0.18;
-          const mod = Math.sin(t * 1.7 - i * 0.38 - seed * 0.14) * 0.12;
-          // Real backend pulse (last N samples) drives the burst when present
-          const pulseIdx = Math.floor((i / 79) * Math.max(1, realPulse.length));
-          const realIntensity = realPulse[pulseIdx] ?? 0;
-          const burst =
-            state === "running"
-              ? Math.max(0, Math.sin(t * 3.5 - i * 0.09)) * 0.85
-              : realIntensity * Math.max(0, Math.sin(t * 2.2 - i * 0.18)) * 0.6;
-          const y = 18 - (base + mod + burst) * 15;
+        const n = Math.max(pulse.length, 60);
+        for (let i = 0; i < n; i++) {
+          const x = (i / (n - 1)) * WIDTH;
+          // Map UI index to pulse-buffer index (pulse is oldest-first, length 60)
+          const pulseIdx =
+            pulse.length > 0
+              ? Math.min(pulse.length - 1, Math.floor((i / (n - 1)) * pulse.length))
+              : 0;
+          const intensity = pulse[pulseIdx] ?? 0;
+
+          // Heartbeat-style wave: amplitude is proportional to intensity, so
+          // truly idle slots are dead-flat. Running tip gets a faster, taller
+          // wiggle to feel "live".
+          let y = MIDLINE;
+          if (intensity > 0.02) {
+            const speed = state === "running" ? 6 : 2.2;
+            const wiggle = Math.sin(t * speed - i * 0.35) * intensity;
+            y -= wiggle * AMPLITUDE;
+          }
           pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
         }
         el.setAttribute("points", pts.join(" "));
-        el.setAttribute("stroke", strokeFor(state));
+        el.setAttribute("stroke", strokeFor(state, recentActivity));
+        el.setAttribute(
+          "stroke-width",
+          state === "running" ? "1.6" : recentActivity ? "1.2" : "1",
+        );
       }
       raf = requestAnimationFrame(tick);
     };
@@ -65,7 +75,15 @@ export function PulseMode(): ReactNode {
       {agents.map((a) => {
         const live = agentActivity[a.name.toLowerCase()];
         const state: LiveState = live?.state === "running" ? "running" : "idle";
+        const pulse = live?.pulse ?? [];
+        const recentActivity = pulse.some((v) => v > 0.05);
         const runs = live?.action_count ?? a.stats.runs;
+        const stateLabel =
+          state === "running"
+            ? "running"
+            : recentActivity
+              ? "settling"
+              : "idle";
         return (
           <div key={a.id} className="pulse-row">
             <div className="pulse-meta">
@@ -84,13 +102,13 @@ export function PulseMode(): ReactNode {
                   polylineRefs.current[a.id] = el;
                 }}
                 fill="none"
-                stroke={strokeFor(state)}
+                stroke={strokeFor(state, recentActivity)}
                 strokeWidth={1.3}
                 points=""
               />
             </svg>
             <div className="pulse-stats">
-              <div>{state}</div>
+              <div>{stateLabel}</div>
               <div>{runs} runs</div>
             </div>
           </div>

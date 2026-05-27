@@ -58,3 +58,20 @@ export function getAgentBubble(
     signal,
   );
 }
+
+export interface AskAgentResponse {
+  agent_id: string;
+  reply: string;
+  trace_id: string;
+  error: string;
+}
+
+export function askAgent(
+  id: string,
+  question: string,
+): Promise<AskAgentResponse> {
+  return apiClient.post<AskAgentResponse>(
+    `/api/agents/registry/${encodeURIComponent(id)}/ask`,
+    { question },
+  );
+}

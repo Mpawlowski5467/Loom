@@ -1,14 +1,20 @@
 import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import { Pencil, Plus, Trash2 } from "lucide-react";
+import { Loader2, Pencil, Play, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import { StatusBadge } from "../../components/primitives/StatusBadge";
 import { AgentBlob } from "../../components/primitives/AgentBlob";
 import { AddAgentModal } from "./AddAgentModal";
 import {
   deleteCustomAgent,
+  getAgentRegistry,
   type AgentRegistryRecord,
 } from "../../api/agentsRegistry";
+import {
+  RUNNABLE_LOOM_AGENTS,
+  formatRunResult,
+  runAgent,
+} from "../../api/agents";
 import type { Agent } from "../../data/types";
 
 function renderTarget(target: string): ReactNode {
@@ -70,6 +76,37 @@ export function CardsMode(): ReactNode {
 
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
+  const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
+
+  const handleRun = async (a: Agent) => {
+    const key = a.name.toLowerCase();
+    if (runningAgents.has(key)) return;
+    setRunningAgents((prev) => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+    try {
+      const res = await runAgent(key);
+      pushToast({
+        icon: "▶",
+        agent: key,
+        body: formatRunResult(key, res.result),
+      });
+    } catch (err) {
+      pushToast({
+        icon: "⚠",
+        agent: "sentinel",
+        body: `${a.name} run failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      });
+    } finally {
+      setRunningAgents((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
+    }
+  };
 
   // Per-agent last event: changelog feed is sorted newest-first, so the first
   // hit per agent is its most recent activity.
@@ -139,22 +176,41 @@ export function CardsMode(): ReactNode {
       <div className="agent-card-last" title={lastActionText}>
         {lastActionText}
       </div>
+      {!isCustom(a) && RUNNABLE_LOOM_AGENTS.has(a.name.toLowerCase()) && (
+        <div className="agent-card-actions">
+          <button
+            type="button"
+            className="btn btn-md"
+            onClick={() => void handleRun(a)}
+            disabled={runningAgents.has(a.name.toLowerCase())}
+            aria-label={`Run ${a.name}`}
+          >
+            {runningAgents.has(a.name.toLowerCase()) ? (
+              <Loader2 size={13} aria-hidden="true" className="spin" />
+            ) : (
+              <Play size={13} aria-hidden="true" />
+            )}
+            <span>run</span>
+          </button>
+        </div>
+      )}
       {isCustom(a) && (
         <div className="agent-card-actions">
           <button
             type="button"
             className="btn btn-md"
-            onClick={() =>
-              setEditing({
-                id: a.id,
-                name: a.name,
-                layer: "shuttle",
-                role: a.role,
-                icon: a.icon,
-                system_prompt: "",
-                system: false,
-              })
-            }
+            onClick={async () => {
+              try {
+                const full = await getAgentRegistry(a.id);
+                setEditing(full);
+              } catch (err) {
+                pushToast({
+                  icon: "⚠",
+                  agent: "sentinel",
+                  body: `Failed to load ${a.name}: ${err instanceof Error ? err.message : "unknown error"}`,
+                });
+              }
+            }}
             aria-label={`Edit ${a.name}`}
           >
             <Pencil size={13} aria-hidden="true" />

@@ -150,6 +150,11 @@
   }
 }
 
+.spin {
+  animation: rotateSlow 1.2s linear infinite;
+  transform-origin: center;
+}
+
 @keyframes wordReveal {
   from {
     letter-spacing: 12px;

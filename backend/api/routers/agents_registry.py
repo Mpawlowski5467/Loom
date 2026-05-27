@@ -240,6 +240,27 @@ def update_custom(
     raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
 
 
+@router.get("/{agent_id}", response_model=AgentRecord)
+@limiter.limit(READ_LIMIT)
+def get_agent(
+    request: Request,  # noqa: ARG001 — required by slowapi
+    agent_id: str,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> AgentRecord:
+    """Fetch a single agent record (including its system_prompt) by id.
+
+    Used by the edit-agent flow so the modal can preload the saved prompt
+    instead of starting blank.
+    """
+    for a in SYSTEM_AGENTS:
+        if a["id"] == agent_id:
+            return _to_record(a, system=True)
+    for a in _load_custom(vm):
+        if a.get("id") == agent_id:
+            return _to_record(a, system=False)
+    raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")
+
+
 @router.delete("/{agent_id}", status_code=204)
 @limiter.limit(WRITE_LIMIT)
 def delete_custom(

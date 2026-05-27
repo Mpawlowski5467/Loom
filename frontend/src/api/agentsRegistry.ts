@@ -21,6 +21,12 @@ export function listAgentRegistry(): Promise<AgentRegistryRecord[]> {
   return apiClient.get<AgentRegistryRecord[]>("/api/agents/registry");
 }
 
+export function getAgentRegistry(id: string): Promise<AgentRegistryRecord> {
+  return apiClient.get<AgentRegistryRecord>(
+    `/api/agents/registry/${encodeURIComponent(id)}`,
+  );
+}
+
 export function createCustomAgent(
   payload: CustomAgentPayload,
 ): Promise<AgentRegistryRecord> {

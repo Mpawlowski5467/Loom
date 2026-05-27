@@ -256,14 +256,24 @@ async def run_agent(
     request: Request,  # noqa: ARG001 — required by slowapi
     agent_name: str,
 ) -> RunResult:
-    """Manually trigger a scheduled agent run."""
+    """Manually trigger a scheduled agent run.
+
+    Tags downstream provider calls with caller ``manual:<agent>`` so the
+    TraceFeed can distinguish user-triggered runs from the captures pipeline
+    or scheduled jobs.
+    """
     from agents.runner import get_runner
+    from core.traces import clear_caller, set_caller
 
     runner = get_runner()
     if runner is None:
         raise HTTPException(status_code=503, detail="Agent runner not initialized")
 
-    result = await runner.run_scheduled(agent_name)
+    try:
+        set_caller(f"manual:{agent_name}")
+        result = await runner.run_scheduled(agent_name)
+    finally:
+        clear_caller()
     if "error" in result:
         raise HTTPException(status_code=400, detail=result["error"])
     return RunResult(agent=agent_name, result=result)

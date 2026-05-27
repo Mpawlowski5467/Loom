@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import date
+from pathlib import Path
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -288,6 +289,129 @@ def get_changelog(
 
     content = changelog_path.read_text(encoding="utf-8")
     return ChangelogEntry(agent=agent, date=date, content=content)
+
+
+class ChangelogFeedEvent(BaseModel):
+    """One parsed changelog entry, suitable for a unified activity feed."""
+
+    id: str
+    ts: str  # ISO timestamp
+    agent: str
+    action: str
+    target: str  # short, human-readable target (e.g. "topics/raft-consensus.md")
+    chain: str  # "ok" | "warn" | "fail"
+    sentinel: str  # "ok" | "warn" | "fail" — Sentinel verdict when known
+
+
+def _parse_changelog_entries(text: str, agent: str) -> list[dict]:
+    """Parse a per-agent changelog markdown file into structured events."""
+    events: list[dict] = []
+    blocks = text.split("\n## ")
+    for raw in blocks[1:]:  # first chunk is "# Changelog — date"
+        block = "## " + raw
+        lines = block.splitlines()
+        if not lines or not lines[0].startswith("## "):
+            continue
+        ts = lines[0][3:].strip()
+        fields: dict[str, str] = {}
+        for line in lines[1:]:
+            line = line.strip()
+            if not line.startswith("- **"):
+                continue
+            # e.g. "- **Action:** created"
+            key_part, _, value = line.partition(":**")
+            if not value:
+                continue
+            key = key_part.replace("- **", "").strip().lower()
+            fields[key] = value.strip()
+        if not fields:
+            continue
+        events.append(
+            {
+                "ts": ts,
+                "agent": fields.get("agent", agent),
+                "action": fields.get("action", "unknown"),
+                "target": fields.get("target", ""),
+                "chain": fields.get("chain", "pass"),
+                "details": fields.get("details", ""),
+            }
+        )
+    return events
+
+
+def _short_target(target: str, vault_root: Path) -> str:
+    """Trim absolute paths down to `<folder>/<name>` for display."""
+    if not target:
+        return ""
+    threads = str(vault_root / "threads") + "/"
+    if target.startswith(threads):
+        return target[len(threads):]
+    return Path(target).name
+
+
+def _verdict_from_details(details: str) -> str:
+    """Pick up Sentinel's verdict prefix when this row came from sentinel."""
+    if not details:
+        return "ok"
+    lower = details.lower()
+    if lower.startswith("[failed"):
+        return "fail"
+    if lower.startswith("[warning"):
+        return "warn"
+    return "ok"
+
+
+@router.get("/changelog/feed", response_model=list[ChangelogFeedEvent])
+def get_changelog_feed(
+    limit: int = Query(40, ge=1, le=200),
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> list[ChangelogFeedEvent]:
+    """Unified, newest-first feed of recent agent activity across all agents.
+
+    Reads `.loom/changelog/<agent>/<date>.md` files for the active vault,
+    parses each `## <iso-timestamp>` block, merges, and returns the most
+    recent ``limit`` entries.
+    """
+    loom_dir = vm.active_loom_dir()
+    changelog_dir = loom_dir / "changelog"
+    if not changelog_dir.exists():
+        return []
+
+    vault_root = vm.active_vault_dir()
+    merged: list[dict] = []
+    for agent_dir in changelog_dir.iterdir():
+        if not agent_dir.is_dir():
+            continue
+        agent_name = agent_dir.name
+        # Read the most recent few days only — full history balloons quickly.
+        files = sorted(agent_dir.glob("*.md"), reverse=True)[:7]
+        for f in files:
+            try:
+                text = f.read_text(encoding="utf-8")
+            except OSError:
+                continue
+            merged.extend(_parse_changelog_entries(text, agent_name))
+
+    merged.sort(key=lambda e: e["ts"], reverse=True)
+    out: list[ChangelogFeedEvent] = []
+    for i, e in enumerate(merged[:limit]):
+        is_sentinel = e["agent"] == "sentinel"
+        chain_status = "ok" if e["chain"] == "pass" else "fail" if e["chain"] == "fail" else "warn"
+        sentinel_status = (
+            _verdict_from_details(e["details"]) if is_sentinel else chain_status
+        )
+        out.append(
+            ChangelogFeedEvent(
+                id=f"ev_{i}_{e['ts']}",
+                ts=e["ts"],
+                agent=e["agent"],
+                action=e["action"],
+                target=_short_target(e["target"], vault_root),
+                chain=chain_status,
+                sentinel=sentinel_status,
+            )
+        )
+    return out
 
 
 def _today_str() -> str:

@@ -24,6 +24,7 @@ import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { sendChatMessage } from "../api/chat";
 import type { AgentActivity } from "../api/activity";
 import { fetchAgentActivity } from "../api/activity";
+import { fetchChangelogFeed } from "../api/changelog";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
@@ -271,7 +272,38 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           lastAction: "",
         })),
   );
-  const [changelog] = useState<AgentEvent[]>(demo ? changelogSeed : []);
+  const [changelog, setChangelog] = useState<AgentEvent[]>(
+    demo ? changelogSeed : [],
+  );
+  useEffect(() => {
+    let cancelled = false;
+    let timer: number | null = null;
+    const tick = async () => {
+      try {
+        const items = await fetchChangelogFeed(40);
+        if (cancelled) return;
+        setChangelog(
+          items.map((e) => ({
+            id: e.id,
+            ts: e.ts,
+            agent: e.agent,
+            action: e.action,
+            target: e.target,
+            chain: e.chain === "ok" ? "ok" : "fail",
+            sentinel: e.sentinel as AgentEvent["sentinel"],
+          })),
+        );
+      } catch {
+        // best-effort
+      }
+      if (!cancelled) timer = window.setTimeout(tick, 3000);
+    };
+    void tick();
+    return () => {
+      cancelled = true;
+      if (timer !== null) window.clearTimeout(timer);
+    };
+  }, []);
 
   const [agentActivity, setAgentActivity] = useState<
     Record<string, AgentActivity>

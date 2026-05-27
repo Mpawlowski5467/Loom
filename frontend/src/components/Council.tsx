@@ -84,22 +84,42 @@ export function Council(): ReactNode {
                     type="button"
                     onClick={() => setOpenTraceId(m.traceId!)}
                     title="View raw LLM call"
-                    style={{
-                      marginLeft: "auto",
-                      background: "transparent",
-                      border: "1px solid rgba(26,24,21,0.15)",
-                      color: "var(--ink-2, #5c5851)",
-                      borderRadius: 4,
-                      fontSize: 10,
-                      fontFamily: "var(--mono, monospace)",
-                      padding: "2px 6px",
-                      cursor: "pointer",
-                    }}
+                    className="raw-call-btn"
                   >
                     raw call
                   </button>
                 )}
               </div>
+              {m.contributions && m.contributions.length > 0 && (
+                <div className="council-contribs">
+                  {m.contributions.map((c, idx) => (
+                    <div key={`${c.agent}-${idx}`} className="council-contrib">
+                      <div className="contrib-h">
+                        <AgentBlob agent={c.agent} state="idle" size={20} />
+                        <span className="contrib-label">{c.agent}</span>
+                        {c.traceId && (
+                          <button
+                            type="button"
+                            onClick={() => setOpenTraceId(c.traceId!)}
+                            title={`View ${c.agent}'s raw LLM call`}
+                            className="raw-call-btn"
+                          >
+                            raw call
+                          </button>
+                        )}
+                      </div>
+                      <div
+                        className="contrib-body"
+                        style={c.error ? { color: "var(--you)", fontStyle: "italic" } : undefined}
+                      >
+                        {c.error
+                          ? `⚠ ${c.error}`
+                          : renderInline(c.body)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
               <div
                 className="bubble"
                 style={m.pending ? { opacity: 0.6, fontStyle: "italic" } : undefined}

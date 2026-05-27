@@ -108,6 +108,14 @@ export interface AgentEvent {
 
 export type CouncilWho = "you" | "summary" | `agent:${string}`;
 
+/** Per-agent voice inside a council turn. Rendered as a sub-bubble. */
+export interface CouncilContribution {
+  agent: string;
+  body: string;
+  traceId?: string;
+  error?: string;
+}
+
 export interface CouncilMessage {
   id: string;
   who: CouncilWho;
@@ -115,6 +123,8 @@ export interface CouncilMessage {
   at: string;
   traceId?: string;
   pending?: boolean;
+  /** Per-agent contributions for ``who === "agent:council"`` messages. */
+  contributions?: CouncilContribution[];
 }
 
 export interface Toast {

@@ -409,3 +409,57 @@
   padding: 12px 18px 16px;
   border-top: 1px solid var(--rule);
 }
+
+/* ── Council contributions (sub-bubbles per agent) ────────────────── */
+.council-contribs {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-left: 8px;
+  border-left: 2px solid var(--rule);
+}
+.council-contrib {
+  background: var(--bg-surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  padding: 6px 10px;
+}
+.contrib-h {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--mono);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--agent);
+  margin-bottom: 4px;
+}
+.contrib-label {
+  line-height: 1;
+}
+.contrib-body {
+  font-family: var(--serif);
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--ink);
+}
+
+.raw-call-btn {
+  margin-left: auto;
+  background: transparent;
+  border: 1px solid var(--rule);
+  color: var(--ink-2);
+  border-radius: 4px;
+  font-size: 10px;
+  font-family: var(--mono);
+  padding: 2px 6px;
+  cursor: pointer;
+  transition: all 160ms var(--ease);
+}
+.raw-call-btn:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}

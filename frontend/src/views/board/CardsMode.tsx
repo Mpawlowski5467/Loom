@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
@@ -71,6 +71,16 @@ export function CardsMode(): ReactNode {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
 
+  // Per-agent last event: changelog feed is sorted newest-first, so the first
+  // hit per agent is its most recent activity.
+  const lastEventByAgent = useMemo(() => {
+    const map = new Map<string, (typeof changelog)[number]>();
+    for (const ev of changelog) {
+      if (!map.has(ev.agent)) map.set(ev.agent, ev);
+    }
+    return map;
+  }, [changelog]);
+
   const handleDelete = async (a: Agent) => {
     const ok = window.confirm(`Delete custom agent "${a.name}"?`);
     if (!ok) return;
@@ -98,6 +108,19 @@ export function CardsMode(): ReactNode {
     const liveState: Agent["state"] =
       live?.state === "running" ? "running" : a.state;
     const liveRuns = live?.action_count ?? a.stats.runs;
+
+    const lastEvent = lastEventByAgent.get(a.name.toLowerCase());
+    const lastWhen = lastEvent
+      ? formatRelativeTime(lastEvent.ts)
+      : live?.last_finished_age_s != null
+        ? formatRelativeTime(
+            new Date(Date.now() - live.last_finished_age_s * 1000).toISOString(),
+          )
+        : "never";
+    const lastActionText = lastEvent
+      ? `${lastEvent.action} ${lastEvent.target}`
+      : a.lastAction || "—";
+
     return (
     <div key={a.id} className="agent-card">
       <div className="agent-card-h">
@@ -111,9 +134,11 @@ export function CardsMode(): ReactNode {
         <span>
           <b>{liveRuns}</b> runs
         </span>
-        <span>last: {a.stats.lastRun}</span>
+        <span title={lastEvent?.ts}>last: {lastWhen}</span>
       </div>
-      <div className="agent-card-last">{a.lastAction}</div>
+      <div className="agent-card-last" title={lastActionText}>
+        {lastActionText}
+      </div>
       {isCustom(a) && (
         <div className="agent-card-actions">
           <button

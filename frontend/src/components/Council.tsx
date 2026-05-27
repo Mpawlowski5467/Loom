@@ -49,7 +49,9 @@ export function Council(): ReactNode {
     <aside className="council" aria-label="Loom Council">
       <div className="council-h">
         <div className="council-h-title">Loom Council</div>
-        <div className="council-h-sub">7 agents · transparent thread</div>
+        <div className="council-h-sub">
+          Weaver · Spider · Archivist · Scribe · Sentinel
+        </div>
       </div>
       <div className="council-log" ref={logRef}>
         {council.map((m) => {

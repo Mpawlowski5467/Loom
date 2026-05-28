@@ -104,6 +104,33 @@ function loadGraphDisplay(): GraphDisplay {
         GRAPH_DISPLAY_RANGES.travelerPace.min,
         GRAPH_DISPLAY_RANGES.travelerPace.max,
       ),
+      labelsEnabled:
+        typeof parsed.labelsEnabled === "boolean"
+          ? parsed.labelsEnabled
+          : GRAPH_DISPLAY_DEFAULTS.labelsEnabled,
+      labelSize: clamp(
+        Number(parsed.labelSize ?? GRAPH_DISPLAY_DEFAULTS.labelSize),
+        GRAPH_DISPLAY_RANGES.labelSize.min,
+        GRAPH_DISPLAY_RANGES.labelSize.max,
+      ),
+      labelShowRatio: clamp(
+        Number(parsed.labelShowRatio ?? GRAPH_DISPLAY_DEFAULTS.labelShowRatio),
+        GRAPH_DISPLAY_RANGES.labelShowRatio.min,
+        GRAPH_DISPLAY_RANGES.labelShowRatio.max,
+      ),
+      edgeThickness: clamp(
+        Number(parsed.edgeThickness ?? GRAPH_DISPLAY_DEFAULTS.edgeThickness),
+        GRAPH_DISPLAY_RANGES.edgeThickness.min,
+        GRAPH_DISPLAY_RANGES.edgeThickness.max,
+      ),
+      travelersEnabled:
+        typeof parsed.travelersEnabled === "boolean"
+          ? parsed.travelersEnabled
+          : GRAPH_DISPLAY_DEFAULTS.travelersEnabled,
+      breathingEnabled:
+        typeof parsed.breathingEnabled === "boolean"
+          ? parsed.breathingEnabled
+          : GRAPH_DISPLAY_DEFAULTS.breathingEnabled,
     };
   } catch {
     return GRAPH_DISPLAY_DEFAULTS;
@@ -216,6 +243,24 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           GRAPH_DISPLAY_RANGES.travelerPace.min,
           GRAPH_DISPLAY_RANGES.travelerPace.max,
         ),
+        labelsEnabled: patch.labelsEnabled ?? prev.labelsEnabled,
+        labelSize: clamp(
+          patch.labelSize ?? prev.labelSize,
+          GRAPH_DISPLAY_RANGES.labelSize.min,
+          GRAPH_DISPLAY_RANGES.labelSize.max,
+        ),
+        labelShowRatio: clamp(
+          patch.labelShowRatio ?? prev.labelShowRatio,
+          GRAPH_DISPLAY_RANGES.labelShowRatio.min,
+          GRAPH_DISPLAY_RANGES.labelShowRatio.max,
+        ),
+        edgeThickness: clamp(
+          patch.edgeThickness ?? prev.edgeThickness,
+          GRAPH_DISPLAY_RANGES.edgeThickness.min,
+          GRAPH_DISPLAY_RANGES.edgeThickness.max,
+        ),
+        travelersEnabled: patch.travelersEnabled ?? prev.travelersEnabled,
+        breathingEnabled: patch.breathingEnabled ?? prev.breathingEnabled,
       };
       return merged;
     });

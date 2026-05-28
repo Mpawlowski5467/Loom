@@ -110,12 +110,17 @@ export function useLoomConfig(pushToast: PushToast): UseLoomConfigResult {
 
   const completeOnboarding = useCallback(
     async (payload: OnboardingCompleteRequest) => {
-      const result = await completeOnboardingApi(payload);
-      setConfig(result);
-      setOffline(false);
-      if (result.ui.theme !== theme) {
-        applyTheme(result.ui.theme);
-        setThemeState(result.ui.theme);
+      setConfigError(null);
+      try {
+        const result = await completeOnboardingApi(payload);
+        setConfig(result);
+        setOffline(false);
+        if (result.ui.theme !== theme) {
+          applyTheme(result.ui.theme);
+          setThemeState(result.ui.theme);
+        }
+      } finally {
+        setConfigLoading(false);
       }
     },
     [theme],

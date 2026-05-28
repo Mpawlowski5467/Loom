@@ -88,12 +88,21 @@ export function defaultSettings(): Partial<Settings> {
     labelWeight: "500",
     defaultEdgeColor: palette.edge,
     renderEdgeLabels: false,
-    labelDensity: 0.6,
-    labelGridCellSize: 80,
-    labelRenderedSizeThreshold: 7,
+    // Label visibility is owned by GraphView's nodeReducer (zoom-tiered by
+    // degree). Disable Sigma's density-based hide/show: it competes with the
+    // breathing animation and causes labels to flicker on and off every frame.
+    labelDensity: 10_000,
+    labelGridCellSize: 1,
+    labelRenderedSizeThreshold: 0,
     enableEdgeEvents: false,
     minCameraRatio: 0.2,
     maxCameraRatio: 8,
+    // Wheel-zoom feel: small per-tick ratio (1.25) + long, overlapping
+    // animations (400ms). Sigma throttles incoming wheel events to
+    // zoomDuration/5 = 80ms which lines up with typical trackpad cadence,
+    // so fast scrolls read as one continuous slide instead of discrete jumps.
+    zoomingRatio: 1.25,
+    zoomDuration: 500,
   };
 }
 

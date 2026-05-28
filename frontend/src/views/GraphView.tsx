@@ -14,6 +14,7 @@ import { startBreathing } from "../graph/breathing";
 import {
   applyConstellationLayout,
   computeOrbitScene,
+  easeInOutCubic,
   ORBIT_SCENES,
   ORBIT_SCENE_LABELS,
   type OrbitScene,
@@ -31,6 +32,37 @@ import { startLayoutTween } from "../graph/layoutTransition";
 
 function spacingToCameraRatio(scale: number): number {
   return 1 / scale;
+}
+
+/**
+ * Zoom-tiered label visibility.
+ *
+ * Returns the minimum degree a node must have to show its label at the given
+ * camera ratio. ``labelKnob`` is the user slider (1..20): lower = more labels,
+ * higher = fewer. The tiers are derived from a base step at ratio 1.0, then
+ * scaled by zoom — far zoom-in shows everything, far zoom-out shows only the
+ * highest-degree anchors.
+ *
+ * Returns ``Infinity`` to mean "no labels at all" (knob slammed off).
+ */
+function labelDegreeFloor(ratio: number, labelKnob: number): number {
+  if (labelKnob >= 19) return Infinity;
+  if (labelKnob <= 1) return 0;
+  // Base floor at the user's slider position, normalized to [0..6].
+  const base = (labelKnob - 1) * (6 / 18);
+  // Zoom multiplier: <0.4 ratio → ~0.4×, 0.4..1.0 → ~1.0×, >1.0 → linear up.
+  let zoomMul: number;
+  if (ratio < 0.4) zoomMul = 0.4;
+  else if (ratio < 1.0) zoomMul = 1.0;
+  else zoomMul = 1.0 + (ratio - 1.0) * 1.2;
+  return Math.round(base * zoomMul);
+}
+
+function ratioToTier(ratio: number): number {
+  if (ratio < 0.4) return 0;
+  if (ratio < 1.0) return 1;
+  if (ratio < 2.0) return 2;
+  return 3;
 }
 
 export function GraphView(): ReactNode {
@@ -82,6 +114,15 @@ export function GraphView(): ReactNode {
   const justDraggedRef = useRef<boolean>(false);
   const orbitTargetsRef = useRef<Map<string, XY>>(new Map());
   const basePositionsRef = useRef<Map<string, XY>>(new Map());
+  const degreeRef = useRef<Map<string, number>>(new Map());
+  const cameraRatioRef = useRef<number>(1);
+  const labelThresholdRef = useRef<number>(graphDisplay.labelThreshold);
+  const labelTierRef = useRef<number>(-1);
+  const labelsEnabledRef = useRef<boolean>(graphDisplay.labelsEnabled);
+  const labelShowRatioRef = useRef<number>(graphDisplay.labelShowRatio);
+  const travelersEnabledRef = useRef<boolean>(graphDisplay.travelersEnabled);
+  const edgeThicknessRef = useRef<number>(graphDisplay.edgeThickness);
+  const [sigmaReady, setSigmaReady] = useState(0);
 
   const stats = useMemo(
     () => ({
@@ -99,8 +140,15 @@ export function GraphView(): ReactNode {
     graphRef.current = graph;
     basePositionsRef.current = applyConstellationLayout(graph);
 
+    const degreeMap = new Map<string, number>();
+    graph.forEachNode((id) => {
+      degreeMap.set(id, graph.degree(id));
+    });
+    degreeRef.current = degreeMap;
+
     const sigma = createSigma(graph, hostRef.current);
-    sigma.setSetting("labelRenderedSizeThreshold", graphDisplay.labelThreshold);
+    cameraRatioRef.current = sigma.getCamera().ratio;
+    labelTierRef.current = ratioToTier(cameraRatioRef.current);
     sigmaRef.current = sigma;
     if (import.meta.env.DEV) {
       (window as unknown as { __loomGraph: unknown }).__loomGraph = {
@@ -122,24 +170,72 @@ export function GraphView(): ReactNode {
       if (filtered) {
         return { ...data, hidden: true };
       }
+
+      // Hover overrides every other label rule: the hovered node always shows
+      // its label; everything else hides its label until hover ends.
+      if (hovered) {
+        if (id === hovered) {
+          const lensHide = id === lensLabelHideForRef.current;
+          return lensHide ? { ...data, label: "" } : data;
+        }
+        const isNeighbor =
+          graph.hasEdge(hovered, id) || graph.hasEdge(id, hovered);
+        if (isNeighbor) return { ...data, label: "" };
+        return { ...data, color: paletteRef.current.nodeDimmed, label: "" };
+      }
+
+      // Master gates: labels-off and zoom-from beat the degree floor.
+      if (!labelsEnabledRef.current) return { ...data, label: "" };
+      if (cameraRatioRef.current > labelShowRatioRef.current) {
+        return { ...data, label: "" };
+      }
+
+      // Zoom-tiered visibility — stable across breathing pulses because it
+      // reads cached degree + camera ratio, not animated size.
+      const floor = labelDegreeFloor(
+        cameraRatioRef.current,
+        labelThresholdRef.current,
+      );
+      const degree = degreeRef.current.get(id) ?? 0;
       const lensHide = id === lensLabelHideForRef.current;
-      if (!hovered) return lensHide ? { ...data, label: "" } : data;
-      if (id === hovered) return lensHide ? { ...data, label: "" } : data;
-      const isNeighbor =
-        graph.hasEdge(hovered, id) || graph.hasEdge(id, hovered);
-      if (isNeighbor) return { ...data, label: "" };
-      return { ...data, color: paletteRef.current.nodeDimmed, label: "" };
+      if (lensHide || degree < floor) return { ...data, label: "" };
+      return data;
     });
 
     sigma.setSetting("edgeReducer", (id, data) => {
       const hovered = hoveredRef.current;
-      if (!hovered) return data;
+      const k = edgeThicknessRef.current;
+      const baseSize = (data.size ?? 1) * k;
+      if (!hovered) return { ...data, size: baseSize };
       const ext = graph.extremities(id);
       if (ext[0] === hovered || ext[1] === hovered) {
-        return { ...data, color: paletteRef.current.edgeHover, size: 1.4 };
+        return {
+          ...data,
+          color: paletteRef.current.edgeHover,
+          size: 1.4 * k,
+        };
       }
-      return { ...data, color: paletteRef.current.edgeFaint };
+      return { ...data, color: paletteRef.current.edgeFaint, size: baseSize };
     });
+
+    // Camera ratio drives the label tier — refresh only when the tier flips,
+    // not on every zoom frame. Sigma itself already repaints per frame during
+    // the camera animation; this just keeps the nodeReducer's view of the
+    // ratio current and forces a label recompute at tier boundaries.
+    const onCameraUpdate = () => {
+      const r = sigma.getCamera().ratio;
+      const prevRatio = cameraRatioRef.current;
+      cameraRatioRef.current = r;
+      const tier = ratioToTier(r);
+      const showRatio = labelShowRatioRef.current;
+      const crossedShowRatio =
+        (prevRatio <= showRatio) !== (r <= showRatio);
+      if (tier !== labelTierRef.current || crossedShowRatio) {
+        labelTierRef.current = tier;
+        sigma.refresh({ skipIndexation: true });
+      }
+    };
+    sigma.getCamera().on("updated", onCameraUpdate);
 
     sigma.on("enterNode", ({ node }) => {
       if (isDraggingRef.current) return;
@@ -177,12 +273,7 @@ export function GraphView(): ReactNode {
       justDragged: justDraggedRef,
     });
 
-    stopBreathRef.current = startBreathing(
-      sigma,
-      graph,
-      baseSizes,
-      sizeScaleRef,
-    );
+    setSigmaReady((v) => v + 1);
 
     const ro = new ResizeObserver(() => {
       sigma.resize();
@@ -191,7 +282,10 @@ export function GraphView(): ReactNode {
     ro.observe(hostRef.current);
 
     const reset = setTimeout(() => {
-      sigma.getCamera().animatedReset({ duration: 600 });
+      sigma.getCamera().animatedReset({
+        duration: 600,
+        easing: easeInOutCubic,
+      });
     }, 200);
 
     const cancelTween = () => {
@@ -380,6 +474,43 @@ export function GraphView(): ReactNode {
     const SEG_LEN = 14;
     const BASE_SPEED = 0.18;
     const NODE_MARGIN = 2;
+    // Lens lookup (nearest-node-to-viewport-center) only runs every Nth frame.
+    // The result barely changes between frames during gentle pans, and we
+    // re-trigger immediately on hover or camera updates anyway.
+    const LENS_FRAME_SKIP = 4;
+    let tickIdx = 0;
+    // Cache last-written DOM attribute values per traveler line + per mask
+    // circle so we can skip setAttribute() calls when values are unchanged.
+    // setAttribute is a surprisingly hot path on graphs with many edges.
+    const lineCache = new Map<
+      SVGLineElement,
+      {
+        x1: string;
+        y1: string;
+        x2: string;
+        y2: string;
+        op: string;
+        sw: string;
+      }
+    >();
+    const setLineAttr = (
+      el: SVGLineElement,
+      cache: { x1: string; y1: string; x2: string; y2: string; op: string; sw: string },
+      x1: string,
+      y1: string,
+      x2: string,
+      y2: string,
+      op: string,
+      sw: string,
+    ) => {
+      if (cache.x1 !== x1) { el.setAttribute("x1", x1); cache.x1 = x1; }
+      if (cache.y1 !== y1) { el.setAttribute("y1", y1); cache.y1 = y1; }
+      if (cache.x2 !== x2) { el.setAttribute("x2", x2); cache.x2 = x2; }
+      if (cache.y2 !== y2) { el.setAttribute("y2", y2); cache.y2 = y2; }
+      if (cache.op !== op) { el.setAttribute("opacity", op); cache.op = op; }
+      if (cache.sw !== sw) { el.setAttribute("stroke-width", sw); cache.sw = sw; }
+    };
+    const maskCache = new Map<SVGCircleElement, { cx: string; cy: string; r: string }>();
     // Sigma 3's scaleSize() converts logical node sizes to viewport pixels at
     // the current camera ratio. Older versions don't expose it — fall back to
     // its formula so the trim still tracks zoom.
@@ -392,16 +523,43 @@ export function GraphView(): ReactNode {
         : (s: number) => s / Math.sqrt(sigma.getCamera().ratio);
 
     const tickTravelers = () => {
+      tickIdx++;
       const lines = travelerLinesRef.current;
       const hovered = hoveredRef.current;
       const filters = graphFiltersRef.current;
       const pace = travelerPaceRef.current;
+      const travelersOn = travelersEnabledRef.current;
       const now = performance.now();
+
+      if (!travelersOn) {
+        for (let i = 0; i < lines.length; i++) {
+          const el = lines[i]!.el;
+          let cache = lineCache.get(el);
+          if (!cache) {
+            cache = { x1: "", y1: "", x2: "", y2: "", op: "", sw: "" };
+            lineCache.set(el, cache);
+          }
+          if (cache.op !== "0") {
+            el.setAttribute("opacity", "0");
+            cache.op = "0";
+          }
+        }
+        // Skip the per-edge geometry + mask updates, but keep the lens pass
+        // alive at the bottom of this tick.
+      } else {
       for (let i = 0; i < lines.length; i++) {
         const { el, s, t } = lines[i]!;
+        let cache = lineCache.get(el);
+        if (!cache) {
+          cache = { x1: "", y1: "", x2: "", y2: "", op: "", sw: "" };
+          lineCache.set(el, cache);
+        }
 
         if (pace <= 0) {
-          el.setAttribute("opacity", "0");
+          if (cache.op !== "0") {
+            el.setAttribute("opacity", "0");
+            cache.op = "0";
+          }
           continue;
         }
 
@@ -415,7 +573,10 @@ export function GraphView(): ReactNode {
         const dy = p2.y - p1.y;
         const len = Math.hypot(dx, dy);
         if (len < 1) {
-          el.setAttribute("opacity", "0");
+          if (cache.op !== "0") {
+            el.setAttribute("opacity", "0");
+            cache.op = "0";
+          }
           continue;
         }
 
@@ -430,8 +591,23 @@ export function GraphView(): ReactNode {
         const travEnd = Math.max(travStart, len - tRadius);
         const travLen = travEnd - travStart;
         if (travLen < 1) {
-          el.setAttribute("opacity", "0");
+          if (cache.op !== "0") {
+            el.setAttribute("opacity", "0");
+            cache.op = "0";
+          }
           continue;
+        }
+
+        if (filters.size > 0) {
+          const sType = graph.getNodeAttribute(s, "noteType") as string;
+          const tType = graph.getNodeAttribute(t, "noteType") as string;
+          if (!filters.has(sType) || !filters.has(tType)) {
+            if (cache.op !== "0") {
+              el.setAttribute("opacity", "0");
+              cache.op = "0";
+            }
+            continue;
+          }
         }
 
         const ux = dx / len;
@@ -440,28 +616,25 @@ export function GraphView(): ReactNode {
         const center = travStart + phase * travLen;
         const segStart = Math.max(travStart, center - SEG_LEN / 2);
         const segEnd = Math.min(travEnd, center + SEG_LEN / 2);
-        el.setAttribute("x1", String(p1.x + ux * segStart));
-        el.setAttribute("y1", String(p1.y + uy * segStart));
-        el.setAttribute("x2", String(p1.x + ux * segEnd));
-        el.setAttribute("y2", String(p1.y + uy * segEnd));
 
-        if (filters.size > 0) {
-          const sType = graph.getNodeAttribute(s, "noteType") as string;
-          const tType = graph.getNodeAttribute(t, "noteType") as string;
-          if (!filters.has(sType) || !filters.has(tType)) {
-            el.setAttribute("opacity", "0");
-            continue;
-          }
-        }
-
+        const k = edgeThicknessRef.current;
+        let op = "0.92";
+        let sw = String(2.0 * k);
         if (hovered) {
           const incident = s === hovered || t === hovered;
-          el.setAttribute("opacity", incident ? "0.92" : "0.15");
-          el.setAttribute("stroke-width", incident ? "2.4" : "2.0");
-        } else {
-          el.setAttribute("opacity", "0.92");
-          el.setAttribute("stroke-width", "2.0");
+          op = incident ? "0.92" : "0.15";
+          sw = incident ? String(2.4 * k) : String(2.0 * k);
         }
+        setLineAttr(
+          el,
+          cache,
+          String(p1.x + ux * segStart),
+          String(p1.y + uy * segStart),
+          String(p1.x + ux * segEnd),
+          String(p1.y + uy * segEnd),
+          op,
+          sw,
+        );
       }
 
       // Update the per-node mask circles so travelers don't render inside
@@ -471,8 +644,16 @@ export function GraphView(): ReactNode {
       graph.forEachNode((id, attr) => {
         const c = maskCircles.get(id);
         if (!c) return;
+        let mc = maskCache.get(c);
+        if (!mc) {
+          mc = { cx: "", cy: "", r: "" };
+          maskCache.set(c, mc);
+        }
         if (filters.size > 0 && !filters.has(attr["noteType"] as string)) {
-          c.setAttribute("r", "0");
+          if (mc.r !== "0") {
+            c.setAttribute("r", "0");
+            mc.r = "0";
+          }
           return;
         }
         const p = sigma.graphToViewport({
@@ -480,36 +661,47 @@ export function GraphView(): ReactNode {
           y: attr["y"] as number,
         });
         const r = scaleSize(attr["size"] as number) + NODE_MARGIN;
-        c.setAttribute("cx", String(p.x));
-        c.setAttribute("cy", String(p.y));
-        c.setAttribute("r", String(r));
+        const cx = String(p.x);
+        const cy = String(p.y);
+        const rs = String(r);
+        if (mc.cx !== cx) { c.setAttribute("cx", cx); mc.cx = cx; }
+        if (mc.cy !== cy) { c.setAttribute("cy", cy); mc.cy = cy; }
+        if (mc.r !== rs) { c.setAttribute("r", rs); mc.r = rs; }
       });
+      }
 
       // --- Lens --------------------------------------------------------------
       // Pick the focused node: nearest to viewport center (skipping filtered).
+      // The full nearest-node scan is O(N) and dominates the traveler frame
+      // budget on large graphs; only re-scan every Nth tick. Drawing and
+      // easing still run every frame so the lens fade stays smooth.
       const host = hostRef.current;
       const lensG = lensGroupRef.current;
       if (host && lensG) {
         const w = host.clientWidth;
         const h = host.clientHeight;
-        const centerGraph = sigma.viewportToGraph({ x: w / 2, y: h / 2 });
-        let nearest: string | null = null;
-        let bestDist = Infinity;
-        graph.forEachNode((id, attr) => {
-          if (filters.size > 0) {
-            const nType = attr["noteType"] as string;
-            if (!filters.has(nType)) return;
-          }
-          const nx = attr["x"] as number;
-          const ny = attr["y"] as number;
-          const d2 =
-            (nx - centerGraph.x) * (nx - centerGraph.x) +
-            (ny - centerGraph.y) * (ny - centerGraph.y);
-          if (d2 < bestDist) {
-            bestDist = d2;
-            nearest = id;
-          }
-        });
+        let nearest: string | null = lensFocusIdRef.current;
+        if (tickIdx % LENS_FRAME_SKIP === 0) {
+          const centerGraph = sigma.viewportToGraph({ x: w / 2, y: h / 2 });
+          let bestDist = Infinity;
+          let scanned: string | null = null;
+          graph.forEachNode((id, attr) => {
+            if (filters.size > 0) {
+              const nType = attr["noteType"] as string;
+              if (!filters.has(nType)) return;
+            }
+            const nx = attr["x"] as number;
+            const ny = attr["y"] as number;
+            const d2 =
+              (nx - centerGraph.x) * (nx - centerGraph.x) +
+              (ny - centerGraph.y) * (ny - centerGraph.y);
+            if (d2 < bestDist) {
+              bestDist = d2;
+              scanned = id;
+            }
+          });
+          nearest = scanned;
+        }
 
         const ratio = sigma.getCamera().ratio;
         const zoomOpenness = Math.max(0, Math.min(1, (0.7 - ratio) / 0.4));
@@ -599,6 +791,7 @@ export function GraphView(): ReactNode {
       stopBreathRef.current?.();
       detachDrag();
       cancelTween();
+      sigma.getCamera().off("updated", onCameraUpdate);
       cancelAnimationFrame(travelerRafRef.current);
       if (overlay) {
         while (overlay.firstChild) overlay.removeChild(overlay.firstChild);
@@ -640,6 +833,55 @@ export function GraphView(): ReactNode {
   useEffect(() => {
     travelerPaceRef.current = graphDisplay.travelerPace;
   }, [graphDisplay.travelerPace]);
+  useEffect(() => {
+    labelsEnabledRef.current = graphDisplay.labelsEnabled;
+    sigmaRef.current?.refresh({ skipIndexation: true });
+  }, [graphDisplay.labelsEnabled]);
+  useEffect(() => {
+    labelShowRatioRef.current = graphDisplay.labelShowRatio;
+    sigmaRef.current?.refresh({ skipIndexation: true });
+  }, [graphDisplay.labelShowRatio]);
+  useEffect(() => {
+    travelersEnabledRef.current = graphDisplay.travelersEnabled;
+  }, [graphDisplay.travelersEnabled]);
+  useEffect(() => {
+    edgeThicknessRef.current = graphDisplay.edgeThickness;
+    sigmaRef.current?.refresh({ skipIndexation: true });
+  }, [graphDisplay.edgeThickness]);
+  useEffect(() => {
+    sigmaRef.current?.setSetting("labelSize", graphDisplay.labelSize);
+    sigmaRef.current?.refresh({ skipIndexation: true });
+  }, [graphDisplay.labelSize]);
+
+  // Breathing lifecycle — owned here so the on/off toggle can mount and unmount
+  // the rAF loop cleanly. Triggered by both the user toggle and the sigma
+  // instance becoming available (sigmaReady).
+  useEffect(() => {
+    const sigma = sigmaRef.current;
+    const graph = graphRef.current;
+    if (!sigma || !graph) return;
+    if (!graphDisplay.breathingEnabled) {
+      stopBreathRef.current?.();
+      stopBreathRef.current = null;
+      // Restore non-breathing baseline so nodes don't freeze mid-pulse.
+      graph.forEachNode((id) => {
+        const base = (baseSizesRef.current.get(id) ?? 4) * sizeScaleRef.current;
+        graph.setNodeAttribute(id, "size", base);
+      });
+      sigma.refresh({ skipIndexation: true });
+      return;
+    }
+    stopBreathRef.current = startBreathing(
+      sigma,
+      graph,
+      baseSizesRef.current,
+      sizeScaleRef,
+    );
+    return () => {
+      stopBreathRef.current?.();
+      stopBreathRef.current = null;
+    };
+  }, [graphDisplay.breathingEnabled, sigmaReady]);
 
   // Repaint when the theme changes. Sigma re-reads node colors on refresh, so
   // we update attributes + settings in place — no need to recreate the
@@ -652,12 +894,11 @@ export function GraphView(): ReactNode {
     paletteRef.current = applyPaletteToGraph(sigma, graph);
   }, [theme]);
 
-  // Label threshold — runtime sigma setting.
+  // Label threshold knob — feeds the zoom-tiered visibility floor in the
+  // nodeReducer. Lower knob = more labels visible; higher = stricter.
   useEffect(() => {
-    const sigma = sigmaRef.current;
-    if (!sigma) return;
-    sigma.setSetting("labelRenderedSizeThreshold", graphDisplay.labelThreshold);
-    sigma.refresh({ skipIndexation: true });
+    labelThresholdRef.current = graphDisplay.labelThreshold;
+    sigmaRef.current?.refresh({ skipIndexation: true });
   }, [graphDisplay.labelThreshold]);
 
   // Spacing → camera zoom. Sigma 3 auto-fits the viewport to node bbox, so
@@ -667,7 +908,10 @@ export function GraphView(): ReactNode {
     const sigma = sigmaRef.current;
     if (!sigma) return;
     const ratio = spacingToCameraRatio(graphDisplay.spacingScale);
-    sigma.getCamera().animate({ ratio, x: 0.5, y: 0.5 }, { duration: 300 });
+    sigma.getCamera().animate(
+      { ratio, x: 0.5, y: 0.5 },
+      { duration: 300, easing: easeInOutCubic },
+    );
   }, [graphDisplay.spacingScale]);
 
   // Orbit auto-cycle: while the user is on the orbit screen, walk through a
@@ -685,7 +929,10 @@ export function GraphView(): ReactNode {
 
     const recenter = () => {
       const ratio = spacingToCameraRatio(graphDisplay.spacingScale);
-      sigma.getCamera().animate({ ratio, x: 0.5, y: 0.5 }, { duration: 600 });
+      sigma.getCamera().animate(
+        { ratio, x: 0.5, y: 0.5 },
+        { duration: 600, easing: easeInOutCubic },
+      );
     };
 
     if (graphMode !== "orbit") {

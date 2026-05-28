@@ -11,6 +11,10 @@ export interface ScaleRef {
   current: number;
 }
 
+// Throttle the breathing pulse to ~30fps. The animation is a ±6% size pulse
+// at 0.6Hz — visually indistinguishable from 60fps, half the work.
+const FRAME_INTERVAL_MS = 33;
+
 export function startBreathing(
   sigma: Sigma,
   graph: Graph,
@@ -20,10 +24,17 @@ export function startBreathing(
   let raf = 0;
   let stopped = false;
   const start = performance.now();
+  let lastFrame = 0;
 
   const tick = () => {
     if (stopped) return;
-    const t = (performance.now() - start) / 1000;
+    const now = performance.now();
+    if (now - lastFrame < FRAME_INTERVAL_MS) {
+      raf = requestAnimationFrame(tick);
+      return;
+    }
+    lastFrame = now;
+    const t = (now - start) / 1000;
     const scale = scaleRef.current;
     graph.forEachNode((id) => {
       const base = (baseSizes.get(id) ?? 4) * scale;

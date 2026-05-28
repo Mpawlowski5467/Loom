@@ -1,6 +1,7 @@
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import { easeInOutCubic, type XY } from "./layouts";
+import type { XY } from "./layouts";
+import { startDragSim, type DragSim } from "./physics";
 
 interface AttachDragArgs {
   sigma: Sigma;
@@ -11,8 +12,6 @@ interface AttachDragArgs {
   isDragging: { current: boolean };
   justDragged: { current: boolean };
 }
-
-const SNAP_DURATION_MS = 350;
 
 export function attachDrag(args: AttachDragArgs): () => void {
   const {
@@ -27,36 +26,17 @@ export function attachDrag(args: AttachDragArgs): () => void {
 
   let draggedNode: string | null = null;
   let movedDuringPress = false;
-  const snapRafs = new Map<string, number>();
+  let sim: DragSim | null = null;
+  let lastGraphX = 0;
+  let lastGraphY = 0;
+  let prevGraphX = 0;
+  let prevGraphY = 0;
 
-  const cancelSnap = (id: string) => {
-    const raf = snapRafs.get(id);
-    if (raf) {
-      cancelAnimationFrame(raf);
-      snapRafs.delete(id);
+  const stopSim = () => {
+    if (sim) {
+      sim.stop();
+      sim = null;
     }
-  };
-
-  const snapHome = (id: string) => {
-    const target = getSnapTarget(id);
-    if (!target) return;
-    const startX = graph.getNodeAttribute(id, "x") as number;
-    const startY = graph.getNodeAttribute(id, "y") as number;
-    const t0 = performance.now();
-    const step = () => {
-      const p = Math.min(1, (performance.now() - t0) / SNAP_DURATION_MS);
-      const eased = easeInOutCubic(p);
-      graph.setNodeAttribute(id, "x", startX + (target.x - startX) * eased);
-      graph.setNodeAttribute(id, "y", startY + (target.y - startY) * eased);
-      sigma.refresh({ skipIndexation: true });
-      if (p < 1) {
-        snapRafs.set(id, requestAnimationFrame(step));
-      } else {
-        snapRafs.delete(id);
-      }
-    };
-    cancelSnap(id);
-    snapRafs.set(id, requestAnimationFrame(step));
   };
 
   const onDownNode = (payload: {
@@ -66,12 +46,35 @@ export function attachDrag(args: AttachDragArgs): () => void {
     const { node, event } = payload;
     if (graph.getNodeAttribute(node, "hidden")) return;
     cancelAnimationFrame(tweenRafRef.current);
-    cancelSnap(node);
+    stopSim();
     draggedNode = node;
     movedDuringPress = false;
     isDragging.current = true;
     hoveredRef.current = null;
     sigma.getCamera().disable();
+
+    const neighborIds: string[] = [];
+    const seen = new Set<string>();
+    graph.forEachNeighbor(node, (n) => {
+      if (seen.has(n)) return;
+      if (graph.getNodeAttribute(n, "hidden")) return;
+      seen.add(n);
+      neighborIds.push(n);
+    });
+
+    lastGraphX = graph.getNodeAttribute(node, "x") as number;
+    lastGraphY = graph.getNodeAttribute(node, "y") as number;
+    prevGraphX = lastGraphX;
+    prevGraphY = lastGraphY;
+
+    sim = startDragSim({
+      sigma,
+      graph,
+      draggedId: node,
+      neighborIds,
+      getHome: getSnapTarget,
+    });
+
     event.preventSigmaDefault?.();
   };
 
@@ -83,11 +86,14 @@ export function attachDrag(args: AttachDragArgs): () => void {
       original: Event;
     };
   }) => {
-    if (!isDragging.current || !draggedNode) return;
+    if (!isDragging.current || !draggedNode || !sim) return;
     const { event } = payload;
     const pos = sigma.viewportToGraph({ x: event.x, y: event.y });
-    graph.setNodeAttribute(draggedNode, "x", pos.x);
-    graph.setNodeAttribute(draggedNode, "y", pos.y);
+    prevGraphX = lastGraphX;
+    prevGraphY = lastGraphY;
+    lastGraphX = pos.x;
+    lastGraphY = pos.y;
+    sim.setDraggedPos(pos.x, pos.y);
     movedDuringPress = true;
     event.preventSigmaDefault?.();
     event.original.preventDefault();
@@ -96,24 +102,25 @@ export function attachDrag(args: AttachDragArgs): () => void {
 
   const endDrag = () => {
     if (!draggedNode || !isDragging.current) return;
-    const node = draggedNode;
     const wasDrag = movedDuringPress;
     isDragging.current = false;
     draggedNode = null;
     movedDuringPress = false;
     sigma.getCamera().enable();
-    if (wasDrag) {
+    if (wasDrag && sim) {
       justDragged.current = true;
-      // clear after the click handler has had a chance to see it
       setTimeout(() => {
         justDragged.current = false;
       }, 0);
-      snapHome(node);
+      const vx = lastGraphX - prevGraphX;
+      const vy = lastGraphY - prevGraphY;
+      sim.release(vx, vy);
+      sim = null;
+    } else {
+      stopSim();
     }
   };
 
-  // Sigma emits `upNode` / `upStage` / `upEdge` for mouseup over each target.
-  // Cover all three plus a window-level fallback in case release is outside.
   const onWindowMouseUp = () => endDrag();
 
   sigma.on("downNode", onDownNode);
@@ -124,8 +131,7 @@ export function attachDrag(args: AttachDragArgs): () => void {
   window.addEventListener("mouseup", onWindowMouseUp);
 
   return () => {
-    for (const raf of snapRafs.values()) cancelAnimationFrame(raf);
-    snapRafs.clear();
+    stopSim();
     sigma.off("downNode", onDownNode);
     sigma.off("moveBody", onMoveBody);
     sigma.off("upNode", endDrag);

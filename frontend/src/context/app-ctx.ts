@@ -21,6 +21,12 @@ export interface GraphDisplay {
   labelThreshold: number;
   spacingScale: number;
   travelerPace: number;
+  labelsEnabled: boolean;
+  labelSize: number;
+  labelShowRatio: number;
+  edgeThickness: number;
+  travelersEnabled: boolean;
+  breathingEnabled: boolean;
 }
 
 export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
@@ -28,6 +34,12 @@ export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
   labelThreshold: 7,
   spacingScale: 1.0,
   travelerPace: 1.0,
+  labelsEnabled: true,
+  labelSize: 11,
+  labelShowRatio: 1.0,
+  edgeThickness: 1.0,
+  travelersEnabled: true,
+  breathingEnabled: true,
 };
 
 export const GRAPH_DISPLAY_RANGES = {
@@ -35,6 +47,9 @@ export const GRAPH_DISPLAY_RANGES = {
   labelThreshold: { min: 1, max: 20, step: 1 },
   spacingScale: { min: 0.5, max: 2.0, step: 0.1 },
   travelerPace: { min: 0, max: 2.0, step: 0.1 },
+  labelSize: { min: 8, max: 18, step: 1 },
+  labelShowRatio: { min: 0.2, max: 4.0, step: 0.1 },
+  edgeThickness: { min: 0.5, max: 3.0, step: 0.1 },
 } as const;
 
 export interface AppContextValue {

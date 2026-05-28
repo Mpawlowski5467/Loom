@@ -11,8 +11,10 @@ Supports two chat modes:
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
+from api.routers.chat_stream import council_stream
 from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.traces import clear_caller, set_caller
@@ -303,6 +305,46 @@ async def _standup_reply() -> str:
     if not result.recap:
         return "No activity recorded today."
     return result.recap
+
+
+@router.post("/send/stream")
+@limiter.limit(WRITE_LIMIT)
+async def send_message_stream(
+    request: Request,  # noqa: ARG001 — required by slowapi
+    body: SendMessageRequest,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008, ARG001
+) -> StreamingResponse:
+    """Server-Sent Events variant of ``/send`` for the Loom Council.
+
+    Only the council target is supported — shuttle agents continue to use
+    the buffered ``/send`` endpoint until there's a UX win in streaming them.
+    """
+    from agents.chat import get_chat_history
+
+    if body.agent != COUNCIL:
+        raise HTTPException(
+            status_code=400,
+            detail="Streaming is only available for the council target",
+        )
+    chat = get_chat_history()
+    if chat is None:
+        raise HTTPException(status_code=503, detail="Chat system not initialized")
+
+    chat.save_message(body.agent, "user", body.message)
+    return StreamingResponse(
+        council_stream(
+            body.message,
+            chat,
+            personas=_COUNCIL_PERSONAS,
+            aggregator_system=_AGGREGATOR_SYSTEM,
+            ask_agent=_ask_agent,
+        ),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 async def _council_reply(message: str, chat) -> _Reply:

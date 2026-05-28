@@ -21,7 +21,7 @@ import { councilSeed } from "../data/council";
 import { notes as notesSeed } from "../data/notes";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
-import { loadChatHistory, sendChatMessage } from "../api/chat";
+import { loadChatHistory, streamCouncilMessage } from "../api/chat";
 import type { AgentActivity } from "../api/activity";
 import { fetchAgentActivity } from "../api/activity";
 import { fetchChangelogFeed } from "../api/changelog";
@@ -390,58 +390,90 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const postCouncilMessage = useCallback(async (body: string) => {
     if (!body.trim()) return;
+    const now = Date.now();
     const youMsg: CouncilMessage = {
-      id: `cm_${Date.now()}`,
+      id: `cm_${now}`,
       who: "you",
       body,
       at: new Date().toISOString(),
     };
-    const pendingId = `cm_${Date.now()}_pending`;
-    const pendingMsg: CouncilMessage = {
-      id: pendingId,
+    const replyId = `cm_${now}_reply`;
+    const replyMsg: CouncilMessage = {
+      id: replyId,
       who: "agent:council" as CouncilWho,
-      body: "…thinking",
+      body: "",
       at: new Date().toISOString(),
       pending: true,
     };
-    setCouncil((prev) => [...prev, youMsg, pendingMsg]);
+    setCouncil((prev) => [...prev, youMsg, replyMsg]);
+
+    const updateReply = (
+      patch:
+        | Partial<CouncilMessage>
+        | ((m: CouncilMessage) => Partial<CouncilMessage>),
+    ) => {
+      setCouncil((prev) =>
+        prev.map((m) =>
+          m.id === replyId
+            ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) }
+            : m,
+        ),
+      );
+    };
 
     try {
-      const reply = await sendChatMessage(body, "_council");
-      // One council turn = one message with per-agent contributions nested
-      // inside it. Silent contributions are dropped (the synthesised voice
-      // already accounts for them); errors are kept so the user sees what
-      // broke.
-      const contributions = reply.agent_contributions
-        .filter((c) => c.content.trim().length > 0 || c.error)
-        .map((c) => ({
-          agent: c.agent,
-          body: c.content,
-          traceId: c.trace_id || undefined,
-          error: c.error || undefined,
-        }));
-      const councilMessage: CouncilMessage = {
-        id: `cm_${Date.now()}_reply`,
-        who: "agent:council" as CouncilWho,
-        body: reply.assistant_message.content,
-        at: reply.assistant_message.timestamp,
-        traceId: reply.trace_id || undefined,
-        contributions: contributions.length > 0 ? contributions : undefined,
-      };
-      setCouncil((prev) =>
-        prev.filter((m) => m.id !== pendingId).concat(councilMessage),
-      );
+      await streamCouncilMessage(body, {
+        onEvent: (event) => {
+          if (event.kind === "contributions") {
+            // Per-agent sub-bubbles arrive once fan-out completes; drop any
+            // that are simultaneously silent and not-errored.
+            const contribs = event.contributions
+              .filter((c) => c.content.trim().length > 0 || c.error)
+              .map((c) => ({
+                agent: c.agent,
+                body: c.content,
+                traceId: c.trace_id || undefined,
+                error: c.error || undefined,
+              }));
+            updateReply({ contributions: contribs.length > 0 ? contribs : undefined });
+          } else if (event.kind === "token") {
+            // Append the streamed chunk to the assistant bubble. ``pending``
+            // stays true until ``done`` so the spinner-style affordance only
+            // turns off once the aggregator has finished.
+            updateReply((m) => ({ body: m.body + event.chunk }));
+          } else if (event.kind === "done") {
+            const finalContribs = event.contributions
+              .filter((c) => c.content.trim().length > 0 || c.error)
+              .map((c) => ({
+                agent: c.agent,
+                body: c.content,
+                traceId: c.trace_id || undefined,
+                error: c.error || undefined,
+              }));
+            updateReply({
+              body: event.assistantText,
+              traceId: event.traceId || undefined,
+              contributions:
+                finalContribs.length > 0 ? finalContribs : undefined,
+              pending: false,
+              at: new Date().toISOString(),
+            });
+          } else if (event.kind === "error") {
+            updateReply({
+              body: `⚠ ${event.message}`,
+              pending: false,
+            });
+          }
+        },
+      });
+      // Ensure pending is cleared even if the stream closed without a
+      // ``done`` event (e.g. network drop mid-response).
+      updateReply((m) => (m.pending ? { pending: false } : {}));
     } catch (err) {
-      setCouncil((prev) =>
-        prev
-          .filter((m) => m.id !== pendingId)
-          .concat({
-            id: `cm_${Date.now()}_err`,
-            who: "agent:council" as CouncilWho,
-            body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
-            at: new Date().toISOString(),
-          }),
-      );
+      updateReply({
+        body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
+        pending: false,
+      });
     }
   }, []);
 

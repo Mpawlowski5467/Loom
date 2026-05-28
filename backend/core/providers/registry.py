@@ -5,6 +5,7 @@ from __future__ import annotations
 import contextlib
 import logging
 import time
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Annotated, Any
 
 from fastapi import Depends
@@ -229,6 +230,43 @@ class TracedProvider(BaseProvider):
                 messages=messages,
                 system=system,
                 response_text=response_text,
+                error_text=error_text,
+                duration_ms=int((time.perf_counter() - start) * 1000),
+                caller=caller,
+            )
+
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        system: str = "",
+    ) -> AsyncIterator[str]:
+        """Stream wrapper around the underlying ``chat_stream``.
+
+        Accumulates chunks for the trace record so streamed calls still show
+        up in ``/api/traces`` with the full assembled response after close.
+        """
+        start = time.perf_counter()
+        chunks: list[str] = []
+        error_text = ""
+        activity = get_activity()
+        caller = get_caller()
+        pulsing = _agents_for_caller(caller)
+        for a in pulsing:
+            activity.begin(a)
+        try:
+            async for chunk in self._inner.chat_stream(messages=messages, system=system):
+                chunks.append(chunk)
+                yield chunk
+        except Exception as exc:
+            error_text = str(exc)
+            raise
+        finally:
+            for a in pulsing:
+                activity.end(a)
+            self._record_trace(
+                messages=messages,
+                system=system,
+                response_text="".join(chunks),
                 error_text=error_text,
                 duration_ms=int((time.perf_counter() - start) * 1000),
                 caller=caller,

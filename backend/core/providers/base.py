@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from typing import Any
 
 from pydantic import BaseModel
@@ -63,3 +64,16 @@ class BaseProvider(ABC):
     @abstractmethod
     async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Return a chat completion string."""
+
+    async def chat_stream(
+        self,
+        messages: list[dict[str, Any]],
+        system: str = "",
+    ) -> AsyncIterator[str]:
+        """Yield chunks of a chat completion as they arrive.
+
+        Default implementation buffers via :meth:`chat` and yields once at the
+        end — providers that natively support streaming should override.
+        """
+        text = await self.chat(messages=messages, system=system)
+        yield text

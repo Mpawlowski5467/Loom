@@ -48,36 +48,3 @@ export function deleteCustomAgent(id: string): Promise<void> {
     `/api/agents/registry/${encodeURIComponent(id)}`,
   );
 }
-
-export interface BubbleResponse {
-  agent_id: string;
-  bubble: string;
-  cached: boolean;
-}
-
-export function getAgentBubble(
-  id: string,
-  signal?: AbortSignal,
-): Promise<BubbleResponse> {
-  return apiClient.get<BubbleResponse>(
-    `/api/agents/registry/${encodeURIComponent(id)}/bubble`,
-    signal,
-  );
-}
-
-export interface AskAgentResponse {
-  agent_id: string;
-  reply: string;
-  trace_id: string;
-  error: string;
-}
-
-export function askAgent(
-  id: string,
-  question: string,
-): Promise<AskAgentResponse> {
-  return apiClient.post<AskAgentResponse>(
-    `/api/agents/registry/${encodeURIComponent(id)}/ask`,
-    { question },
-  );
-}

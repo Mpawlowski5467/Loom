@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -7,10 +7,47 @@ import { Wikilink } from "../components/primitives/Wikilink";
 import { AgentBlob } from "../components/primitives/AgentBlob";
 import { renderMarkdown } from "../editor/renderMarkdown";
 import { EditSuggestionModal } from "./EditSuggestionModal";
-import { processCapture } from "../api/captures";
+import {
+  captureRelPath,
+  commitCapture,
+  previewCapture,
+  processCapture,
+  type CapturePreview,
+  type CommitResult,
+} from "../api/captures";
+import { backendNoteToFrontend, titleMapFromNotes } from "../api/notes";
+import { ApiError } from "../api/client";
+import type { Capture, NodeType } from "../data/types";
+
+/** Per-capture state of the lazily-fetched Weaver preview. A missing entry
+ * means "loading" (a fetch is in flight or about to start). */
+type PreviewState =
+  | { status: "ready"; preview: CapturePreview }
+  | { status: "error"; message: string };
+
+interface CardLink {
+  key: string;
+  title: string;
+  decision?: string;
+}
+
+/** Normalised shape the suggestion card renders, from demo seed OR a preview. */
+interface CardData {
+  type: NodeType;
+  destFolder: string;
+  title: string;
+  tags: string[];
+  links: CardLink[];
+}
+
+/** Backend note types use ``person``; the frontend NodeType is ``people``. */
+function toNodeType(t: string): NodeType {
+  return (t === "person" ? "people" : t) as NodeType;
+}
 
 export function InboxView(): ReactNode {
   const {
+    notes,
     captures,
     selectedCaptureId,
     selectCapture,
@@ -23,6 +60,10 @@ export function InboxView(): ReactNode {
   const [editing, setEditing] = useState(false);
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [previews, setPreviews] = useState<Record<string, PreviewState>>({});
+  // Ids with a preview fetch in flight — dedupes the lazy effect without a
+  // synchronous setState in the effect body (which would cascade renders).
+  const inFlight = useRef<Set<string>>(new Set());
 
   const filteredCaptures = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -99,9 +140,7 @@ export function InboxView(): ReactNode {
     let ok = 0;
     let fail = 0;
     for (const c of targets) {
-      const relPath = c.filePath
-        ? c.filePath.split("/threads/")[1] ?? c.filePath
-        : `${c.folder}/${c.id}.md`;
+      const relPath = captureRelPath(c);
       try {
         const result = await processCapture(relPath);
         if (result.processed) {
@@ -171,6 +210,142 @@ export function InboxView(): ReactNode {
     [captures, setCaptureStatus, pushToast],
   );
 
+  // Apply a committed note to app state + surface the agent-chain toasts.
+  const onCommitted = useCallback(
+    (cap: Capture, result: CommitResult) => {
+      const note = backendNoteToFrontend(result.note, titleMapFromNotes(notes));
+      appendNote(note);
+      setCaptureStatus(cap.id, "done");
+      pushToast({
+        icon: "🧶",
+        agent: "weaver",
+        body: `Filed "${result.note.title}" → ${result.note.type || "note"}`,
+      });
+      const linkCount = result.linked.length;
+      const suggCount = result.suggested.length;
+      if (linkCount + suggCount > 0) {
+        pushToast({
+          icon: "🕸",
+          agent: "spider",
+          body: `${linkCount} linked, ${suggCount} suggested`,
+        });
+      }
+      if (result.validation) {
+        const v = result.validation;
+        pushToast({
+          icon: v === "passed" ? "✓" : v === "warning" ? "⚠" : "✗",
+          agent: "sentinel",
+          body: `Validation: ${v}`,
+        });
+      }
+      openNote(note.id);
+    },
+    [notes, appendNote, setCaptureStatus, pushToast, openNote],
+  );
+
+  const handleCommitError = useCallback(
+    (cap: Capture, err: unknown) => {
+      if (err instanceof ApiError && err.status === 404) {
+        // Already processed (e.g. via bulk Process) — treat as filed.
+        setCaptureStatus(cap.id, "done");
+        pushToast({ icon: "✓", agent: "weaver", body: "Capture already processed." });
+        return;
+      }
+      setCaptureStatus(cap.id, "pending");
+      pushToast({
+        icon: "⚠",
+        agent: "weaver",
+        body: `Failed to file: ${err instanceof Error ? err.message : String(err)}`,
+      });
+    },
+    [setCaptureStatus, pushToast],
+  );
+
+  const commitPreview = useCallback(
+    async (cap: Capture, preview: CapturePreview) => {
+      setCaptureStatus(cap.id, "processing");
+      try {
+        const result = await commitCapture({
+          capture_path: captureRelPath(cap),
+          note_type: preview.note_type,
+          folder: preview.folder,
+          title: preview.title,
+          tags: preview.tags,
+          body: preview.body,
+        });
+        onCommitted(cap, result);
+      } catch (err) {
+        handleCommitError(cap, err);
+      }
+    },
+    [setCaptureStatus, onCommitted, handleCommitError],
+  );
+
+  // Accept the current suggestion. Demo captures carry a seed suggestion and
+  // file locally; real captures commit the fetched preview through the backend.
+  const accept = useCallback(() => {
+    if (!selected) return;
+    if (selected.suggestion) {
+      fileCapture(selected.id);
+      return;
+    }
+    const st = previews[selected.id];
+    if (st?.status === "ready") void commitPreview(selected, st.preview);
+  }, [selected, previews, fileCapture, commitPreview]);
+
+  const retryPreview = useCallback((id: string) => {
+    // Clearing the entry re-triggers the lazy effect (previews is a dep).
+    setPreviews((p) => {
+      const next = { ...p };
+      delete next[id];
+      return next;
+    });
+  }, []);
+
+  // Lazily fetch Weaver's proposal when a pending capture is selected. Demo
+  // captures already carry a seed ``suggestion`` so they skip the round-trip.
+  useEffect(() => {
+    const cap = selected;
+    if (!cap) return;
+    if (cap.status === "done" || cap.status === "processing") return;
+    if (cap.suggestion) return; // demo seed suggestion — no round-trip
+    const id = cap.id;
+    if (previews[id]) return; // already resolved (ready / error)
+    if (inFlight.current.has(id)) return; // fetch already running
+
+    inFlight.current.add(id);
+    let active = true;
+    const ctrl = new AbortController();
+    previewCapture({ capture_path: captureRelPath(cap) }, ctrl.signal)
+      .then((preview) => {
+        inFlight.current.delete(id);
+        if (!active) return;
+        setPreviews((p) => ({
+          ...p,
+          [id]: preview
+            ? { status: "ready", preview }
+            : { status: "error", message: "Empty capture — nothing to file." },
+        }));
+      })
+      .catch((err: unknown) => {
+        inFlight.current.delete(id);
+        if (!active || (err instanceof DOMException && err.name === "AbortError"))
+          return;
+        setPreviews((p) => ({
+          ...p,
+          [id]: {
+            status: "error",
+            message: err instanceof Error ? err.message : "Preview failed",
+          },
+        }));
+      });
+
+    return () => {
+      active = false;
+      ctrl.abort();
+    };
+  }, [selected, previews]);
+
   // Keyboard triage: j/k move between captures, e edits the suggestion, ↵ files
   // it. Ignored while typing in a field or with the edit modal open.
   useEffect(() => {
@@ -186,11 +361,13 @@ export function InboxView(): ReactNode {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       if (!["j", "k", "e", "Enter"].includes(e.key)) return;
       const idx = filteredCaptures.findIndex((c) => c.id === selected?.id);
+      const previewReady =
+        !!selected && previews[selected.id]?.status === "ready";
       const actionable =
         !!selected &&
         selected.status !== "done" &&
         selected.status !== "processing" &&
-        !!selected.suggestion;
+        (!!selected.suggestion || previewReady);
       if (e.key === "j") {
         e.preventDefault();
         const n = filteredCaptures[Math.min(filteredCaptures.length - 1, idx + 1)];
@@ -204,12 +381,65 @@ export function InboxView(): ReactNode {
         setEditing(true);
       } else if (e.key === "Enter" && actionable) {
         e.preventDefault();
-        fileCapture(selected.id);
+        accept();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [filteredCaptures, selected, editing, selectCapture, fileCapture]);
+  }, [filteredCaptures, selected, editing, selectCapture, accept, previews]);
+
+  // One card, fed from either the demo seed suggestion or a fetched preview.
+  const renderSuggestionCard = (data: CardData): ReactNode => (
+    <div className="inbox-suggest">
+      <div className="inbox-suggest-h">
+        <AgentBlob agent="weaver" state="running" size={22} />
+        Weaver suggestion
+      </div>
+      <div className="inbox-suggest-row">
+        <span className="label">type</span>
+        <Chip type={data.type}>{data.type}</Chip>
+        <span className="label" style={{ marginLeft: 8 }}>
+          folder
+        </span>
+        <Chip>{data.destFolder}/</Chip>
+        <span className="label" style={{ marginLeft: 8 }}>
+          title
+        </span>
+        <span style={{ fontFamily: "var(--serif)", fontStyle: "italic" }}>
+          {data.title}
+        </span>
+      </div>
+      <div className="inbox-suggest-row">
+        <span className="label">tags</span>
+        {data.tags.length === 0 && <span className="inbox-suggest-none">none</span>}
+        {data.tags.map((t) => (
+          <Chip key={t}>#{t}</Chip>
+        ))}
+      </div>
+      <div className="inbox-suggest-row">
+        <span className="label">links</span>
+        {data.links.length === 0 && <span className="inbox-suggest-none">none</span>}
+        {data.links.map((l) => (
+          <span key={l.key} className="inbox-suggest-link">
+            <Wikilink target={l.title} />
+            {l.decision === "suggested" && (
+              <span className="inbox-suggest-tag">suggested</span>
+            )}
+          </span>
+        ))}
+      </div>
+      <div className="inbox-suggest-actions">
+        <Button variant="amber" size="md" onClick={accept}>
+          accept &amp; file
+        </Button>
+        <Button onClick={() => setEditing(true)}>edit suggestion</Button>
+        <Button onClick={() => selected && setCaptureStatus(selected.id, "done")}>
+          skip
+        </Button>
+        <span className="inbox-kbd-hint">j/k move · e edit · ↵ file</span>
+      </div>
+    </div>
+  );
 
   return (
     <div className="inbox-view">
@@ -351,50 +581,71 @@ export function InboxView(): ReactNode {
           )}
           {selected.status !== "done" &&
             selected.status !== "processing" &&
-            selected.suggestion && (
-            <div className="inbox-suggest">
-              <div className="inbox-suggest-h">
-                <AgentBlob agent="weaver" state="running" size={22} />
-                Weaver suggestion
-              </div>
-              <div className="inbox-suggest-row">
-                <span className="label">type</span>
-                <Chip type={selected.suggestion.type}>{selected.suggestion.type}</Chip>
-                <span className="label" style={{ marginLeft: 8 }}>folder</span>
-                <Chip>{selected.suggestion.destFolder}/</Chip>
-                <span className="label" style={{ marginLeft: 8 }}>title</span>
-                <span style={{ fontFamily: "var(--serif)", fontStyle: "italic" }}>
-                  {selected.suggestion.title}
-                </span>
-              </div>
-              <div className="inbox-suggest-row">
-                <span className="label">tags</span>
-                {selected.suggestion.tags.map((t) => (
-                  <Chip key={t}>#{t}</Chip>
-                ))}
-              </div>
-              <div className="inbox-suggest-row">
-                <span className="label">links</span>
-                {selected.suggestion.links.map((id) => {
-                  const n = noteById(id);
-                  if (!n) return null;
-                  return <Wikilink key={id} target={n.title} />;
-                })}
-              </div>
-              <div className="inbox-suggest-actions">
-                <Button
-                  variant="amber"
-                  size="md"
-                  onClick={() => fileCapture(selected.id)}
-                >
-                  accept & file
-                </Button>
-                <Button onClick={() => setEditing(true)}>edit suggestion</Button>
-                <Button onClick={() => setCaptureStatus(selected.id, "done")}>skip</Button>
-                <span className="inbox-kbd-hint">j/k move · e edit · ↵ file</span>
-              </div>
-            </div>
-          )}
+            (selected.suggestion
+              ? renderSuggestionCard({
+                  type: selected.suggestion.type,
+                  destFolder: selected.suggestion.destFolder,
+                  title: selected.suggestion.title,
+                  tags: selected.suggestion.tags,
+                  links: selected.suggestion.links
+                    .map((id) => {
+                      const n = noteById(id);
+                      return n ? { key: id, title: n.title } : null;
+                    })
+                    .filter((x): x is CardLink => x !== null),
+                })
+              : (() => {
+                  const st = previews[selected.id];
+                  if (!st) {
+                    return (
+                      <div
+                        className="inbox-processing"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <div className="inbox-suggest-h">
+                          <AgentBlob agent="weaver" state="running" size={22} />
+                          Weaver is reading this capture…
+                        </div>
+                        <div className="inbox-skeleton" aria-hidden="true">
+                          <span className="sk-line" />
+                          <span className="sk-line short" />
+                          <span className="sk-line" />
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (st.status === "error") {
+                    return (
+                      <div className="inbox-suggest" role="status">
+                        <div className="inbox-suggest-h">
+                          <AgentBlob agent="weaver" state="idle" size={22} />
+                          Weaver suggestion
+                        </div>
+                        <p className="inbox-suggest-err">{st.message}</p>
+                        <div className="inbox-suggest-actions">
+                          <Button
+                            size="md"
+                            onClick={() => retryPreview(selected.id)}
+                          >
+                            retry
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  }
+                  return renderSuggestionCard({
+                    type: toNodeType(st.preview.note_type),
+                    destFolder: st.preview.folder,
+                    title: st.preview.title,
+                    tags: st.preview.tags,
+                    links: st.preview.links.map((l) => ({
+                      key: l.note_id || l.title,
+                      title: l.title,
+                      decision: l.decision,
+                    })),
+                  });
+                })())}
           {selected.status === "done" && (
             <div className="inbox-suggest" style={{ borderColor: "var(--green)", background: "var(--green-bg)" }}>
               <div className="inbox-suggest-h" style={{ color: "var(--green)" }}>
@@ -411,18 +662,20 @@ export function InboxView(): ReactNode {
       {editing && selected && (
         <EditSuggestionModal
           capture={selected}
+          preview={
+            previews[selected.id]?.status === "ready"
+              ? (
+                  previews[selected.id] as {
+                    status: "ready";
+                    preview: CapturePreview;
+                  }
+                ).preview
+              : undefined
+          }
           onClose={() => setEditing(false)}
-          onAccepted={(note, record) => {
-            appendNote(note);
-            setCaptureStatus(selected.id, "done");
-            pushToast({
-              icon: "🧶",
-              agent: "weaver",
-              body: `Filed [[${record.title}]] → ${
-                record.file_path.split("/threads/")[1] ?? record.file_path
-              }`,
-            });
-            openNote(note.id);
+          onAccepted={(result) => {
+            onCommitted(selected, result);
+            setEditing(false);
           }}
         />
       )}

@@ -10,18 +10,45 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.traces import clear_caller, get_trace_store, set_caller
 
 logger = logging.getLogger(__name__)
 
+# Free OpenRouter models cap requests per minute, and the Council fans out one
+# call per agent. Cap how many run at once so a single turn doesn't slam the
+# whole minute budget in one instant (the provider also retries through 429s).
+_COUNCIL_CONCURRENCY = 3
+
 
 def sse(event: str, data: dict | str) -> str:
     """Format a single Server-Sent Event frame."""
     payload = data if isinstance(data, str) else json.dumps(data)
     return f"event: {event}\ndata: {payload}\n\n"
+
+
+async def fan_out_agents(
+    ask_agent: Callable[..., Awaitable[Any]],
+    provider: Any,
+    personas: dict[str, str],
+    history: list[dict],
+    message: str,
+) -> list[Any]:
+    """Run every council persona concurrently, capped at ``_COUNCIL_CONCURRENCY``.
+
+    Each ``ask_agent`` call captures its own errors, so a single agent failing
+    (including a final rate-limit give-up) never sinks the whole fan-out.
+    """
+    sem = asyncio.Semaphore(_COUNCIL_CONCURRENCY)
+
+    async def _one(name: str, persona: str) -> Any:
+        async with sem:
+            return await ask_agent(provider, name, persona, history, message)
+
+    return await asyncio.gather(*[_one(n, p) for n, p in personas.items()])
 
 
 async def council_stream(
@@ -57,11 +84,8 @@ async def council_stream(
     history = [m.to_llm_message() for m in recent]
 
     try:
-        contributions = await asyncio.gather(
-            *[
-                ask_agent(provider, name, persona, history, message)
-                for name, persona in personas.items()
-            ]
+        contributions = await fan_out_agents(
+            ask_agent, provider, personas, history, message
         )
     except Exception as exc:
         yield sse("error", {"message": f"Fan-out failed: {exc}"})

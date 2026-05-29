@@ -7,11 +7,9 @@ import { Council } from "../components/Council";
 import { TraceFeed } from "../components/TraceFeed";
 import { CardsMode } from "./board/CardsMode";
 import { PulseMode } from "./board/PulseMode";
-import { RoundTableModal } from "./board/RoundTableModal";
 
 export function BoardView(): ReactNode {
   const [viz, setViz] = useState<BoardMode>("cards");
-  const [rtOpen, setRtOpen] = useState(false);
 
   return (
     <div className="board-view">
@@ -23,14 +21,6 @@ export function BoardView(): ReactNode {
             <StatusBadge state="idle" label="settling" />
             <StatusBadge state="idle" label="idle" />
           </div>
-          <button
-            type="button"
-            className="btn btn-md"
-            onClick={() => setRtOpen(true)}
-          >
-            <span aria-hidden="true">◯</span>
-            <span>round table</span>
-          </button>
           <ModeToggle
             value={viz}
             onChange={setViz}
@@ -49,7 +39,6 @@ export function BoardView(): ReactNode {
         <TraceFeed />
       </div>
       <Council />
-      {rtOpen && <RoundTableModal onClose={() => setRtOpen(false)} />}
     </div>
   );
 }

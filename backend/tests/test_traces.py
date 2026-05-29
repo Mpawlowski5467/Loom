@@ -38,9 +38,9 @@ class TestCallerConcurrencyIsolation:
 
     Before the ContextVar fix, set_caller/get_caller used threading.local, so
     two coroutines running on the same event-loop thread shared one slot.
-    The bubble endpoint would read the captures pipeline's "weaver" caller
+    A council fan-out call would read the captures pipeline's "weaver" caller
     mid-flight and tag its own LLM call as caller=weaver even though it was
-    a bubble call for, say, Researcher.
+    a council call for, say, Spider.
     """
 
     @pytest.mark.asyncio
@@ -86,11 +86,11 @@ class TestCallerConcurrencyIsolation:
 
     @pytest.mark.asyncio
     async def test_interleaved_set_and_chat_simulation(self) -> None:
-        """Simulates the original bug: pipeline holds 'weaver' while bubble fires.
+        """Simulates the original bug: pipeline holds 'weaver' while a council call fires.
 
-        Without ContextVar, the bubble task would read 'weaver' from the
-        shared threading.local slot. With ContextVar, the bubble task sees
-        only its own 'bubble:researcher'.
+        Without ContextVar, the council task would read 'weaver' from the
+        shared threading.local slot. With ContextVar, the council task sees
+        only its own 'council:spider'.
         """
         captured: list[tuple[str, str]] = []  # (task_name, observed_caller)
 
@@ -101,17 +101,17 @@ class TestCallerConcurrencyIsolation:
             await asyncio.sleep(0.01)
             captured.append(("pipeline_end", get_caller()))
 
-        async def bubble_call():
-            # Bubble fires while the pipeline is mid-flight.
+        async def council_call():
+            # A council fan-out call fires while the pipeline is mid-flight.
             await asyncio.sleep(0.002)  # let pipeline set its caller first
-            set_caller("bubble:researcher")
+            set_caller("council:spider")
             await asyncio.sleep(0.005)
-            captured.append(("bubble", get_caller()))
+            captured.append(("council", get_caller()))
 
-        await asyncio.gather(pipeline_call(), bubble_call())
+        await asyncio.gather(pipeline_call(), council_call())
 
-        # The pipeline must keep seeing 'weaver' even though the bubble
+        # The pipeline must keep seeing 'weaver' even though the council
         # task set its own caller in between.
         assert ("pipeline", "weaver") in captured
         assert ("pipeline_end", "weaver") in captured
-        assert ("bubble", "bubble:researcher") in captured
+        assert ("council", "council:spider") in captured

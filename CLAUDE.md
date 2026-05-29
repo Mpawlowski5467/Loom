@@ -8,7 +8,7 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 - **Frontend**: React + TypeScript / Sigma.js (graph) / hand-rolled markdown renderer
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
-- **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, Ollama)
+- **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama); every call traced
 - **Theme**: Paper theme — warm cream paper aesthetic, single duotone accent. Paper is the default; navy/forest/sepia variants also ship in tokens.css.
 
 ## Repo Layout
@@ -35,10 +35,9 @@ loom/
 │       ├── styles/           # tokens.css + view stylesheets
 │       ├── theme/            # Theme tokens + runtime swap
 │       └── views/            # GraphView, BoardView, ThreadView, InboxView
-├── docs/                     # Architecture docs, reference
+├── docs/                     # Architecture docs, reference, wireframes/
 ├── examples/                 # Example vaults, rules, schemas
 ├── scripts/                  # Repo-level scripts
-├── wireframes/               # Reference UI mockups
 └── pyproject.toml
 ```
 
@@ -78,12 +77,14 @@ Task prompts: @docs/tasks/
 **Implemented**
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
 - Both Shuttle Layer agents (Researcher, Standup)
-- 4 views: GraphView (Sigma.js), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle, round-table modal)
+- Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier; execution wiring pending)
+- 4 views: GraphView (Sigma.js — constellation + orbit, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
 - Settings UI: Appearance, Providers (with key validation), Vault, About (diagnostics + re-run onboarding), Danger Zone
 - Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
 - Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
-- Provider system: OpenAI, Anthropic, xAI, Ollama — chat + embed independently configurable
+- Provider system: OpenAI, Anthropic, xAI, OpenRouter, Ollama — chat + embed independently configurable
+- Streaming Loom Council chat (SSE fan-out, ≤3 concurrent) + LLM trace system (in-mem ring + disk mirror, "raw call" inspector via `/api/traces`)
 - Multi-vault management via `/api/vaults`
 - Cmd+K palette, file tree with filter bar, toasts
 - CI in `.github/workflows/`, LICENSE present

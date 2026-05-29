@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from starlette.testclient import TestClient
 
+from agents.loom.spider_models import LinkCandidate
+from agents.loom.weaver import CaptureProposal
+from core.notes import Note
 from tests.conftest import _seed_notes
 
 _CAPTURE_NOTES = [
@@ -248,3 +251,154 @@ class TestProcessAllCaptures:
         assert data["processed"] == 2
         assert len(data["results"]) == 2
         assert all(r["processed"] for r in data["results"])
+
+
+# ---------------------------------------------------------------------------
+# POST /api/captures/preview  (dry-run)
+# ---------------------------------------------------------------------------
+
+
+class TestPreviewCapture:
+    def test_preview_returns_proposal_and_candidates(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """Preview returns Weaver's proposal plus Spider candidates; skipped links drop out."""
+        proposal = CaptureProposal(
+            note_type="topic",
+            folder="topics",
+            title="Cool Idea",
+            tags=["idea"],
+            body="## Summary\n\nNeat.\n",
+            raw_capture_id="thr_cap001",
+        )
+        mock_weaver = MagicMock()
+        mock_weaver.propose_capture = AsyncMock(return_value=proposal)
+        mock_spider = MagicMock()
+        mock_spider.propose_candidates = AsyncMock(
+            return_value=[
+                LinkCandidate(note_id="thr_a", title="Alpha", score=0.91, decision="auto-linked"),
+                LinkCandidate(note_id="thr_b", title="Beta", score=0.6, decision="suggested"),
+                LinkCandidate(note_id="thr_c", title="Gamma", score=0.2, decision="skipped"),
+            ]
+        )
+
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.spider.get_spider", return_value=mock_spider),
+        ):
+            resp = client.post(
+                "/api/captures/preview",
+                json={"capture_path": "captures/raw-idea.md"},
+            )
+
+        assert resp.status_code == 200
+        preview = resp.json()["preview"]
+        assert preview["note_type"] == "topic"
+        assert preview["folder"] == "topics"
+        assert preview["title"] == "Cool Idea"
+        assert preview["body"].startswith("## Summary")
+        # "skipped" candidate is filtered out; only auto-linked + suggested remain.
+        decisions = {link["title"]: link["decision"] for link in preview["links"]}
+        assert decisions == {"Alpha": "auto-linked", "Beta": "suggested"}
+
+    def test_preview_no_writes(self, client: TestClient, seeded_captures: Path) -> None:
+        """Preview must not archive the capture or add notes — the inbox is unchanged."""
+        proposal = CaptureProposal(
+            note_type="topic", folder="topics", title="X", tags=[], body="## Summary\n\nx\n"
+        )
+        mock_weaver = MagicMock()
+        mock_weaver.propose_capture = AsyncMock(return_value=proposal)
+
+        before = {item["id"] for item in client.get("/api/captures").json()}
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.spider.get_spider", return_value=None),
+        ):
+            resp = client.post(
+                "/api/captures/preview",
+                json={"capture_path": "captures/raw-idea.md"},
+            )
+        assert resp.status_code == 200
+
+        after = {item["id"] for item in client.get("/api/captures").json()}
+        assert before == after
+        # Capture file still in the inbox, nothing archived.
+        assert (seeded_captures / "threads" / "captures" / "raw-idea.md").exists()
+
+    def test_preview_empty_capture_returns_null(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """An empty capture yields ``preview: null`` (not a 500)."""
+        mock_weaver = MagicMock()
+        mock_weaver.propose_capture = AsyncMock(return_value=None)
+
+        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+            resp = client.post(
+                "/api/captures/preview",
+                json={"capture_path": "captures/raw-idea.md"},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["preview"] is None
+
+
+# ---------------------------------------------------------------------------
+# POST /api/captures/commit
+# ---------------------------------------------------------------------------
+
+
+class TestCommitCapture:
+    def test_commit_writes_and_archives(self, client: TestClient, seeded_captures: Path) -> None:
+        """Commit returns the created note and archives the capture out of the inbox."""
+        note = Note(
+            id="thr_new",
+            title="Filed Note",
+            type="topic",
+            file_path="/tmp/threads/topics/filed.md",
+            body="## Summary\n\nx\n",
+        )
+        mock_weaver = MagicMock()
+        mock_weaver.commit_proposal = AsyncMock(return_value=(note, None))
+
+        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+            resp = client.post(
+                "/api/captures/commit",
+                json={
+                    "capture_path": "captures/raw-idea.md",
+                    "note_type": "topic",
+                    "folder": "topics",
+                    "title": "Filed Note",
+                    "tags": ["idea"],
+                    "body": "## Summary\n\nx\n",
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["note"]["id"] == "thr_new"
+        assert data["note"]["title"] == "Filed Note"
+        assert data["capture_archived"] is True
+        # Capture is moved out of the inbox.
+        assert not (seeded_captures / "threads" / "captures" / "raw-idea.md").exists()
+
+    def test_commit_404_when_capture_missing(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """Commit on a capture that no longer exists returns 404 (e.g. already processed)."""
+        mock_weaver = MagicMock()
+
+        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+            resp = client.post(
+                "/api/captures/commit",
+                json={
+                    "capture_path": "captures/nonexistent.md",
+                    "note_type": "topic",
+                    "folder": "topics",
+                    "title": "X",
+                    "tags": [],
+                    "body": "y",
+                },
+            )
+
+        assert resp.status_code == 404
+        assert "not found" in resp.json()["detail"]

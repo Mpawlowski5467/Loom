@@ -57,7 +57,7 @@ export interface BoardStatus {
 
 /**
  * Single source of truth for how an agent's status reads across the board
- * (cards, pulse rows, round table). "settling" = idle but with recent pulse
+ * (cards, pulse rows). "settling" = idle but with recent pulse
  * activity; it renders with the idle dot so the legend stays three-state.
  */
 export function boardStatus(

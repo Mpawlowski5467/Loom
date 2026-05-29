@@ -20,7 +20,7 @@ from agents.base import BaseAgent
 from agents.loom.spider_candidates import find_candidates
 from agents.loom.spider_linker import apply_links
 from agents.loom.spider_lookup import build_title_map
-from agents.loom.spider_models import ScanReport, VaultScanReport
+from agents.loom.spider_models import LinkCandidate, ScanReport, VaultScanReport
 from core.notes import Note, parse_note
 
 if TYPE_CHECKING:
@@ -105,6 +105,16 @@ class Spider(BaseAgent):
 
         result = await self.execute_with_chain(note_path, _action)
         return result.get("_report", ScanReport(source_id="", source_title=""))
+
+    async def propose_candidates(self, note: Note, existing_links: set[str]) -> list[LinkCandidate]:
+        """Score link candidates for an in-memory note WITHOUT writing.
+
+        Used by the inbox preview: the note may not exist on disk or in the
+        index yet. ``find_candidates`` only reads (vector search / vault scan),
+        so this has no side effects — unlike ``scan_and_report``, which also
+        applies links.
+        """
+        return await find_candidates(self._vault_root, note, existing_links, self._chat_provider)
 
     async def scan_vault(self) -> int:
         """Run scan_for_connections on all notes. Returns total new links."""

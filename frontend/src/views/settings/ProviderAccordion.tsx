@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { CheckCircle2, Plus, TestTube2, Trash2 } from "lucide-react";
 import type { TestProviderResponse } from "../../api/types";
+import { ModelCombobox } from "./ModelCombobox";
 import type { ProviderForm, ProviderMeta } from "./providerModels";
 
 interface Props {
@@ -86,13 +87,13 @@ function ProviderFormFields(
         </label>
       )}
       <div className="settings-field-row">
-        <ModelSelect
+        <ModelCombobox
           label="Chat model"
           value={props.provider.chatModel}
           options={props.meta.chatModels}
           onChange={(chatModel) => props.onPatch({ chatModel })}
         />
-        <ModelSelect
+        <ModelCombobox
           label="Embed model"
           value={props.provider.embedModel}
           options={props.meta.embedModels}
@@ -141,40 +142,5 @@ function ProviderFormFields(
         </div>
       )}
     </>
-  );
-}
-
-function ModelSelect(props: {
-  label: string;
-  value: string;
-  options: string[];
-  disabled?: boolean;
-  onChange: (value: string) => void;
-}): ReactNode {
-  // Datalist combobox: keeps the suggested list a click away while allowing
-  // arbitrary model slugs (especially useful for OpenRouter's catalog).
-  const listId = `model-list-${props.label.replace(/\s+/g, "-").toLowerCase()}`;
-  return (
-    <label className="settings-field">
-      <span className="settings-field-label">{props.label}</span>
-      <input
-        className="input mono"
-        type="text"
-        list={props.disabled ? undefined : listId}
-        value={props.disabled ? "" : props.value}
-        placeholder={props.disabled ? "Unavailable" : "model name"}
-        disabled={props.disabled}
-        autoComplete="off"
-        spellCheck={false}
-        onChange={(e) => props.onChange(e.target.value)}
-      />
-      {!props.disabled && props.options.length > 0 && (
-        <datalist id={listId}>
-          {props.options.map((option) => (
-            <option key={option} value={option} />
-          ))}
-        </datalist>
-      )}
-    </label>
   );
 }

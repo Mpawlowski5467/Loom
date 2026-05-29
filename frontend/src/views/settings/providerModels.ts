@@ -66,16 +66,22 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "openrouter",
     label: "OpenRouter",
     type: "cloud",
-    defaultChat: "openai/gpt-4o-mini",
+    defaultChat: "google/gemma-4-31b-it:free",
     defaultEmbed: "",
     defaultHost: "",
+    // Free models that suit Loom's multi-agent Council — good instruction-
+    // following + reasonable speed, ordered best-first. All ":free" models
+    // share OpenRouter's per-account daily cap; you can still type any paid
+    // model id here. Embeddings stay on a separate provider (ollama/openai).
     chatModels: [
-      "openai/gpt-4o-mini",
-      "openai/gpt-4o",
-      "anthropic/claude-3.5-sonnet",
-      "anthropic/claude-3.5-haiku",
-      "meta-llama/llama-3.3-70b-instruct",
-      "google/gemini-2.0-flash-001",
+      "google/gemma-4-31b-it:free",
+      "openai/gpt-oss-20b:free",
+      "qwen/qwen3-next-80b-a3b-instruct:free",
+      "openai/gpt-oss-120b:free",
+      "google/gemma-4-26b-a4b-it:free",
+      "deepseek/deepseek-v4-flash:free",
+      "moonshotai/kimi-k2.6:free",
+      "meta-llama/llama-3.3-70b-instruct:free",
     ],
     embedModels: [],
     supportsEmbed: false,

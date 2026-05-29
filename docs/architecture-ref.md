@@ -68,6 +68,8 @@ history:
 
 **Boundary**: Shuttle agents write to `captures/` only. Loom agents process from there.
 
+**Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`); the 7 built-ins stay read-only. Execution wiring is still pending.
+
 ## Read-Before-Write Chain
 
 ```
@@ -87,6 +89,7 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 - Smart chunking by `##` headers
 - Hybrid search: semantic + keyword/tag + graph-aware boosting
 - Tags + title embedded; other frontmatter = filters only
+- Keyword-only fallback when no embedding provider is configured
 - Real-time watcher for small edits, batch for heavy ops
 
 ## UI Layout
@@ -114,6 +117,9 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 - Toasts: bottom-right for agent actions
 - Auto-refresh: 5-10s interval
 - Bidirectional sync: graph ↔ file tree
+- Graph display panel: labels/size/spacing/edge-thickness/breathing/travelers, persisted to localStorage
+- Board: two modes — cards (agent grid) and pulse (live activity)
+- Settings: appearance, providers (key validation), vault, about/diagnostics, danger zone
 
 ## Color System
 
@@ -150,6 +156,12 @@ providers:
   anthropic:
     api_key: ${ANTHROPIC_API_KEY}
     chat_model: claude-sonnet-4-20250514
+  xai:
+    api_key: ${XAI_API_KEY}
+    chat_model: grok-3
+  openrouter:
+    api_key: ${OPENROUTER_API_KEY}
+    chat_model: qwen/qwen3-next-80b-a3b-instruct:free
   ollama:
     host: http://localhost:11434
     embed_model: nomic-embed-text
@@ -157,3 +169,18 @@ providers:
 ```
 
 Embed and chat models are independent. Mix and match.
+
+## Tracing
+
+Every provider is wrapped in a `TracedProvider` that records each call (provider, model, messages, response, duration, caller). Stored in a 500-entry in-memory ring + mirrored to disk at `.loom/traces/<date>/`. Read via `/api/traces` (recent) and `/api/traces/disk` (by date). The UI's "raw call" link opens the exact exchange.
+
+## Council Streaming
+
+`POST /api/chat/send/stream` (Server-Sent Events). Fans out to all 5 Loom agents, capped at 3 concurrent. Emits one `contributions` event (per-agent takes), streams the aggregator reply as `token` events, ends with `done` (+ `trace_id`). The non-streaming `POST /api/chat/send` also exists for Shuttle 1:1 chat.
+
+## Graph Layout & Motion
+
+- Modes: **constellation** (ForceAtlas2 force-directed) and **orbit** (focus-first concentric rings; rings/spiral/arms scenes)
+- Edge travelers: dashes animate along edges on an SVG overlay; pace adjustable or off
+- Breathing: gentle node-size oscillation
+- All display knobs live in the graph display panel (persisted to localStorage, with a reset button)

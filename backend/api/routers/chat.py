@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from api.routers.chat_stream import council_stream
+from api.routers.chat_stream import council_stream, fan_out_agents
 from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.traces import clear_caller, set_caller
@@ -354,8 +354,6 @@ async def _council_reply(message: str, chat) -> _Reply:
     distils the five answers into a single council voice; the per-agent
     contributions are returned alongside so the UI can render them.
     """
-    import asyncio
-
     from core.providers import get_chat_provider
 
     try:
@@ -374,11 +372,8 @@ async def _council_reply(message: str, chat) -> _Reply:
     # Fan out in parallel. Each agent call carries the prior conversation +
     # the new user turn so each persona has the same context. Caller tag is
     # per-agent so the trace store + activity pulse attribute correctly.
-    contributions = await asyncio.gather(
-        *[
-            _ask_agent(provider, name, persona, history, message)
-            for name, persona in _COUNCIL_PERSONAS.items()
-        ]
+    contributions = await fan_out_agents(
+        _ask_agent, provider, _COUNCIL_PERSONAS, history, message
     )
 
     # Aggregate. The aggregator sees the five raw contributions plus the
@@ -400,7 +395,7 @@ async def _ask_agent(
     """Call the chat provider in one agent's voice. Errors are captured, not raised."""
     from core.traces import get_trace_store
 
-    messages = list(history) + [{"role": "user", "content": message}]
+    messages = [*history, {"role": "user", "content": message}]
     try:
         set_caller(f"council:{agent}")
         text = await provider.chat(messages=messages, system=persona)
@@ -431,7 +426,7 @@ async def _aggregate(
             parts.append(f"- **{c.agent}**: (silent — nothing to add)")
     aggregator_input = "\n".join(parts)
 
-    messages = list(history) + [{"role": "user", "content": aggregator_input}]
+    messages = [*history, {"role": "user", "content": aggregator_input}]
 
     try:
         set_caller("council")

@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import type { NoteRecord } from "./notes";
 import type { Capture, CaptureStatus } from "../data/types";
 
 export interface CaptureRecord {
@@ -36,6 +37,85 @@ export function processCapture(capturePath: string): Promise<ProcessResult> {
   return apiClient.post<ProcessResult>("/api/captures/process", {
     capture_path: capturePath,
   });
+}
+
+/** A candidate wikilink Spider proposes for a previewed note. */
+export interface PreviewLink {
+  note_id: string;
+  title: string;
+  score: number;
+  decision: string; // "auto-linked" | "suggested"
+}
+
+/** Weaver's proposed filing for a capture, plus Spider's link candidates. */
+export interface CapturePreview {
+  note_type: string;
+  folder: string;
+  title: string;
+  tags: string[];
+  body: string;
+  links: PreviewLink[];
+}
+
+/** Optional fields override Weaver's classification (sent when re-previewing edits). */
+export interface PreviewRequest {
+  capture_path: string;
+  note_type?: string;
+  folder?: string;
+  title?: string;
+  tags?: string[];
+}
+
+interface PreviewResponse {
+  preview: CapturePreview | null;
+}
+
+/**
+ * Dry-run a capture: returns Weaver's proposed filing + Spider's link
+ * candidates without writing anything. ``null`` means an empty capture.
+ */
+export function previewCapture(
+  req: PreviewRequest,
+  signal?: AbortSignal,
+): Promise<CapturePreview | null> {
+  return apiClient
+    .post<PreviewResponse>("/api/captures/preview", req, signal)
+    .then((r) => r.preview);
+}
+
+export interface CommitRequest {
+  capture_path: string;
+  note_type: string;
+  folder: string;
+  title: string;
+  tags: string[];
+  body: string;
+}
+
+export interface CommitResult {
+  note: NoteRecord;
+  linked: string[];
+  suggested: string[];
+  validation: string;
+  validation_mode: string;
+  validation_reasons: string[];
+  capture_archived: boolean;
+  review_required: boolean;
+  flagged: boolean;
+}
+
+/** File a previewed (and possibly edited) capture. Writes the note verbatim. */
+export function commitCapture(req: CommitRequest): Promise<CommitResult> {
+  return apiClient.post<CommitResult>("/api/captures/commit", req);
+}
+
+/** The path of a capture relative to ``threads/`` — what the API expects. */
+export function captureRelPath(
+  cap: Pick<Capture, "filePath" | "folder" | "id">,
+): string {
+  return cap.filePath
+    ? cap.filePath.split("/threads/")[1] ?? cap.filePath
+    : `${cap.folder}/${cap.id}.md`;
 }
 
 export function backendCaptureToFrontend(record: CaptureRecord): Capture {

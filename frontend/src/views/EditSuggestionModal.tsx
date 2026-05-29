@@ -1,18 +1,20 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import type { Capture, NodeType } from "../data/types";
-import { useApp } from "../context/app-ctx";
+import type { Capture } from "../data/types";
 import {
-  createNote,
-  backendNoteToFrontend,
-  titleMapFromNotes,
-  type NoteRecord,
-} from "../api/notes";
+  captureRelPath,
+  commitCapture,
+  previewCapture,
+  type CapturePreview,
+  type CommitResult,
+} from "../api/captures";
 
 interface Props {
   capture: Capture;
+  /** The already-fetched preview, used to prefill the form. */
+  preview?: CapturePreview;
   onClose: () => void;
-  onAccepted: (note: ReturnType<typeof backendNoteToFrontend>, record: NoteRecord) => void;
+  onAccepted: (result: CommitResult) => void;
 }
 
 const TYPE_OPTIONS: { value: string; label: string }[] = [
@@ -23,18 +25,27 @@ const TYPE_OPTIONS: { value: string; label: string }[] = [
   { value: "capture", label: "Capture" },
 ];
 
+/** The UI carries the frontend ``people``; the backend speaks ``person``. */
+function toBackendType(t: string): string {
+  return t === "people" ? "person" : t;
+}
+
 export function EditSuggestionModal({
   capture,
+  preview,
   onClose,
   onAccepted,
 }: Props): ReactNode {
-  const { notes } = useApp();
   const sug = capture.suggestion;
-  const initialType: string = sug?.type === "people" ? "person" : sug?.type ?? "topic";
-  const [title, setTitle] = useState(sug?.title ?? capture.title);
+  const initialType = toBackendType(preview?.note_type ?? sug?.type ?? "topic");
+  const initialTitle = preview?.title ?? sug?.title ?? capture.title;
+  const initialFolder = preview?.folder ?? sug?.destFolder ?? capture.folder;
+  const initialTags = (preview?.tags ?? sug?.tags ?? []).join(", ");
+
+  const [title, setTitle] = useState(initialTitle);
   const [type, setType] = useState(initialType);
-  const [folder, setFolder] = useState(sug?.destFolder ?? capture.folder);
-  const [tagsInput, setTagsInput] = useState((sug?.tags ?? []).join(", "));
+  const [folder, setFolder] = useState(initialFolder);
+  const [tagsInput, setTagsInput] = useState(initialTags);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -42,10 +53,10 @@ export function EditSuggestionModal({
   const canSubmit = trimmedTitle.length > 0 && !busy;
 
   const dirty =
-    title !== (sug?.title ?? capture.title) ||
+    title !== initialTitle ||
     type !== initialType ||
-    folder !== (sug?.destFolder ?? capture.folder) ||
-    tagsInput !== (sug?.tags ?? []).join(", ");
+    folder !== initialFolder ||
+    tagsInput !== initialTags;
 
   // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist.
   const requestClose = () => {
@@ -64,18 +75,32 @@ export function EditSuggestionModal({
         .split(",")
         .map((t) => t.trim().replace(/^#/, ""))
         .filter(Boolean);
-      const record = await createNote({
-        title: trimmedTitle,
-        type,
-        tags,
+      const path = captureRelPath(capture);
+      // Re-preview with the edits so Weaver regenerates the body for the chosen
+      // type, then file exactly what was regenerated (what-you-see-is-filed).
+      const fresh = await previewCapture({
+        capture_path: path,
+        note_type: type,
         folder,
-        content: capture.body,
+        title: trimmedTitle,
+        tags,
       });
-      const frontend = backendNoteToFrontend(record, titleMapFromNotes(notes));
-      onAccepted(frontend, record);
+      if (!fresh) {
+        setError("This capture is empty — nothing to file.");
+        return;
+      }
+      const result = await commitCapture({
+        capture_path: path,
+        note_type: fresh.note_type,
+        folder: fresh.folder,
+        title: fresh.title,
+        tags: fresh.tags,
+        body: fresh.body,
+      });
+      onAccepted(result);
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Create failed");
+      setError(err instanceof Error ? err.message : "Filing failed");
     } finally {
       setBusy(false);
     }
@@ -105,8 +130,8 @@ export function EditSuggestionModal({
           Edit suggestion
         </h2>
         <p className="settings-copy">
-          Override Weaver's classification before filing this capture. ⌘↵ to
-          submit.
+          Override Weaver's classification before filing this capture. Weaver
+          regenerates the note body for your chosen type. ⌘↵ to submit.
         </p>
 
         <label className="settings-field">
@@ -126,7 +151,7 @@ export function EditSuggestionModal({
             <select
               className="input mono"
               value={type}
-              onChange={(e) => setType(e.target.value as NodeType)}
+              onChange={(e) => setType(e.target.value)}
             >
               {TYPE_OPTIONS.map((opt) => (
                 <option key={opt.value} value={opt.value}>

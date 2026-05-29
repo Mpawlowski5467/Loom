@@ -9,6 +9,7 @@ writes them to the appropriate vault folder with correct frontmatter.
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
@@ -27,6 +28,18 @@ if TYPE_CHECKING:
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class CaptureProposal:
+    """A dry-run filing proposal: what Weaver *would* write, without writing it."""
+
+    note_type: str
+    folder: str
+    title: str
+    tags: list[str]
+    body: str
+    raw_capture_id: str = ""
 
 
 class Weaver(BaseAgent):
@@ -54,7 +67,6 @@ class Weaver(BaseAgent):
         reflect the chain Weaver actually ran, instead of a freshly-built
         one that looks like the chain was skipped.
         """
-        captures_dir = capture_path.parent
         captured_chain: dict[str, Any] = {}
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
@@ -69,26 +81,11 @@ class Weaver(BaseAgent):
                     "note": None,
                 }
 
-            classification = await classify_capture(raw_content, self._chat_provider)
-            note_type = classification.get("type", "topic")
-            folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
-            title = classification.get("title", raw_note.title or capture_path.stem)
-            tags_str = classification.get("tags", "")
-            raw_tags = [t.strip() for t in tags_str.split(",") if t.strip()]
-            # Snap LLM tags to existing vault vocabulary so typos like
-            # 'rafter' → 'raft' don't leak into frontmatter. New vocabulary
-            # passes through unchanged.
-            vault_tags = get_note_index().get_tag_set()
-            tags, snapped = snap_tags(raw_tags, vault_tags)
-            if snapped:
-                logger.info(
-                    "Weaver snapped tags for %s: %s",
-                    capture_path.name,
-                    ", ".join(f"{a!r}→{b!r}" for a, b in snapped),
-                )
-
+            note_type, folder, title, tags = await self._classify_and_tag(
+                raw_content, raw_note, capture_path
+            )
             body = await generate_note_body(
-                self._vault_root, raw_content, note_type, chain, self._chat_provider
+                self._vault_root, raw_content, note_type, self._chat_provider, chain
             )
 
             note = write_note(
@@ -113,7 +110,111 @@ class Weaver(BaseAgent):
                 "note": note,
             }
 
-        result = await self.execute_with_chain(captures_dir, _action)
+        result = await self.execute_with_chain(capture_path.parent, _action)
+        return result.get("note"), captured_chain.get("chain")
+
+    async def _classify_and_tag(
+        self,
+        raw_content: str,
+        raw_note: Note,
+        capture_path: Path,
+        overrides: dict[str, Any] | None = None,
+    ) -> tuple[str, str, str, list[str]]:
+        """Decide (type, folder, title, tags) for a capture.
+
+        With ``overrides`` (user edits from the inbox), use them verbatim and
+        skip the LLM. Otherwise classify via the chat provider and snap tags to
+        the existing vault vocabulary. Shared by the auto-process path and the
+        dry-run preview/commit path.
+        """
+        if overrides is not None:
+            note_type = overrides.get("note_type") or "topic"
+            folder = overrides.get("folder") or TYPE_TO_FOLDER.get(note_type, "topics")
+            title = overrides.get("title") or raw_note.title or capture_path.stem
+            tags = list(overrides.get("tags") or [])
+            return note_type, folder, title, tags
+
+        classification = await classify_capture(raw_content, self._chat_provider)
+        note_type = classification.get("type", "topic")
+        folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
+        title = classification.get("title", raw_note.title or capture_path.stem)
+        tags_str = classification.get("tags", "")
+        raw_tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+        # Snap LLM tags to existing vault vocabulary so typos like
+        # 'rafter' → 'raft' don't leak into frontmatter. New vocabulary
+        # passes through unchanged.
+        vault_tags = get_note_index().get_tag_set()
+        tags, snapped = snap_tags(raw_tags, vault_tags)
+        if snapped:
+            logger.info(
+                "Weaver snapped tags for %s: %s",
+                capture_path.name,
+                ", ".join(f"{a!r}→{b!r}" for a, b in snapped),
+            )
+        return note_type, folder, title, tags
+
+    async def propose_capture(
+        self, capture_path: Path, overrides: dict[str, Any] | None = None
+    ) -> CaptureProposal | None:
+        """Dry-run: classify + generate a body for a capture WITHOUT writing.
+
+        Bypasses ``execute_with_chain`` on purpose — a preview must not log a
+        changelog action, bump agent state, or trigger memory summarization.
+        Returns ``None`` for an empty capture.
+        """
+        raw_note = parse_note(capture_path)
+        raw_content = raw_note.body.strip()
+        if not raw_content:
+            return None
+
+        note_type, folder, title, tags = await self._classify_and_tag(
+            raw_content, raw_note, capture_path, overrides
+        )
+        body = await generate_note_body(
+            self._vault_root, raw_content, note_type, self._chat_provider
+        )
+        return CaptureProposal(
+            note_type=note_type,
+            folder=folder,
+            title=title,
+            tags=tags,
+            body=body,
+            raw_capture_id=raw_note.id,
+        )
+
+    async def commit_proposal(
+        self, capture_path: Path, proposal: CaptureProposal
+    ) -> tuple[Note | None, ReadChainResult | None]:
+        """Write a previously-proposed note verbatim (no re-classify/regenerate).
+
+        Runs through ``execute_with_chain`` so the "created" action is logged
+        and Sentinel gets a real chain to validate against — same contract as
+        ``process_capture_full``.
+        """
+        captured_chain: dict[str, Any] = {}
+
+        async def _action(chain: ReadChainResult) -> dict[str, Any]:
+            captured_chain["chain"] = chain
+            raw_note = parse_note(capture_path)
+            note = write_note(
+                self._vault_root,
+                proposal.title,
+                proposal.note_type,
+                proposal.tags,
+                proposal.folder,
+                proposal.body,
+                source=f"capture:{raw_note.id}",
+            )
+            return {
+                "action": "created",
+                "details": (
+                    f"Filed capture '{capture_path.name}' → "
+                    f"{proposal.folder}/{to_kebab(proposal.title)}.md"
+                ),
+                "note": note,
+            }
+
+        result = await self.execute_with_chain(capture_path.parent, _action)
         return result.get("note"), captured_chain.get("chain")
 
     async def create_from_modal(

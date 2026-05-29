@@ -85,8 +85,8 @@ async def generate_note_body(
     vault_root: Path,
     raw_content: str,
     note_type: str,
-    chain: ReadChainResult,  # noqa: ARG001 — read for compliance, not injected into prompt
     chat_provider: BaseProvider | None,
+    chain: ReadChainResult | None = None,  # noqa: ARG001 — read for compliance, not injected
 ) -> str:
     """Use LLM to generate a structured note body from raw content."""
     if chat_provider is None:

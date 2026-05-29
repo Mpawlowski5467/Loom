@@ -4,6 +4,14 @@
 
 Loom is a local-first, privacy-respecting AI knowledge base that lives on your machine. You point it at your notes, documents, and data — and it indexes, organizes, links, and maintains everything through a system of specialized AI agents. Your knowledge is stored as plain markdown files, visualized as an interactive graph, and searchable through natural language.
 
+> **Status legend.** This document is both a description of what ships today *and* the north-star design. Sections carry one of three tags — ✅ shipped · 🟡 partial · 🔭 planned (not yet built). Quick map:
+>
+> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle chat), the Rules Engine, the Graph UI (Paper theme, orbit mode, display controls).
+> - 🟡 **Partial**: custom agents (registry + Board UI exist; execution wiring pending), Scribe daily logs, Sentinel AI validation.
+> - 🔭 **Planned**: the Bridge (integrations), the Prompt Compiler, multi-file attachments.
+>
+> Where a section describes something not yet built, it opens with a 🔭 callout.
+
 ---
 
 ## Table of Contents
@@ -29,7 +37,7 @@ Loom is a local-first, privacy-respecting AI knowledge base that lives on your m
 - **Privacy-respecting**: nothing leaves your system unless you explicitly configure a cloud AI provider.
 - **Human-readable**: all knowledge is stored as plain markdown files you can open, edit, and version control.
 - **Git-friendly**: the entire vault is a folder you can track with git.
-- **Provider-agnostic**: bring your own AI — OpenAI, Anthropic, xAI/Grok, Azure/Copilot, or fully local with Ollama.
+- **Provider-agnostic**: bring your own AI — OpenAI, Anthropic, xAI/Grok, OpenRouter, or fully local with Ollama.
 - **Transparent**: every agent action is logged with who, when, and why. Nothing happens silently.
 - **Cross-platform**: runs on macOS, Linux, and Windows.
 
@@ -165,7 +173,7 @@ The Index is the search brain that makes the vault queryable beyond filenames an
 ### 3.1 Key Decisions
 
 - **Vector database**: LanceDB — lightweight, serverless, built for AI workloads. No infrastructure to manage.
-- **Provider-agnostic models**: unified interface supporting OpenAI, Anthropic, xAI/Grok, Azure/Copilot, and local models via Ollama. Embedding and chat models are configured independently.
+- **Provider-agnostic models**: unified interface supporting OpenAI, Anthropic, xAI/Grok, OpenRouter, and local models via Ollama. Embedding and chat models are configured independently, and every provider call is wrapped and recorded as a trace (see 3.3).
 - **Smart chunking**: notes are split by `##` markdown headers. Each section is embedded individually with a reference back to its parent note. Keeps chunks semantically meaningful while enabling precise retrieval.
 - **Hybrid + graph-aware search**: three-layer search strategy:
   1. **Semantic similarity**: embeddings via LanceDB for natural language matching
@@ -197,10 +205,23 @@ providers:
 
   xai:
     api_key: ${XAI_API_KEY}
-    chat_model: grok-2
+    chat_model: grok-3
+
+  openrouter:
+    api_key: ${OPENROUTER_API_KEY}
+    chat_model: qwen/qwen3-next-80b-a3b-instruct:free
 ```
 
 **Key insight**: embedding and chat are separate concerns. You might use cheap local embeddings via Ollama for indexing (runs constantly) but route agent chat/reasoning through Claude or GPT for quality. Mix and match freely.
+
+### 3.3 Provider Tracing
+
+Every provider resolves through a central **registry** and is wrapped in a `TracedProvider`. Each model exchange — provider, model, system prompt, messages, response, duration, and the calling context (`weaver`, `council`, …) — is recorded automatically:
+
+- **In-memory ring buffer** (500 entries) for the live "raw call" view.
+- **On-disk mirror** under `.loom/traces/<YYYY-MM-DD>/<id>.json`, so traces survive restarts and you can page back beyond the buffer.
+
+The UI reads recent traces from `/api/traces` and older ones from `/api/traces/disk`. The "raw call" link on any chat message opens the exact request/response behind it — there is no hidden prompt.
 
 ---
 
@@ -345,9 +366,11 @@ Agents coordinate through two mechanisms:
 - **Pipelines** for complex workflows: capture arrives → Weaver creates note → Spider links it → Scribe updates index → Sentinel validates
 - **Event-driven** for real-time reactions: file modified → re-index, new capture detected → trigger Weaver
 
-### 4.10 Custom Agents (Future)
+### 4.10 Custom Agents 🟡 Partial
 
-Custom Shuttle agents will come in a later version. Users will drop a new folder into `agents/` with a config file, and the system picks it up. Custom agents are always Shuttle-tier — the Loom layer is locked down and protected.
+Custom Shuttle agents are partly here. A registry API (`/api/agents/registry`) and an **Add agent** modal on the Board let you create, edit, and delete your own agents, persisted to `agents.yaml` in the vault directory. Custom agents are always Shuttle-tier — the seven built-in agents are locked down and read-only.
+
+What's still pending is **execution wiring**: custom agents show up, store a system prompt, and can be edited, but they don't yet run a full task loop. The registry + UI are the foundation; running them end-to-end is the next step.
 
 ### 4.11 Global Changelog
 
@@ -432,6 +455,8 @@ A single chat interface for talking to the Loom Layer as a collective. When you 
 3. Agents discuss internally — Spider explains the link, Sentinel confirms it passed validation, Archivist notes there's a related duplicate
 4. You see the full back-and-forth, labeled by agent, followed by a final consolidated answer
 5. Conversation is saved in `agents/_council/chat/`
+
+**Implementation note (✅ shipped):** the Council endpoint streams. The backend fans the question out to all five agents concurrently — capped at three in flight so a single turn doesn't exhaust a free model's per-minute budget — emits every agent's contribution in one `contributions` event, then streams the aggregator's consolidated answer token-by-token over Server-Sent Events (`POST /api/chat/send/stream`). The final `done` frame carries a `trace_id` for the raw aggregator call.
 
 **Example thread:**
 
@@ -567,8 +592,8 @@ The Graph UI is the visual interface where users see and interact with their kno
 
 - **Web-based (localhost)**: runs a local FastAPI server, opens in browser. Cross-platform for free — no packaging headaches on macOS, Linux, or Windows.
 - **Sigma.js**: WebGL-powered graph rendering. Handles thousands of nodes performantly without frame drops.
-- **Plate (Slate.js)**: rich WYSIWYG markdown editor. Built on Slate.js, highly customizable, React-native.
-- **Dark theme only** for v1.
+- **Custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`): a hand-rolled renderer with `[[wikilink]]` support and inline marks — not a third-party WYSIWYG framework.
+- **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Navy, forest, and sepia variants ship alongside it in `tokens.css`.
 
 ### 6.2 Layout
 
@@ -635,7 +660,7 @@ Rendered markdown view of a specific note when selected from graph or file tree.
 - Rendered content with clickable `[[wikilinks]]`
 - Frontmatter metadata display (type, tags)
 - Backlinks section (what links TO this note)
-- Edit history section (who changed what, when, why — color-coded amber for user, purple for agent)
+- Edit history section (who changed what, when, why — color-coded brick-red for user, ink-blue for agent)
 - View/Edit toggle buttons
 
 ### 6.5 File Explorer
@@ -652,26 +677,19 @@ Always-visible left sidebar showing the vault as a traditional file tree (VS Cod
 - Search/filter the file tree with a dedicated filter input
 - See file metadata at a glance: colored dot for type, connection count, last modified
 
-### 6.6 Rich Editor
+### 6.6 Editor
 
-When editing a note, the right sidebar becomes a WYSIWYG editor powered by Plate (Slate.js).
-
-**Toolbar:**
-- Text formatting: Bold, Italic, Strikethrough, Code
-- Headings: H1, H2, H3
-- Lists: Bullet, Numbered, Checkbox
-- Special: Insert `[[wikilink]]` button
+When editing a note, the right sidebar swaps to an editing surface backed by Loom's **custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`) — no third-party WYSIWYG framework.
 
 **Meta section above editor:**
-- Type selector (dropdown: topic, project, person, daily)
+- Type selector (topic, project, person, daily)
 - Tags (chips with add/remove)
-- Folder selector (dropdown)
+- Folder selector
 
 **Editor body:**
-- WYSIWYG rendering of markdown
-- `[[wikilinks]]` rendered as clickable purple chips
-- Live cursor line highlighting
-- Standard keyboard shortcuts for formatting
+- Markdown source with a live rendered preview
+- `[[wikilinks]]` rendered as clickable chips and resolved against the vault
+- Inline marks (bold, italic, code) and `##` headings
 
 ### 6.7 Create Note Modal
 
@@ -698,9 +716,11 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 | **Pin nodes** | Pin a node in place so it doesn't move with physics. Useful for anchoring key hubs. |
 | **Live filtering** | Filter chips at top of graph: by type (project, topic, person, daily), tag, date, agent author. Filters apply instantly. |
 
-**Layout**: force-directed (physics-based). Nodes push and pull organically. Natural clustering emerges from link density.
+**Layout**: two modes. **Constellation** is force-directed (ForceAtlas2) — nodes push and pull organically, and natural clustering emerges from link density. **Orbit** is focus-first: a selected note sits at the center with the rest in concentric rings (rings / spiral / arms scenes).
 
-**Animations**: subtle. Smooth transitions when filtering, adding, or removing nodes. Not flashy.
+**Display controls**: a panel exposes ~9 knobs — label size & density, node size, spacing, edge thickness, breathing, and edge travelers — persisted to `localStorage` with a one-click reset.
+
+**Animations**: subtle. Nodes "breathe" (gentle size oscillation) and short dashes ("travelers") slide along edges so the graph reads as alive. Smooth transitions when filtering, adding, or removing nodes.
 
 ### 6.9 Graph Visuals
 
@@ -711,66 +731,67 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 | **Node color** | Color-coded by note type (see Color System) |
 | **Node glow** | Glow effect only on hover or when active/selected. No persistent glow. |
 | **Edges** | Lines that get thicker based on connection density between areas |
-| **Edge color** | Muted purple for thick connections, subtle gray for thin |
+| **Edge color** | Muted ink hairlines; the `--agent` ink-blue tints denser links |
+| **Edge travelers** | Short dashes animate along edges (source → target) on an SVG overlay; pace is adjustable or off |
+| **Breathing** | Nodes gently oscillate in size when enabled |
 
 ### 6.10 Notifications & Real-Time
 
-- **Toast notifications**: small popups in the bottom-right corner that fade away. Purple border for agent actions. Shown for note creation, linking, issue flagging.
+- **Toast notifications**: small popups in the bottom-right corner that fade away. Ink-blue border (`--agent`) for agent actions. Shown for note creation, linking, issue flagging.
 - **Auto-refresh**: graph updates on a short interval (every 5-10 seconds) as agents work. No manual reload required.
 
 ### 6.11 Color System
 
-Loom uses a dark color palette with amber for user actions and purple for agent/system actions. This split provides instant visual distinction between "I did this" and "an agent did this."
+Loom's default is the **Paper** theme — warm cream paper surfaces with a single duotone accent split: **brick red** for user actions and **ink blue** for agent actions. This split gives instant "I did this" vs "an agent did this" distinction. Navy, forest, and sepia variants ship alongside Paper in `tokens.css` (same token names, different palettes).
 
-#### Base Colors
+#### Surfaces & Ink (Paper)
 
-| Role | Hex |
+| Token | Hex |
 |------|-----|
-| Background (base) | `#0f172a` |
-| Background (surface) | `#1e293b` |
-| Background (elevated) | `#334155` |
-| Text (primary) | `#e2e8f0` |
-| Text (secondary) | `#94a3b8` |
+| `--bg-base` | `#f5f1e8` |
+| `--bg-surface` | `#ede8da` |
+| `--bg-elevated` | `#e3dcca` |
+| `--ink` | `#1a1815` |
+| `--ink-2` | `#5c5851` |
+| `--ink-3` | `#8c877d` |
+
+Hairlines are `rgba(26,24,21,0.08)` / `rgba(26,24,21,0.18)`.
 
 #### Accent Colors (Split by Context)
 
-| Role | Hex | Usage |
-|------|-----|-------|
-| User accent (amber) | `#f59e0b` | Buttons, edits, create actions, user history dots, active tabs |
-| Agent accent (purple) | `#a78bfa` | Agent badges, graph edges, system actions, wikilinks, toast borders |
+| Role | Token | Hex | Usage |
+|------|-------|-----|-------|
+| User | `--you` | `#a83a2c` (brick red) | Buttons, edits, create actions, user history dots |
+| Agent | `--agent` | `#2d4a7c` (ink blue) | Agent badges, graph edges, system actions, wikilinks, toast borders |
 
-#### Node Colors (Muted Jewel Tones)
+#### Node Colors
 
-| Note Type | Hex |
-|-----------|-----|
-| Project | `#60a5fa` |
-| Topic | `#4ade80` |
-| Person | `#c084fc` |
-| Daily | `#94a3b8` |
-| Capture | `#fbbf24` |
-| Custom | `#2dd4bf` |
-
-#### Status Colors
-
-| Role | Hex |
-|------|-----|
-| Danger / archive | `#f87171` |
-| Success / toast | `#34d399` |
+| Note Type | Token | Hex |
+|-----------|-------|-----|
+| Project | `--node-project` | `#2d4a7c` (ink blue) |
+| Topic | `--node-topic` | `#4a6b3a` (moss) |
+| Person | `--node-person` | `#6b3a6b` (aubergine) |
+| Daily | `--node-daily` | `#8c877d` (graphite) |
+| Capture | `--node-capture` | `#a8722a` (ochre) |
+| Custom | `--node-custom` | `#2d6b6b` (teal ink) |
 
 #### Typography
 
 | Role | Font |
 |------|------|
-| UI / headings / body | Sora |
-| Code / timestamps / monospace | JetBrains Mono |
+| Prose & headings | Fraunces (serif) |
+| UI chrome | Inter (sans) |
+| Timestamps / tags / labels | JetBrains Mono |
 
-#### Logo
+#### Motion
 
-Amber-to-purple gradient (`#f59e0b` → `#a78bfa`), representing the user-agent duality.
+Default ease for any transition longer than 100ms: `cubic-bezier(.2, .7, .3, 1)`.
 
 ---
 
 ## 7. Layer 6: The Bridge
+
+> 🔭 **Planned — not yet built.** There is no `backend/bridge/` today; the integrations below are a design target, not shipped code. The capture-processing pipeline they would feed (Weaver → Spider → Scribe → Sentinel) *is* real, so dropping files into `captures/` manually already works.
 
 The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
 
@@ -806,6 +827,8 @@ Spider links it → Scribe updates indexes → Sentinel validates
 ---
 
 ## 8. Layer 7: The Prompt Compiler
+
+> 🔭 **Planned — not yet built.** There is no `backend/compiler/` today. Agents currently assemble prompts directly and call the provider registry (which traces every call — see 3.3). The optimization pipeline below is the intended evolution, not current behavior.
 
 The Prompt Compiler is the system that sits between agents and the LLM. Every prompt passes through it before being sent. Its job is to produce token-efficient, well-structured, high-quality prompts every time.
 
@@ -964,6 +987,8 @@ This creates a feedback loop. Over time you can see which template versions prod
 
 ## 9. File Support (Future)
 
+> 🔭 **Planned — not yet built.** Loom is markdown-only today. The attachments model below is a future direction.
+
 Loom's vault is markdown-first, but will support additional file types in a future version.
 
 ### 9.1 Supported File Types
@@ -1024,14 +1049,16 @@ Attachments appear as smaller secondary nodes connected to their parent note, vi
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python + FastAPI |
-| Frontend | React + Sigma.js |
-| Rich Editor | Plate (Slate.js) |
+| Backend | Python 3.11+ + FastAPI |
+| Frontend | React + TypeScript + Sigma.js |
+| Editor | Custom Markdown renderer (`renderMarkdown.tsx`) |
 | Vector DB | LanceDB |
 | Storage | Markdown files + YAML frontmatter |
-| AI Models | Provider-agnostic (OpenAI, Anthropic, xAI, Ollama) |
-| Prompt Compiler | Markdown templates + Python optimization pipeline |
-| Theme | Dark only (v1) |
+| AI Models | Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama) |
+| Tracing | In-memory ring + on-disk mirror (`/api/traces`) |
+| Streaming | Server-Sent Events (Council chat) |
+| Prompt Compiler | 🔭 Planned — Markdown templates + Python optimization pipeline |
+| Theme | Paper by default; navy / forest / sepia variants |
 | Delivery | Localhost web app (browser-based) |
 | Repo | Monorepo |
 
@@ -1041,23 +1068,34 @@ Attachments appear as smaller secondary nodes connected to their parent note, vi
 
 ```
 loom/
-├── backend/                # Python — FastAPI, agents, index, rules engine
-│   ├── api/                # FastAPI routes (vault, search, agents, graph data)
-│   ├── agents/             # Agent logic
+├── backend/                # Python — FastAPI, agents, index
+│   ├── api/
+│   │   ├── main.py         # app entry + router registration
+│   │   └── routers/        # notes, graph, search, chat, captures, agents, traces, …
+│   ├── agents/
 │   │   ├── loom/           # Weaver, Spider, Archivist, Scribe, Sentinel
 │   │   └── shuttle/        # Researcher, Standup
-│   ├── compiler/           # Prompt Compiler (optimization pipeline)
-│   ├── index/              # LanceDB, embeddings, smart chunking, hybrid search
-│   ├── rules/              # Rules engine parser (schemas, policies, workflows)
-│   ├── bridge/             # GitHub, Email, Calendar integrations
-│   └── core/               # Vault management, file watcher, config, read chain
-├── frontend/               # React — Graph UI
-│   ├── views/              # Graph, Board, Thread, Inbox
-│   ├── components/         # Sidebar, search bar, agent cards, file tree, editor
-│   └── lib/                # Sigma.js graph logic, Plate editor config
-├── docs/                   # Documentation
-├── examples/               # Example vaults, custom rules, workflows
+│   ├── core/               # vault, notes, config, watcher, activity, traces
+│   │   └── providers/      # openai, anthropic, xai, openrouter, ollama + registry (TracedProvider)
+│   ├── index/              # LanceDB indexer, searcher, chunker
+│   ├── scripts/            # maintenance scripts
+│   └── tests/              # pytest
+├── frontend/               # React + TypeScript — Graph UI
+│   └── src/
+│       ├── views/          # Graph, Board, Inbox, Thread, Settings, Palette + onboarding
+│       ├── components/     # layout, primitives, graph (toolbar + display controls)
+│       ├── context/        # AppContext, useLoomConfig, useAgentPolling
+│       ├── api/            # HTTP clients (one per resource) + client.ts
+│       ├── graph/          # Sigma setup, layouts, travelers, breathing, drag
+│       ├── editor/         # custom Markdown renderer
+│       ├── theme/          # theme tokens + runtime swap
+│       └── styles/         # tokens.css + view stylesheets
+├── docs/                   # ARCHITECTURE.md, architecture-ref.md, style-guide.md
+├── examples/               # demo vault, rules, schemas
+├── scripts/                # repo-level scripts
 └── pyproject.toml
+
+# 🔭 Planned (not present today): backend/compiler/ (Prompt Compiler), backend/bridge/ (integrations).
 ```
 
 ---
@@ -1079,7 +1117,7 @@ loom/
 - Bidirectional sync between file tree and graph
 - Basic keyword search (global + file tree filter)
 - Create note modal (sends request to Weaver pipeline, works manually before agents exist)
-- Rich editor (Plate) in right sidebar with toolbar and meta fields
+- Rich editor (custom Markdown renderer) in right sidebar with meta fields
 - Toast notifications placeholder
 - Auto-refresh graph on short interval
 - **Goal**: manually write notes, open the UI, see your knowledge graph, browse and edit from the file explorer

@@ -174,11 +174,30 @@ export function ProviderConfig({
   };
 
   const skip = () => {
+    const ok = window.confirm(
+      "Skip provider setup? Agents, search, and graph linking stay offline " +
+        "until you add a provider in Settings → Providers.",
+    );
+    if (!ok) return;
     onChange({ providers: [], chatProvider: null, embedProvider: null });
     onSubmit();
   };
 
-  const canFinish = providers.length === 0 || (chatProvider && embedProvider);
+  const tested = (name: string | null): boolean =>
+    !!name && testResults[name]?.ok === true;
+  // Finish requires the chosen chat + embed providers to have a passing
+  // connection test, so you can't land in an app where every agent silently
+  // fails on an empty or bad key. The Skip button is the explicit escape.
+  const canFinish =
+    providers.length > 0 &&
+    !!chatProvider &&
+    !!embedProvider &&
+    tested(chatProvider) &&
+    tested(embedProvider);
+  const finishHint =
+    providers.length > 0 && !canFinish
+      ? "Test your chat and embed providers to finish — or Skip for now."
+      : null;
 
   return (
     <div className="onb-step">
@@ -335,6 +354,7 @@ export function ProviderConfig({
       )}
 
       {submitError && <div className="onb-submit-error">{submitError}</div>}
+      {finishHint && <div className="onb-finish-hint">{finishHint}</div>}
 
       <div className="onb-actions">
         <button className="btn btn-md" onClick={onBack} disabled={submitting}>

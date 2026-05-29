@@ -463,3 +463,110 @@
   border-color: var(--ink-3);
   color: var(--ink);
 }
+
+/* ── Board chrome: legend + sidebar ────────────────────────────── */
+.board-status-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.board-sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  padding: 12px 12px 12px 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.changelog-empty {
+  padding: 12px 4px;
+  font-size: 12px;
+  color: var(--ink-3);
+  font-style: italic;
+}
+.board-wikilink {
+  color: var(--agent);
+  font-family: var(--serif);
+  font-style: italic;
+}
+
+/* ── Round-table modal ─────────────────────────────────────────── */
+.board-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(var(--ink-rgb), 0.32);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  animation: viewIn 200ms var(--ease);
+}
+.board-modal {
+  width: min(760px, 92vw);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: var(--bg-base);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  box-shadow: 0 16px 48px rgba(var(--ink-rgb), 0.22);
+  padding: 18px 20px 22px;
+}
+.board-modal-h {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.board-modal-close {
+  background: transparent;
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  border-radius: 999px;
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+  cursor: pointer;
+  font-size: 12px;
+  transition: all 160ms var(--ease);
+}
+.board-modal-close:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+.rt-ask-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  pointer-events: auto;
+  width: min(420px, 70%);
+}
+.rt-ask-row .input {
+  flex: 1;
+  font-size: 12px;
+}
+.rt-raw-btn {
+  margin-left: 6px;
+  background: transparent;
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  border-radius: 3px;
+  font-size: 9px;
+  font-family: var(--mono);
+  padding: 1px 4px;
+  cursor: pointer;
+}
+.rt-raw-btn:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+.rt-bubble.thinking {
+  opacity: 0.55;
+  font-style: italic;
+}
+.rt-bubble.error {
+  color: var(--you);
+}
+.rt-bubble[data-empty="true"] {
+  opacity: 0.4;
+  font-style: italic;
+}

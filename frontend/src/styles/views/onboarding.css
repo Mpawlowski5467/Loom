@@ -404,6 +404,14 @@
   background: var(--you-bg);
 }
 
+.onb-finish-hint {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+  text-align: right;
+  margin-top: 4px;
+}
+
 /* ── Actions ──────────────────────────────────────────────────── */
 .onb-actions {
   display: flex;

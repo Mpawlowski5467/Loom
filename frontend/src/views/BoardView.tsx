@@ -2,50 +2,54 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 import type { BoardMode } from "../data/types";
 import { ModeToggle } from "../components/primitives/ModeToggle";
+import { StatusBadge } from "../components/primitives/StatusBadge";
 import { Council } from "../components/Council";
 import { TraceFeed } from "../components/TraceFeed";
 import { CardsMode } from "./board/CardsMode";
-import { RoundTableMode } from "./board/RoundTableMode";
 import { PulseMode } from "./board/PulseMode";
+import { RoundTableModal } from "./board/RoundTableModal";
 
 export function BoardView(): ReactNode {
-  const [mode, setMode] = useState<BoardMode>("cards");
+  const [viz, setViz] = useState<BoardMode>("cards");
+  const [rtOpen, setRtOpen] = useState(false);
 
   return (
     <div className="board-view">
       <div className="board-main">
         <div className="board-toolbar">
           <div className="board-h">Agents</div>
+          <div className="board-status-legend" aria-label="Status key">
+            <StatusBadge state="running" label="running" />
+            <StatusBadge state="idle" label="settling" />
+            <StatusBadge state="idle" label="idle" />
+          </div>
+          <button
+            type="button"
+            className="btn btn-md"
+            onClick={() => setRtOpen(true)}
+          >
+            <span aria-hidden="true">◯</span>
+            <span>round table</span>
+          </button>
           <ModeToggle
-            value={mode}
-            onChange={setMode}
-            ariaLabel="Board mode"
+            value={viz}
+            onChange={setViz}
+            ariaLabel="Agent view"
             options={[
               { value: "cards", icon: "▦", label: "cards" },
-              { value: "round-table", icon: "◯", label: "round table" },
               { value: "pulse", icon: "∿", label: "pulse" },
             ]}
           />
         </div>
-        <div key={mode} className="board-mode-content">
-          {mode === "cards" && <CardsMode />}
-          {mode === "round-table" && <RoundTableMode />}
-          {mode === "pulse" && <PulseMode />}
+        <div key={viz} className="board-mode-content">
+          {viz === "cards" ? <CardsMode /> : <PulseMode />}
         </div>
       </div>
-      <div
-        style={{
-          width: 280,
-          flexShrink: 0,
-          padding: "12px 12px 12px 0",
-          display: "flex",
-          flexDirection: "column",
-          minHeight: 0,
-        }}
-      >
+      <div className="board-sidebar">
         <TraceFeed />
       </div>
       <Council />
+      {rtOpen && <RoundTableModal onClose={() => setRtOpen(false)} />}
     </div>
   );
 }

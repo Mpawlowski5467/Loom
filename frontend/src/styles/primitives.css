@@ -254,6 +254,21 @@
   display: block;
   padding: 5px 0;
 }
+.wikilink-new {
+  color: var(--ink-3);
+}
+.wikilink-new::after {
+  height: 0;
+  background: transparent;
+  border-bottom: 1px dashed var(--ink-3);
+}
+.wikilink-new:hover {
+  color: var(--you);
+  background: var(--you-bg, transparent);
+}
+.wikilink-new:hover::after {
+  border-bottom-color: var(--you);
+}
 
 /* ── Dot (type indicator) ──────────────────────────────────────── */
 .dot {

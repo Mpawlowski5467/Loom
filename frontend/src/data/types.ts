@@ -21,7 +21,9 @@ export type SettingsSection =
 
 export type GraphMode = "constellation" | "orbit";
 
-export type BoardMode = "cards" | "round-table" | "pulse";
+// Cards is the agent dashboard; pulse is an alternate viz of the same agents.
+// Round Table is no longer a peer mode — it opens as a modal.
+export type BoardMode = "cards" | "pulse";
 
 export type AgentLayer = "loom" | "shuttle";
 

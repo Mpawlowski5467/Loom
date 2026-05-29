@@ -78,8 +78,9 @@ Task prompts: @docs/tasks/
 **Implemented**
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
 - Both Shuttle Layer agents (Researcher, Standup)
-- 4 views: GraphView (Sigma.js), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards/round-table/pulse)
-- Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig
+- 4 views: GraphView (Sigma.js), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle, round-table modal)
+- Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
+- Settings UI: Appearance, Providers (with key validation), Vault, About (diagnostics + re-run onboarding), Danger Zone
 - Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
 - Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
 - Provider system: OpenAI, Anthropic, xAI, Ollama — chat + embed independently configurable
@@ -91,11 +92,10 @@ Task prompts: @docs/tasks/
 - Scribe daily-log generation (index works; summary tuning)
 - Sentinel full AI-assisted validation (LLM path exists with static fallback)
 - Standup calendar integration (generate() works; no calendar link)
-- Settings UI (post-onboarding theme/provider/vault management) — not yet started
 
 **Known gaps**
-- Zero frontend tests (backend has 30 test files; frontend has none)
-- No `.env.example` (README implies one exists)
+- Thin frontend test coverage (7 test files — onboarding, primitives, context, markdown; views + graph largely untested)
+- AppContext still hosts most global state; only `useAgentPolling` is split out so far
 
 ## Conventions
 

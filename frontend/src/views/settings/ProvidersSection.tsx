@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Save } from "lucide-react";
 import { patchConfig } from "../../api/config";
@@ -31,8 +31,12 @@ export function ProvidersSection(): ReactNode {
     Partial<Record<ProviderName, TestProviderResponse>>
   >({});
   const [testing, setTesting] = useState<string | null>(null);
+  // Hydrate the forms only once. Without this, changing the default-provider
+  // radio (which refreshes config) would re-fetch and wipe unsaved key edits.
+  const hydratedRef = useRef(false);
 
   useEffect(() => {
+    if (hydratedRef.current) return;
     let cancelled = false;
     getSettingsProviders()
       .then((result) => {
@@ -45,6 +49,7 @@ export function ProvidersSection(): ReactNode {
           initial && next[initial] ? initial : (configured[0] ?? ""),
         );
         setOpenName(configured[0] ?? "openai");
+        hydratedRef.current = true;
       })
       .catch((err) => {
         if (!cancelled) {
@@ -138,6 +143,20 @@ export function ProvidersSection(): ReactNode {
   const save = async () => {
     if (configuredNames.length === 0) {
       setMessage("At least one provider must be configured.");
+      return;
+    }
+    // Block empty keys: agents fail with a cryptic error later otherwise.
+    // A key counts if it's typed now or already stored on the backend.
+    const missingKeys = configuredNames.filter((name) => {
+      if (name === "ollama") return false;
+      const provider = providers[name];
+      return !provider?.apiKey.trim() && !provider?.apiKeySet;
+    });
+    if (missingKeys.length > 0) {
+      const labels = missingKeys.map(
+        (name) => PROVIDER_BY_NAME.get(name)?.label ?? name,
+      );
+      setMessage(`Add an API key before saving: ${labels.join(", ")}.`);
       return;
     }
     setSaving(true);

@@ -9,24 +9,37 @@ interface Props {
 }
 
 export function TraceModal({ traceId, onClose }: Props): ReactNode {
-  const [trace, setTrace] = useState<TraceDetail | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // Tag the result with its traceId so a stale fetch never renders against a
+  // newer id — lets us avoid resetting state synchronously inside the effect.
+  const [result, setResult] = useState<{
+    id: string;
+    trace: TraceDetail | null;
+    error: string | null;
+  }>({ id: "", trace: null, error: null });
 
   useEffect(() => {
     let cancelled = false;
-    setTrace(null);
-    setError(null);
     fetchTrace(traceId)
       .then((t) => {
-        if (!cancelled) setTrace(t);
+        if (!cancelled) setResult({ id: traceId, trace: t, error: null });
       })
       .catch((e) => {
-        if (!cancelled) setError(e instanceof Error ? e.message : String(e));
+        if (!cancelled) {
+          setResult({
+            id: traceId,
+            trace: null,
+            error: e instanceof Error ? e.message : String(e),
+          });
+        }
       });
     return () => {
       cancelled = true;
     };
   }, [traceId]);
+
+  const current = result.id === traceId ? result : null;
+  const trace = current?.trace ?? null;
+  const error = current?.error ?? null;
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

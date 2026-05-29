@@ -16,7 +16,7 @@ type RemoteOutcome =
   | { kind: "error"; query: string };
 
 export function Palette(): ReactNode {
-  const { notes, openNote, setPaletteOpen } = useApp();
+  const { notes, openNote, flyToNode, setPaletteOpen } = useApp();
   const [q, setQ] = useState("");
   const [sel, setSel] = useState(0);
   const [outcome, setOutcome] = useState<RemoteOutcome | null>(null);
@@ -82,6 +82,14 @@ export function Palette(): ReactNode {
     setPaletteOpen(false);
   };
 
+  // Reveal in graph: fly the camera to the node instead of opening the reader.
+  const reveal = (idx: number) => {
+    const r = results[idx];
+    if (!r) return;
+    flyToNode(r.note_id);
+    setPaletteOpen(false);
+  };
+
   return (
     <div
       className="palette-overlay"
@@ -111,7 +119,8 @@ export function Palette(): ReactNode {
               setSel((s) => Math.max(0, s - 1));
             } else if (e.key === "Enter") {
               e.preventDefault();
-              choose(sel);
+              if (e.altKey) reveal(sel);
+              else choose(sel);
             } else if (e.key === "Escape") {
               setPaletteOpen(false);
             }
@@ -142,7 +151,7 @@ export function Palette(): ReactNode {
               aria-selected={i === sel}
               className="palette-item"
               onMouseEnter={() => setSel(i)}
-              onClick={() => choose(i)}
+              onClick={(e) => (e.altKey ? reveal(i) : choose(i))}
             >
               <div className="palette-item-h">
                 <div className="palette-item-h-l">
@@ -159,7 +168,7 @@ export function Palette(): ReactNode {
           ))}
         </div>
         <div className="palette-foot">
-          <span>↑↓ navigate · ↵ open · esc close</span>
+          <span>↑↓ navigate · ↵ open · ⌥↵ reveal · esc close</span>
           <span>{footLabel}</span>
         </div>
       </div>

@@ -271,3 +271,148 @@
 .related-row:hover {
   color: var(--ink);
 }
+
+/* ── Extended markdown (react-markdown + remark-gfm) ───────────────── */
+.thread-body h1 {
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  margin: 30px 0 14px;
+  color: var(--ink);
+}
+.thread-body h4,
+.thread-body h5,
+.thread-body h6 {
+  font-family: var(--serif);
+  font-weight: 600;
+  margin: 18px 0 8px;
+  color: var(--ink);
+}
+.thread-body h4 {
+  font-size: 15px;
+}
+.thread-body h5,
+.thread-body h6 {
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.thread-body ol {
+  margin: 8px 0 16px;
+  padding-left: 24px;
+}
+.thread-body ol li {
+  margin-bottom: 4px;
+}
+.thread-body li > ul,
+.thread-body li > ol {
+  margin: 4px 0 4px;
+}
+.thread-body a {
+  color: var(--agent);
+  text-underline-offset: 2px;
+}
+.thread-body blockquote {
+  margin: 14px 0 18px;
+  padding: 2px 16px;
+  border-left: 3px solid var(--agent);
+  color: var(--ink-2);
+  font-style: italic;
+}
+.thread-body blockquote p:last-child {
+  margin-bottom: 0;
+}
+.thread-body hr {
+  border: none;
+  border-top: 1px solid var(--rule);
+  margin: 28px 0;
+}
+.thread-body del {
+  color: var(--ink-3);
+}
+.thread-body table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 14px 0 20px;
+  font-size: 14px;
+}
+.thread-body th,
+.thread-body td {
+  border: 1px solid var(--rule);
+  padding: 7px 11px;
+  text-align: left;
+}
+.thread-body th {
+  background: var(--bg-surface);
+  font-family: var(--font);
+  font-weight: 600;
+  font-size: 12.5px;
+}
+.thread-body td {
+  font-family: var(--font);
+  font-size: 13.5px;
+}
+.thread-body ul.contains-task-list {
+  list-style: none;
+  padding-left: 4px;
+}
+.thread-body li input[type="checkbox"] {
+  margin-right: 8px;
+  accent-color: var(--agent);
+}
+
+/* ── Syntax highlighting (rehype-highlight / hljs), Paper-toned ────── */
+.thread-body .hljs,
+.inbox-detail-body .hljs {
+  color: var(--ink);
+  background: none;
+}
+.thread-body .hljs-comment,
+.thread-body .hljs-quote,
+.inbox-detail-body .hljs-comment,
+.inbox-detail-body .hljs-quote {
+  color: var(--ink-3);
+  font-style: italic;
+}
+.thread-body .hljs-keyword,
+.thread-body .hljs-selector-tag,
+.thread-body .hljs-literal,
+.thread-body .hljs-section,
+.inbox-detail-body .hljs-keyword,
+.inbox-detail-body .hljs-selector-tag,
+.inbox-detail-body .hljs-literal,
+.inbox-detail-body .hljs-section {
+  color: var(--agent);
+  font-weight: 600;
+}
+.thread-body .hljs-string,
+.thread-body .hljs-regexp,
+.thread-body .hljs-addition,
+.inbox-detail-body .hljs-string,
+.inbox-detail-body .hljs-regexp,
+.inbox-detail-body .hljs-addition {
+  color: var(--node-topic);
+}
+.thread-body .hljs-number,
+.thread-body .hljs-symbol,
+.thread-body .hljs-deletion,
+.inbox-detail-body .hljs-number,
+.inbox-detail-body .hljs-symbol,
+.inbox-detail-body .hljs-deletion {
+  color: var(--you);
+}
+.thread-body .hljs-title,
+.thread-body .hljs-function .hljs-title,
+.thread-body .hljs-attr,
+.inbox-detail-body .hljs-title,
+.inbox-detail-body .hljs-attr {
+  color: var(--node-person);
+}
+.thread-body .hljs-built_in,
+.thread-body .hljs-type,
+.thread-body .hljs-attribute,
+.inbox-detail-body .hljs-built_in,
+.inbox-detail-body .hljs-type,
+.inbox-detail-body .hljs-attribute {
+  color: var(--node-custom);
+}

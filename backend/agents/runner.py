@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -114,7 +115,7 @@ class AgentRunner:
             return result
 
         try:
-            note = await weaver.process_capture(capture_path)
+            note, weaver_chain = await weaver.process_capture_full(capture_path)
             if note is None:
                 result.errors.append("Weaver returned no note (empty capture?)")
                 return result
@@ -150,11 +151,17 @@ class AgentRunner:
         sentinel = get_sentinel()
         if sentinel is not None:
             try:
-                # Re-run chain for validation context
-                from agents.chain import ReadChain
+                # Reuse the chain Weaver already ran (same vault.yaml + prime.md)
+                # instead of re-reading it all from disk. Fall back to a fresh
+                # run only if Weaver didn't surface one.
+                chain_result = weaver_chain
+                if chain_result is None:
+                    from agents.chain import ReadChain
 
-                chain = ReadChain(self._vault_root)
-                chain_result = chain.execute("sentinel", note_path)
+                    chain = ReadChain(self._vault_root)
+                    chain_result = await asyncio.to_thread(
+                        chain.execute, "sentinel", note_path
+                    )
                 result.validation = await sentinel.validate_action(
                     "weaver", "created", note_path, chain_result
                 )

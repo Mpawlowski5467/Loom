@@ -9,25 +9,38 @@ interface Props {
 }
 
 export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
-  const { resolveWikilink, openNote, noteById } = useApp();
+  const { resolveWikilink, openNote, noteById, setNewNoteOpen, setNewNoteTitle } =
+    useApp();
   const id = resolveWikilink(target);
   const note = id ? noteById(id) : undefined;
   const text = label ?? target;
-  const unresolved = !id;
+
+  if (!id) {
+    // Unresolved link — offer to create the missing note instead of dead-ending.
+    return (
+      <button
+        className={`wikilink wikilink-new ${block ? "backlink" : ""}`}
+        onClick={() => {
+          setNewNoteTitle(target);
+          setNewNoteOpen(true);
+        }}
+        title={`Create note "${target}"`}
+        aria-label={`Create note ${text}`}
+      >
+        {text}
+      </button>
+    );
+  }
 
   return (
     <button
       className={`wikilink ${block ? "backlink" : ""}`}
       onClick={() => {
-        if (id) {
-          onOpen?.(target);
-          openNote(id);
-        }
+        onOpen?.(target);
+        openNote(id);
       }}
-      disabled={unresolved}
-      title={note ? `${note.type} · ${note.folder}` : `unresolved: ${target}`}
+      title={note ? `${note.type} · ${note.folder}` : target}
       aria-label={`Open note ${text}`}
-      style={unresolved ? { opacity: 0.5 } : undefined}
     >
       {text}
     </button>

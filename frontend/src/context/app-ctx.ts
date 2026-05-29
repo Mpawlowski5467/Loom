@@ -70,6 +70,9 @@ export interface AppContextValue {
   setGraphMode: (m: GraphMode) => void;
   graphFocusId: NoteId | null;
   setGraphFocusId: (id: NoteId | null) => void;
+  /** Bumped to ask the graph to fly its camera to a node (e.g. from search). */
+  graphFlyTo: { id: NoteId; nonce: number } | null;
+  flyToNode: (id: NoteId) => void;
   graphFilters: Set<string>;
   toggleGraphFilter: (t: string) => void;
 
@@ -102,6 +105,8 @@ export interface AppContextValue {
 
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;
+  newNoteTitle: string | null;
+  setNewNoteTitle: (t: string | null) => void;
   appendNote: (note: Note) => void;
   updateNote: (note: Note) => void;
   removeNote: (id: string) => void;

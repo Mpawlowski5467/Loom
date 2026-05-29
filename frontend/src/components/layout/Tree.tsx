@@ -1,8 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
-import type { Note, NodeType } from "../../data/types";
-import { Dot } from "../primitives/Dot";
 import {
   archiveTreePath,
   createFolder,
@@ -11,72 +9,16 @@ import {
   renameTreePath,
 } from "../../api/notes";
 import { ApiError } from "../../api/client";
-
-interface Section {
-  folder: string;
-  type: NodeType;
-  notes: Note[];
-}
-
-const FOLDER_ORDER: { folder: string; type: NodeType }[] = [
-  { folder: "daily", type: "daily" },
-  { folder: "projects", type: "project" },
-  { folder: "topics", type: "topic" },
-  { folder: "people", type: "people" },
-  { folder: "captures", type: "capture" },
-  { folder: "reading", type: "custom" },
-  { folder: "scratch", type: "custom" },
-  { folder: "agents", type: "people" },
-];
-
-const FOLDER_TYPE_BY_NAME = new Map(
-  FOLDER_ORDER.map((f) => [f.folder, f.type] as const),
-);
-
-const FOLDER_NAME_RE = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
-const SAFE_NAME_RE = /^[A-Za-z0-9_-]+$/;
-
-const RESERVED_FOLDERS = new Set([
-  "daily",
-  "projects",
-  "topics",
-  "people",
-  "captures",
-]);
-
-const DRAG_MIME = "application/x-loom-path";
-
-const TREE_EXPANDED_KEY = "loom.treeExpanded";
-
-function loadExpanded(): Record<string, boolean> {
-  if (typeof window === "undefined") return {};
-  try {
-    const raw = window.localStorage.getItem(TREE_EXPANDED_KEY);
-    if (!raw) return {};
-    const parsed = JSON.parse(raw);
-    if (!parsed || typeof parsed !== "object") return {};
-    const out: Record<string, boolean> = {};
-    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
-      if (typeof v === "boolean") out[k] = v;
-    }
-    return out;
-  } catch {
-    return {};
-  }
-}
-
-interface ContextMenuState {
-  x: number;
-  y: number;
-  kind: "file" | "folder";
-  path: string;
-  noteId?: string;
-}
-
-interface InlineRename {
-  path: string;
-  initial: string;
-}
+import { FolderSection } from "./tree/FolderSection";
+import {
+  DRAG_MIME,
+  FOLDER_NAME_RE,
+  SAFE_NAME_RE,
+  useLinkCount,
+  useTreeExpanded,
+  useTreeSections,
+  type TreeInteraction,
+} from "./tree/treeModel";
 
 export function Tree(): ReactNode {
   const {
@@ -90,210 +32,106 @@ export function Tree(): ReactNode {
     setTab,
   } = useApp();
 
+  const treeRef = useRef<HTMLElement | null>(null);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  // New-folder flow.
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const inputRef = useRef<HTMLInputElement | null>(null);
-  const renameInputRef = useRef<HTMLInputElement | null>(null);
 
+  // Drag & drop.
   const [dragSource, setDragSource] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<string | null>(null);
-  const [menu, setMenu] = useState<ContextMenuState | null>(null);
-  const [rename, setRename] = useState<InlineRename | null>(null);
-  const [renameDraft, setRenameDraft] = useState("");
-  const [renameError, setRenameError] = useState<string | null>(null);
+
+  // A single interaction: context menu OR inline rename, never both.
+  const [interaction, setInteraction] = useState<TreeInteraction>(null);
 
   const [filter, setFilter] = useState("");
   const filterLower = filter.trim().toLowerCase();
 
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(loadExpanded);
-  const isExpanded = (folder: string) =>
-    expanded[folder] !== undefined ? expanded[folder]! : true;
-  const toggleExpanded = (folder: string) => {
-    setExpanded((prev) => ({ ...prev, [folder]: !isExpanded(folder) }));
-  };
+  const { isExpanded, toggle } = useTreeExpanded();
+  const sections = useTreeSections(notes, extraFolders, filterLower);
+  const linkCount = useLinkCount(notes);
 
+  // Close the context menu on any outside click / scroll.
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(TREE_EXPANDED_KEY, JSON.stringify(expanded));
-    } catch {
-      // ignore quota / serialization failures
-    }
-  }, [expanded]);
-
-  const sections = useMemo<Section[]>(() => {
-    const filtered = filterLower
-      ? notes.filter((n) => n.title.toLowerCase().includes(filterLower))
-      : notes;
-
-    const byFolder = new Map<string, Note[]>();
-    for (const n of filtered) {
-      const arr = byFolder.get(n.folder) ?? [];
-      arr.push(n);
-      byFolder.set(n.folder, arr);
-    }
-
-    const seen = new Set<string>();
-    const out: Section[] = [];
-
-    for (const f of FOLDER_ORDER) {
-      const arr = byFolder.get(f.folder);
-      // When filtering, hide folders with no matches. Otherwise keep the
-      // previous behavior of hiding sections that are entirely empty.
-      if (!arr || arr.length === 0) continue;
-      seen.add(f.folder);
-      out.push({
-        folder: f.folder,
-        type: f.type,
-        notes: [...arr].sort((a, b) =>
-          a.type === "daily"
-            ? b.title.localeCompare(a.title)
-            : a.title.localeCompare(b.title),
-        ),
-      });
-    }
-
-    for (const folder of extraFolders) {
-      if (seen.has(folder)) continue;
-      seen.add(folder);
-      const arr = byFolder.get(folder) ?? [];
-      // Empty custom folders disappear under an active filter; keep them
-      // visible when there's no filter so users can drop notes into them.
-      if (filterLower && arr.length === 0) continue;
-      const type: NodeType = FOLDER_TYPE_BY_NAME.get(folder) ?? "custom";
-      out.push({
-        folder,
-        type,
-        notes: [...arr].sort((a, b) => a.title.localeCompare(b.title)),
-      });
-    }
-
-    return out;
-  }, [notes, extraFolders, filterLower]);
-
-  const linkCount = useMemo(() => {
-    const m = new Map<string, number>();
-    for (const n of notes) {
-      m.set(n.id, (m.get(n.id) ?? 0) + n.links.length);
-      for (const l of n.links) m.set(l, (m.get(l) ?? 0) + 1);
-    }
-    return m;
-  }, [notes]);
-
-  useEffect(() => {
-    if (!menu) return;
-    const onDown = () => setMenu(null);
-    window.addEventListener("click", onDown);
-    window.addEventListener("scroll", onDown, true);
+    if (interaction?.kind !== "menu") return;
+    const close = () => setInteraction(null);
+    window.addEventListener("click", close);
+    window.addEventListener("scroll", close, true);
     return () => {
-      window.removeEventListener("click", onDown);
-      window.removeEventListener("scroll", onDown, true);
+      window.removeEventListener("click", close);
+      window.removeEventListener("scroll", close, true);
     };
-  }, [menu]);
+  }, [interaction]);
 
-  useEffect(() => {
-    if (rename) {
-      setTimeout(() => renameInputRef.current?.focus(), 0);
-    }
-  }, [rename]);
-
-  // --- new folder -----------------------------------------------------------
-
+  // --- new folder ----------------------------------------------------------
   const startCreate = () => {
     setCreating(true);
     setDraft("");
     setError(null);
     setTimeout(() => inputRef.current?.focus(), 0);
   };
-
   const cancelCreate = () => {
     setCreating(false);
     setDraft("");
     setError(null);
   };
-
   const submitCreate = async () => {
     const name = draft.trim();
-    if (!name) {
-      setError("Name required");
-      return;
-    }
+    if (!name) return setError("Name required");
     if (!FOLDER_NAME_RE.test(name)) {
-      setError("Letters, digits, dashes, underscores; '/' for nesting");
-      return;
+      return setError("Letters, digits, dashes, underscores; '/' for nesting");
     }
     setBusy(true);
     setError(null);
     try {
       await createFolder(name);
       addFolder(name);
-      pushToast({
-        icon: "📁",
-        agent: "archivist",
-        body: `Created folder ${name}/`,
-      });
+      pushToast({ icon: "📁", agent: "archivist", body: `Created folder ${name}/` });
       cancelCreate();
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setError("Folder already exists");
-      } else {
-        setError(err instanceof Error ? err.message : "Failed to create folder");
-      }
+      if (err instanceof ApiError && err.status === 409) setError("Folder already exists");
+      else setError(err instanceof Error ? err.message : "Failed to create folder");
     } finally {
       setBusy(false);
     }
   };
 
-  // --- drag & drop ----------------------------------------------------------
-
+  // --- drag & drop ---------------------------------------------------------
   const handleDragStart = (e: React.DragEvent, path: string) => {
     e.dataTransfer.setData(DRAG_MIME, path);
     e.dataTransfer.setData("text/plain", path);
     e.dataTransfer.effectAllowed = "move";
     setDragSource(path);
   };
-
   const handleDragEnd = () => {
     setDragSource(null);
     setDropTarget(null);
   };
-
   const handleFolderDragOver = (e: React.DragEvent, folder: string) => {
     if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(folder);
   };
-
-  const handleFolderDragLeave = (folder: string) => {
+  const handleFolderDragLeave = (folder: string) =>
     setDropTarget((curr) => (curr === folder ? null : curr));
-  };
-
   const handleFolderDrop = async (e: React.DragEvent, folder: string) => {
     e.preventDefault();
     const from = e.dataTransfer.getData(DRAG_MIME);
     setDropTarget(null);
     setDragSource(null);
     if (!from) return;
-
     const fromName = from.split("/").pop()!;
-    const fromParent = from.split("/").slice(0, -1).join("/");
-    if (fromParent === folder) return;
-
-    const to = `${folder}/${fromName}`;
+    if (from.split("/").slice(0, -1).join("/") === folder) return;
     try {
-      await moveTreePath(from, to);
-      const movedNote = notes.find((n) => notePathOf(n) === from);
-      if (movedNote) {
-        updateNote({ ...movedNote, folder });
-      }
-      pushToast({
-        icon: "→",
-        agent: "archivist",
-        body: `Moved ${fromName} → ${folder}/`,
-      });
+      await moveTreePath(from, `${folder}/${fromName}`);
+      const moved = notes.find((n) => notePathOf(n) === from);
+      if (moved) updateNote({ ...moved, folder });
+      pushToast({ icon: "→", agent: "archivist", body: `Moved ${fromName} → ${folder}/` });
     } catch (err) {
       const msg =
         err instanceof ApiError && err.status === 409
@@ -306,83 +144,59 @@ export function Tree(): ReactNode {
   };
 
   // --- context menu / rename / delete --------------------------------------
-
-  const openContextMenu = (
-    e: React.MouseEvent,
-    state: Omit<ContextMenuState, "x" | "y">,
-  ) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setMenu({ x: e.clientX, y: e.clientY, ...state });
-  };
-
   const beginRename = (path: string) => {
     const last = path.split("/").pop() ?? "";
     const initial = last.endsWith(".md") ? last.slice(0, -3) : last;
-    setRename({ path, initial });
-    setRenameDraft(initial);
-    setRenameError(null);
-    setMenu(null);
+    setInteraction({ kind: "rename", path, initial, draft: initial, error: null });
   };
 
   const submitRename = async () => {
-    if (!rename) return;
-    const name = renameDraft.trim();
-    if (!name) {
-      setRenameError("Name required");
-      return;
-    }
+    if (interaction?.kind !== "rename") return;
+    const { path, initial, draft: name } = { ...interaction, draft: interaction.draft.trim() };
+    if (!name) return setInteraction({ ...interaction, error: "Name required" });
     if (!SAFE_NAME_RE.test(name)) {
-      setRenameError("Letters, digits, dashes, underscores only");
-      return;
-    }
-    if (name === rename.initial) {
-      setRename(null);
-      return;
-    }
-    try {
-      await renameTreePath(rename.path, name);
-      const renamedNote = notes.find((n) => notePathOf(n) === rename.path);
-      if (renamedNote) {
-        const newFilename = renamedNote.filename
-          ? renamedNote.filename.endsWith(".md")
-            ? `${name}.md`
-            : name
-          : `${name}.md`;
-        updateNote({ ...renamedNote, filename: newFilename });
-      }
-      pushToast({
-        icon: "✎",
-        agent: "archivist",
-        body: `Renamed → ${name}`,
+      return setInteraction({
+        ...interaction,
+        error: "Letters, digits, dashes, underscores only",
       });
-      setRename(null);
-    } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        setRenameError("Name already taken");
-      } else {
-        setRenameError(err instanceof Error ? err.message : "Rename failed");
+    }
+    if (name === initial) return setInteraction(null);
+    try {
+      await renameTreePath(path, name);
+      const renamed = notes.find((n) => notePathOf(n) === path);
+      if (renamed) {
+        const newFilename =
+          !renamed.filename || renamed.filename.endsWith(".md")
+            ? `${name}.md`
+            : name;
+        updateNote({ ...renamed, filename: newFilename });
       }
+      pushToast({ icon: "✎", agent: "archivist", body: `Renamed → ${name}` });
+      setInteraction(null);
+    } catch (err) {
+      const msg =
+        err instanceof ApiError && err.status === 409
+          ? "Name already taken"
+          : err instanceof Error
+            ? err.message
+            : "Rename failed";
+      setInteraction({ ...interaction, error: msg });
     }
   };
 
   const performDelete = async (path: string, noteId?: string) => {
-    setMenu(null);
+    setInteraction(null);
     const last = path.split("/").pop() ?? path;
-    const confirmed = window.confirm(
-      `Archive '${last}'?\n\nIt will move to threads/.archive/ and be removed from the workspace.`,
-    );
-    if (!confirmed) return;
+    if (
+      !window.confirm(
+        `Archive '${last}'?\n\nIt will move to threads/.archive/ and be removed from the workspace.`,
+      )
+    )
+      return;
     try {
       await archiveTreePath(path);
-      pushToast({
-        icon: "📦",
-        agent: "archivist",
-        body: `Archived ${last}`,
-      });
-      if (noteId && currentNoteId === noteId) {
-        setTab("graph");
-      }
+      pushToast({ icon: "📦", agent: "archivist", body: `Archived ${last}` });
+      if (noteId && currentNoteId === noteId) setTab("graph");
     } catch (err) {
       pushToast({
         icon: "⚠",
@@ -392,10 +206,29 @@ export function Tree(): ReactNode {
     }
   };
 
-  // --- render ---------------------------------------------------------------
+  // Arrow-key navigation between note rows (rows are buttons, so Enter opens
+  // natively). Ignored while typing in the filter / rename fields.
+  const onTreeKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    const t = e.target as HTMLElement;
+    if (t.tagName === "INPUT" || t.tagName === "TEXTAREA") return;
+    const rows = Array.from(
+      treeRef.current?.querySelectorAll<HTMLElement>(
+        ".tree-row:not(.tree-row--rename)",
+      ) ?? [],
+    );
+    if (rows.length === 0) return;
+    e.preventDefault();
+    const idx = rows.indexOf(document.activeElement as HTMLElement);
+    let next: HTMLElement | undefined;
+    if (idx === -1) next = e.key === "ArrowDown" ? rows[0] : rows[rows.length - 1];
+    else if (e.key === "ArrowDown") next = rows[Math.min(rows.length - 1, idx + 1)];
+    else next = rows[Math.max(0, idx - 1)];
+    next?.focus();
+  };
 
   return (
-    <aside className="tree" role="tree">
+    <aside className="tree" role="tree" ref={treeRef} onKeyDown={onTreeKeyDown}>
       <div className="tree-filter">
         <input
           type="search"
@@ -443,165 +276,55 @@ export function Tree(): ReactNode {
             aria-describedby={error ? "tree-new-folder-error" : undefined}
           />
           {error && (
-            <div
-              id="tree-new-folder-error"
-              className="tree-new-folder-error"
-              role="alert"
-            >
+            <div id="tree-new-folder-error" className="tree-new-folder-error" role="alert">
               {error}
             </div>
           )}
         </div>
       )}
 
-      {sections.map((s) => {
-        const isDropping = dropTarget === s.folder;
-        const folderEditable = !RESERVED_FOLDERS.has(s.folder);
-        const folderRenaming = rename?.path === s.folder;
-        // While a filter is active, force every matching folder open so the
-        // user can see the matches without manually expanding each section.
-        const open = filterLower ? true : isExpanded(s.folder);
-        return (
-          <div
-            key={s.folder}
-            className={`tree-section-wrap ${isDropping ? "drop" : ""}`}
-            onDragOver={(e) => handleFolderDragOver(e, s.folder)}
-            onDragLeave={() => handleFolderDragLeave(s.folder)}
-            onDrop={(e) => void handleFolderDrop(e, s.folder)}
-          >
-            {folderRenaming ? (
-              <div className="tree-section">
-                <input
-                  ref={renameInputRef}
-                  className="tree-rename-input"
-                  value={renameDraft}
-                  onChange={(e) => setRenameDraft(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      e.preventDefault();
-                      void submitRename();
-                    }
-                    if (e.key === "Escape") {
-                      e.preventDefault();
-                      setRename(null);
-                    }
-                  }}
-                  onBlur={() => setRename(null)}
-                  aria-invalid={renameError !== null}
-                />
-                {renameError && (
-                  <div className="tree-new-folder-error">{renameError}</div>
-                )}
-              </div>
-            ) : (
-              <div
-                className="tree-section"
-                draggable={folderEditable}
-                onDragStart={
-                  folderEditable
-                    ? (e) => handleDragStart(e, s.folder)
-                    : undefined
-                }
-                onDragEnd={handleDragEnd}
-                onContextMenu={(e) =>
-                  folderEditable &&
-                  openContextMenu(e, { kind: "folder", path: s.folder })
-                }
-              >
-                <button
-                  type="button"
-                  className="tree-section-chevron"
-                  aria-label={open ? "Collapse folder" : "Expand folder"}
-                  aria-expanded={open}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleExpanded(s.folder);
-                  }}
-                  disabled={!!filterLower}
-                >
-                  <span className={`chevron ${open ? "open" : ""}`}>▸</span>
-                </button>
-                <span className="tree-section-name">{s.folder}</span>
-              </div>
-            )}
+      {sections.map((s) => (
+        <FolderSection
+          key={s.folder}
+          section={s}
+          open={filterLower ? true : isExpanded(s.folder)}
+          filterActive={!!filterLower}
+          currentNoteId={currentNoteId}
+          linkCount={linkCount}
+          interaction={interaction}
+          dropTarget={dropTarget}
+          dragSource={dragSource}
+          onToggle={toggle}
+          onOpenNote={openNote}
+          onContextMenu={(e, target) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setInteraction({ kind: "menu", x: e.clientX, y: e.clientY, ...target });
+          }}
+          onRenameChange={(d) =>
+            setInteraction((prev) =>
+              prev?.kind === "rename" ? { ...prev, draft: d, error: null } : prev,
+            )
+          }
+          onRenameSubmit={() => void submitRename()}
+          onRenameCancel={() => setInteraction(null)}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+          onFolderDragOver={handleFolderDragOver}
+          onFolderDragLeave={handleFolderDragLeave}
+          onFolderDrop={handleFolderDrop}
+        />
+      ))}
 
-            {open && s.notes.length === 0 && (
-              <div className="tree-empty">empty</div>
-            )}
-            {open && s.notes.map((n) => {
-              const notePath = notePathOf(n);
-              const isRowRenaming = rename?.path === notePath;
-              const isDraggingRow = dragSource === notePath;
-              return isRowRenaming ? (
-                <div key={n.id} className="tree-row tree-row--rename">
-                  <Dot type={n.type} />
-                  <input
-                    ref={renameInputRef}
-                    className="tree-rename-input"
-                    value={renameDraft}
-                    onChange={(e) => setRenameDraft(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault();
-                        void submitRename();
-                      }
-                      if (e.key === "Escape") {
-                        e.preventDefault();
-                        setRename(null);
-                      }
-                    }}
-                    onBlur={() => setRename(null)}
-                    aria-invalid={renameError !== null}
-                  />
-                  {renameError && (
-                    <span className="tree-new-folder-error">
-                      {renameError}
-                    </span>
-                  )}
-                </div>
-              ) : (
-                <button
-                  key={n.id}
-                  role="treeitem"
-                  aria-current={currentNoteId === n.id ? "page" : undefined}
-                  className={`tree-row ${isDraggingRow ? "drag" : ""}`}
-                  onClick={() => openNote(n.id)}
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, notePath)}
-                  onDragEnd={handleDragEnd}
-                  onContextMenu={(e) =>
-                    openContextMenu(e, {
-                      kind: "file",
-                      path: notePath,
-                      noteId: n.id,
-                    })
-                  }
-                >
-                  <Dot type={n.type} />
-                  <span className="tree-row-name">{n.title}</span>
-                  <span className="tree-row-count">
-                    {linkCount.get(n.id) ?? 0}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        );
-      })}
-
-      {menu && (
+      {interaction?.kind === "menu" && (
         <ul
           className="tree-context-menu"
           role="menu"
-          style={{ top: menu.y, left: menu.x }}
+          style={{ top: interaction.y, left: interaction.x }}
           onClick={(e) => e.stopPropagation()}
         >
           <li>
-            <button
-              type="button"
-              role="menuitem"
-              onClick={() => beginRename(menu.path)}
-            >
+            <button type="button" role="menuitem" onClick={() => beginRename(interaction.path)}>
               Rename
             </button>
           </li>
@@ -610,9 +333,9 @@ export function Tree(): ReactNode {
               type="button"
               role="menuitem"
               className="danger"
-              onClick={() => void performDelete(menu.path, menu.noteId)}
+              onClick={() => void performDelete(interaction.path, interaction.noteId)}
             >
-              {menu.kind === "folder" ? "Archive folder" : "Archive"}
+              {interaction.target === "folder" ? "Archive folder" : "Archive"}
             </button>
           </li>
         </ul>

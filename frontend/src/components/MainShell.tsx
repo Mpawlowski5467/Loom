@@ -51,6 +51,8 @@ export function MainShell(): ReactNode {
     setPaletteOpen,
     newNoteOpen,
     setNewNoteOpen,
+    newNoteTitle,
+    setNewNoteTitle,
     notes,
     appendNote,
     openNote,
@@ -132,11 +134,16 @@ export function MainShell(): ReactNode {
       {paletteOpen && <Palette />}
       {newNoteOpen && (
         <NewNoteModal
-          onClose={() => setNewNoteOpen(false)}
+          initialTitle={newNoteTitle ?? ""}
+          onClose={() => {
+            setNewNoteOpen(false);
+            setNewNoteTitle(null);
+          }}
           onCreated={(record) => {
             const note = backendNoteToFrontend(record, titleMapFromNotes(notes));
             appendNote(note);
             openNote(note.id);
+            setNewNoteTitle(null);
             pushToast({
               icon: "✎",
               agent: "weaver",

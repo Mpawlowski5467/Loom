@@ -7,8 +7,10 @@ interface AttachDragArgs {
   sigma: Sigma;
   graph: Graph;
   getSnapTarget: (id: string) => XY | undefined;
-  hoveredRef: { current: string | null };
-  tweenRafRef: { current: number };
+  /** Clear hover state when a drag begins. */
+  clearHover: () => void;
+  /** Abort any in-flight scene tween — grabbing a node interrupts it. */
+  cancelTween: () => void;
   isDragging: { current: boolean };
   justDragged: { current: boolean };
 }
@@ -18,8 +20,8 @@ export function attachDrag(args: AttachDragArgs): () => void {
     sigma,
     graph,
     getSnapTarget,
-    hoveredRef,
-    tweenRafRef,
+    clearHover,
+    cancelTween,
     isDragging,
     justDragged,
   } = args;
@@ -45,12 +47,12 @@ export function attachDrag(args: AttachDragArgs): () => void {
   }) => {
     const { node, event } = payload;
     if (graph.getNodeAttribute(node, "hidden")) return;
-    cancelAnimationFrame(tweenRafRef.current);
+    cancelTween();
     stopSim();
     draggedNode = node;
     movedDuringPress = false;
     isDragging.current = true;
-    hoveredRef.current = null;
+    clearHover();
     sigma.getCamera().disable();
 
     const neighborIds: string[] = [];

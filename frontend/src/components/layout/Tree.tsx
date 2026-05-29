@@ -14,9 +14,9 @@ import {
   DRAG_MIME,
   FOLDER_NAME_RE,
   SAFE_NAME_RE,
+  useFolderTree,
   useLinkCount,
   useTreeExpanded,
-  useTreeSections,
   type TreeInteraction,
 } from "./tree/treeModel";
 
@@ -52,7 +52,7 @@ export function Tree(): ReactNode {
   const filterLower = filter.trim().toLowerCase();
 
   const { isExpanded, toggle } = useTreeExpanded();
-  const sections = useTreeSections(notes, extraFolders, filterLower);
+  const tree = useFolderTree(notes, extraFolders, filterLower);
   const linkCount = useLinkCount(notes);
 
   // Close the context menu on any outside click / scroll.
@@ -114,6 +114,9 @@ export function Tree(): ReactNode {
   const handleFolderDragOver = (e: React.DragEvent, folder: string) => {
     if (!e.dataTransfer.types.includes(DRAG_MIME)) return;
     e.preventDefault();
+    // Innermost folder claims the hover; ancestors' handlers must not override
+    // the drop target as the event bubbles up the nested wraps.
+    e.stopPropagation();
     e.dataTransfer.dropEffect = "move";
     setDropTarget(folder);
   };
@@ -121,6 +124,8 @@ export function Tree(): ReactNode {
     setDropTarget((curr) => (curr === folder ? null : curr));
   const handleFolderDrop = async (e: React.DragEvent, folder: string) => {
     e.preventDefault();
+    // Only the innermost folder under the cursor performs the move.
+    e.stopPropagation();
     const from = e.dataTransfer.getData(DRAG_MIME);
     setDropTarget(null);
     setDragSource(null);
@@ -283,11 +288,12 @@ export function Tree(): ReactNode {
         </div>
       )}
 
-      {sections.map((s) => (
+      {tree.map((node) => (
         <FolderSection
-          key={s.folder}
-          section={s}
-          open={filterLower ? true : isExpanded(s.folder)}
+          key={node.path}
+          node={node}
+          depth={0}
+          isExpanded={isExpanded}
           filterActive={!!filterLower}
           currentNoteId={currentNoteId}
           linkCount={linkCount}

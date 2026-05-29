@@ -240,7 +240,7 @@
   font-family: var(--mono);
   font-size: 10px;
   color: var(--ink-3);
-  padding: 4px 10px 6px 8px;
+  padding: 4px 10px 6px calc(8px + var(--indent, 0px));
   font-style: italic;
 }
 
@@ -261,7 +261,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 4px 8px;
+  padding: 4px 10px 4px calc(8px + var(--indent, 0px));
 }
 
 .tree-rename-input {
@@ -325,7 +325,7 @@
   letter-spacing: 1.5px;
   text-transform: uppercase;
   color: var(--ink-3);
-  padding: 14px 12px 6px 4px;
+  padding: 14px 12px 6px calc(4px + var(--indent, 0px));
   display: flex;
   align-items: center;
   gap: 4px;
@@ -366,7 +366,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 4px 10px 4px 8px;
+  padding: 4px 10px 4px calc(8px + var(--indent, 0px));
   margin-right: 8px;
   border-radius: var(--r-sm);
   font-size: 12.5px;
@@ -375,13 +375,13 @@
   transition: all 160ms var(--ease);
   background: transparent;
   border: none;
-  width: calc(100% - 8px);
+  width: calc(100% - 8px - var(--indent, 0px));
   text-align: left;
 }
 .tree-row:hover {
   background: var(--bg-surface);
   color: var(--ink);
-  padding-left: 10px;
+  padding-left: calc(10px + var(--indent, 0px));
 }
 .tree-row[aria-current="page"] {
   background: var(--you-bg);

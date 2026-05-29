@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Note, NodeType } from "../../../data/types";
 
-export interface Section {
-  folder: string;
-  type: NodeType;
+export interface FolderTreeNode {
+  /** Last path segment, e.g. ``loom-ui``. */
+  name: string;
+  /** Full folder path under ``threads/``, e.g. ``projects/loom-ui``. */
+  path: string;
+  folders: FolderTreeNode[];
   notes: Note[];
 }
 
@@ -86,58 +89,113 @@ export function useTreeExpanded(): TreeExpanded {
   };
 }
 
-/** Build the ordered folder sections from the notes + custom folders, filtered
- * by the title query. */
-export function useTreeSections(
+interface MutableNode {
+  name: string;
+  path: string;
+  folders: Map<string, MutableNode>;
+  notes: Note[];
+}
+
+function emptyNode(name: string, path: string): MutableNode {
+  return { name, path, folders: new Map(), notes: [] };
+}
+
+/** Walk (creating as needed) the folder chain for a path like
+ * ``projects/loom-ui`` and return the deepest node. ``""`` returns the root. */
+function ensurePath(root: MutableNode, folder: string): MutableNode {
+  let cur = root;
+  let prefix = "";
+  for (const seg of folder.split("/")) {
+    if (!seg) continue;
+    prefix = prefix ? `${prefix}/${seg}` : seg;
+    let next = cur.folders.get(seg);
+    if (!next) {
+      next = emptyNode(seg, prefix);
+      cur.folders.set(seg, next);
+    }
+    cur = next;
+  }
+  return cur;
+}
+
+function sortNotes(notes: Note[]): Note[] {
+  return [...notes].sort((a, b) =>
+    a.type === "daily"
+      ? b.title.localeCompare(a.title)
+      : a.title.localeCompare(b.title),
+  );
+}
+
+/** Top-level folders follow FOLDER_ORDER; the rest fall back to alphabetical. */
+function topLevelRank(folder: string): number {
+  const idx = FOLDER_ORDER.findIndex((f) => f.folder === folder);
+  return idx === -1 ? FOLDER_ORDER.length : idx;
+}
+
+/** Freeze the mutable tree into ordered ``FolderTreeNode``s. ``depth`` is the
+ * depth of ``node`` itself: its top-level children (node at depth 0) order by
+ * FOLDER_ORDER, everything deeper is alphabetical. Notes follow folders. */
+function finalize(node: MutableNode, depth: number): FolderTreeNode {
+  const folders = [...node.folders.values()]
+    .map((child) => finalize(child, depth + 1))
+    .sort((a, b) =>
+      depth === 0
+        ? topLevelRank(a.path) - topLevelRank(b.path) ||
+          a.name.localeCompare(b.name)
+        : a.name.localeCompare(b.name),
+    );
+  return {
+    name: node.name,
+    path: node.path,
+    folders,
+    notes: sortNotes(node.notes),
+  };
+}
+
+/** Drop folders whose subtree holds no notes — used while filtering so empty
+ * branches don't linger. */
+function pruneEmpty(node: FolderTreeNode): FolderTreeNode | null {
+  const folders = node.folders
+    .map(pruneEmpty)
+    .filter((n): n is FolderTreeNode => n !== null);
+  if (folders.length === 0 && node.notes.length === 0) return null;
+  return { ...node, folders };
+}
+
+/** Build the nested folder tree from the notes (+ user-created folders),
+ * filtered by the title query. Folders nest by their ``/``-separated path;
+ * root-level notes (``folder === ""``) are not shown. */
+export function buildFolderTree(
   notes: Note[],
   extraFolders: string[],
   filterLower: string,
-): Section[] {
-  return useMemo<Section[]>(() => {
-    const filtered = filterLower
-      ? notes.filter((n) => n.title.toLowerCase().includes(filterLower))
-      : notes;
+): FolderTreeNode[] {
+  const filtered = filterLower
+    ? notes.filter((n) => n.title.toLowerCase().includes(filterLower))
+    : notes;
 
-    const byFolder = new Map<string, Note[]>();
-    for (const n of filtered) {
-      const arr = byFolder.get(n.folder) ?? [];
-      arr.push(n);
-      byFolder.set(n.folder, arr);
-    }
+  const root = emptyNode("", "");
+  for (const n of filtered) ensurePath(root, n.folder).notes.push(n);
 
-    const seen = new Set<string>();
-    const out: Section[] = [];
+  // Materialize user-created (possibly empty) folders, but not while filtering
+  // — an empty folder can't match a title query.
+  if (!filterLower) for (const f of extraFolders) ensurePath(root, f);
 
-    for (const f of FOLDER_ORDER) {
-      const arr = byFolder.get(f.folder);
-      if (!arr || arr.length === 0) continue;
-      seen.add(f.folder);
-      out.push({
-        folder: f.folder,
-        type: f.type,
-        notes: [...arr].sort((a, b) =>
-          a.type === "daily"
-            ? b.title.localeCompare(a.title)
-            : a.title.localeCompare(b.title),
-        ),
-      });
-    }
+  const tree = finalize(root, 0).folders;
+  if (!filterLower) return tree;
+  return tree.map(pruneEmpty).filter((n): n is FolderTreeNode => n !== null);
+}
 
-    for (const folder of extraFolders) {
-      if (seen.has(folder)) continue;
-      seen.add(folder);
-      const arr = byFolder.get(folder) ?? [];
-      if (filterLower && arr.length === 0) continue;
-      const type: NodeType = FOLDER_TYPE_BY_NAME.get(folder) ?? "custom";
-      out.push({
-        folder,
-        type,
-        notes: [...arr].sort((a, b) => a.title.localeCompare(b.title)),
-      });
-    }
-
-    return out;
-  }, [notes, extraFolders, filterLower]);
+/** Memoized wrapper around {@link buildFolderTree}. */
+export function useFolderTree(
+  notes: Note[],
+  extraFolders: string[],
+  filterLower: string,
+): FolderTreeNode[] {
+  return useMemo(
+    () => buildFolderTree(notes, extraFolders, filterLower),
+    [notes, extraFolders, filterLower],
+  );
 }
 
 /** Per-note connection counts (outgoing + incoming links). */

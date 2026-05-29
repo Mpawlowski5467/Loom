@@ -1,7 +1,18 @@
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 import { Dot } from "../../primitives/Dot";
 import { notePathOf } from "../../../api/notes";
-import { RESERVED_FOLDERS, type Section, type TreeInteraction } from "./treeModel";
+import {
+  RESERVED_FOLDERS,
+  type FolderTreeNode,
+  type TreeInteraction,
+} from "./treeModel";
+
+const INDENT_STEP = 12;
+
+/** Depth → left-indent, exposed as the ``--indent`` custom property the tree
+ * CSS folds into each row's left padding. */
+const indentStyle = (depth: number): CSSProperties =>
+  ({ "--indent": `${depth * INDENT_STEP}px` }) as CSSProperties;
 
 interface MenuTarget {
   target: "file" | "folder";
@@ -10,8 +21,10 @@ interface MenuTarget {
 }
 
 interface FolderSectionProps {
-  section: Section;
-  open: boolean;
+  node: FolderTreeNode;
+  /** Nesting depth of this folder; 0 for top level. */
+  depth: number;
+  isExpanded: (path: string) => boolean;
   filterActive: boolean;
   currentNoteId: string | null;
   linkCount: Map<string, number>;
@@ -64,22 +77,31 @@ function RenameInput(props: {
   );
 }
 
+/**
+ * One folder and its contents, rendered recursively: header, then child
+ * folders (folders first), then the files in this folder. Indentation grows
+ * with ``depth``; everything is keyed off the folder's full path so nested
+ * folders behave like top-level ones for expand/collapse, drag-drop, rename,
+ * and the context menu.
+ */
 export function FolderSection(props: FolderSectionProps): ReactNode {
-  const { section, interaction } = props;
-  const isDropping = props.dropTarget === section.folder;
-  const folderEditable = !RESERVED_FOLDERS.has(section.folder);
+  const { node, depth, interaction } = props;
+  const open = props.filterActive || props.isExpanded(node.path);
+  const isDropping = props.dropTarget === node.path;
+  const folderEditable = !RESERVED_FOLDERS.has(node.path);
   const renaming = interaction?.kind === "rename" ? interaction : null;
-  const folderRenaming = renaming?.path === section.folder;
+  const folderRenaming = renaming?.path === node.path;
+  const childDepth = depth + 1;
 
   return (
     <div
       className={`tree-section-wrap ${isDropping ? "drop" : ""}`}
-      onDragOver={(e) => props.onFolderDragOver(e, section.folder)}
-      onDragLeave={() => props.onFolderDragLeave(section.folder)}
-      onDrop={(e) => void props.onFolderDrop(e, section.folder)}
+      onDragOver={(e) => props.onFolderDragOver(e, node.path)}
+      onDragLeave={() => props.onFolderDragLeave(node.path)}
+      onDrop={(e) => void props.onFolderDrop(e, node.path)}
     >
       {folderRenaming && renaming ? (
-        <div className="tree-section">
+        <div className="tree-section" style={indentStyle(depth)}>
           <RenameInput
             interaction={renaming}
             onChange={props.onRenameChange}
@@ -90,44 +112,62 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
       ) : (
         <div
           className="tree-section"
+          style={indentStyle(depth)}
           draggable={folderEditable}
           onDragStart={
             folderEditable
-              ? (e) => props.onDragStart(e, section.folder)
+              ? (e) => props.onDragStart(e, node.path)
               : undefined
           }
           onDragEnd={props.onDragEnd}
           onContextMenu={(e) =>
             folderEditable &&
-            props.onContextMenu(e, { target: "folder", path: section.folder })
+            props.onContextMenu(e, { target: "folder", path: node.path })
           }
         >
           <button
             type="button"
             className="tree-section-chevron"
-            aria-label={props.open ? "Collapse folder" : "Expand folder"}
-            aria-expanded={props.open}
+            aria-label={open ? "Collapse folder" : "Expand folder"}
+            aria-expanded={open}
             onClick={(e) => {
               e.stopPropagation();
-              props.onToggle(section.folder);
+              props.onToggle(node.path);
             }}
             disabled={props.filterActive}
           >
-            <span className={`chevron ${props.open ? "open" : ""}`}>▸</span>
+            <span className={`chevron ${open ? "open" : ""}`}>▸</span>
           </button>
-          <span className="tree-section-name">{section.folder}</span>
+          <span className="tree-section-name">{node.name}</span>
         </div>
       )}
 
-      {props.open && section.notes.length === 0 && (
-        <div className="tree-empty">empty</div>
+      {open &&
+        node.folders.map((child) => (
+          <FolderSection
+            key={child.path}
+            {...props}
+            node={child}
+            depth={childDepth}
+          />
+        ))}
+
+      {open && node.folders.length === 0 && node.notes.length === 0 && (
+        <div className="tree-empty" style={indentStyle(childDepth)}>
+          empty
+        </div>
       )}
-      {props.open &&
-        section.notes.map((n) => {
+
+      {open &&
+        node.notes.map((n) => {
           const notePath = notePathOf(n);
           const rowRenaming = renaming?.path === notePath;
           return rowRenaming && renaming ? (
-            <div key={n.id} className="tree-row tree-row--rename">
+            <div
+              key={n.id}
+              className="tree-row tree-row--rename"
+              style={indentStyle(childDepth)}
+            >
               <Dot type={n.type} />
               <RenameInput
                 interaction={renaming}
@@ -142,6 +182,7 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
               role="treeitem"
               aria-current={props.currentNoteId === n.id ? "page" : undefined}
               className={`tree-row ${props.dragSource === notePath ? "drag" : ""}`}
+              style={indentStyle(childDepth)}
               onClick={() => props.onOpenNote(n.id)}
               draggable
               onDragStart={(e) => props.onDragStart(e, notePath)}
@@ -156,7 +197,9 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
             >
               <Dot type={n.type} />
               <span className="tree-row-name">{n.title}</span>
-              <span className="tree-row-count">{props.linkCount.get(n.id) ?? 0}</span>
+              <span className="tree-row-count">
+                {props.linkCount.get(n.id) ?? 0}
+              </span>
             </button>
           );
         })}

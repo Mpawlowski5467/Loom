@@ -41,6 +41,20 @@ export function EditSuggestionModal({
   const trimmedTitle = title.trim();
   const canSubmit = trimmedTitle.length > 0 && !busy;
 
+  const dirty =
+    title !== (sug?.title ?? capture.title) ||
+    type !== initialType ||
+    folder !== (sug?.destFolder ?? capture.folder) ||
+    tagsInput !== (sug?.tags ?? []).join(", ");
+
+  // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist.
+  const requestClose = () => {
+    if (dirty && !window.confirm("Discard your changes to this suggestion?")) {
+      return;
+    }
+    onClose();
+  };
+
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
@@ -68,7 +82,7 @@ export function EditSuggestionModal({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
+    if (e.key === "Escape") requestClose();
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
   };
 
@@ -76,7 +90,7 @@ export function EditSuggestionModal({
     <div
       className="settings-modal-backdrop"
       role="presentation"
-      onClick={onClose}
+      onClick={requestClose}
       onKeyDown={onKey}
     >
       <div
@@ -150,7 +164,7 @@ export function EditSuggestionModal({
         )}
 
         <div className="settings-actions">
-          <button className="btn btn-md" type="button" onClick={onClose}>
+          <button className="btn btn-md" type="button" onClick={requestClose}>
             Cancel
           </button>
           <button

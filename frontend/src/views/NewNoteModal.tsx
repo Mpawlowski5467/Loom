@@ -5,6 +5,7 @@ import { createNote, getTree, type NoteRecord } from "../api/notes";
 interface Props {
   onClose: () => void;
   onCreated: (note: NoteRecord) => void;
+  initialTitle?: string;
 }
 
 interface TypeOption {
@@ -25,8 +26,12 @@ const TYPE_OPTIONS: TypeOption[] = [
 // Sentinel value for "no override — use the type's default folder".
 const FOLDER_AUTO = "__auto__";
 
-export function NewNoteModal({ onClose, onCreated }: Props): ReactNode {
-  const [title, setTitle] = useState("");
+export function NewNoteModal({
+  onClose,
+  onCreated,
+  initialTitle,
+}: Props): ReactNode {
+  const [title, setTitle] = useState(initialTitle ?? "");
   const [type, setType] = useState<string>("topic");
   const [folder, setFolder] = useState<string>(FOLDER_AUTO);
   const [tagsInput, setTagsInput] = useState("");

@@ -6,6 +6,7 @@ chain, handles trust-level logic, logs actions, and manages memory.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -194,8 +195,12 @@ class BaseAgent(ABC):
             )
             raise ReadChainError(self.name, ["prime.md is immutable to agents"])
 
-        # Run the read chain
-        chain_result = self._chain.execute(self.name, target_path)
+        # Run the read chain off the event loop — it does blocking file I/O
+        # (vault.yaml, prime.md, related notes) that would otherwise stall the
+        # server on large vaults.
+        chain_result = await asyncio.to_thread(
+            self._chain.execute, self.name, target_path
+        )
 
         if not chain_result.success:
             failed_names = [s.name for s in chain_result.failed_required]

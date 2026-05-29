@@ -286,4 +286,49 @@
   display: flex;
   gap: 8px;
   margin-top: 16px;
+  align-items: center;
+}
+.inbox-kbd-hint {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+/* ── Processing skeleton ───────────────────────────────────────── */
+.inbox-processing {
+  margin-top: 20px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+.inbox-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 14px;
+}
+.inbox-skeleton .sk-line {
+  height: 10px;
+  border-radius: 999px;
+  background: linear-gradient(
+    90deg,
+    var(--rule-2) 25%,
+    var(--bg-elevated) 37%,
+    var(--rule-2) 63%
+  );
+  background-size: 400% 100%;
+  animation: inboxShimmer 1.4s ease-in-out infinite;
+}
+.inbox-skeleton .sk-line.short {
+  width: 60%;
+}
+@keyframes inboxShimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
 }

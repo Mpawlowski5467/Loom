@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 import yaml
 from pydantic import ValidationError
 
+from agents.sanitize import scrub_untrusted
 from core.notes import parse_note
 
 if TYPE_CHECKING:
@@ -222,7 +223,7 @@ class ReadChain:
                                 {
                                     "title": linked.title,
                                     "id": linked.id,
-                                    "body": linked.body[:2000],
+                                    "body": scrub_untrusted(linked.body[:2000]),
                                 }
                             )
 

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -158,14 +158,58 @@ export function InboxView(): ReactNode {
     }
   };
 
-  const accept = (capId: string) => {
-    setCaptureStatus(capId, "done");
-    pushToast({
-      icon: "🧶",
-      agent: "weaver",
-      body: `Filed ${selected?.suggestion?.title ?? "capture"} → ${selected?.suggestion?.destFolder ?? "captures"}/`,
-    });
-  };
+  const fileCapture = useCallback(
+    (capId: string) => {
+      const cap = captures.find((c) => c.id === capId);
+      setCaptureStatus(capId, "done");
+      pushToast({
+        icon: "🧶",
+        agent: "weaver",
+        body: `Filed ${cap?.suggestion?.title ?? "capture"} → ${cap?.suggestion?.destFolder ?? "captures"}/`,
+      });
+    },
+    [captures, setCaptureStatus, pushToast],
+  );
+
+  // Keyboard triage: j/k move between captures, e edits the suggestion, ↵ files
+  // it. Ignored while typing in a field or with the edit modal open.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (editing) return;
+      const el = e.target as HTMLElement | null;
+      if (
+        el?.tagName === "INPUT" ||
+        el?.tagName === "TEXTAREA" ||
+        el?.isContentEditable
+      )
+        return;
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      if (!["j", "k", "e", "Enter"].includes(e.key)) return;
+      const idx = filteredCaptures.findIndex((c) => c.id === selected?.id);
+      const actionable =
+        !!selected &&
+        selected.status !== "done" &&
+        selected.status !== "processing" &&
+        !!selected.suggestion;
+      if (e.key === "j") {
+        e.preventDefault();
+        const n = filteredCaptures[Math.min(filteredCaptures.length - 1, idx + 1)];
+        if (n) selectCapture(n.id);
+      } else if (e.key === "k") {
+        e.preventDefault();
+        const p = filteredCaptures[Math.max(0, idx - 1)];
+        if (p) selectCapture(p.id);
+      } else if (e.key === "e" && actionable) {
+        e.preventDefault();
+        setEditing(true);
+      } else if (e.key === "Enter" && actionable) {
+        e.preventDefault();
+        fileCapture(selected.id);
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [filteredCaptures, selected, editing, selectCapture, fileCapture]);
 
   return (
     <div className="inbox-view">
@@ -292,7 +336,22 @@ export function InboxView(): ReactNode {
           </div>
           {renderMarkdown(selected.body, { bodyClass: "inbox-detail-body" })}
 
-          {selected.status !== "done" && selected.suggestion && (
+          {selected.status === "processing" && (
+            <div className="inbox-processing" role="status" aria-live="polite">
+              <div className="inbox-suggest-h">
+                <AgentBlob agent="weaver" state="running" size={22} />
+                Weaver is filing this capture…
+              </div>
+              <div className="inbox-skeleton" aria-hidden="true">
+                <span className="sk-line" />
+                <span className="sk-line short" />
+                <span className="sk-line" />
+              </div>
+            </div>
+          )}
+          {selected.status !== "done" &&
+            selected.status !== "processing" &&
+            selected.suggestion && (
             <div className="inbox-suggest">
               <div className="inbox-suggest-h">
                 <AgentBlob agent="weaver" state="running" size={22} />
@@ -323,11 +382,16 @@ export function InboxView(): ReactNode {
                 })}
               </div>
               <div className="inbox-suggest-actions">
-                <Button variant="amber" size="md" onClick={() => accept(selected.id)}>
+                <Button
+                  variant="amber"
+                  size="md"
+                  onClick={() => fileCapture(selected.id)}
+                >
                   accept & file
                 </Button>
                 <Button onClick={() => setEditing(true)}>edit suggestion</Button>
                 <Button onClick={() => setCaptureStatus(selected.id, "done")}>skip</Button>
+                <span className="inbox-kbd-hint">j/k move · e edit · ↵ file</span>
               </div>
             </div>
           )}

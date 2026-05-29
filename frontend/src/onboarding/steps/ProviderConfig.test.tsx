@@ -104,19 +104,65 @@ describe("ProviderConfig", () => {
     expect(screen.getByText("OK — 12ms")).toBeInTheDocument();
   });
 
-  it("skip button clears providers and submits", async () => {
+  it("skip button confirms, then clears providers and submits", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const onSubmit = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderProviderConfig({ onChange, onSubmit });
 
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
 
+    expect(confirmSpy).toHaveBeenCalled();
     expect(onChange).toHaveBeenCalledWith({
       providers: [],
       chatProvider: null,
       embedProvider: null,
     });
+    expect(onSubmit).toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("skip is a no-op when the confirm is dismissed", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
+    renderProviderConfig({ onSubmit });
+
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+
+    expect(onSubmit).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("Finish stays disabled until the chosen providers pass a test", async () => {
+    const user = userEvent.setup();
+    const onSubmit = vi.fn();
+    renderProviderConfig({
+      providers: [
+        {
+          name: "openai",
+          api_key: "sk-test",
+          chat_model: "gpt-4o-mini",
+          embed_model: "text-embedding-3-small",
+          host: "",
+        },
+      ],
+      chatProvider: "openai",
+      embedProvider: "openai",
+      onSubmit,
+    });
+
+    const finish = screen.getByRole("button", { name: /Finish/ });
+    expect(finish).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Test connection" }));
+    await waitFor(() =>
+      expect(screen.getByText("OK — 12ms")).toBeInTheDocument(),
+    );
+
+    expect(finish).toBeEnabled();
+    await user.click(finish);
     expect(onSubmit).toHaveBeenCalled();
   });
 });

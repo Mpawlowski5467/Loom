@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Clipboard, ExternalLink } from "lucide-react";
+import { Clipboard, ExternalLink, RotateCcw } from "lucide-react";
 import { API_BASE } from "../../api/client";
+import { resetOnboarding } from "../../api/onboarding";
+import { useApp } from "../../context/app-ctx";
 import {
   getDiagnostics,
   getHealth,
@@ -10,11 +12,25 @@ import {
 } from "../../api/diagnostics";
 
 export function AboutSection(): ReactNode {
+  const { refreshConfig } = useApp();
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(
     null,
   );
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+
+  const rerunOnboarding = async () => {
+    const ok = window.confirm(
+      "Re-run the onboarding wizard? Your vault and provider settings are kept.",
+    );
+    if (!ok) return;
+    try {
+      await resetOnboarding();
+      await refreshConfig();
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Couldn't reset onboarding.");
+    }
+  };
 
   useEffect(() => {
     void Promise.all([getDiagnostics(), getHealth()])
@@ -96,6 +112,23 @@ export function AboutSection(): ReactNode {
         >
           <Clipboard size={14} aria-hidden="true" />
           Copy path
+        </button>
+      </div>
+      <div className="settings-about-card">
+        <div>
+          <div className="settings-field-label">Setup</div>
+          <p className="settings-copy settings-copy-tight">
+            Re-run the first-run wizard. Your vault and provider settings are
+            kept.
+          </p>
+        </div>
+        <button
+          className="btn btn-md"
+          type="button"
+          onClick={() => void rerunOnboarding()}
+        >
+          <RotateCcw size={14} aria-hidden="true" />
+          Re-run onboarding
         </button>
       </div>
       <div className="settings-link-row">

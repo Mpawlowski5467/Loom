@@ -1,10 +1,11 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
+import { StatusBadge } from "../../components/primitives/StatusBadge";
+import type { AgentState } from "../../data/types";
+import { boardStatus, liveAgentState } from "./boardHelpers";
 
-type LiveState = "running" | "idle";
-
-function strokeFor(state: LiveState, hasRecentActivity: boolean): string {
+function strokeFor(state: AgentState, hasRecentActivity: boolean): string {
   if (state === "running") return "var(--agent)";
   if (hasRecentActivity) return "var(--ink-2)";
   return "var(--ink-3)";
@@ -28,7 +29,7 @@ export function PulseMode(): ReactNode {
         const el = polylineRefs.current[a.id];
         if (!el) continue;
         const live = agentActivity[a.name.toLowerCase()];
-        const state: LiveState = live?.state === "running" ? "running" : "idle";
+        const state = liveAgentState(a, live);
         const pulse = live?.pulse ?? [];
         const recentActivity = pulse.some((v) => v > 0.05);
 
@@ -36,21 +37,21 @@ export function PulseMode(): ReactNode {
         const n = Math.max(pulse.length, 60);
         for (let i = 0; i < n; i++) {
           const x = (i / (n - 1)) * WIDTH;
-          // Map UI index to pulse-buffer index (pulse is oldest-first, length 60)
           const pulseIdx =
             pulse.length > 0
-              ? Math.min(pulse.length - 1, Math.floor((i / (n - 1)) * pulse.length))
+              ? Math.min(
+                  pulse.length - 1,
+                  Math.floor((i / (n - 1)) * pulse.length),
+                )
               : 0;
           const intensity = pulse[pulseIdx] ?? 0;
 
-          // Heartbeat-style wave: amplitude is proportional to intensity, so
-          // truly idle slots are dead-flat. Running tip gets a faster, taller
-          // wiggle to feel "live".
+          // Heartbeat wave: amplitude tracks intensity, so idle slots are flat.
+          // Running tip wiggles faster/taller to feel live.
           let y = MIDLINE;
           if (intensity > 0.02) {
             const speed = state === "running" ? 6 : 2.2;
-            const wiggle = Math.sin(t * speed - i * 0.35) * intensity;
-            y -= wiggle * AMPLITUDE;
+            y -= Math.sin(t * speed - i * 0.35) * intensity * AMPLITUDE;
           }
           pts.push(`${x.toFixed(1)},${y.toFixed(1)}`);
         }
@@ -70,20 +71,21 @@ export function PulseMode(): ReactNode {
     };
   }, [agents, agentActivity]);
 
+  if (agents.length === 0) {
+    return (
+      <div className="board-empty">
+        No agents to chart. Add an agent or run one to see its pulse.
+      </div>
+    );
+  }
+
   return (
     <div className="pulse-mode">
       {agents.map((a) => {
         const live = agentActivity[a.name.toLowerCase()];
-        const state: LiveState = live?.state === "running" ? "running" : "idle";
-        const pulse = live?.pulse ?? [];
-        const recentActivity = pulse.some((v) => v > 0.05);
+        const status = boardStatus(a, live);
+        const recentActivity = (live?.pulse ?? []).some((v) => v > 0.05);
         const runs = live?.action_count ?? a.stats.runs;
-        const stateLabel =
-          state === "running"
-            ? "running"
-            : recentActivity
-              ? "settling"
-              : "idle";
         return (
           <div key={a.id} className="pulse-row">
             <div className="pulse-meta">
@@ -102,13 +104,13 @@ export function PulseMode(): ReactNode {
                   polylineRefs.current[a.id] = el;
                 }}
                 fill="none"
-                stroke={strokeFor(state, recentActivity)}
+                stroke={strokeFor(status.state, recentActivity)}
                 strokeWidth={1.3}
                 points=""
               />
             </svg>
             <div className="pulse-stats">
-              <div>{stateLabel}</div>
+              <StatusBadge state={status.state} label={status.label} />
               <div>{runs} runs</div>
             </div>
           </div>

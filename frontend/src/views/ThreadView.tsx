@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -39,15 +39,40 @@ export function ThreadView(): ReactNode {
 
   const note = currentNoteId ? noteById(currentNoteId) ?? null : null;
   const [draft, setDraft] = useState<string>(note?.body ?? "");
-  const [lastSeed, setLastSeed] = useState<string | null>(note?.id ?? null);
   const [saving, setSaving] = useState(false);
-  if ((note?.id ?? null) !== lastSeed) {
-    setLastSeed(note?.id ?? null);
-    setDraft(note?.body ?? "");
-  }
 
   const dirty = !!note && draft !== note.body;
   const canSave = dirty && !saving;
+
+  // Keep latest draft/editing readable from the note-switch guard below.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const editingRef = useRef(editing);
+  editingRef.current = editing;
+  const prevNoteRef = useRef<{ id: string; title: string; body: string } | null>(
+    note ? { id: note.id, title: note.title, body: note.body } : null,
+  );
+
+  // Re-seed the editor when the open note changes; guard unsaved edits so
+  // switching notes mid-edit can't silently discard work.
+  useLayoutEffect(() => {
+    const prev = prevNoteRef.current;
+    const switched = (prev?.id ?? null) !== (note?.id ?? null);
+    if (
+      switched &&
+      prev &&
+      editingRef.current &&
+      draftRef.current !== prev.body &&
+      !window.confirm(`Discard unsaved changes in "${prev.title}"?`)
+    ) {
+      openNote(prev.id); // revert navigation, keep the in-progress draft
+      return;
+    }
+    prevNoteRef.current = note
+      ? { id: note.id, title: note.title, body: note.body }
+      : null;
+    if (switched) setDraft(note?.body ?? "");
+  }, [currentNoteId, note, openNote]);
 
   const save = async () => {
     if (!note || !canSave) return;
@@ -355,10 +380,19 @@ export function ThreadView(): ReactNode {
                 no headings
               </em>
             )}
-            {headings.map((h, i) => (
-              <button key={i} className="outline-row">
+            {headings.map((h) => (
+              <button
+                key={h.id}
+                className="outline-row"
+                style={{ paddingLeft: 4 + (h.depth - 1) * 12 }}
+                onClick={() =>
+                  document
+                    .getElementById(h.id)
+                    ?.scrollIntoView({ behavior: "smooth", block: "start" })
+                }
+              >
                 <span className="marker">§</span>
-                <span>{h}</span>
+                <span>{h.text}</span>
               </button>
             ))}
           </div>

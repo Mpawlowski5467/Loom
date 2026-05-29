@@ -96,6 +96,9 @@
   font-size: 13px;
   line-height: 1.6;
 }
+.settings-copy-tight {
+  margin: 4px 0 0;
+}
 
 .settings-subhead {
   margin-top: 32px;

@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
-  AgentEvent,
   Capture,
   CaptureStatus,
   CouncilMessage,
@@ -22,13 +21,11 @@ import { notes as notesSeed } from "../data/notes";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
-import type { AgentActivity } from "../api/activity";
-import { fetchAgentActivity } from "../api/activity";
-import { fetchChangelogFeed } from "../api/changelog";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
+import { useAgentPolling } from "./useAgentPolling";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
@@ -197,6 +194,14 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const [graphMode, setGraphMode] = useState<GraphMode>("constellation");
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
+  const [graphFlyTo, setGraphFlyTo] = useState<{
+    id: NoteId;
+    nonce: number;
+  } | null>(null);
+  const flyToNode = useCallback((id: NoteId) => {
+    setTab("graph");
+    setGraphFlyTo((prev) => ({ id, nonce: (prev?.nonce ?? 0) + 1 }));
+  }, []);
   const [graphFilters, setGraphFilters] = useState<Set<string>>(loadGraphFilters);
   const toggleGraphFilter = useCallback((t: string) => {
     setGraphFilters((prev) => {
@@ -317,63 +322,16 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           lastAction: "",
         })),
   );
-  const [changelog, setChangelog] = useState<AgentEvent[]>(
+  // Agent activity (1s) + changelog (3s) feed only the Board, so poll only
+  // while it's the active tab, online, and not demo — never in the background.
+  // Avoids 1s/3s network chatter when the user is on another view.
+  const { changelog, agentActivity } = useAgentPolling(
+    !demo &&
+      loomConfig.onboardingComplete &&
+      !loomConfig.offline &&
+      tab === "board",
     demo ? changelogSeed : [],
   );
-  useEffect(() => {
-    let cancelled = false;
-    let timer: number | null = null;
-    const tick = async () => {
-      try {
-        const items = await fetchChangelogFeed(40);
-        if (cancelled) return;
-        setChangelog(
-          items.map((e) => ({
-            id: e.id,
-            ts: e.ts,
-            agent: e.agent,
-            action: e.action,
-            target: e.target,
-            chain: e.chain === "ok" ? "ok" : "fail",
-            sentinel: e.sentinel as AgentEvent["sentinel"],
-          })),
-        );
-      } catch {
-        // best-effort
-      }
-      if (!cancelled) timer = window.setTimeout(tick, 3000);
-    };
-    void tick();
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
-
-  const [agentActivity, setAgentActivity] = useState<
-    Record<string, AgentActivity>
-  >({});
-  useEffect(() => {
-    let cancelled = false;
-    let timer: number | null = null;
-    const tick = async () => {
-      try {
-        const items = await fetchAgentActivity();
-        if (cancelled) return;
-        const next: Record<string, AgentActivity> = {};
-        for (const a of items) next[a.name] = a;
-        setAgentActivity(next);
-      } catch {
-        // best-effort; backend may be cold during dev restarts
-      }
-      if (!cancelled) timer = window.setTimeout(tick, 1000);
-    };
-    void tick();
-    return () => {
-      cancelled = true;
-      if (timer !== null) window.clearTimeout(timer);
-    };
-  }, []);
 
   const [customAgents, setCustomAgents] = useState<Agent[]>([]);
   const refreshCustomAgents = useCallback(async () => {
@@ -523,6 +481,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   const [newNoteOpen, setNewNoteOpen] = useState(false);
+  const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);
 
   const [captures, setCaptures] = useState<Capture[]>(
     demo ? capturesSeed : [],
@@ -611,6 +570,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setGraphMode,
     graphFocusId,
     setGraphFocusId,
+    graphFlyTo,
+    flyToNode,
     graphFilters,
     toggleGraphFilter,
 
@@ -643,6 +604,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     newNoteOpen,
     setNewNoteOpen,
+    newNoteTitle,
+    setNewNoteTitle,
     appendNote,
     updateNote,
     removeNote,

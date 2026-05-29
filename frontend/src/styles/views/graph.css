@@ -347,3 +347,36 @@
   font-family: var(--serif);
   font-style: italic;
 }
+
+.graph-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--ink-3);
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 14px;
+  pointer-events: none;
+  z-index: 2;
+  animation: graphSceneFadeIn 300ms var(--ease);
+}
+.graph-loading-orbit {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  border: 1.5px solid var(--rule-2);
+  border-top-color: var(--agent);
+  animation: graphSpin 700ms linear infinite;
+}
+@keyframes graphSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.graph-perf-note {
+  color: var(--ink-3);
+}

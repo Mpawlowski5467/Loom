@@ -128,6 +128,48 @@
   font-family: var(--font);
 }
 
+/* Tree first-load / empty state */
+.tree-state {
+  padding: 12px 14px 12px 8px;
+}
+.tree-state-empty {
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.tree-state-empty kbd {
+  font-size: 9px;
+}
+.tree-skeleton-row {
+  display: block;
+  height: 11px;
+  margin: 9px 6px;
+  border-radius: 3px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-surface) 25%,
+    var(--bg-elevated) 50%,
+    var(--bg-surface) 75%
+  );
+  background-size: 200% 100%;
+  animation: treeShimmer 1.4s ease-in-out infinite;
+}
+.tree-skeleton-row:nth-child(2) {
+  width: 70%;
+}
+.tree-skeleton-row:nth-child(3) {
+  width: 85%;
+}
+@keyframes treeShimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+
 .tree-filter {
   padding: 0 12px 10px 4px;
 }
@@ -287,7 +329,7 @@
   background: var(--bg-base);
   border: 1px solid var(--rule-2);
   border-radius: var(--r-sm);
-  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 6px 24px var(--shadow-elev);
   z-index: 1000;
   min-width: 140px;
   font-family: var(--font);

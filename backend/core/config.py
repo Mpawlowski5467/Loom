@@ -71,16 +71,21 @@ settings = LoomSettings()
 
 
 class ThemeName(StrEnum):
-    """Themes shipped with Loom. Paper is the default."""
+    """Themes shipped with Loom. Paper is the default.
+
+    Keep in sync with ``frontend/src/theme/themes.ts`` and the ``.theme-*``
+    blocks in ``frontend/src/styles/tokens.css``.
+    """
 
     paper = "paper"
-    navy = "navy"
-    forest = "forest"
-    sepia = "sepia"
     slate = "slate"
+    foundry = "foundry"
+    dune = "dune"
     carbon = "carbon"
-    iris = "iris"
     lagoon = "lagoon"
+    obsidian = "obsidian"
+    ember = "ember"
+    mulberry = "mulberry"
 
 
 class ProviderConfig(BaseModel):

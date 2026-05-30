@@ -12,6 +12,7 @@
 @import "./styles/views/toasts.css";
 @import "./styles/views/onboarding.css";
 @import "./styles/views/settings.css";
+@import "./styles/views/traces.css";
 
 *,
 *::before,

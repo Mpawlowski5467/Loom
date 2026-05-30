@@ -225,6 +225,20 @@ export function ProviderConfig({
         })}
       </div>
 
+      {providers.length === 0 && (
+        <div className="onb-providers-empty">
+          <p>
+            Pick at least one provider above to unlock agents, search, and graph
+            linking.
+          </p>
+          <p className="onb-providers-empty-sub">
+            <strong>Chat</strong> powers the agents and Council; <strong>embed</strong>{" "}
+            powers semantic search and link suggestions. They can be different
+            providers — or Skip to stay fully local for now.
+          </p>
+        </div>
+      )}
+
       {providers.map((prov) => {
         const meta = META_BY_NAME.get(prov.name as ProviderName);
         if (!meta) return null;

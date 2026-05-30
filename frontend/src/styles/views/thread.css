@@ -406,7 +406,7 @@
 .thread-body .hljs-attr,
 .inbox-detail-body .hljs-title,
 .inbox-detail-body .hljs-attr {
-  color: var(--node-person);
+  color: var(--node-people);
 }
 .thread-body .hljs-built_in,
 .thread-body .hljs-type,

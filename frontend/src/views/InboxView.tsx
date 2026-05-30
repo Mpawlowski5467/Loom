@@ -2,11 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
-import { Chip } from "../components/primitives/Chip";
-import { Wikilink } from "../components/primitives/Wikilink";
-import { AgentBlob } from "../components/primitives/AgentBlob";
-import { renderMarkdown } from "../editor/renderMarkdown";
 import { EditSuggestionModal } from "./EditSuggestionModal";
+import { CaptureCard } from "./inbox/CaptureCard";
+import { DetailPane, type PreviewState } from "./inbox/DetailPane";
 import {
   captureRelPath,
   commitCapture,
@@ -17,33 +15,7 @@ import {
 } from "../api/captures";
 import { backendNoteToFrontend, titleMapFromNotes } from "../api/notes";
 import { ApiError } from "../api/client";
-import type { Capture, NodeType } from "../data/types";
-
-/** Per-capture state of the lazily-fetched Weaver preview. A missing entry
- * means "loading" (a fetch is in flight or about to start). */
-type PreviewState =
-  | { status: "ready"; preview: CapturePreview }
-  | { status: "error"; message: string };
-
-interface CardLink {
-  key: string;
-  title: string;
-  decision?: string;
-}
-
-/** Normalised shape the suggestion card renders, from demo seed OR a preview. */
-interface CardData {
-  type: NodeType;
-  destFolder: string;
-  title: string;
-  tags: string[];
-  links: CardLink[];
-}
-
-/** Backend note types use ``person``; the frontend NodeType is ``people``. */
-function toNodeType(t: string): NodeType {
-  return (t === "person" ? "people" : t) as NodeType;
-}
+import type { Capture } from "../data/types";
 
 export function InboxView(): ReactNode {
   const {
@@ -388,59 +360,6 @@ export function InboxView(): ReactNode {
     return () => window.removeEventListener("keydown", onKey);
   }, [filteredCaptures, selected, editing, selectCapture, accept, previews]);
 
-  // One card, fed from either the demo seed suggestion or a fetched preview.
-  const renderSuggestionCard = (data: CardData): ReactNode => (
-    <div className="inbox-suggest">
-      <div className="inbox-suggest-h">
-        <AgentBlob agent="weaver" state="running" size={22} />
-        Weaver suggestion
-      </div>
-      <div className="inbox-suggest-row">
-        <span className="label">type</span>
-        <Chip type={data.type}>{data.type}</Chip>
-        <span className="label" style={{ marginLeft: 8 }}>
-          folder
-        </span>
-        <Chip>{data.destFolder}/</Chip>
-        <span className="label" style={{ marginLeft: 8 }}>
-          title
-        </span>
-        <span style={{ fontFamily: "var(--serif)", fontStyle: "italic" }}>
-          {data.title}
-        </span>
-      </div>
-      <div className="inbox-suggest-row">
-        <span className="label">tags</span>
-        {data.tags.length === 0 && <span className="inbox-suggest-none">none</span>}
-        {data.tags.map((t) => (
-          <Chip key={t}>#{t}</Chip>
-        ))}
-      </div>
-      <div className="inbox-suggest-row">
-        <span className="label">links</span>
-        {data.links.length === 0 && <span className="inbox-suggest-none">none</span>}
-        {data.links.map((l) => (
-          <span key={l.key} className="inbox-suggest-link">
-            <Wikilink target={l.title} />
-            {l.decision === "suggested" && (
-              <span className="inbox-suggest-tag">suggested</span>
-            )}
-          </span>
-        ))}
-      </div>
-      <div className="inbox-suggest-actions">
-        <Button variant="amber" size="md" onClick={accept}>
-          accept &amp; file
-        </Button>
-        <Button onClick={() => setEditing(true)}>edit suggestion</Button>
-        <Button onClick={() => selected && setCaptureStatus(selected.id, "done")}>
-          skip
-        </Button>
-        <span className="inbox-kbd-hint">j/k move · e edit · ↵ file</span>
-      </div>
-    </div>
-  );
-
   return (
     <div className="inbox-view">
       <div className="inbox-list">
@@ -497,166 +416,42 @@ export function InboxView(): ReactNode {
           </div>
         </div>
         <div className="inbox-scroll">
-          {filteredCaptures.length === 0 && (
-            <div className="inbox-empty">No matching captures</div>
-          )}
-          {filteredCaptures.map((c) => {
-            const isActive = selected?.id === c.id;
-            const filed = c.status === "done";
-            const isChecked = selectedIds.has(c.id);
-            return (
-              <div
-                key={c.id}
-                className="inbox-card"
-                role="button"
-                tabIndex={0}
-                aria-current={isActive}
-                onClick={() => selectCapture(c.id)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    selectCapture(c.id);
-                  }
-                }}
-              >
-                <input
-                  type="checkbox"
-                  className="inbox-card-check"
-                  checked={isChecked}
-                  onChange={() => toggleOne(c.id)}
-                  onClick={(e) => e.stopPropagation()}
-                  aria-label={`Select ${c.title}`}
-                />
-                <div className="inbox-card-body">
-                  <div className="inbox-card-h">
-                    <span className="inbox-card-title">{c.title}</span>
-                    {!filed && (
-                      <span
-                        className="status-badge"
-                        data-state={c.status === "processing" ? "running" : "queued"}
-                      >
-                        <span className="pulse-dot" />
-                        {c.status}
-                      </span>
-                    )}
-                  </div>
-                  <div className="inbox-card-meta">
-                    <span>{c.folder}/</span>
-                    <span>·</span>
-                    <span>{c.receivedAt.slice(11, 16)} · {c.receivedAt.slice(5, 10)}</span>
-                  </div>
-                  {filed && c.filedAs && noteById(c.filedAs) && (
-                    <div className="inbox-card-filed">
-                      filed as <Wikilink target={noteById(c.filedAs)!.title} />
-                    </div>
-                  )}
-                </div>
+          {filteredCaptures.length === 0 &&
+            (captures.length === 0 ? (
+              <div className="inbox-empty inbox-empty-zero">
+                <span className="inbox-empty-title">Inbox is clear</span>
+                <span className="inbox-empty-hint">
+                  Captures land here for triage. Drop a note in{" "}
+                  <code>captures/</code> or run a Shuttle agent to fill it.
+                </span>
               </div>
-            );
-          })}
+            ) : (
+              <div className="inbox-empty">No captures match “{search.trim()}”</div>
+            ))}
+          {filteredCaptures.map((c) => (
+            <CaptureCard
+              key={c.id}
+              capture={c}
+              isActive={selected?.id === c.id}
+              isChecked={selectedIds.has(c.id)}
+              noteById={noteById}
+              onSelect={selectCapture}
+              onToggle={toggleOne}
+            />
+          ))}
         </div>
       </div>
 
       {selected && (
-        <div className="inbox-detail">
-          <div className="inbox-detail-title">{selected.title}</div>
-          <div className="inbox-detail-meta">
-            <span>{selected.folder}/</span>
-            <span>received {selected.receivedAt.slice(5, 16).replace("T", " ")}</span>
-          </div>
-          {renderMarkdown(selected.body, { bodyClass: "inbox-detail-body" })}
-
-          {selected.status === "processing" && (
-            <div className="inbox-processing" role="status" aria-live="polite">
-              <div className="inbox-suggest-h">
-                <AgentBlob agent="weaver" state="running" size={22} />
-                Weaver is filing this capture…
-              </div>
-              <div className="inbox-skeleton" aria-hidden="true">
-                <span className="sk-line" />
-                <span className="sk-line short" />
-                <span className="sk-line" />
-              </div>
-            </div>
-          )}
-          {selected.status !== "done" &&
-            selected.status !== "processing" &&
-            (selected.suggestion
-              ? renderSuggestionCard({
-                  type: selected.suggestion.type,
-                  destFolder: selected.suggestion.destFolder,
-                  title: selected.suggestion.title,
-                  tags: selected.suggestion.tags,
-                  links: selected.suggestion.links
-                    .map((id) => {
-                      const n = noteById(id);
-                      return n ? { key: id, title: n.title } : null;
-                    })
-                    .filter((x): x is CardLink => x !== null),
-                })
-              : (() => {
-                  const st = previews[selected.id];
-                  if (!st) {
-                    return (
-                      <div
-                        className="inbox-processing"
-                        role="status"
-                        aria-live="polite"
-                      >
-                        <div className="inbox-suggest-h">
-                          <AgentBlob agent="weaver" state="running" size={22} />
-                          Weaver is reading this capture…
-                        </div>
-                        <div className="inbox-skeleton" aria-hidden="true">
-                          <span className="sk-line" />
-                          <span className="sk-line short" />
-                          <span className="sk-line" />
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (st.status === "error") {
-                    return (
-                      <div className="inbox-suggest" role="status">
-                        <div className="inbox-suggest-h">
-                          <AgentBlob agent="weaver" state="idle" size={22} />
-                          Weaver suggestion
-                        </div>
-                        <p className="inbox-suggest-err">{st.message}</p>
-                        <div className="inbox-suggest-actions">
-                          <Button
-                            size="md"
-                            onClick={() => retryPreview(selected.id)}
-                          >
-                            retry
-                          </Button>
-                        </div>
-                      </div>
-                    );
-                  }
-                  return renderSuggestionCard({
-                    type: toNodeType(st.preview.note_type),
-                    destFolder: st.preview.folder,
-                    title: st.preview.title,
-                    tags: st.preview.tags,
-                    links: st.preview.links.map((l) => ({
-                      key: l.note_id || l.title,
-                      title: l.title,
-                      decision: l.decision,
-                    })),
-                  });
-                })())}
-          {selected.status === "done" && (
-            <div className="inbox-suggest" style={{ borderColor: "var(--green)", background: "var(--green-bg)" }}>
-              <div className="inbox-suggest-h" style={{ color: "var(--green)" }}>
-                ✓ filed
-              </div>
-              <div style={{ fontFamily: "var(--serif)", fontSize: 13.5, color: "var(--ink-2)" }}>
-                This capture has been processed.
-              </div>
-            </div>
-          )}
-        </div>
+        <DetailPane
+          capture={selected}
+          preview={previews[selected.id]}
+          noteById={noteById}
+          onAccept={accept}
+          onEdit={() => setEditing(true)}
+          onSkip={() => setCaptureStatus(selected.id, "done")}
+          onRetry={retryPreview}
+        />
       )}
 
       {editing && selected && (

@@ -132,48 +132,14 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
   };
 
   return (
-    <aside
-      aria-label="LLM call log"
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        background: "var(--bg-surface)",
-        border: "1px solid rgba(26,24,21,0.08)",
-        borderRadius: 6,
-        overflow: "hidden",
-        minHeight: 0,
-      }}
-    >
-      <div
-        style={{
-          padding: "10px 12px",
-          borderBottom: "1px solid rgba(26,24,21,0.08)",
-          fontFamily: "var(--mono, monospace)",
-          fontSize: 11,
-          letterSpacing: "0.04em",
-          textTransform: "uppercase",
-          color: "var(--ink-3, #8c877d)",
-          display: "flex",
-          alignItems: "center",
-          gap: 10,
-        }}
-      >
+    <aside aria-label="LLM call log" className="trace-feed">
+      <div className="trace-feed-header">
         <span>llm calls</span>
         <select
           aria-label="Filter trace caller"
           value={filter}
           onChange={onFilterChange}
-          style={{
-            marginLeft: "auto",
-            background: "var(--bg-base)",
-            color: "var(--ink-2)",
-            border: "1px solid rgba(26,24,21,0.18)",
-            borderRadius: 4,
-            fontFamily: "var(--mono, monospace)",
-            fontSize: 10.5,
-            padding: "2px 6px",
-            textTransform: "none",
-          }}
+          className="trace-feed-filter"
         >
           <option value={ALL}>all ({allItems.length})</option>
           {callers.map((c) => (
@@ -184,16 +150,9 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
         </select>
         <span>{visible.length}</span>
       </div>
-      <div style={{ overflow: "auto", flex: 1 }}>
+      <div className="trace-feed-body">
         {visible.length === 0 && (
-          <div
-            style={{
-              padding: "16px 12px",
-              fontSize: 12,
-              color: "var(--ink-3)",
-              fontStyle: "italic",
-            }}
-          >
+          <div className="trace-feed-empty">
             {filter === ALL
               ? "No calls yet. Send a council message or process a capture."
               : `No calls matching ${filter}.`}
@@ -205,51 +164,17 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
             type="button"
             onClick={() => setOpenId(t.id)}
             title="View raw call"
-            style={{
-              display: "block",
-              width: "100%",
-              textAlign: "left",
-              padding: "8px 12px",
-              background: "transparent",
-              border: "none",
-              borderBottom: "1px solid rgba(26,24,21,0.06)",
-              cursor: "pointer",
-              fontFamily: "var(--sans, Inter, system-ui)",
-              color: "var(--ink, #1a1815)",
-            }}
-            onMouseEnter={(e) =>
-              (e.currentTarget.style.background = "var(--bg-elevated)")
-            }
-            onMouseLeave={(e) =>
-              (e.currentTarget.style.background = "transparent")
-            }
+            className="trace-item"
           >
-            <div
-              style={{
-                display: "flex",
-                gap: 8,
-                fontSize: 11,
-                fontFamily: "var(--mono, monospace)",
-                color: t.error ? "var(--you)" : "var(--ink-2)",
-                marginBottom: 3,
-              }}
-            >
+            <div className={`trace-item-meta${t.error ? " error" : ""}`}>
               <span>{new Date(t.timestamp).toLocaleTimeString()}</span>
               <span>·</span>
-              <span style={{ color: "var(--agent)" }}>{t.caller || "—"}</span>
+              <span className="trace-item-caller">{t.caller || "—"}</span>
               <span>·</span>
               <span>{t.model}</span>
-              <span style={{ marginLeft: "auto" }}>{t.duration_ms}ms</span>
+              <span className="trace-item-dur">{t.duration_ms}ms</span>
             </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: "var(--ink-2)",
-                whiteSpace: "nowrap",
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-              }}
-            >
+            <div className="trace-item-preview">
               {t.error ? `⚠ ${t.error}` : t.response_preview}
             </div>
           </button>
@@ -258,21 +183,7 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
           type="button"
           onClick={() => void loadOlder()}
           disabled={loadingOlder || dateExhausted.current}
-          style={{
-            display: "block",
-            width: "100%",
-            padding: "8px 12px",
-            background: "transparent",
-            border: "none",
-            borderTop: "1px solid rgba(26,24,21,0.06)",
-            cursor:
-              loadingOlder || dateExhausted.current ? "default" : "pointer",
-            fontFamily: "var(--mono, monospace)",
-            fontSize: 10.5,
-            color: "var(--ink-3)",
-            textTransform: "uppercase",
-            letterSpacing: "0.06em",
-          }}
+          className="trace-feed-more"
         >
           {loadingOlder
             ? "loading…"

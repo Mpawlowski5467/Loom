@@ -3,15 +3,19 @@
 
    :root holds the *paper* defaults so SSR / pre-hydration paints
    sensibly. Each .theme-* block overrides the same set of vars.
-   To add a theme: copy a block, retune the same token list.
+   To add a theme: copy a block, retune the same token list, and
+   register it in `theme/themes.ts` + `backend/core/config.py`.
 
-   Tokens consumed by Sigma.js (graph) live at the bottom: they are
-   read with getComputedStyle() at paint time.
+   Tokens consumed by Sigma.js (graph) live near the bottom of each
+   block: they are read with getComputedStyle() at paint time.
+
+   Light: paper, slate, foundry, dune.
+   Dark:  carbon, lagoon, obsidian, ember, mulberry.
    ────────────────────────────────────────────────────────────────── */
 
 :root,
 .theme-paper {
-  /* Surfaces — warm cream */
+  /* Surfaces */
   --bg-base: #f5f1e8;
   --bg-surface: #ede8da;
   --bg-elevated: #e3dcca;
@@ -26,13 +30,14 @@
   --rule: rgba(var(--ink-rgb), 0.08);
   --rule-2: rgba(var(--ink-rgb), 0.18);
 
-  /* Duotone */
+  /* Duotone — agent */
   --agent: #2d4a7c;
   --agent-rgb: 45, 74, 124;
   --agent-bg: rgba(var(--agent-rgb), 0.08);
   --agent-line: rgba(var(--agent-rgb), 0.35);
   --agent-line-fade: rgba(var(--agent-rgb), 0);
 
+  /* Duotone — you */
   --you: #a83a2c;
   --you-rgb: 168, 58, 44;
   --you-bg: rgba(var(--you-rgb), 0.08);
@@ -56,10 +61,10 @@
   --edge-color: rgba(var(--ink-rgb), 0.18);
   --edge-color-hover: rgba(var(--you-rgb), 0.55);
   --edge-color-faint: rgba(var(--ink-rgb), 0.05);
-  --node-dimmed: rgba(140, 135, 125, 0.18);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
 
   /* Surface elevation shadow */
-  --shadow-elev: rgba(var(--ink-rgb), 0.08);
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
 
   /* Fonts */
   --font: "Inter", system-ui, -apple-system, sans-serif;
@@ -75,142 +80,7 @@
   --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* ── Navy — dark theme, derived from the navy duotone ───────────── */
-.theme-navy {
-  --bg-base: #0c1322;
-  --bg-surface: #131c2f;
-  --bg-elevated: #1d2740;
-
-  --ink: #e6e3d8;
-  --ink-2: #a8a89d;
-  --ink-3: #6b7088;
-  --ink-rgb: 230, 227, 216;
-
-  --rule: rgba(var(--ink-rgb), 0.08);
-  --rule-2: rgba(var(--ink-rgb), 0.18);
-
-  --agent: #7da7e8;
-  --agent-rgb: 125, 167, 232;
-  --agent-bg: rgba(var(--agent-rgb), 0.1);
-  --agent-line: rgba(var(--agent-rgb), 0.4);
-  --agent-line-fade: rgba(var(--agent-rgb), 0);
-
-  --you: #e8896a;
-  --you-rgb: 232, 137, 106;
-  --you-bg: rgba(var(--you-rgb), 0.1);
-  --you-line: rgba(var(--you-rgb), 0.45);
-
-  --green: #8ab877;
-  --green-bg: rgba(138, 184, 119, 0.12);
-  --red: #e8896a;
-
-  --node-project: #7da7e8;
-  --node-topic: #8ab877;
-  --node-people: #c89dd1;
-  --node-daily: #8c93a8;
-  --node-capture: #e0a560;
-  --node-custom: #6dc7c7;
-
-  --label-color: var(--ink-2);
-  --edge-color: rgba(var(--ink-rgb), 0.2);
-  --edge-color-hover: rgba(var(--you-rgb), 0.65);
-  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
-  --node-dimmed: rgba(var(--ink-rgb), 0.1);
-
-  --shadow-elev: rgba(0, 0, 0, 0.45);
-}
-
-/* ── Forest — warm-light, mossier ────────────────────────────────── */
-.theme-forest {
-  --bg-base: #f1ede0;
-  --bg-surface: #e6e2d2;
-  --bg-elevated: #d9d5c2;
-
-  --ink: #1c2418;
-  --ink-2: #4d5544;
-  --ink-3: #7d836f;
-  --ink-rgb: 28, 36, 24;
-
-  --rule: rgba(var(--ink-rgb), 0.08);
-  --rule-2: rgba(var(--ink-rgb), 0.18);
-
-  --agent: #356040;
-  --agent-rgb: 53, 96, 64;
-  --agent-bg: rgba(var(--agent-rgb), 0.08);
-  --agent-line: rgba(var(--agent-rgb), 0.35);
-  --agent-line-fade: rgba(var(--agent-rgb), 0);
-
-  --you: #b04a1f;
-  --you-rgb: 176, 74, 31;
-  --you-bg: rgba(var(--you-rgb), 0.08);
-  --you-line: rgba(var(--you-rgb), 0.4);
-
-  --green: #4a6b3a;
-  --green-bg: rgba(74, 107, 58, 0.14);
-  --red: #b04a1f;
-
-  --node-project: #356040;
-  --node-topic: #6b8a3a;
-  --node-people: #5e3a6b;
-  --node-daily: #7d836f;
-  --node-capture: #b06022;
-  --node-custom: #2d6b6b;
-
-  --label-color: var(--ink-2);
-  --edge-color: rgba(var(--ink-rgb), 0.18);
-  --edge-color-hover: rgba(var(--you-rgb), 0.55);
-  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
-  --node-dimmed: rgba(125, 131, 111, 0.2);
-
-  --shadow-elev: rgba(var(--ink-rgb), 0.1);
-}
-
-/* ── Sepia — warm-light, browner ─────────────────────────────────── */
-.theme-sepia {
-  --bg-base: #f1e8d8;
-  --bg-surface: #e8ddc8;
-  --bg-elevated: #ddd0b7;
-
-  --ink: #1f1813;
-  --ink-2: #5e4d3d;
-  --ink-3: #8c7860;
-  --ink-rgb: 31, 24, 19;
-
-  --rule: rgba(var(--ink-rgb), 0.08);
-  --rule-2: rgba(var(--ink-rgb), 0.18);
-
-  --agent: #4a3a7c;
-  --agent-rgb: 74, 58, 124;
-  --agent-bg: rgba(var(--agent-rgb), 0.08);
-  --agent-line: rgba(var(--agent-rgb), 0.35);
-  --agent-line-fade: rgba(var(--agent-rgb), 0);
-
-  --you: #a8521c;
-  --you-rgb: 168, 82, 28;
-  --you-bg: rgba(var(--you-rgb), 0.08);
-  --you-line: rgba(var(--you-rgb), 0.4);
-
-  --green: #6b6028;
-  --green-bg: rgba(107, 96, 40, 0.14);
-  --red: #a83a2c;
-
-  --node-project: #4a3a7c;
-  --node-topic: #6b6028;
-  --node-people: #6b3a6b;
-  --node-daily: #8c7860;
-  --node-capture: #b06022;
-  --node-custom: #2d6b6b;
-
-  --label-color: var(--ink-2);
-  --edge-color: rgba(var(--ink-rgb), 0.2);
-  --edge-color-hover: rgba(var(--you-rgb), 0.55);
-  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
-  --node-dimmed: rgba(140, 120, 96, 0.22);
-
-  --shadow-elev: rgba(var(--ink-rgb), 0.1);
-}
-
-/* ── Slate — light, cool stone ───────────────────────────────────── */
+/* ── Slate — light, cool stone · royal blue + persimmon ──────────── */
 .theme-slate {
   --bg-base: #ecece6;
   --bg-surface: #e0e0d9;
@@ -250,12 +120,126 @@
   --edge-color: rgba(var(--ink-rgb), 0.18);
   --edge-color-hover: rgba(var(--you-rgb), 0.55);
   --edge-color-faint: rgba(var(--ink-rgb), 0.05);
-  --node-dimmed: rgba(138, 143, 150, 0.2);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
 
   --shadow-elev: rgba(var(--ink-rgb), 0.1);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* ── Carbon — dark, true black, terminal ─────────────────────────── */
+/* ── Foundry — warm archival cream · ink-blue + brick ────────────── */
+.theme-foundry {
+  --bg-base: #f4efe3;
+  --bg-surface: #ebe3d0;
+  --bg-elevated: #e0d6bf;
+
+  --ink: #211c15;
+  --ink-2: #6b6359;
+  --ink-3: #928b7e;
+  --ink-rgb: 33, 28, 21;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #2f4a78;
+  --agent-rgb: 47, 74, 120;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #b0432e;
+  --you-rgb: 176, 67, 46;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --green: #4f6b35;
+  --green-bg: rgba(79, 107, 53, 0.12);
+  --red: #b0432e;
+
+  --node-project: #2f4a78;
+  --node-topic: #4f6b35;
+  --node-people: #7a3f6b;
+  --node-daily: #8d8678;
+  --node-capture: #b06a28;
+  --node-custom: #2f6b66;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Dune — sandy khaki · deep teal + rust ───────────────────────── */
+.theme-dune {
+  --bg-base: #ece4d0;
+  --bg-surface: #dcd1b4;
+  --bg-elevated: #cec1a0;
+
+  --ink: #2a2618;
+  --ink-2: #6b6450;
+  --ink-3: #928b73;
+  --ink-rgb: 42, 38, 24;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #2b5654;
+  --agent-rgb: 43, 86, 84;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #a8521f;
+  --you-rgb: 168, 82, 31;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --green: #6f7b30;
+  --green-bg: rgba(111, 123, 48, 0.12);
+  --red: #a8521f;
+
+  --node-project: #2b5654;
+  --node-topic: #6f7b30;
+  --node-people: #7a3f6b;
+  --node-daily: #8a8268;
+  --node-capture: #a8521f;
+  --node-custom: #9a6a2a;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Carbon — true black · terminal green + magenta ──────────────── */
 .theme-carbon {
   --bg-base: #0a0a0a;
   --bg-surface: #161616;
@@ -266,22 +250,22 @@
   --ink-3: #5e5e5e;
   --ink-rgb: 237, 237, 237;
 
-  --rule: rgba(var(--ink-rgb), 0.06);
-  --rule-2: rgba(var(--ink-rgb), 0.16);
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
 
   --agent: #7eed90;
   --agent-rgb: 126, 237, 144;
-  --agent-bg: rgba(var(--agent-rgb), 0.1);
-  --agent-line: rgba(var(--agent-rgb), 0.4);
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
   --agent-line-fade: rgba(var(--agent-rgb), 0);
 
   --you: #f06c9b;
   --you-rgb: 240, 108, 155;
-  --you-bg: rgba(var(--you-rgb), 0.1);
-  --you-line: rgba(var(--you-rgb), 0.4);
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #7eed90;
-  --green-bg: rgba(126, 237, 144, 0.12);
+  --green: #9becff;
+  --green-bg: rgba(155, 236, 255, 0.14);
   --red: #f06c9b;
 
   --node-project: #7eed90;
@@ -294,58 +278,21 @@
   --label-color: var(--ink-2);
   --edge-color: rgba(var(--ink-rgb), 0.16);
   --edge-color-hover: rgba(var(--you-rgb), 0.6);
-  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
-  --node-dimmed: rgba(var(--ink-rgb), 0.1);
-
-  --shadow-elev: rgba(0, 0, 0, 0.6);
-}
-
-/* ── Iris — dark, eggplant + lavender/mint ───────────────────────── */
-.theme-iris {
-  --bg-base: #1a1224;
-  --bg-surface: #261a35;
-  --bg-elevated: #362547;
-
-  --ink: #f0e6f5;
-  --ink-2: #b29bbd;
-  --ink-3: #7a6885;
-  --ink-rgb: 240, 230, 245;
-
-  --rule: rgba(var(--ink-rgb), 0.07);
-  --rule-2: rgba(var(--ink-rgb), 0.18);
-
-  --agent: #b89dff;
-  --agent-rgb: 184, 157, 255;
-  --agent-bg: rgba(var(--agent-rgb), 0.12);
-  --agent-line: rgba(var(--agent-rgb), 0.42);
-  --agent-line-fade: rgba(var(--agent-rgb), 0);
-
-  --you: #74e8c0;
-  --you-rgb: 116, 232, 192;
-  --you-bg: rgba(var(--you-rgb), 0.12);
-  --you-line: rgba(var(--you-rgb), 0.45);
-
-  --green: #74e8c0;
-  --green-bg: rgba(116, 232, 192, 0.14);
-  --red: #ff8da8;
-
-  --node-project: #b89dff;
-  --node-topic: #74e8c0;
-  --node-people: #ff8da8;
-  --node-daily: #9a8aa8;
-  --node-capture: #f5b876;
-  --node-custom: #7ec7e5;
-
-  --label-color: var(--ink-2);
-  --edge-color: rgba(var(--ink-rgb), 0.18);
-  --edge-color-hover: rgba(var(--you-rgb), 0.6);
   --edge-color-faint: rgba(var(--ink-rgb), 0.06);
   --node-dimmed: rgba(var(--ink-rgb), 0.1);
 
   --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }
 
-/* ── Lagoon — dark, deep petrol + coral/butter ───────────────────── */
+/* ── Lagoon — deep petrol · coral + butter ───────────────────────── */
 .theme-lagoon {
   --bg-base: #0d1f24;
   --bg-surface: #142e36;
@@ -361,18 +308,18 @@
 
   --agent: #ff8a7a;
   --agent-rgb: 255, 138, 122;
-  --agent-bg: rgba(var(--agent-rgb), 0.12);
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
   --agent-line: rgba(var(--agent-rgb), 0.42);
   --agent-line-fade: rgba(var(--agent-rgb), 0);
 
   --you: #f5d56b;
   --you-rgb: 245, 213, 107;
-  --you-bg: rgba(var(--you-rgb), 0.12);
+  --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
   --green: #7ddcb4;
   --green-bg: rgba(125, 220, 180, 0.14);
-  --red: #ff8a7a;
+  --red: #f5d56b;
 
   --node-project: #ff8a7a;
   --node-topic: #7ddcb4;
@@ -382,10 +329,177 @@
   --node-custom: #5dd3d9;
 
   --label-color: var(--ink-2);
-  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
   --edge-color-hover: rgba(var(--you-rgb), 0.6);
   --edge-color-faint: rgba(var(--ink-rgb), 0.06);
   --node-dimmed: rgba(var(--ink-rgb), 0.1);
 
   --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Obsidian — near-black · sky + neon orange ───────────────────── */
+.theme-obsidian {
+  --bg-base: #0a0a0c;
+  --bg-surface: #141418;
+  --bg-elevated: #1f1f25;
+
+  --ink: #f0f0ee;
+  --ink-2: #9a9aa0;
+  --ink-3: #62626a;
+  --ink-rgb: 240, 240, 238;
+
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #5fb8ff;
+  --agent-rgb: 95, 184, 255;
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #ff8a3a;
+  --you-rgb: 255, 138, 58;
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --green: #5fb8ff;
+  --green-bg: rgba(95, 184, 255, 0.14);
+  --red: #ff8a3a;
+
+  --node-project: #8ef06a;
+  --node-topic: #5fb8ff;
+  --node-people: #ff5fd1;
+  --node-daily: #8a8a92;
+  --node-capture: #ff8a3a;
+  --node-custom: #b07bff;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
+  --edge-color-hover: rgba(var(--you-rgb), 0.6);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Ember — warm espresso · amber + magenta ─────────────────────── */
+.theme-ember {
+  --bg-base: #1a120e;
+  --bg-surface: #271811;
+  --bg-elevated: #33211a;
+
+  --ink: #f0e6d8;
+  --ink-2: #b39c8a;
+  --ink-3: #6e5d50;
+  --ink-rgb: 240, 230, 216;
+
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #f0a83a;
+  --agent-rgb: 240, 168, 58;
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #e664a4;
+  --you-rgb: 230, 100, 164;
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --green: #b3d164;
+  --green-bg: rgba(179, 209, 100, 0.14);
+  --red: #e664a4;
+
+  --node-project: #f0a83a;
+  --node-topic: #b3d164;
+  --node-people: #e664a4;
+  --node-daily: #a08a76;
+  --node-capture: #f07840;
+  --node-custom: #5dc7c4;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
+  --edge-color-hover: rgba(var(--you-rgb), 0.6);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Mulberry — eggplant · lavender + rose ───────────────────────── */
+.theme-mulberry {
+  --bg-base: #1a1222;
+  --bg-surface: #261934;
+  --bg-elevated: #332343;
+
+  --ink: #f0e6f5;
+  --ink-2: #b29bc4;
+  --ink-3: #776588;
+  --ink-rgb: 240, 230, 245;
+
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #b89dff;
+  --agent-rgb: 184, 157, 255;
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #ff8da8;
+  --you-rgb: 255, 141, 168;
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --green: #74e8c0;
+  --green-bg: rgba(116, 232, 192, 0.14);
+  --red: #ff8da8;
+
+  --node-project: #b89dff;
+  --node-topic: #74e8c0;
+  --node-people: #ff8da8;
+  --node-daily: #9a8aaa;
+  --node-capture: #f5b876;
+  --node-custom: #7ec7e5;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
+  --edge-color-hover: rgba(var(--you-rgb), 0.6);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
 }

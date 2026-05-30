@@ -5,23 +5,25 @@
 
 export type ThemeName =
   | "paper"
-  | "navy"
-  | "forest"
-  | "sepia"
   | "slate"
+  | "foundry"
+  | "dune"
   | "carbon"
-  | "iris"
-  | "lagoon";
+  | "lagoon"
+  | "obsidian"
+  | "ember"
+  | "mulberry";
 
 export const THEMES: ThemeName[] = [
   "paper",
-  "navy",
-  "forest",
-  "sepia",
   "slate",
+  "foundry",
+  "dune",
   "carbon",
-  "iris",
   "lagoon",
+  "obsidian",
+  "ember",
+  "mulberry",
 ];
 
 export type ThemeMode = "light" | "dark";
@@ -56,7 +58,7 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
   paper: {
     name: "paper",
     label: "Paper",
-    description: "Warm cream — Loom's default.",
+    description: "Warm cream — Loom's default. Ink-blue + brick.",
     mode: "light",
     swatch: {
       bgBase: "#f5f1e8",
@@ -67,52 +69,10 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#4a6b3a",
     },
   },
-  navy: {
-    name: "navy",
-    label: "Navy",
-    description: "Dark mode, blue-leaning.",
-    mode: "dark",
-    swatch: {
-      bgBase: "#0c1322",
-      bgSurface: "#131c2f",
-      ink: "#e6e3d8",
-      agent: "#7da7e8",
-      you: "#e8896a",
-      node: "#8ab877",
-    },
-  },
-  forest: {
-    name: "forest",
-    label: "Forest",
-    description: "Warm light, moss-toned ink.",
-    mode: "light",
-    swatch: {
-      bgBase: "#f1ede0",
-      bgSurface: "#e6e2d2",
-      ink: "#1c2418",
-      agent: "#356040",
-      you: "#b04a1f",
-      node: "#6b8a3a",
-    },
-  },
-  sepia: {
-    name: "sepia",
-    label: "Sepia",
-    description: "Warm light, ochre-shifted.",
-    mode: "light",
-    swatch: {
-      bgBase: "#f1e8d8",
-      bgSurface: "#e8ddc8",
-      ink: "#1f1813",
-      agent: "#4a3a7c",
-      you: "#a8521c",
-      node: "#6b6028",
-    },
-  },
   slate: {
     name: "slate",
     label: "Slate",
-    description: "Light, cool stone — desaturated.",
+    description: "Cool stone — royal blue + persimmon.",
     mode: "light",
     swatch: {
       bgBase: "#ecece6",
@@ -123,10 +83,38 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#15803d",
     },
   },
+  foundry: {
+    name: "foundry",
+    label: "Foundry",
+    description: "Warm archival cream — ink-blue + brick.",
+    mode: "light",
+    swatch: {
+      bgBase: "#f4efe3",
+      bgSurface: "#ebe3d0",
+      ink: "#211c15",
+      agent: "#2f4a78",
+      you: "#b0432e",
+      node: "#4f6b35",
+    },
+  },
+  dune: {
+    name: "dune",
+    label: "Dune",
+    description: "Sandy khaki — deep teal + rust.",
+    mode: "light",
+    swatch: {
+      bgBase: "#ece4d0",
+      bgSurface: "#dcd1b4",
+      ink: "#2a2618",
+      agent: "#2b5654",
+      you: "#a8521f",
+      node: "#6f7b30",
+    },
+  },
   carbon: {
     name: "carbon",
     label: "Carbon",
-    description: "Dark, true black — terminal feel.",
+    description: "True black — terminal green + magenta.",
     mode: "dark",
     swatch: {
       bgBase: "#0a0a0a",
@@ -137,24 +125,10 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#9becff",
     },
   },
-  iris: {
-    name: "iris",
-    label: "Iris",
-    description: "Dark, eggplant with lavender and mint.",
-    mode: "dark",
-    swatch: {
-      bgBase: "#1a1224",
-      bgSurface: "#261a35",
-      ink: "#f0e6f5",
-      agent: "#b89dff",
-      you: "#74e8c0",
-      node: "#ff8da8",
-    },
-  },
   lagoon: {
     name: "lagoon",
     label: "Lagoon",
-    description: "Dark, deep petrol with coral and butter.",
+    description: "Deep petrol — coral + butter.",
     mode: "dark",
     swatch: {
       bgBase: "#0d1f24",
@@ -163,6 +137,48 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       agent: "#ff8a7a",
       you: "#f5d56b",
       node: "#7ddcb4",
+    },
+  },
+  obsidian: {
+    name: "obsidian",
+    label: "Obsidian",
+    description: "Near-black — sky + neon orange.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#0a0a0c",
+      bgSurface: "#141418",
+      ink: "#f0f0ee",
+      agent: "#5fb8ff",
+      you: "#ff8a3a",
+      node: "#5fb8ff",
+    },
+  },
+  ember: {
+    name: "ember",
+    label: "Ember",
+    description: "Warm espresso — amber + magenta.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#1a120e",
+      bgSurface: "#271811",
+      ink: "#f0e6d8",
+      agent: "#f0a83a",
+      you: "#e664a4",
+      node: "#b3d164",
+    },
+  },
+  mulberry: {
+    name: "mulberry",
+    label: "Mulberry",
+    description: "Eggplant — lavender + rose.",
+    mode: "dark",
+    swatch: {
+      bgBase: "#1a1222",
+      bgSurface: "#261934",
+      ink: "#f0e6f5",
+      agent: "#b89dff",
+      you: "#ff8da8",
+      node: "#74e8c0",
     },
   },
 };

@@ -106,6 +106,21 @@ button:focus:not(:focus-visible),
   outline: none;
 }
 
+/* Inputs and custom controls that declare `outline: none` opt out of the
+   global ring above. Re-establish a keyboard-only focus indicator for them so
+   focus stays visible without showing a ring on mouse click. */
+.input:focus-visible,
+.tree-filter-input:focus-visible,
+.palette-input:focus-visible,
+.thread-title-input:focus-visible,
+.editor-textarea:focus-visible,
+.inbox-search:focus-visible,
+.graph-display-range:focus-visible,
+[role="button"]:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
 /* Utility */
 .row {
   display: flex;

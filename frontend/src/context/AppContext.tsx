@@ -141,6 +141,9 @@ interface ProviderProps {
 export function AppProvider({ children }: ProviderProps): ReactNode {
   const demo = useMemo(() => readDemoMode(), []);
   const [notes, setNotes] = useState<Note[]>(() => (demo ? notesSeed : []));
+  // Demo seeds are present immediately; a live vault is "loaded" only after the
+  // initial fetch resolves, so the tree can distinguish loading from empty.
+  const [notesLoaded, setNotesLoaded] = useState<boolean>(() => demo);
   const appendNote = useCallback((note: Note) => {
     setNotes((prev) =>
       prev.some((n) => n.id === note.id) ? prev : [...prev, note],
@@ -491,7 +494,12 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
 
   useEffect(() => {
-    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) return;
+    // No live fetch in demo/offline/pre-onboarding — treat as already loaded
+    // so the tree shows its empty state rather than a perpetual skeleton.
+    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) {
+      setNotesLoaded(true);
+      return;
+    }
     const ctrl = new AbortController();
 
     void loadAllNotes(ctrl.signal)
@@ -511,6 +519,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           agent: "loom",
           body: err instanceof Error ? err.message : "Failed to load notes",
         });
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setNotesLoaded(true);
       });
 
     void listCaptures(ctrl.signal)
@@ -554,6 +565,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const value: AppContextValue = {
     notes,
+    notesLoaded,
     wikilinkMap,
     resolveWikilink,
     noteById,

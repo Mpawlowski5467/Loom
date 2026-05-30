@@ -45,9 +45,9 @@ describe("useLoomConfig", () => {
   it("readInitialTheme returns localStorage value when set, else default", () => {
     expect(readInitialTheme()).toBe("paper");
 
-    localStorage.setItem("loom.theme", "navy");
+    localStorage.setItem("loom.theme", "mulberry");
 
-    expect(readInitialTheme()).toBe("navy");
+    expect(readInitialTheme()).toBe("mulberry");
   });
 
   it("setTheme optimistically applies, then syncs with backend", async () => {
@@ -56,17 +56,17 @@ describe("useLoomConfig", () => {
     await waitFor(() => expect(result.current.configLoading).toBe(false));
 
     await act(async () => {
-      await result.current.setTheme("forest");
+      await result.current.setTheme("dune");
     });
 
-    expect(document.documentElement).toHaveClass("theme-forest");
-    expect(localStorage.getItem("loom.theme")).toBe("forest");
-    expect(patchConfigMock).toHaveBeenCalledWith({ theme: "forest" });
-    expect(result.current.theme).toBe("forest");
+    expect(document.documentElement).toHaveClass("theme-dune");
+    expect(localStorage.getItem("loom.theme")).toBe("dune");
+    expect(patchConfigMock).toHaveBeenCalledWith({ theme: "dune" });
+    expect(result.current.theme).toBe("dune");
   });
 
   it("fires a sync toast when backend theme differs from localStorage", async () => {
-    localStorage.setItem("loom.theme", "navy");
+    localStorage.setItem("loom.theme", "mulberry");
     getConfigMock.mockResolvedValue(config("paper"));
     const pushToast = vi.fn();
 

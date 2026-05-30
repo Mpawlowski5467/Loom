@@ -101,6 +101,33 @@
   text-align: center;
   font-style: italic;
 }
+.inbox-empty-zero {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 48px 24px;
+  font-style: normal;
+}
+.inbox-empty-title {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+.inbox-empty-hint {
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-3);
+}
+.inbox-empty-hint code {
+  font-family: var(--mono);
+  font-size: 11px;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background: var(--bg-elevated);
+  color: var(--ink-2);
+}
 
 .inbox-scroll {
   flex: 1;
@@ -281,6 +308,28 @@
   text-transform: uppercase;
   color: var(--ink-3);
   width: 64px;
+}
+/* Inline secondary labels (folder / title) sit between chips, not in the
+   leading 64px column. */
+.inbox-suggest-row .label.label-gap {
+  width: auto;
+  margin-left: 8px;
+}
+.inbox-suggest-title {
+  font-family: var(--serif);
+  font-style: italic;
+}
+.inbox-filed {
+  border-color: var(--green);
+  background: var(--green-bg);
+}
+.inbox-filed-h {
+  color: var(--green);
+}
+.inbox-filed-body {
+  font-family: var(--serif);
+  font-size: 13.5px;
+  color: var(--ink-2);
 }
 .inbox-suggest-actions {
   display: flex;

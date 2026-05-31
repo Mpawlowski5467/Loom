@@ -159,9 +159,7 @@ class AgentRunner:
                     from agents.chain import ReadChain
 
                     chain = ReadChain(self._vault_root)
-                    chain_result = await asyncio.to_thread(
-                        chain.execute, "sentinel", note_path
-                    )
+                    chain_result = await asyncio.to_thread(chain.execute, "sentinel", note_path)
                 result.validation = await sentinel.validate_action(
                     "weaver", "created", note_path, chain_result
                 )
@@ -231,7 +229,48 @@ class AgentRunner:
             result = await standup.generate(standup_date)
             return result.to_dict()
 
+        # Not a built-in — try the user-defined custom-agent registry. Custom
+        # agents are Shuttle-tier: they write to captures/ only, and Loom agents
+        # process from there.
+        record = self._lookup_custom_record(agent_name)
+        if record is not None:
+            from agents.shuttle.custom import CustomAgent
+
+            agent = CustomAgent(self._vault_root, record, _get_chat_provider())
+            run_result = await agent.run()
+            return run_result.to_dict()
+
         return {"error": f"Unknown agent or not schedulable: {agent_name}"}
+
+    def _lookup_custom_record(self, agent_name: str) -> dict[str, Any] | None:
+        """Find a custom agent by id in ``agents.yaml`` next to vault.yaml."""
+        import yaml
+
+        agents_file = self._vault_root / "agents.yaml"
+        if not agents_file.exists():
+            return None
+        try:
+            data = yaml.safe_load(agents_file.read_text()) or {}
+        except yaml.YAMLError:
+            logger.warning("agents.yaml is malformed; cannot run custom agents")
+            return None
+        items = data.get("agents") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return None
+        for raw in items:
+            if isinstance(raw, dict) and raw.get("id") == agent_name:
+                return raw
+        return None
+
+
+def _get_chat_provider() -> Any:
+    """Best-effort chat provider for custom-agent runs; None if unavailable."""
+    try:
+        from core.providers import get_registry
+
+        return get_registry().get_chat_provider()
+    except Exception:
+        return None
 
 
 def _resolve_path(file_path: str) -> Path:

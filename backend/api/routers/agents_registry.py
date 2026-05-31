@@ -5,9 +5,9 @@ below. Custom agents persist to ``agents.yaml`` next to vault.yaml so
 they survive restarts.
 
 This router is intentionally separate from ``agents.py`` (which exposes
-agent runtime status / changelog). It does NOT wire custom agents to
-execution — they are display-only until a future ticket extends the
-runner (see G4 scope guardrails).
+agent runtime status / changelog). Custom agents ARE executable: running
+one (``POST /api/agents/{id}/run``) dispatches through ``AgentRunner`` to
+``agents.shuttle.custom.CustomAgent``, which writes a capture for triage.
 """
 
 from __future__ import annotations

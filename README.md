@@ -322,19 +322,41 @@ flowchart LR
 
 ## Quick start
 
-### Prerequisites
+### Run with Docker (one command)
+
+The fastest way to try Loom. Builds the frontend and backend into a single
+container that serves both on **one port**.
+
+```bash
+cp .env.example .env     # optional — add a provider key, or skip and use onboarding
+docker compose up        # first build takes a few minutes
+```
+
+Then open **http://localhost:8000**. The onboarding wizard handles vault and
+provider setup on first run.
+
+Your notes persist in the `loom-data` Docker volume across restarts and
+rebuilds. To keep them as plain Markdown files on your machine instead, swap the
+volume for a bind mount (see the commented line in `docker-compose.yml`).
+
+> **Note:** Provider API keys are stored in plain text (in `.env` and in the
+> vault's `config.yaml`). Keep `.env` private — it is git-ignored by default.
+
+### Run from source (for development)
+
+#### Prerequisites
 - Python ≥ 3.11
 - Node.js ≥ 18 with npm
 - An API key for at least one provider (or a running Ollama instance)
 
-### Backend
+#### Backend
 ```bash
 cd backend
 pip install -e ".[dev]" --break-system-packages
 uvicorn api.main:app --reload --port 8000
 ```
 
-### Frontend
+#### Frontend
 ```bash
 cd frontend
 npm install

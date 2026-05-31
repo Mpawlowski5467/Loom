@@ -1,0 +1,32 @@
+# Keep the build context small and reproducible.
+
+# Dependencies / build outputs (reinstalled/rebuilt inside the image)
+**/node_modules
+**/dist
+frontend/.vite
+
+# Python caches and local envs
+**/__pycache__
+**/*.pyc
+.venv
+**/.venv
+**/.pytest_cache
+**/.ruff_cache
+**/.mypy_cache
+*.egg-info
+
+# Local data and secrets — never bake into the image
+.env
+loom-data/
+**/.loom
+
+# VCS / tooling / editor
+.git
+.github
+.gitignore
+.claude
+**/.DS_Store
+*.log
+
+# Docs and CI artifacts not needed at build time
+docs/wireframes

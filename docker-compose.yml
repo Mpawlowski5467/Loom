@@ -1,0 +1,34 @@
+# Loom — one-command local run.
+#
+#   cp .env.example .env     # optional: add provider key(s)
+#   docker compose up        # builds + runs
+#   → open http://localhost:8000
+#
+# Notes persist in the named volume `loom-data` across restarts and rebuilds.
+# To browse the markdown on your host instead, swap the volume for a bind
+# mount (see the commented line below).
+
+services:
+  loom:
+    build: .
+    image: loom:latest
+    container_name: loom
+    ports:
+      - "8000:8000"
+    environment:
+      # Vault data root (matches the volume mount below).
+      LOOM_HOME: /data
+    # Provider API keys (and any other overrides) come from .env if present.
+    # Missing file is fine — keys can also be added in the onboarding wizard.
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - loom-data:/data
+      # To keep notes as plain files on your machine instead, comment the line
+      # above and uncomment this (creates ./loom-data/ next to the compose file):
+      # - ./loom-data:/data
+    restart: unless-stopped
+
+volumes:
+  loom-data:

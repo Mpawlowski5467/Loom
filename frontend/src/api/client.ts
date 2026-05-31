@@ -10,7 +10,10 @@ const DEFAULT_BASE = "http://localhost:8000";
 
 function resolveBaseUrl(): string {
   const fromEnv = import.meta.env.VITE_API_BASE as string | undefined;
-  if (fromEnv && typeof fromEnv === "string") return fromEnv.replace(/\/$/, "");
+  // An explicitly-set value wins — including an empty string, which means
+  // "same origin" (relative ``/api`` paths). This is how the single-container
+  // Docker build talks to its own backend regardless of host/port.
+  if (typeof fromEnv === "string") return fromEnv.replace(/\/$/, "");
   return DEFAULT_BASE;
 }
 

@@ -123,6 +123,8 @@ export interface AppContextValue {
 
   theme: ThemeName;
   setTheme: (t: ThemeName) => Promise<void>;
+  followOsTheme: boolean;
+  setFollowOsTheme: (on: boolean) => void;
   config: LoomConfigPublic | null;
   configLoading: boolean;
   configError: string | null;

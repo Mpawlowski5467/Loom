@@ -11,6 +11,9 @@ export default mergeConfig(
       environment: "jsdom",
       setupFiles: ["./src/test/setup.ts"],
       globals: false,
+      // userEvent-driven interaction tests can brush the default 5s timeout
+      // when the full suite runs under load; give them headroom to avoid flakes.
+      testTimeout: 15000,
     },
   }),
 );

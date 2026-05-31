@@ -80,3 +80,104 @@ describe("useLoomConfig", () => {
     expect(document.documentElement).toHaveClass("theme-paper");
   });
 });
+
+/** Controllable prefers-color-scheme: dark for the follow-OS path. */
+function stubMatchMedia(dark: boolean) {
+  const listeners = new Set<(e: MediaQueryListEvent) => void>();
+  const mql = {
+    matches: dark,
+    media: "(prefers-color-scheme: dark)",
+    addEventListener: (_: string, cb: (e: MediaQueryListEvent) => void) =>
+      listeners.add(cb),
+    removeEventListener: (_: string, cb: (e: MediaQueryListEvent) => void) =>
+      listeners.delete(cb),
+  };
+  vi.stubGlobal(
+    "matchMedia",
+    vi.fn(() => mql),
+  );
+  return {
+    flip(toDark: boolean) {
+      mql.matches = toDark;
+      for (const cb of listeners) cb({ matches: toDark } as MediaQueryListEvent);
+    },
+  };
+}
+
+describe("useLoomConfig — follow OS theme", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.unstubAllGlobals();
+    localStorage.clear();
+    document.documentElement.className = "";
+    getConfigMock.mockResolvedValue(config("paper"));
+    patchConfigMock.mockImplementation(async (patch) =>
+      config(patch.theme ?? "paper"),
+    );
+  });
+
+  it("resolves a dark theme on boot when following the OS in dark mode", async () => {
+    localStorage.setItem("loom.theme", "paper"); // last theme was light
+    localStorage.setItem("loom.theme.followOs", "1");
+    stubMatchMedia(true); // OS prefers dark
+    const { result } = renderHook(() => useLoomConfig(vi.fn()));
+
+    // Boot resolves away from the light theme toward a dark one.
+    await waitFor(() => expect(result.current.theme).not.toBe("paper"));
+    expect(result.current.followOsTheme).toBe(true);
+  });
+
+  it("does not let the backend theme override while following the OS", async () => {
+    localStorage.setItem("loom.theme.followOs", "1");
+    stubMatchMedia(true);
+    getConfigMock.mockResolvedValue(config("paper")); // server says light
+    const { result } = renderHook(() => useLoomConfig(vi.fn()));
+
+    await waitFor(() => expect(result.current.configLoading).toBe(false));
+    // Server's "paper" must not win over the OS-resolved dark theme.
+    expect(result.current.theme).not.toBe("paper");
+  });
+
+  it("switches theme when the OS preference flips", async () => {
+    localStorage.setItem("loom.theme.followOs", "1");
+    const media = stubMatchMedia(false); // start light
+    const { result } = renderHook(() => useLoomConfig(vi.fn()));
+    await waitFor(() => expect(result.current.configLoading).toBe(false));
+    const lightTheme = result.current.theme;
+
+    await act(async () => {
+      media.flip(true); // OS goes dark
+    });
+    await waitFor(() => expect(result.current.theme).not.toBe(lightTheme));
+  });
+
+  it("a manual setTheme clears the follow-OS flag and sticks", async () => {
+    // Start following in dark mode → resolves to a dark theme. Then manually
+    // pick a light theme; with the flag cleared the OS must not pull it back.
+    localStorage.setItem("loom.theme.followOs", "1");
+    stubMatchMedia(true);
+    const { result } = renderHook(() => useLoomConfig(vi.fn()));
+    await waitFor(() => expect(result.current.followOsTheme).toBe(true));
+    await waitFor(() => expect(result.current.theme).not.toBe("paper"));
+
+    await act(async () => {
+      await result.current.setTheme("paper");
+    });
+    expect(result.current.followOsTheme).toBe(false);
+    expect(result.current.theme).toBe("paper");
+    expect(localStorage.getItem("loom.theme.followOs")).toBeNull();
+  });
+
+  it("setFollowOsTheme(true) adopts the OS-appropriate theme", async () => {
+    stubMatchMedia(true); // OS dark
+    const { result } = renderHook(() => useLoomConfig(vi.fn()));
+    await waitFor(() => expect(result.current.configLoading).toBe(false));
+    expect(result.current.theme).toBe("paper"); // started light
+
+    await act(async () => {
+      result.current.setFollowOsTheme(true);
+    });
+    await waitFor(() => expect(result.current.theme).not.toBe("paper"));
+    expect(result.current.followOsTheme).toBe(true);
+  });
+});

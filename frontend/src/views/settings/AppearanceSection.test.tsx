@@ -1,26 +1,22 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AppCtx, type AppContextValue } from "../../context/app-ctx";
 import { AppearanceSection } from "./AppearanceSection";
 
-/** Stub prefers-color-scheme for the follow-OS effect. */
-function stubMatchMedia(dark: boolean) {
-  vi.stubGlobal(
-    "matchMedia",
-    vi.fn(() => ({
-      matches: dark,
-      media: "(prefers-color-scheme: dark)",
-      addEventListener: vi.fn(),
-      removeEventListener: vi.fn(),
-    })),
-  );
-}
-
-function renderSection(theme = "paper") {
+function renderSection(
+  theme = "paper",
+  opts: { followOsTheme?: boolean } = {},
+) {
   const setTheme = vi.fn().mockResolvedValue(undefined);
-  const value = { theme, setTheme } as unknown as AppContextValue;
+  const setFollowOsTheme = vi.fn();
+  const value = {
+    theme,
+    setTheme,
+    followOsTheme: opts.followOsTheme ?? false,
+    setFollowOsTheme,
+  } as unknown as AppContextValue;
   function Harness(): ReactNode {
     return (
       <AppCtx.Provider value={value}>
@@ -29,16 +25,11 @@ function renderSection(theme = "paper") {
     );
   }
   render(<Harness />);
-  return { setTheme };
+  return { setTheme, setFollowOsTheme };
 }
 
 beforeEach(() => {
   window.localStorage.clear();
-  stubMatchMedia(false); // OS prefers light by default
-});
-
-afterEach(() => {
-  vi.unstubAllGlobals();
 });
 
 describe("AppearanceSection", () => {
@@ -121,38 +112,62 @@ describe("AppearanceSection — reset to defaults", () => {
 });
 
 describe("AppearanceSection — follow OS appearance", () => {
-  it("starts unchecked and lets the user pick a theme", () => {
+  it("starts unchecked when not following the OS", () => {
     renderSection();
     expect(screen.getByLabelText("Follow OS appearance")).not.toBeChecked();
   });
 
-  it("adopts the OS-appropriate theme when enabled", async () => {
-    const user = userEvent.setup();
-    stubMatchMedia(true); // OS prefers dark
-    const { setTheme } = renderSection("paper"); // current is a light theme
-
-    await user.click(screen.getByLabelText("Follow OS appearance"));
-    // Switches away from the light theme toward a dark one.
-    expect(setTheme).toHaveBeenCalled();
-    expect(setTheme.mock.calls[0]![0]).not.toBe("paper");
-  });
-
-  it("reflects the following state in the status line", async () => {
-    const user = userEvent.setup();
-    renderSection("paper"); // OS light + light theme → no switch needed
-    await user.click(screen.getByLabelText("Follow OS appearance"));
+  it("reflects the following state from context", () => {
+    renderSection("obsidian", { followOsTheme: true });
+    expect(screen.getByLabelText("Follow OS appearance")).toBeChecked();
     expect(screen.getByRole("status")).toHaveTextContent("Following OS");
   });
 
-  it("turns off when the user manually picks a theme", async () => {
+  it("enabling the toggle asks the app to follow the OS", async () => {
     const user = userEvent.setup();
-    renderSection("paper");
-    const toggle = screen.getByLabelText("Follow OS appearance");
-    await user.click(toggle);
-    expect(toggle).toBeChecked();
+    const { setFollowOsTheme } = renderSection("paper");
+    await user.click(screen.getByLabelText("Follow OS appearance"));
+    expect(setFollowOsTheme).toHaveBeenCalledWith(true);
+  });
 
-    // Pick a theme card → follow-OS clears.
+  it("disabling the toggle asks the app to stop following the OS", async () => {
+    const user = userEvent.setup();
+    const { setFollowOsTheme } = renderSection("obsidian", {
+      followOsTheme: true,
+    });
+    await user.click(screen.getByLabelText("Follow OS appearance"));
+    expect(setFollowOsTheme).toHaveBeenCalledWith(false);
+  });
+
+  it("locks the theme grid while following the OS", () => {
+    const { container } = renderWithContainer("obsidian", {
+      followOsTheme: true,
+    });
+    expect(container.querySelector(".settings-theme-locked")).not.toBeNull();
+  });
+
+  it("picking a theme manually routes through setTheme (which clears follow-OS)", async () => {
+    const user = userEvent.setup();
+    const { setTheme } = renderSection("paper");
     await user.click(screen.getAllByRole("radio")[0]!);
-    expect(screen.getByLabelText("Follow OS appearance")).not.toBeChecked();
+    expect(setTheme).toHaveBeenCalled();
   });
 });
+
+/** Variant that also returns the container for class-based assertions. */
+function renderWithContainer(
+  theme: string,
+  opts: { followOsTheme?: boolean } = {},
+) {
+  const value = {
+    theme,
+    setTheme: vi.fn().mockResolvedValue(undefined),
+    followOsTheme: opts.followOsTheme ?? false,
+    setFollowOsTheme: vi.fn(),
+  } as unknown as AppContextValue;
+  return render(
+    <AppCtx.Provider value={value}>
+      <AppearanceSection />
+    </AppCtx.Provider>,
+  );
+}

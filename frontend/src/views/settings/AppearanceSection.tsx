@@ -1,16 +1,9 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { RotateCcw } from "lucide-react";
 import { ThemePickerGrid } from "../../onboarding/steps/ThemePicker";
 import { useApp } from "../../context/app-ctx";
 import type { ThemeName } from "../../theme/themes";
-import {
-  osThemeMode,
-  readFollowOsTheme,
-  subscribeOsTheme,
-  themeForOsMode,
-  writeFollowOsTheme,
-} from "../../theme/themeAuto";
 import {
   APPEARANCE_DEFAULTS,
   applyAppearance,
@@ -39,49 +32,22 @@ const MOTION_OPTIONS: { value: Motion; label: string }[] = [
 ];
 
 export function AppearanceSection(): ReactNode {
-  const { theme, setTheme } = useApp();
+  // Follow-OS theme tracking is owned by useLoomConfig (app-wide), so it stays
+  // active no matter which view is open — this panel only drives the toggle.
+  const { theme, setTheme, followOsTheme, setFollowOsTheme } = useApp();
   const [savingTheme, setSavingTheme] = useState<ThemeName | null>(null);
   const [appearance, setAppearanceState] = useState(readInitialAppearance);
-  const [followOs, setFollowOs] = useState(readFollowOsTheme);
-
-  // While following the OS, apply the matching theme now and on every flip.
-  // The picker is disabled in this mode, so the only theme source is the OS.
-  useEffect(() => {
-    if (!followOs) return;
-    const sync = () => {
-      const next = themeForOsMode(osThemeMode(), theme);
-      if (next !== theme) void setTheme(next);
-    };
-    sync();
-    return subscribeOsTheme(sync);
-    // theme is intentionally excluded: re-subscribing on every theme change
-    // would tear down the listener mid-flip. sync() reads the latest theme via
-    // closure only at mount/toggle, which is the desired "adopt current" point.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [followOs]);
 
   const saveTheme = (next: ThemeName) => {
-    // A manual theme pick is an override — stop following the OS.
-    if (followOs) {
-      setFollowOs(false);
-      writeFollowOsTheme(false);
-    }
+    // setTheme clears follow-OS automatically (a manual pick is an override).
     setSavingTheme(next);
     void setTheme(next).finally(() => setSavingTheme(null));
   };
 
   const toggleFollowOs = () => {
-    const next = !followOs;
-    setFollowOs(next);
-    writeFollowOsTheme(next);
-    if (next) {
-      // Adopt the OS-appropriate theme immediately (without clearing the flag
-      // we just set — so don't route through saveTheme here).
-      const t = themeForOsMode(osThemeMode(), theme);
-      setSavingTheme(t);
-      void setTheme(t).finally(() => setSavingTheme(null));
-    }
+    setFollowOsTheme(!followOsTheme);
   };
+  const followOs = followOsTheme;
 
   const update = (patch: Partial<typeof appearance>) => {
     const next = { ...appearance, ...patch };

@@ -10,6 +10,8 @@ const { mockConfig } = vi.hoisted(() => ({
   mockConfig: {
     theme: "paper",
     setTheme: vi.fn(),
+    followOsTheme: false,
+    setFollowOsTheme: vi.fn(),
     config: null,
     configLoading: false,
     configError: null,

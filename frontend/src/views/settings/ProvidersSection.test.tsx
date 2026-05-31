@@ -98,6 +98,13 @@ describe("ProvidersSection — hydration", () => {
     ).toBeInTheDocument();
   });
 
+  it("always shows the plaintext-key storage note", async () => {
+    renderSection([mkSettingsProvider()]);
+    expect(
+      await screen.findByText(/Keys are stored unencrypted/),
+    ).toBeInTheDocument();
+  });
+
   it("does not warn when an embed-capable provider is configured", async () => {
     renderSection([mkSettingsProvider({ name: "openai" })]);
     await screen.findByRole("radio", { name: "OpenAI" });

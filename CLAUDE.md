@@ -77,7 +77,7 @@ Task prompts: @docs/tasks/
 **Implemented**
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
 - Both Shuttle Layer agents (Researcher, Standup)
-- Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier; execution wiring pending)
+- Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
 - 4 views: GraphView (Sigma.js — constellation + orbit, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
 - Settings UI: Appearance, Providers (with key validation), Vault, About (diagnostics + re-run onboarding), Danger Zone
@@ -90,13 +90,15 @@ Task prompts: @docs/tasks/
 - CI in `.github/workflows/`, LICENSE present
 
 **In flight**
-- Scribe daily-log generation (index works; summary tuning)
-- Sentinel full AI-assisted validation (LLM path exists with static fallback)
-- Standup calendar integration (generate() works; no calendar link)
+- Scribe daily-log generation works; summary phrasing is still being tuned
+- Sentinel AI-assisted validation works (LLM path with deterministic fallback); broadening rule coverage
+- Standup `generate()` works; no external calendar link yet
 
 **Known gaps**
-- Thin frontend test coverage (7 test files — onboarding, primitives, context, markdown; views + graph largely untested)
+- Provider API keys stored in plain text in `config.yaml` (no encryption/keychain yet)
+- No auth layer on the API (safe on localhost; do not expose the port as-is)
 - AppContext still hosts most global state; only `useAgentPolling` is split out so far
+- Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested
 
 ## Conventions
 

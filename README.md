@@ -488,16 +488,19 @@ In active development. What works today:
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
 - Provider system (OpenAI, Anthropic, xAI, OpenRouter, Ollama)
+- Custom agents — define your own from the Board; running one produces a capture for triage
 - File watcher, rate limiting, health/readiness probes
+- One-command Docker run (single container serves UI + API)
 
 In flight:
-- Scribe's daily-log generation (index works; daily summary being tuned)
-- Sentinel's full AI-assisted validation (LLM path exists with a static fallback)
-- Standup calendar integration
-- Custom-agent execution (registry + Board UI exist; run-wiring pending)
+- Scribe's daily-log generation works; the summary phrasing is still being tuned
+- Sentinel's AI-assisted validation works (LLM path with a deterministic fallback); rule coverage is being broadened
+- Standup `generate()` works; no external calendar link yet
 
 Known gaps:
-- Thin frontend test coverage — backend has thorough pytest coverage; the frontend has 7 test files (onboarding, primitives, context, markdown), with views + graph largely untested
+- Provider API keys are stored in plain text in `config.yaml` — no encryption or OS-keychain support yet
+- The API has no auth layer — safe on localhost, but do not expose the port without putting it behind your own auth
+- A few board child components and the `useGraph*` hooks remain untested (backend + the rest of the frontend are well covered)
 
 See [`docs/architecture-ref.md`](docs/architecture-ref.md) for the full design and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

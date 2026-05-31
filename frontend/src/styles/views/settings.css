@@ -255,6 +255,14 @@
   background: var(--you-bg);
   color: var(--ink);
 }
+.settings-banner-note {
+  /* Always-present, informational — calmer than the warn banner. */
+  border-left: 3px solid var(--ink-3);
+}
+.settings-banner-note code {
+  font-family: var(--mono);
+  font-size: 11px;
+}
 
 .settings-provider-body {
   display: grid;

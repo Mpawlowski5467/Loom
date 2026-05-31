@@ -206,6 +206,9 @@ export function ProviderConfig({
         You can configure more than one. Pick the default for chat and the
         default for embeddings — they can be different providers.
       </p>
+      <p className="onb-sub onb-sub-muted">
+        Keys are stored unencrypted in <code>config.yaml</code> on this machine.
+      </p>
 
       <div className="onb-providers" role="group" aria-label="Provider">
         {PROVIDERS.map((opt) => {

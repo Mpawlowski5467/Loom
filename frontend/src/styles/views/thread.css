@@ -25,7 +25,7 @@
 
 .thread-header {
   max-width: 760px;
-  margin: 32px auto 0;
+  margin: calc(32px * var(--space-scale)) auto 0;
   padding: 0 32px;
   width: 100%;
 }

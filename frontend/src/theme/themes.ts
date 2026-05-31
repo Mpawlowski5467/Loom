@@ -188,3 +188,13 @@ export function isThemeName(value: unknown): value is ThemeName {
     typeof value === "string" && THEMES.includes(value as ThemeName)
   );
 }
+
+/** Theme names of a given mode, in registry order. */
+export function themesByMode(mode: ThemeMode): ThemeName[] {
+  return THEMES.filter((name) => THEME_META[name].mode === mode);
+}
+
+/** The default theme to use for a mode when auto-switching (registry-first). */
+export function defaultThemeForMode(mode: ThemeMode): ThemeName {
+  return themesByMode(mode)[0] ?? "paper";
+}

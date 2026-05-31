@@ -17,6 +17,17 @@ body,
 :root {
   --font-scale: 1;
   --space-scale: 1;
+
+  /* Spacing step scale. Each step bakes in --space-scale, so the UI density
+     control (Compact / Cozy / Comfortable) resizes every surface built from
+     these tokens. Use these for structural padding/gap rather than raw px so
+     density stays a real, single-knob setting. */
+  --space-1: calc(4px * var(--space-scale));
+  --space-2: calc(8px * var(--space-scale));
+  --space-3: calc(12px * var(--space-scale));
+  --space-4: calc(16px * var(--space-scale));
+  --space-5: calc(20px * var(--space-scale));
+  --space-6: calc(24px * var(--space-scale));
 }
 html.font-scale-sm { --font-scale: 0.9; }
 html.font-scale-md { --font-scale: 1; }
@@ -29,6 +40,14 @@ html.density-comfortable { --space-scale: 1.15; }
   html.motion-auto * {
     animation-duration: 0.001ms !important;
     transition-duration: 0.001ms !important;
+  }
+  /* "Always on" opts back into motion even when the OS prefers reduced motion:
+     restore the authored durations the media query would otherwise suppress. */
+  html.motion-on *,
+  html.motion-on *::before,
+  html.motion-on *::after {
+    animation-duration: revert !important;
+    transition-duration: revert !important;
   }
 }
 html.motion-off *,

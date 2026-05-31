@@ -137,6 +137,17 @@ export function ProvidersSection(): ReactNode {
         base_url: meta?.supportsBaseUrl ? provider.baseUrl : "",
       });
       setTests((prev) => ({ ...prev, [name]: result }));
+    } catch (err) {
+      // A thrown call (network error, 5xx) would otherwise leave the spinner
+      // stopping with no result. Surface it as a failed test instead.
+      setTests((prev) => ({
+        ...prev,
+        [name]: {
+          ok: false,
+          latency_ms: 0,
+          error: err instanceof Error ? err.message : "Test failed",
+        },
+      }));
     } finally {
       setTesting(null);
     }

@@ -1,7 +1,13 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { applyTheme } from "../../theme/applyTheme";
-import { THEME_META, THEMES, type ThemeName } from "../../theme/themes";
+import {
+  THEME_META,
+  THEMES,
+  themesByMode,
+  type ThemeMode,
+  type ThemeName,
+} from "../../theme/themes";
 import { ThemeSwatch } from "../ThemeSwatch";
 
 interface Props {
@@ -16,6 +22,11 @@ interface ThemePickerGridProps {
   onChange: (theme: ThemeName) => void;
   className?: string;
 }
+
+const MODE_GROUPS: { mode: ThemeMode; label: string }[] = [
+  { mode: "light", label: "Light" },
+  { mode: "dark", label: "Dark" },
+];
 
 export function ThemePickerGrid({
   selected,
@@ -42,30 +53,41 @@ export function ThemePickerGrid({
     onChange(theme);
   };
 
+  const card = (name: ThemeName): ReactNode => {
+    const meta = THEME_META[name];
+    const active = selected === name;
+    return (
+      <button
+        key={name}
+        type="button"
+        role="radio"
+        aria-checked={active}
+        className={`onb-theme-card ${active ? "active" : ""}`}
+        onMouseEnter={() => preview(name)}
+        onFocus={() => preview(name)}
+        onMouseLeave={restore}
+        onBlur={restore}
+        onClick={() => commit(name)}
+      >
+        <ThemeSwatch theme={name} />
+        <div className="onb-theme-meta">
+          <div className="onb-theme-name">{meta.label}</div>
+          <div className="onb-theme-desc">{meta.description}</div>
+        </div>
+      </button>
+    );
+  };
+
   return (
-    <div className={className} role="radiogroup" aria-label="Theme">
-      {THEMES.map((name) => {
-        const meta = THEME_META[name];
-        const active = selected === name;
+    <div role="radiogroup" aria-label="Theme">
+      {MODE_GROUPS.map(({ mode, label }) => {
+        const names = themesByMode(mode);
+        if (names.length === 0) return null;
         return (
-          <button
-            key={name}
-            type="button"
-            role="radio"
-            aria-checked={active}
-            className={`onb-theme-card ${active ? "active" : ""}`}
-            onMouseEnter={() => preview(name)}
-            onFocus={() => preview(name)}
-            onMouseLeave={restore}
-            onBlur={restore}
-            onClick={() => commit(name)}
-          >
-            <ThemeSwatch theme={name} />
-            <div className="onb-theme-meta">
-              <div className="onb-theme-name">{meta.label}</div>
-              <div className="onb-theme-desc">{meta.description}</div>
-            </div>
-          </button>
+          <div key={mode} className="theme-mode-group">
+            <div className="theme-mode-label">{label}</div>
+            <div className={className}>{names.map(card)}</div>
+          </div>
         );
       })}
     </div>

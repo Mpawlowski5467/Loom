@@ -115,6 +115,38 @@ def test_create_note(client: TestClient, seeded_vault: Path) -> None:
     assert data["type"] == "topic"
 
 
+def test_create_note_does_not_overwrite_same_title(
+    client: TestClient, seeded_vault: Path
+) -> None:
+    """Two notes with the same title in the same folder must both survive.
+
+    Regression: the direct-write fallback used to clobber an existing file whose
+    kebab stem matched, silently destroying a note (deletion = archive only).
+    """
+    payload = {"title": "Duplicate Name", "type": "topic", "tags": []}
+
+    first = client.post("/api/notes", json=payload)
+    assert first.status_code == 201
+    first_id = first.json()["id"]
+    first_path = first.json()["file_path"]
+
+    second = client.post("/api/notes", json=payload)
+    assert second.status_code == 201
+    second_id = second.json()["id"]
+    second_path = second.json()["file_path"]
+
+    # Distinct ids, distinct files — the first note is not overwritten.
+    assert first_id != second_id
+    assert first_path != second_path
+    assert Path(first_path).exists()
+    assert Path(second_path).exists()
+
+    # The original is still fetchable.
+    again = client.get(f"/api/notes/{first_id}")
+    assert again.status_code == 200
+    assert again.json()["title"] == "Duplicate Name"
+
+
 def test_update_note(client: TestClient, seeded_vault: Path) -> None:
     resp = client.put(
         "/api/notes/thr_aaa111",

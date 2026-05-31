@@ -56,6 +56,7 @@ export function MainShell(): ReactNode {
     notes,
     appendNote,
     openNote,
+    setEditing,
     config,
     offline,
     pushToast,
@@ -143,6 +144,9 @@ export function MainShell(): ReactNode {
             const note = backendNoteToFrontend(record, titleMapFromNotes(notes));
             appendNote(note);
             openNote(note.id);
+            // Drop straight into the editor — a fresh note is empty, so land
+            // ready to type rather than on a blank read view.
+            setEditing(true);
             setNewNoteTitle(null);
             pushToast({
               icon: "✎",

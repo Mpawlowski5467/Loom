@@ -144,6 +144,10 @@ async def create_note(
     }
 
     file_path = target_dir / f"{stem}.md"
+    # Never clobber an existing note (deletion = archive, never silent loss).
+    # Mirrors weaver_io.write_note's collision handling.
+    if file_path.exists():
+        file_path = target_dir / f"{stem}-{note_id}.md"
     atomic_write_text(file_path, note_to_file_content(meta, body.content))
 
     # Eagerly update the index so the new note is immediately findable

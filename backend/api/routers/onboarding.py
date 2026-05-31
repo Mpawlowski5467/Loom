@@ -29,6 +29,7 @@ class OnboardingProviderPayload(BaseModel):
     chat_model: str | None = None
     embed_model: str | None = None
     host: str | None = None
+    base_url: str | None = None
 
 
 class OnboardingCompleteRequest(BaseModel):
@@ -118,6 +119,7 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
             chat_model=prov.chat_model or existing.chat_model,
             embed_model=prov.embed_model if prov.embed_model is not None else existing.embed_model,
             host=prov.host if prov.host is not None else existing.host,
+            base_url=prov.base_url if prov.base_url is not None else existing.base_url,
         )
 
     if providers:

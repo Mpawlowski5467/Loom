@@ -46,13 +46,3 @@ export function listModels(
     signal,
   );
 }
-
-export function deleteProvider(
-  name: string,
-  signal?: AbortSignal,
-): Promise<void> {
-  return apiClient.delete<void>(
-    `/api/providers/${encodeURIComponent(name)}`,
-    signal,
-  );
-}

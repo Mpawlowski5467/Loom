@@ -48,6 +48,7 @@ export interface ProviderUpsert {
 export interface ProviderTestRequest {
   api_key?: string | null;
   host?: string | null;
+  base_url?: string | null;
 }
 
 export interface TestProviderResponse {

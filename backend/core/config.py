@@ -95,6 +95,9 @@ class ProviderConfig(BaseModel):
     chat_model: str = "gpt-4o"
     embed_model: str | None = None
     host: str | None = None
+    # Custom API endpoint for OpenAI-compatible providers (xai, openrouter).
+    # None falls back to each provider's hardcoded default base_url.
+    base_url: str | None = None
 
     def to_public(self) -> ProviderConfigPublic:
         """Return a redacted view safe for the API."""
@@ -103,6 +106,7 @@ class ProviderConfig(BaseModel):
             chat_model=self.chat_model,
             embed_model=self.embed_model or "",
             host=self.host or "",
+            base_url=self.base_url or "",
         )
 
 
@@ -113,6 +117,7 @@ class ProviderConfigPublic(BaseModel):
     chat_model: str = ""
     embed_model: str = ""
     host: str = ""
+    base_url: str = ""
 
 
 class RateLimitConfig(BaseModel):

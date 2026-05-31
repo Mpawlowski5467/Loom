@@ -87,7 +87,8 @@ export function ThemePicker({
     <div className="onb-step">
       <h2 className="onb-h2">Pick a look</h2>
       <p className="onb-sub">
-        Loom ships with four themes. You can change this any time from Settings.
+        Loom ships with {THEMES.length} themes. You can change this any time from
+        Settings.
       </p>
       <ThemePickerGrid selected={selected} onChange={onChange} />
       <div className="onb-actions">

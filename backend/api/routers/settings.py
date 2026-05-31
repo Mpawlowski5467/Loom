@@ -128,6 +128,7 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
             chat_model=p.chat_model or (prior.chat_model if prior else "gpt-4o"),
             embed_model=p.embed_model or (prior.embed_model if prior else None),
             host=p.host or (prior.host if prior else None),
+            base_url=p.base_url or (prior.base_url if prior else None),
         )
         providers[p.name] = pc
 

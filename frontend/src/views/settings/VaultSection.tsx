@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Eye, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
+import { Download, Eye, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   archiveVault,
   createVault,
@@ -8,11 +8,14 @@ import {
   renameVault,
   revealVault,
   setActiveVault,
+  vaultExportUrl,
 } from "../../api/vault";
 import type { VaultInfo } from "../../api/types";
 import { useApp } from "../../context/app-ctx";
 
-const VAULT_NAME_RE = /^[A-Za-z0-9_-]+$/;
+// Mirrors backend/core/vault.py _NAME_RE: must start alphanumeric, then
+// letters/digits/dash/underscore, max 64 chars total.
+const VAULT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 export function VaultSection(): ReactNode {
   const { refreshConfig } = useApp();
@@ -79,6 +82,17 @@ export function VaultSection(): ReactNode {
     }
   };
 
+  const exportVault = (vault: string) => {
+    setMessage(null);
+    const link = document.createElement("a");
+    link.href = vaultExportUrl(vault);
+    link.rel = "noopener";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    setMessage(`Exporting ${vault}…`);
+  };
+
   const beginRename = (vault: VaultInfo) => {
     setRenaming(vault.name);
     setRenameDraft(vault.name);
@@ -92,7 +106,9 @@ export function VaultSection(): ReactNode {
       return;
     }
     if (!VAULT_NAME_RE.test(next)) {
-      setRenameError("Letters, digits, dashes, underscores only");
+      setRenameError(
+        "Start with a letter or digit; dashes and underscores allowed (max 64).",
+      );
       return;
     }
     if (next === oldName) {
@@ -236,6 +252,15 @@ export function VaultSection(): ReactNode {
                     >
                       <Eye size={14} aria-hidden="true" />
                       Reveal
+                    </button>
+                    <button
+                      className="btn btn-md"
+                      type="button"
+                      title="Download a restorable tarball of this vault."
+                      onClick={() => exportVault(vault.name)}
+                    >
+                      <Download size={14} aria-hidden="true" />
+                      Export
                     </button>
                     <button
                       className="btn btn-md"

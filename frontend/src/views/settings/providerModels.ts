@@ -17,6 +17,10 @@ export interface ProviderMeta {
   chatModels: string[];
   embedModels: string[];
   supportsEmbed: boolean;
+  /** OpenAI-compatible providers expose a custom API endpoint. */
+  supportsBaseUrl: boolean;
+  /** Placeholder shown when base_url is blank — the provider's hosted default. */
+  defaultBaseUrl: string;
 }
 
 export interface ProviderForm {
@@ -24,6 +28,7 @@ export interface ProviderForm {
   apiKey: string;
   apiKeySet: boolean;
   host: string;
+  baseUrl: string;
   chatModel: string;
   embedModel: string;
 }
@@ -39,6 +44,8 @@ export const PROVIDERS: ProviderMeta[] = [
     chatModels: ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"],
     embedModels: ["text-embedding-3-small", "text-embedding-3-large"],
     supportsEmbed: true,
+    supportsBaseUrl: false,
+    defaultBaseUrl: "",
   },
   {
     name: "anthropic",
@@ -50,6 +57,8 @@ export const PROVIDERS: ProviderMeta[] = [
     chatModels: ["claude-sonnet-4-20250514", "claude-3-5-haiku-latest"],
     embedModels: [],
     supportsEmbed: false,
+    supportsBaseUrl: false,
+    defaultBaseUrl: "",
   },
   {
     name: "xai",
@@ -61,6 +70,8 @@ export const PROVIDERS: ProviderMeta[] = [
     chatModels: ["grok-3", "grok-2-latest"],
     embedModels: [],
     supportsEmbed: false,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.x.ai/v1",
   },
   {
     name: "openrouter",
@@ -85,6 +96,8 @@ export const PROVIDERS: ProviderMeta[] = [
     ],
     embedModels: [],
     supportsEmbed: false,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://openrouter.ai/api/v1",
   },
   {
     name: "ollama",
@@ -96,6 +109,8 @@ export const PROVIDERS: ProviderMeta[] = [
     chatModels: ["llama3", "llama3.1", "mistral", "qwen2.5"],
     embedModels: ["nomic-embed-text", "mxbai-embed-large"],
     supportsEmbed: true,
+    supportsBaseUrl: false,
+    defaultBaseUrl: "",
   },
 ];
 
@@ -108,6 +123,7 @@ export function createProvider(name: ProviderName): ProviderForm {
     apiKey: "",
     apiKeySet: false,
     host: meta.defaultHost,
+    baseUrl: "",
     chatModel: meta.defaultChat,
     embedModel: meta.supportsEmbed ? meta.defaultEmbed : "",
   };
@@ -123,7 +139,7 @@ export function toProviderInput(
     type: meta.type,
     api_key: provider.apiKey,
     host: provider.host,
-    base_url: "",
+    base_url: meta.supportsBaseUrl ? provider.baseUrl : "",
     chat_model: provider.chatModel,
     embed_model: meta.supportsEmbed ? provider.embedModel : "",
     is_default: provider.name === defaultProvider,

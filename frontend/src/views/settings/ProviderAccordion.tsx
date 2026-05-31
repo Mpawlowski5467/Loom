@@ -86,6 +86,21 @@ function ProviderFormFields(
           />
         </label>
       )}
+      {props.meta.supportsBaseUrl && (
+        <label className="settings-field">
+          <span className="settings-field-label">API base URL</span>
+          <input
+            className="input mono"
+            type="text"
+            value={props.provider.baseUrl}
+            placeholder={props.meta.defaultBaseUrl}
+            onChange={(e) => props.onPatch({ baseUrl: e.target.value })}
+          />
+          <span className="settings-field-hint">
+            Leave blank to use {props.meta.defaultBaseUrl}.
+          </span>
+        </label>
+      )}
       <div className="settings-field-row">
         <ModelCombobox
           label="Chat model"

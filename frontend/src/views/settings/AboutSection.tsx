@@ -91,6 +91,26 @@ export function AboutSection(): ReactNode {
           >
             {health?.ok ? "Ready" : "Limited"}
           </span>
+          {health && (
+            <ul className="settings-health-components">
+              {Object.entries(health.components).map(([name, c]) => (
+                <li key={name} className="settings-health-component">
+                  <span
+                    className={`settings-health-dot ${c.ready ? "ok" : "warn"}`}
+                    aria-hidden="true"
+                  />
+                  <span className="settings-health-component-name">{name}</span>
+                  <span className="settings-health-component-detail">
+                    {c.ready
+                      ? c.count !== undefined
+                        ? `${c.count}`
+                        : "ready"
+                      : (c.details ?? "not ready")}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
         <div>
           <div className="settings-field-label">Vault path</div>
@@ -141,6 +161,9 @@ export function AboutSection(): ReactNode {
           rel="noreferrer"
         >
           Diagnostics <ExternalLink size={13} aria-hidden="true" />
+        </a>
+        <a href={`${API_BASE}/api/traces`} target="_blank" rel="noreferrer">
+          LLM traces <ExternalLink size={13} aria-hidden="true" />
         </a>
       </div>
       {message && <div className="settings-inline-status">{message}</div>}

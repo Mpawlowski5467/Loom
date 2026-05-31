@@ -1,11 +1,5 @@
 import type { ReactNode } from "react";
-import {
-  Palette,
-  Server,
-  ShieldAlert,
-  SlidersHorizontal,
-  Vault,
-} from "lucide-react";
+import { Info, Palette, Server, ShieldAlert, Vault } from "lucide-react";
 import { useApp } from "../context/app-ctx";
 import type { SettingsSection } from "../data/types";
 import { AppearanceSection } from "./settings/AppearanceSection";
@@ -22,7 +16,7 @@ const SECTIONS: {
   { id: "appearance", label: "Appearance", icon: <Palette size={15} /> },
   { id: "providers", label: "Providers", icon: <Server size={15} /> },
   { id: "vault", label: "Vault", icon: <Vault size={15} /> },
-  { id: "about", label: "About", icon: <SlidersHorizontal size={15} /> },
+  { id: "about", label: "About", icon: <Info size={15} /> },
   { id: "danger", label: "Danger", icon: <ShieldAlert size={15} /> },
 ];
 
@@ -56,18 +50,24 @@ export function SettingsView(): ReactNode {
 }
 
 function renderSection(section: SettingsSection): ReactNode {
-  if (section === "appearance") return <AppearanceSection />;
-  if (section === "providers") return <ProvidersSection />;
-  if (section === "vault") return <VaultSection />;
-  if (section === "about") return <AboutSection />;
-  if (section === "danger") return <DangerZoneSection />;
-  return (
-    <div className="settings-panel">
-      <div className="settings-kicker">{section}</div>
-      <h1 className="settings-title">Coming next</h1>
-      <p className="settings-copy">
-        This section is reserved for the next settings slice.
-      </p>
-    </div>
-  );
+  switch (section) {
+    case "appearance":
+      return <AppearanceSection />;
+    case "providers":
+      return <ProvidersSection />;
+    case "vault":
+      return <VaultSection />;
+    case "about":
+      return <AboutSection />;
+    case "danger":
+      return <DangerZoneSection />;
+    default:
+      // Exhaustiveness guard: adding a SettingsSection without a case here is
+      // a compile error, not a silent "Coming next" placeholder.
+      return assertNever(section);
+  }
+}
+
+function assertNever(value: never): never {
+  throw new Error(`Unhandled settings section: ${String(value)}`);
 }

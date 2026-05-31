@@ -14,6 +14,13 @@ export function DangerZoneSection(): ReactNode {
   const [message, setMessage] = useState<string | null>(null);
   const vaultName = config?.active_vault ?? "";
 
+  // Success status that fades after a few seconds so it isn't mistaken for a
+  // persistent state. The modal owns error display, not this.
+  const flash = (text: string) => {
+    setMessage(text);
+    window.setTimeout(() => setMessage(null), 4000);
+  };
+
   const exportVault = () => {
     if (!vaultName) return;
     const link = document.createElement("a");
@@ -22,14 +29,17 @@ export function DangerZoneSection(): ReactNode {
     document.body.appendChild(link);
     link.click();
     link.remove();
-    setMessage(`Exporting ${vaultName}…`);
+    flash(`Exporting ${vaultName}…`);
   };
 
+  // Errors are intentionally NOT caught here: they propagate to
+  // TypedConfirmModal, which shows them inline and keeps itself open so the
+  // user can retry without re-typing the confirmation phrase.
   const confirm = async () => {
     if (action === "reset") {
       await resetOnboarding();
       await refreshConfig();
-      setMessage("Onboarding reset.");
+      flash("Onboarding reset.");
     }
     if (action === "cache") {
       window.localStorage.clear();
@@ -38,12 +48,12 @@ export function DangerZoneSection(): ReactNode {
     if (action === "archive" && vaultName) {
       const result = await archiveVault(vaultName);
       await refreshConfig();
-      setMessage(`Archived ${result.archived_name}.`);
+      flash(`Archived ${result.archived_name}.`);
     }
     if (action === "delete" && vaultName) {
       await hardDeleteVault(vaultName);
       await refreshConfig();
-      setMessage(`Permanently deleted ${vaultName}.`);
+      flash(`Permanently deleted ${vaultName}.`);
     }
   };
 

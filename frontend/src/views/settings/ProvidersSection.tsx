@@ -128,11 +128,13 @@ export function ProvidersSection(): ReactNode {
   const runTest = async (name: ProviderName) => {
     const provider = providers[name];
     if (!provider) return;
+    const meta = PROVIDER_BY_NAME.get(name);
     setTesting(name);
     try {
       const result = await testProvider(name, {
         api_key: provider.apiKey,
         host: provider.host,
+        base_url: meta?.supportsBaseUrl ? provider.baseUrl : "",
       });
       setTests((prev) => ({ ...prev, [name]: result }));
     } finally {
@@ -266,6 +268,7 @@ function hydrateProviders(
       apiKey: "",
       apiKeySet: provider.api_key_set,
       host: provider.host || meta.defaultHost,
+      baseUrl: provider.base_url || "",
       chatModel: provider.chat_model || meta.defaultChat,
       embedModel: meta.supportsEmbed
         ? provider.embed_model || meta.defaultEmbed

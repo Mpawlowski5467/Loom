@@ -104,6 +104,26 @@ def initialize_vault_runtime(
     init_agents(vault_dir)
     init_chat(vault_dir)
     start_watcher(vault_dir, loop=loop)
+    _reconcile_index_drift()
+
+
+def _reconcile_index_drift() -> None:
+    """Re-queue notes present in NoteIndex but missing from the vector store.
+
+    Heals "index drift" — notes whose embeddings never landed (e.g. an
+    embedding blip) and are invisible to search. Best-effort: a cold or
+    unavailable index reports no drift and never blocks startup.
+    """
+    try:
+        from core.watcher import seed_retryable
+        from index.indexer import unindexed_note_paths
+
+        drifted = unindexed_note_paths()
+        if drifted:
+            logger.warning("Index drift detected on startup: %d note(s) — re-queuing", len(drifted))
+            seed_retryable(drifted)
+    except Exception:
+        logger.warning("Index drift reconciliation failed", exc_info=True)
 
 
 def release_active_handles() -> None:

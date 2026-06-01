@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 from agents.changelog import log_action
 from agents.loom.weaver_helpers import build_meta
+from core.note_index import get_note_index
 from core.notes import (
     Note,
     generate_id,
@@ -20,7 +21,34 @@ from core.vault_io import write_note as _vault_write_note
 if TYPE_CHECKING:
     from pathlib import Path
 
+    from core.notes import NoteMeta
+
 logger = logging.getLogger(__name__)
+
+
+def find_note_by_capture_source(capture_id: str) -> NoteMeta | None:
+    """Return an existing note created from a given capture, if any.
+
+    Looks for a note whose ``source`` is ``capture:{capture_id}`` — the marker
+    Weaver writes when it files a capture. Used to make pipeline re-runs
+    idempotent: if a crash happened after the note was written but before the
+    capture was archived, a retry finds the note here instead of creating a
+    duplicate. Keyed on the capture *id* (stable), never the title (titles
+    legitimately collide).
+
+    Args:
+        capture_id: The originating capture's frontmatter id.
+
+    Returns:
+        The matching ``NoteMeta`` from the in-memory index, or ``None``.
+    """
+    if not capture_id:
+        return None
+    target = f"capture:{capture_id}"
+    for meta in get_note_index().all_metas():
+        if meta.source == target:
+            return meta
+    return None
 
 
 def write_note(

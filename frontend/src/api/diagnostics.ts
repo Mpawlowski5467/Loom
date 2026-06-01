@@ -14,7 +14,7 @@ export interface HealthResponse {
   ok: boolean;
   components: Record<
     string,
-    { ready: boolean; details?: string; count?: number }
+    { ready: boolean; details?: string; count?: number; unindexed?: number }
   >;
 }
 

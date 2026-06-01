@@ -163,6 +163,24 @@ class VectorIndexer:
         except Exception:  # noqa: BLE001
             return False
 
+    def indexed_note_ids(self) -> set[str]:
+        """Return the distinct note ids present in the vector store.
+
+        Returns an empty set when the table doesn't exist or can't be read —
+        same defensive posture as :attr:`is_ready`, so a cold index reconciles
+        to "everything unindexed" rather than raising.
+        """
+        try:
+            if not self._table_exists():
+                return set()
+            table = self.get_db().open_table(TABLE_NAME)
+            # Project to just note_id (avoids materializing vectors) and read
+            # via Arrow — robust across lancedb versions for a full scan.
+            arrow = table.to_arrow().select(["note_id"])
+            return {nid for nid in arrow.column("note_id").to_pylist() if nid}
+        except Exception:  # noqa: BLE001
+            return set()
+
     @staticmethod
     def _delete_by_note_id(table: lancedb.table.Table, note_id: str) -> None:
         """Delete all rows matching a note_id."""
@@ -195,3 +213,46 @@ def reset_indexer() -> None:
     if _indexer is not None:
         _indexer.close()
     _indexer = None
+
+
+def unindexed_note_ids(threads_dir: Path | None = None) -> list[str]:
+    """Return note ids present in NoteIndex but absent from the vector store.
+
+    Reconciles the in-memory metadata index against LanceDB to surface "index
+    drift" — notes that were added to NoteIndex (and so appear in the file tree
+    and graph) but whose embeddings never landed, leaving them invisible to
+    search. Returns ``[]`` when the indexer is uninitialized or the vector store
+    can't be read, so a cold start never reports false drift.
+
+    Args:
+        threads_dir: Unused; accepted for call-site symmetry with other
+            reconciliation helpers and possible future filtering.
+    """
+    indexer = get_indexer()
+    if indexer is None:
+        return []
+    from core.note_index import get_note_index
+
+    indexed = indexer.indexed_note_ids()
+    if not indexed:
+        # Cold/empty index: treat as "not yet built" rather than total drift,
+        # so we don't spuriously flag every note before the first index pass.
+        return []
+    meta_ids = {m.id for m in get_note_index().all_metas() if m.id}
+    return sorted(meta_ids - indexed)
+
+
+def unindexed_note_paths() -> list[Path]:
+    """Resolve :func:`unindexed_note_ids` to file paths via NoteIndex.
+
+    Used by startup reconciliation to re-queue drifted notes for indexing.
+    """
+    from core.note_index import get_note_index
+
+    note_index = get_note_index()
+    paths: list[Path] = []
+    for note_id in unindexed_note_ids():
+        path = note_index.get_path_by_id(note_id)
+        if path is not None:
+            paths.append(path)
+    return paths

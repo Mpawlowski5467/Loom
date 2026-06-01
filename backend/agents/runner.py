@@ -105,67 +105,89 @@ class AgentRunner:
           2. Spider scans the new note for connections
           3. Scribe updates the target folder's _index.md
           4. Sentinel validates the created note
+
+        Idempotent on re-run: if a previous run already created the note but
+        crashed before archiving the capture, re-processing detects the
+        existing note (by capture-id source) and skips straight to archiving,
+        so a retry finishes the job instead of creating a duplicate.
         """
         result = PipelineResult()
 
-        # Step 1: Weaver processes capture
+        # Idempotency guard: an already-archived capture is a no-op. (The file
+        # is moved out of captures/ only after a successful archive.)
+        if not capture_path.exists():
+            return result
+
         weaver = get_weaver()
         if weaver is None:
             result.errors.append("Weaver agent not initialized")
             return result
 
-        try:
-            note, weaver_chain = await weaver.process_capture_full(capture_path)
-            if note is None:
-                result.errors.append("Weaver returned no note (empty capture?)")
+        # If this capture was already filed (crash between note-write and
+        # archive), reuse the existing note and skip re-creation — keyed on the
+        # stable capture id, never the title.
+        existing = self._existing_note_for_capture(capture_path)
+        if existing is not None:
+            result.note = existing
+            logger.info(
+                "Capture %s already filed as note %s — finishing archive only",
+                capture_path.name,
+                existing.id,
+            )
+        else:
+            # Step 1: Weaver processes capture
+            try:
+                note, weaver_chain = await weaver.process_capture_full(capture_path)
+                if note is None:
+                    result.errors.append("Weaver returned no note (empty capture?)")
+                    return result
+                result.note = note
+            except Exception as exc:
+                logger.warning("Weaver failed during pipeline run", exc_info=True)
+                result.errors.append(f"Weaver failed: {exc}")
                 return result
-            result.note = note
-        except Exception as exc:
-            logger.warning("Weaver failed during pipeline run", exc_info=True)
-            result.errors.append(f"Weaver failed: {exc}")
-            return result
 
-        note_path = _resolve_path(note.file_path)
+            note_path = _resolve_path(note.file_path)
 
-        # Step 2: Spider links
-        spider = get_spider()
-        if spider is not None:
-            try:
-                result.links_added = await spider.scan_for_connections(note_path)
-            except Exception as exc:
-                logger.warning("Spider failed during pipeline run", exc_info=True)
-                result.errors.append(f"Spider failed: {exc}")
+            # Step 2: Spider links
+            spider = get_spider()
+            if spider is not None:
+                try:
+                    result.links_added = await spider.scan_for_connections(note_path)
+                except Exception as exc:
+                    logger.warning("Spider failed during pipeline run", exc_info=True)
+                    result.errors.append(f"Spider failed: {exc}")
 
-        # Step 3: Scribe updates folder index
-        scribe = get_scribe()
-        if scribe is not None:
-            try:
-                folder_path = note_path.parent
-                await scribe.update_index(folder_path)
-                result.index_updated = True
-            except Exception as exc:
-                logger.warning("Scribe failed during pipeline run", exc_info=True)
-                result.errors.append(f"Scribe failed: {exc}")
+            # Step 3: Scribe updates folder index
+            scribe = get_scribe()
+            if scribe is not None:
+                try:
+                    folder_path = note_path.parent
+                    await scribe.update_index(folder_path)
+                    result.index_updated = True
+                except Exception as exc:
+                    logger.warning("Scribe failed during pipeline run", exc_info=True)
+                    result.errors.append(f"Scribe failed: {exc}")
 
-        # Step 4: Sentinel validates
-        sentinel = get_sentinel()
-        if sentinel is not None:
-            try:
-                # Reuse the chain Weaver already ran (same vault.yaml + prime.md)
-                # instead of re-reading it all from disk. Fall back to a fresh
-                # run only if Weaver didn't surface one.
-                chain_result = weaver_chain
-                if chain_result is None:
-                    from agents.chain import ReadChain
+            # Step 4: Sentinel validates
+            sentinel = get_sentinel()
+            if sentinel is not None:
+                try:
+                    # Reuse the chain Weaver already ran (same vault.yaml + prime.md)
+                    # instead of re-reading it all from disk. Fall back to a fresh
+                    # run only if Weaver didn't surface one.
+                    chain_result = weaver_chain
+                    if chain_result is None:
+                        from agents.chain import ReadChain
 
-                    chain = ReadChain(self._vault_root)
-                    chain_result = await asyncio.to_thread(chain.execute, "sentinel", note_path)
-                result.validation = await sentinel.validate_action(
-                    "weaver", "created", note_path, chain_result
-                )
-            except Exception as exc:
-                logger.warning("Sentinel failed during pipeline run", exc_info=True)
-                result.errors.append(f"Sentinel failed: {exc}")
+                        chain = ReadChain(self._vault_root)
+                        chain_result = await asyncio.to_thread(chain.execute, "sentinel", note_path)
+                    result.validation = await sentinel.validate_action(
+                        "weaver", "created", note_path, chain_result
+                    )
+                except Exception as exc:
+                    logger.warning("Sentinel failed during pipeline run", exc_info=True)
+                    result.errors.append(f"Sentinel failed: {exc}")
 
         # Step 5: Sentinel enforcement on the capture. Archive unless the
         # verdict was "failed" — in that case the capture stays put so the
@@ -241,6 +263,32 @@ class AgentRunner:
             return run_result.to_dict()
 
         return {"error": f"Unknown agent or not schedulable: {agent_name}"}
+
+    def _existing_note_for_capture(self, capture_path: Path) -> Note | None:
+        """Return a note already created from this capture, or None.
+
+        Parses the capture's stable frontmatter id and looks for a note whose
+        ``source`` is ``capture:{id}`` (the marker Weaver writes). Best-effort:
+        a missing/unparseable capture or missing note file yields None, so the
+        pipeline falls back to normal creation.
+        """
+        from agents.loom.weaver_io import find_note_by_capture_source
+        from core.notes import parse_note, parse_note_meta
+
+        try:
+            capture_id = parse_note_meta(capture_path).id
+        except (OSError, ValueError):
+            return None
+        meta = find_note_by_capture_source(capture_id)
+        if meta is None or not meta.file_path:
+            return None
+        note_file = _resolve_path(meta.file_path)
+        if not note_file.exists():
+            return None
+        try:
+            return parse_note(note_file)
+        except (OSError, ValueError):
+            return None
 
     def _lookup_custom_record(self, agent_name: str) -> dict[str, Any] | None:
         """Find a custom agent by id in ``agents.yaml`` next to vault.yaml."""

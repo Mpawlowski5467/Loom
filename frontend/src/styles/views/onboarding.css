@@ -496,6 +496,11 @@
   color: var(--agent);
   border-bottom-color: var(--agent-line);
 }
+.banner-unindexed {
+  background: var(--agent-bg);
+  color: var(--agent);
+  border-bottom-color: var(--agent-line);
+}
 
 /* ── A11y helpers ─────────────────────────────────────────────── */
 .sr-only {

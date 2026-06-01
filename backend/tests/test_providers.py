@@ -375,6 +375,202 @@ class TestTracedProviderWrapper:
         assert wrapped.name == "fancy"
 
 
+class TestTracedProviderRetry:
+    """TracedProvider retries transient ProviderError, except for OpenRouter."""
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Make backoff sleeps instant so the suite stays sub-second."""
+        import core.providers._retry as retry_mod
+
+        async def _instant(_seconds: float) -> None:
+            return None
+
+        monkeypatch.setattr(retry_mod.asyncio, "sleep", _instant)
+
+    @pytest.mark.asyncio
+    async def test_chat_retries_then_succeeds(self) -> None:
+        """chat() retries a transient ProviderError up to 3 attempts total."""
+        from core.exceptions import ProviderError
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class FlakyProvider(BaseProvider):
+            name = "flaky"
+            chat_model = "flaky-model"
+
+            def __init__(self) -> None:
+                self.attempts = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                self.attempts += 1
+                if self.attempts < 3:
+                    raise ProviderError("flaky", "transient blip")
+                return "recovered"
+
+        inner = FlakyProvider()
+        wrapped = TracedProvider(inner, provider_name="flaky")
+
+        result = await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert result == "recovered"
+        assert inner.attempts == 3  # two failures + one success
+
+    @pytest.mark.asyncio
+    async def test_chat_reraises_after_exhausting_attempts(self) -> None:
+        """When every attempt fails, the last ProviderError propagates."""
+        from core.exceptions import ProviderError
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class AlwaysFails(BaseProvider):
+            name = "doomed"
+            chat_model = "doomed-model"
+
+            def __init__(self) -> None:
+                self.attempts = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                self.attempts += 1
+                raise ProviderError("doomed", "always down")
+
+        inner = AlwaysFails()
+        wrapped = TracedProvider(inner, provider_name="doomed")
+
+        with pytest.raises(ProviderError, match="always down"):
+            await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert inner.attempts == 3  # exactly the bounded attempt count
+
+    @pytest.mark.asyncio
+    async def test_openrouter_is_attempted_exactly_once(self) -> None:
+        """OpenRouter runs its own 429 loop — the generic retry must not wrap it."""
+        from core.exceptions import ProviderError
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class FakeOpenRouter(BaseProvider):
+            name = "openrouter"
+            chat_model = "or-model"
+
+            def __init__(self) -> None:
+                self.attempts = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                self.attempts += 1
+                raise ProviderError("openrouter", "rate limited")
+
+        inner = FakeOpenRouter()
+        wrapped = TracedProvider(inner, provider_name="openrouter")
+
+        with pytest.raises(ProviderError, match="rate limited"):
+            await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert inner.attempts == 1  # NOT retried
+
+    @pytest.mark.asyncio
+    async def test_embed_retries_then_succeeds(self) -> None:
+        """embed() shares the same bounded retry as chat()."""
+        from core.exceptions import ProviderError
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class FlakyEmbed(BaseProvider):
+            name = "flakyembed"
+
+            def __init__(self) -> None:
+                self.attempts = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                self.attempts += 1
+                if self.attempts < 2:
+                    raise ProviderError("flakyembed", "cold start")
+                return [1.0, 2.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return ""
+
+        inner = FlakyEmbed()
+        wrapped = TracedProvider(inner, provider_name="flakyembed")
+
+        vec = await wrapped.embed("hello")
+
+        assert vec == [1.0, 2.0]
+        assert inner.attempts == 2
+
+    @pytest.mark.asyncio
+    async def test_non_provider_error_not_retried(self) -> None:
+        """Only ProviderError is retried; other exceptions propagate immediately."""
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class Boom(BaseProvider):
+            name = "boom"
+            chat_model = "boom-model"
+
+            def __init__(self) -> None:
+                self.attempts = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                self.attempts += 1
+                raise RuntimeError("not transient")
+
+        inner = Boom()
+        wrapped = TracedProvider(inner, provider_name="boom")
+
+        with pytest.raises(RuntimeError, match="not transient"):
+            await wrapped.chat(messages=[{"role": "user", "content": "hi"}])
+
+        assert inner.attempts == 1
+
+    @pytest.mark.asyncio
+    async def test_chat_stream_retries_connection_then_streams(self) -> None:
+        """chat_stream retries the connection phase but never replays mid-stream."""
+        from core.exceptions import ProviderError
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class FlakyStream(BaseProvider):
+            name = "flakystream"
+            chat_model = "fs-model"
+
+            def __init__(self) -> None:
+                self.opens = 0
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return ""
+
+            async def chat_stream(self, messages, system=""):  # noqa: ARG002
+                self.opens += 1
+                if self.opens == 1:
+                    raise ProviderError("flakystream", "connection reset")
+                for tok in ("hello", " ", "world"):
+                    yield tok
+
+        inner = FlakyStream()
+        wrapped = TracedProvider(inner, provider_name="flakystream")
+
+        collected = [chunk async for chunk in wrapped.chat_stream(messages=[])]
+
+        assert "".join(collected) == "hello world"
+        assert inner.opens == 2  # first open failed, second succeeded
+
+
 class TestRegistryClose:
     @pytest.mark.asyncio
     async def test_close_calls_provider_close(self) -> None:

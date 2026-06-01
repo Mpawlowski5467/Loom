@@ -99,6 +99,8 @@ export interface AppContextValue {
   agents: Agent[];
   agentActivity: Record<string, AgentActivity>;
   changelog: AgentEvent[];
+  /** Notes present in the file index but missing from the search vector store. */
+  unindexedCount: number;
   customAgents: Agent[];
   refreshCustomAgents: () => Promise<void>;
 

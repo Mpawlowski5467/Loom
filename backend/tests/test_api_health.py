@@ -32,6 +32,9 @@ class TestHealthShape:
         assert "details" in components["indexer"]
         assert isinstance(components["indexer"]["ready"], bool)
         assert isinstance(components["indexer"]["details"], str)
+        # Index-drift signal: a separate integer, NOT folded into `ready`.
+        assert "unindexed" in components["indexer"]
+        assert isinstance(components["indexer"]["unindexed"], int)
 
         assert "ready" in components["agents"]
         assert "count" in components["agents"]
@@ -100,6 +103,27 @@ class TestHealthShape:
         data = resp.json()
         assert data["components"]["indexer"]["ready"] is False
         assert "not initialized" in data["components"]["indexer"]["details"]
+        assert data["components"]["indexer"]["unindexed"] == 0
+
+    def test_health_unindexed_reflects_drift_without_affecting_ready(
+        self, client: TestClient
+    ) -> None:
+        """unindexed surfaces drift while ready stays True (has data)."""
+        mock_indexer = MagicMock()
+        type(mock_indexer).is_ready = PropertyMock(return_value=True)
+
+        with (
+            patch("index.indexer.get_indexer", return_value=mock_indexer),
+            patch("index.indexer.unindexed_note_ids", return_value=["thr_a", "thr_b", "thr_c"]),
+            patch("core.watcher.failed_index_paths", return_value=1),
+        ):
+            resp = client.get("/api/health")
+
+        data = resp.json()
+        indexer = data["components"]["indexer"]
+        # ready is unchanged (index has data); drift is reported separately.
+        assert indexer["ready"] is True
+        assert indexer["unindexed"] == 3  # max(len(drift)=3, failed=1)
 
 
 # ---------------------------------------------------------------------------

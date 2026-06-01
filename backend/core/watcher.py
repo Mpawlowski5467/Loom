@@ -52,6 +52,13 @@ class _VaultEventHandler(FileSystemEventHandler):
         self._content_hashes: dict[Path, str] = {}
         self._hash_lock = threading.Lock()
 
+        # Paths whose vector index failed and are pending a retry. A note can
+        # land in NoteIndex but not LanceDB (embedding blip) and become
+        # invisible to search; tracking the path here lets startup reconciliation
+        # re-queue it and surfaces a count to the health endpoint.
+        self._failed_paths: set[Path] = set()
+        self._failed_lock = threading.Lock()
+
         # Background worker for indexer calls
         self._task_queue: queue.Queue[Path] = queue.Queue()
         self._stop_event = threading.Event()
@@ -157,6 +164,32 @@ class _VaultEventHandler(FileSystemEventHandler):
             self._run_async(indexer.index_note(path))
         except Exception:
             logger.warning("Vector index update failed for %s", path, exc_info=True)
+            with self._failed_lock:
+                self._failed_paths.add(path)
+        else:
+            # Indexed cleanly — clear any prior failure marker for this path.
+            with self._failed_lock:
+                self._failed_paths.discard(path)
+
+    # -- Index-drift tracking ----------------------------------------------
+
+    def failed_count(self) -> int:
+        """Number of paths whose vector index currently failed (drift)."""
+        with self._failed_lock:
+            return len(self._failed_paths)
+
+    def queue_retry(self, paths: list[Path]) -> None:
+        """Mark *paths* as failed and queue them for a re-index attempt.
+
+        Used by startup reconciliation to heal drift detected between
+        NoteIndex and the vector store. Each path is re-queued onto the same
+        worker that handles live edits, so the retry happens off the main
+        thread.
+        """
+        with self._failed_lock:
+            self._failed_paths.update(paths)
+        for path in paths:
+            self._task_queue.put(path)
 
     def _vector_index_file(self, path: Path) -> None:
         """Queue a re-index of ``path`` if its content actually changed."""
@@ -213,6 +246,25 @@ class _VaultEventHandler(FileSystemEventHandler):
 _observer: BaseObserver | None = None
 _handler: _VaultEventHandler | None = None
 _batch_timer: threading.Timer | None = None
+
+
+def failed_index_paths() -> int:
+    """Return the count of notes whose vector index failed (index drift).
+
+    Reaches the active handler the same way ``health.check_watcher`` reaches
+    ``_observer``. Returns 0 when no watcher is running.
+    """
+    return _handler.failed_count() if _handler is not None else 0
+
+
+def seed_retryable(paths: list[Path]) -> None:
+    """Queue *paths* for a vector re-index via the active handler.
+
+    No-op when no watcher is running. Used by startup reconciliation to heal
+    notes present in NoteIndex but missing from the vector store.
+    """
+    if _handler is not None and paths:
+        _handler.queue_retry(paths)
 
 
 def _schedule_batch_reindex(

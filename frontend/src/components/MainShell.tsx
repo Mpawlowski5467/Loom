@@ -15,6 +15,7 @@ import { NewNoteModal } from "../views/NewNoteModal";
 import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
+import { UnindexedBanner } from "./UnindexedBanner";
 
 const SPLASH_KEY = "loom.splash.seen";
 
@@ -59,6 +60,7 @@ export function MainShell(): ReactNode {
     setEditing,
     config,
     offline,
+    unindexedCount,
     pushToast,
   } = useApp();
   const [showSplash, setShowSplash] = useState<boolean>(() =>
@@ -109,6 +111,9 @@ export function MainShell(): ReactNode {
       <Nav />
       {providerMissing && <ProviderBanner />}
       {offline && <OfflineBanner />}
+      {!offline && unindexedCount > 0 && (
+        <UnindexedBanner count={unindexedCount} />
+      )}
       {tab === "settings" ? (
         <div className="app-main">
           <SettingsView />

@@ -13,6 +13,7 @@ from fastapi import Depends
 from core.activity import get_activity
 from core.config import GlobalConfig, settings
 from core.exceptions import ProviderConfigError
+from core.providers._retry import with_retry
 from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
     AnthropicProviderConfig,
@@ -198,9 +199,16 @@ class TracedProvider(BaseProvider):
 
     def __init__(self, inner: BaseProvider, provider_name: str = "") -> None:
         self._inner = inner
-        self._provider_name = provider_name or getattr(
-            inner, "name", inner.__class__.__name__
-        )
+        self._provider_name = provider_name or getattr(inner, "name", inner.__class__.__name__)
+
+    def _should_retry(self) -> bool:
+        """Whether this provider's transient failures should be retried here.
+
+        OpenRouter runs its own per-minute 429 backoff loop (see
+        ``openrouter.py``); wrapping it again would multiply waits and burn the
+        rate-limit budget, so we skip the generic retry for it.
+        """
+        return getattr(self._inner, "name", "") != "openrouter"
 
     # BaseProvider API -------------------------------------------------------
 
@@ -218,7 +226,12 @@ class TracedProvider(BaseProvider):
         for a in pulsing:
             activity.begin(a)
         try:
-            response_text = await self._inner.chat(messages=messages, system=system)
+            if self._should_retry():
+                response_text = await with_retry(
+                    lambda: self._inner.chat(messages=messages, system=system)
+                )
+            else:
+                response_text = await self._inner.chat(messages=messages, system=system)
             return response_text
         except Exception as exc:
             error_text = str(exc)
@@ -253,10 +266,35 @@ class TracedProvider(BaseProvider):
         pulsing = _agents_for_caller(caller)
         for a in pulsing:
             activity.begin(a)
+
+        _DONE = object()
+
+        async def _open_stream() -> tuple[AsyncIterator[str], Any]:
+            """Open the stream and pull the first chunk.
+
+            Retried as a unit so a transient connection failure restarts a
+            fresh stream — but only the *first* chunk is gated this way. Once
+            content has been delivered, we never replay: re-running a
+            half-delivered stream would double-count tokens.
+            """
+            iterator = self._inner.chat_stream(messages=messages, system=system).__aiter__()
+            try:
+                first = await iterator.__anext__()
+            except StopAsyncIteration:
+                return iterator, _DONE
+            return iterator, first
+
         try:
-            async for chunk in self._inner.chat_stream(messages=messages, system=system):
-                chunks.append(chunk)
-                yield chunk
+            if self._should_retry():
+                iterator, first = await with_retry(_open_stream)
+            else:
+                iterator, first = await _open_stream()
+            if first is not _DONE:
+                chunks.append(first)
+                yield first
+                async for chunk in iterator:
+                    chunks.append(chunk)
+                    yield chunk
         except Exception as exc:
             error_text = str(exc)
             raise
@@ -273,6 +311,8 @@ class TracedProvider(BaseProvider):
             )
 
     async def embed(self, text: str) -> list[float]:
+        if self._should_retry():
+            return await with_retry(lambda: self._inner.embed(text))
         return await self._inner.embed(text)
 
     # Pass-through -----------------------------------------------------------

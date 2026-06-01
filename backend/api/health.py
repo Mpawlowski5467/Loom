@@ -5,20 +5,48 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+def _unindexed_count() -> int:
+    """Count notes that are in NoteIndex but missing from the vector store.
+
+    Combines startup-detected drift with paths the watcher failed to index
+    live, deduped. Best-effort — any error reports 0 so the health check stays
+    cheap and never raises.
+    """
+    try:
+        from core.watcher import failed_index_paths
+        from index.indexer import unindexed_note_ids
+
+        drift = set(unindexed_note_ids())
+        # failed_index_paths() counts live failures; union conceptually, but it
+        # returns a count not ids, so take the max to avoid under-reporting
+        # when the two sets overlap or diverge.
+        return max(len(drift), failed_index_paths())
+    except Exception:
+        logger.debug("Unindexed count unavailable", exc_info=True)
+        return 0
+
+
 def check_indexer() -> dict:
-    """Report indexer readiness."""
+    """Report indexer readiness.
+
+    ``unindexed`` is a *separate* drift signal — notes present in NoteIndex but
+    absent from the vector store. It is intentionally NOT folded into ``ready``:
+    ``ready`` must keep meaning "the index has data" because ``/api/ready``
+    503-gates on it.
+    """
     try:
         from index.indexer import get_indexer
 
         indexer = get_indexer()
         if indexer is None:
-            return {"ready": False, "details": "indexer not initialized"}
+            return {"ready": False, "details": "indexer not initialized", "unindexed": 0}
+        unindexed = _unindexed_count()
         if indexer.is_ready:
-            return {"ready": True, "details": "index ready"}
-        return {"ready": False, "details": "index has no data"}
+            return {"ready": True, "details": "index ready", "unindexed": unindexed}
+        return {"ready": False, "details": "index has no data", "unindexed": unindexed}
     except Exception as exc:
         logger.warning("Indexer health check failed", exc_info=True)
-        return {"ready": False, "details": f"error: {exc}"}
+        return {"ready": False, "details": f"error: {exc}", "unindexed": 0}
 
 
 def check_agents() -> dict:

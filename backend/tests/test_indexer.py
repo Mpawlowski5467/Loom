@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from core.notes import build_frontmatter
-from index.indexer import VectorIndexer
+from index.indexer import VectorIndexer, unindexed_note_ids
 
 
 @pytest.fixture
@@ -153,3 +153,79 @@ class TestVectorIndexer:
         indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
         total = await indexer.reindex_vault(tmp_vault / "threads")
         assert total == 0
+
+
+class TestIndexDriftReconciliation:
+    """unindexed_note_ids: ids in NoteIndex but missing from the vector store."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_singletons(self):
+        """Isolate the module-level indexer + note index per test."""
+        from core import note_index as ni_mod
+        from index import indexer as idx_mod
+
+        idx_mod.reset_indexer()
+        prev_ni = ni_mod._note_index
+        ni_mod._note_index = None
+        yield
+        idx_mod.reset_indexer()
+        ni_mod._note_index = None
+        ni_mod._note_index = prev_ni
+
+    @pytest.mark.asyncio
+    async def test_reports_drifted_ids(self, tmp_vault, fake_embed):
+        """A note in NoteIndex but not in vectors is reported as unindexed."""
+        from core.note_index import get_note_index
+        from index.indexer import init_indexer
+
+        topics = tmp_vault / "threads" / "topics"
+        indexed = _write_note(topics, "indexed.md", "Indexed", "Body.", id="thr_aaaaaa")
+        # Drifted note exists on disk + in NoteIndex but never gets vectorized.
+        _write_note(topics, "drift.md", "Drifted", "Body.", id="thr_bbbbbb")
+
+        # Seed the singleton indexer and index ONLY the first note.
+        idx = init_indexer(tmp_vault / ".loom", fake_embed)
+        await idx.index_note(indexed)
+
+        # Build NoteIndex over the whole threads dir (sees both notes).
+        get_note_index().build(tmp_vault / "threads")
+
+        drifted = unindexed_note_ids()
+        assert drifted == ["thr_bbbbbb"]
+
+    @pytest.mark.asyncio
+    async def test_no_drift_when_all_indexed(self, tmp_vault, fake_embed):
+        """When every NoteIndex id is in vectors, nothing is reported."""
+        from core.note_index import get_note_index
+        from index.indexer import init_indexer
+
+        topics = tmp_vault / "threads" / "topics"
+        a = _write_note(topics, "a.md", "A", "Body.", id="thr_aaaaaa")
+        b = _write_note(topics, "b.md", "B", "Body.", id="thr_bbbbbb")
+
+        idx = init_indexer(tmp_vault / ".loom", fake_embed)
+        await idx.index_note(a)
+        await idx.index_note(b)
+        get_note_index().build(tmp_vault / "threads")
+
+        assert unindexed_note_ids() == []
+
+    @pytest.mark.asyncio
+    async def test_cold_index_reports_no_drift(self, tmp_vault, fake_embed):
+        """An empty vector store reports no drift (not 'everything drifted')."""
+        from core.note_index import get_note_index
+        from index.indexer import init_indexer
+
+        topics = tmp_vault / "threads" / "topics"
+        _write_note(topics, "a.md", "A", "Body.", id="thr_aaaaaa")
+        init_indexer(tmp_vault / ".loom", fake_embed)  # never indexes anything
+        get_note_index().build(tmp_vault / "threads")
+
+        assert unindexed_note_ids() == []
+
+    def test_no_indexer_reports_no_drift(self):
+        """With no indexer initialized, reconciliation is a safe no-op."""
+        from index.indexer import reset_indexer
+
+        reset_indexer()
+        assert unindexed_note_ids() == []

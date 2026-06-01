@@ -26,6 +26,7 @@ import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 import { useAgentPolling } from "./useAgentPolling";
+import { useHealthPolling } from "./useHealthPolling";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
@@ -335,6 +336,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       tab === "board",
     demo ? changelogSeed : [],
   );
+  // Index-drift signal — slow poll (8s), independent of the active tab so the
+  // banner shows wherever the user is. Off in demo/offline/pre-onboarding.
+  const unindexedCount = useHealthPolling(
+    !demo && loomConfig.onboardingComplete && !loomConfig.offline,
+  );
 
   const [customAgents, setCustomAgents] = useState<Agent[]>([]);
   const refreshCustomAgents = useCallback(async () => {
@@ -608,6 +614,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     agents: agentsState,
     agentActivity,
     changelog,
+    unindexedCount,
     customAgents,
     refreshCustomAgents,
 

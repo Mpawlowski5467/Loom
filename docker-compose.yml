@@ -14,7 +14,11 @@ services:
     image: loom:latest
     container_name: loom
     ports:
-      - "8000:8000"
+      # Bound to loopback only — Loom ships no auth, so the API is reachable
+      # at http://localhost:8000 on THIS machine but not from the LAN/internet.
+      # To deliberately expose it (only behind a reverse proxy + auth — see
+      # SECURITY.md), change this to "8000:8000" or "0.0.0.0:8000:8000".
+      - "127.0.0.1:8000:8000"
     environment:
       # Vault data root (matches the volume mount below).
       LOOM_HOME: /data

@@ -366,11 +366,11 @@ Agents coordinate through two mechanisms:
 - **Pipelines** for complex workflows: capture arrives → Weaver creates note → Spider links it → Scribe updates index → Sentinel validates
 - **Event-driven** for real-time reactions: file modified → re-index, new capture detected → trigger Weaver
 
-### 4.10 Custom Agents 🟡 Partial
+### 4.10 Custom Agents
 
-Custom Shuttle agents are partly here. A registry API (`/api/agents/registry`) and an **Add agent** modal on the Board let you create, edit, and delete your own agents, persisted to `agents.yaml` in the vault directory. Custom agents are always Shuttle-tier — the seven built-in agents are locked down and read-only.
+Custom Shuttle agents are here. A registry API (`/api/agents/registry`) and an **Add agent** modal on the Board let you create, edit, and delete your own agents, persisted to `agents.yaml` in the vault directory. Custom agents are always Shuttle-tier — the seven built-in agents are locked down and read-only.
 
-What's still pending is **execution wiring**: custom agents show up, store a system prompt, and can be edited, but they don't yet run a full task loop. The registry + UI are the foundation; running them end-to-end is the next step.
+Execution is wired end-to-end: running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's stored system prompt, and writes a capture for triage — the same boundary every Shuttle agent observes.
 
 ### 4.11 Global Changelog
 

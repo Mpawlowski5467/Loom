@@ -76,9 +76,9 @@ export function AddAgentModal({
           {existing ? "Edit agent" : "Add agent"}
         </h2>
         <p className="settings-copy">
-          Custom agents persist with your vault. <strong>Note:</strong> they
-          appear on the Board but don't yet run on their own — execution
-          wiring is coming in a future ticket.
+          Custom agents persist with your vault. Run one from its Board card and
+          it gathers vault context, calls your chat provider with the system
+          prompt below, and writes a capture to your Inbox for triage.
         </p>
 
         <label className="settings-field">

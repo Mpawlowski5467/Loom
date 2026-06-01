@@ -10,6 +10,7 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama); every call traced
 - **Theme**: Paper theme — warm cream paper aesthetic, single duotone accent. Paper is the default; navy/forest/sepia variants also ship in tokens.css.
+- **Packaging**: Docker (multi-stage build → single container serving UI + API on one port); `docker compose up`. Vaults persist in the `loom-data` named volume.
 
 ## Repo Layout
 
@@ -52,6 +53,10 @@ loom/
 ## Commands
 
 ```bash
+# Docker (one command — serves UI + API on one port)
+docker compose up        # builds + runs → open http://localhost:8000
+                         # vaults persist in the `loom-data` named volume
+
 # Backend
 cd backend && pip install -e ".[dev]" --break-system-packages
 uvicorn api.main:app --reload --port 8000

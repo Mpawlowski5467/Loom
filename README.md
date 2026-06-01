@@ -22,6 +22,8 @@ Loom is a personal knowledge system that stores everything as **plain Markdown**
 
 You write captures; agents do the structuring, linking, summarizing, and validating. The whole stack runs locally — your files, your provider keys, your machine.
 
+> **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, the four views, and the capture → note → graph loop.
+
 ## Why Loom?
 
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
@@ -341,6 +343,10 @@ volume for a bind mount (see the commented line in `docker-compose.yml`).
 
 > **Note:** Provider API keys are stored in plain text (in `.env` and in the
 > vault's `config.yaml`). Keep `.env` private — it is git-ignored by default.
+>
+> **Security:** the published port binds to `127.0.0.1` (this machine only) and the
+> API ships **no auth**. Do not expose it to a LAN/internet without a reverse proxy
+> + auth — see [SECURITY.md](SECURITY.md).
 
 ### Run from source (for development)
 
@@ -565,4 +571,4 @@ Early sketches of the visual language and view models. These are *wireframes, no
 
 ## License
 
-MIT — see [LICENSE](LICENSE) (when added).
+MIT — see [LICENSE](LICENSE).

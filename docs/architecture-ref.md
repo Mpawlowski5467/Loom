@@ -68,7 +68,7 @@ history:
 
 **Boundary**: Shuttle agents write to `captures/` only. Loom agents process from there.
 
-**Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`); the 7 built-ins stay read-only. Execution wiring is still pending.
+**Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`); the 7 built-ins stay read-only. Running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's system prompt, and writes a capture for triage.
 
 ## Read-Before-Write Chain
 

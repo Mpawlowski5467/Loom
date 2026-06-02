@@ -14,6 +14,7 @@ import {
   titleMapFromNotes,
   updateNote as apiUpdateNote,
 } from "../api/notes";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { Trash2 } from "lucide-react";
 
 export function ThreadView(): ReactNode {
@@ -36,6 +37,12 @@ export function ThreadView(): ReactNode {
   } = useApp();
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
+  // Accessible confirm dialogs (replace window.confirm).
+  const [confirmArchive, setConfirmArchive] = useState(false);
+  const [pendingDiscard, setPendingDiscard] = useState<{
+    fromTitle: string;
+    toId: string;
+  } | null>(null);
 
   const note = currentNoteId ? noteById(currentNoteId) ?? null : null;
   const [draft, setDraft] = useState<string>(note?.body ?? "");
@@ -52,22 +59,30 @@ export function ThreadView(): ReactNode {
   const prevNoteRef = useRef<{ id: string; title: string; body: string } | null>(
     note ? { id: note.id, title: note.title, body: note.body } : null,
   );
+  // Set while the user is intentionally discarding (confirmed) so the guard
+  // below lets that one switch through instead of re-prompting.
+  const discardingRef = useRef(false);
 
   // Re-seed the editor when the open note changes; guard unsaved edits so
-  // switching notes mid-edit can't silently discard work.
+  // switching notes mid-edit can't silently discard work. The confirmation is
+  // a state-driven accessible modal (see ConfirmModal below): on an unsaved
+  // switch we revert to ``prev`` and stash the target in ``pendingDiscard``;
+  // confirming there re-navigates with the guard bypassed.
   useLayoutEffect(() => {
     const prev = prevNoteRef.current;
     const switched = (prev?.id ?? null) !== (note?.id ?? null);
     if (
       switched &&
       prev &&
+      !discardingRef.current &&
       editingRef.current &&
-      draftRef.current !== prev.body &&
-      !window.confirm(`Discard unsaved changes in "${prev.title}"?`)
+      draftRef.current !== prev.body
     ) {
+      setPendingDiscard({ fromTitle: prev.title, toId: note?.id ?? prev.id });
       openNote(prev.id); // revert navigation, keep the in-progress draft
       return;
     }
+    discardingRef.current = false;
     prevNoteRef.current = note
       ? { id: note.id, title: note.title, body: note.body }
       : null;
@@ -150,27 +165,17 @@ export function ThreadView(): ReactNode {
     }
   };
 
-  const deleteNote = async () => {
-    const ok = window.confirm(
-      `Archive "${note.title}"? It moves to threads/.archive/.`,
-    );
-    if (!ok) return;
-    try {
-      await apiArchiveNote(note.id);
-      removeNote(note.id);
-      pushToast({
-        icon: "📦",
-        agent: "archivist",
-        body: `Archived [[${note.title}]]`,
-      });
-      setTab("graph");
-    } catch (err) {
-      pushToast({
-        icon: "⚠",
-        agent: "sentinel",
-        body: err instanceof Error ? err.message : "Archive failed",
-      });
-    }
+  // Archive runs after the user confirms in the modal. Errors propagate so the
+  // ConfirmModal shows them inline and stays open for a retry.
+  const archiveNow = async () => {
+    await apiArchiveNote(note.id);
+    removeNote(note.id);
+    pushToast({
+      icon: "📦",
+      agent: "archivist",
+      body: `Archived [[${note.title}]]`,
+    });
+    setTab("graph");
   };
 
   const headings = extractHeadings(note.body);
@@ -229,7 +234,7 @@ export function ThreadView(): ReactNode {
               ✎ edit
             </Button>
             <Button
-              onClick={() => void deleteNote()}
+              onClick={() => setConfirmArchive(true)}
               aria-label="Archive note"
               title="Archive note"
             >
@@ -418,6 +423,33 @@ export function ThreadView(): ReactNode {
             })}
           </div>
         </Sidebar>
+      )}
+
+      {confirmArchive && (
+        <ConfirmModal
+          title={`Archive "${note.title}"?`}
+          body="It moves to threads/.archive/ and leaves the active graph. You can restore it from there."
+          confirmLabel="Archive"
+          destructive
+          onConfirm={archiveNow}
+          onClose={() => setConfirmArchive(false)}
+        />
+      )}
+
+      {pendingDiscard && (
+        <ConfirmModal
+          title={`Discard unsaved changes in "${pendingDiscard.fromTitle}"?`}
+          body="Your in-progress edits will be lost."
+          confirmLabel="Discard"
+          destructive
+          onConfirm={() => {
+            const { toId } = pendingDiscard;
+            discardingRef.current = true;
+            setPendingDiscard(null);
+            openNote(toId);
+          }}
+          onClose={() => setPendingDiscard(null)}
+        />
       )}
     </div>
   );

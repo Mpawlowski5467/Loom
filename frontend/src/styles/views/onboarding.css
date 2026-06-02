@@ -24,6 +24,39 @@
   animation: rotateSlow 1.4s linear infinite;
 }
 
+/* Timed-out boot: the spinner mark stops, and we show an actionable retry. */
+.boot-screen-error .boot-mark {
+  animation: none;
+  border-top-color: var(--rule-2);
+}
+.boot-error-body {
+  max-width: 280px;
+  margin: 0;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: normal;
+  text-transform: none;
+  text-align: center;
+  color: var(--ink-2);
+}
+.boot-retry {
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--bg-surface);
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-sm);
+  padding: 8px 18px;
+  cursor: pointer;
+  transition: background 160ms var(--ease);
+}
+.boot-retry:hover {
+  background: var(--bg-elevated);
+}
+
 /* ── Onboarding root ───────────────────────────────────────────── */
 .onb-root {
   position: fixed;

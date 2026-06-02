@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AppCtx, type AppContextValue } from "../context/app-ctx";
 import { ThreadView } from "./ThreadView";
@@ -267,13 +267,25 @@ describe("ThreadView — editing", () => {
 });
 
 describe("ThreadView — archive", () => {
-  it("archives after confirmation, removes the note, and returns to the graph", async () => {
+  it("opens an accessible confirm dialog instead of window.confirm", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
+    renderThread();
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Archive note" }));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(dialog).toHaveTextContent(/Archive "Caching strategy"\?/);
+  });
+
+  it("archives after confirming, removes the note, and returns to the graph", async () => {
+    const user = userEvent.setup();
     archiveNote.mockResolvedValue({ status: "archived", path: "x" });
     const spies = renderThread();
 
     await user.click(screen.getByRole("button", { name: "Archive note" }));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
 
     await waitFor(() => expect(archiveNote).toHaveBeenCalledWith("thr_1"));
     expect(spies.removeNote).toHaveBeenCalledWith("thr_1");
@@ -283,14 +295,41 @@ describe("ThreadView — archive", () => {
     );
   });
 
-  it("does nothing when the archive confirmation is declined", async () => {
+  it("does nothing when the dialog is cancelled", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     const spies = renderThread();
 
     await user.click(screen.getByRole("button", { name: "Archive note" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
+    expect(screen.queryByRole("dialog")).toBeNull();
     expect(archiveNote).not.toHaveBeenCalled();
+    expect(spies.removeNote).not.toHaveBeenCalled();
+  });
+
+  it("cancels the archive dialog on Escape", async () => {
+    const user = userEvent.setup();
+    renderThread();
+
+    await user.click(screen.getByRole("button", { name: "Archive note" }));
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+
+    await user.keyboard("{Escape}");
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(archiveNote).not.toHaveBeenCalled();
+  });
+
+  it("keeps the dialog open and shows the error when archiving fails", async () => {
+    const user = userEvent.setup();
+    archiveNote.mockRejectedValue(new Error("disk full"));
+    const spies = renderThread();
+
+    await user.click(screen.getByRole("button", { name: "Archive note" }));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    await screen.findByText("disk full");
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
     expect(spies.removeNote).not.toHaveBeenCalled();
   });
 });
@@ -351,5 +390,92 @@ describe("ThreadView — context sidebar", () => {
   it("hides the context sidebar while editing", () => {
     renderThread({ secondaryOpen: true, editing: true });
     expect(screen.queryByText("Outline")).not.toBeInTheDocument();
+  });
+});
+
+describe("ThreadView — discard-unsaved guard", () => {
+  /**
+   * Stateful harness: a real ``currentNoteId`` + ``openNote`` so the unsaved-
+   * edit guard (which reverts navigation via ``openNote``) can be exercised.
+   */
+  function renderSwitchable(noteA: Note, noteB: Note) {
+    const byId = new Map([noteA, noteB].map((n) => [n.id, n]));
+    const openNote = vi.fn();
+
+    function Harness(): ReactNode {
+      const [currentId, setCurrentId] = useState(noteA.id);
+      openNote.mockImplementation((id: string) => setCurrentId(id));
+      const value = {
+        currentNoteId: currentId,
+        notes: [noteA, noteB],
+        noteById: (id: string) => byId.get(id),
+        backlinksFor: () => [],
+        primaryOpen: false,
+        secondaryOpen: false,
+        editing: true, // start in edit mode so the guard can fire
+        resolveWikilink: () => undefined,
+        openNote,
+        updateNote: vi.fn(),
+        removeNote: vi.fn(),
+        pushToast: vi.fn(),
+        setTab: vi.fn(),
+        setEditing: vi.fn(),
+        setPrimaryOpen: vi.fn(),
+        setSecondaryOpen: vi.fn(),
+        setNewNoteOpen: vi.fn(),
+        setNewNoteTitle: vi.fn(),
+      } as unknown as AppContextValue;
+      return (
+        <AppCtx.Provider value={value}>
+          <ThreadView />
+          <button onClick={() => setCurrentId(noteB.id)}>switch-to-B</button>
+        </AppCtx.Provider>
+      );
+    }
+    render(<Harness />);
+    return { openNote };
+  }
+
+  it("prompts before discarding unsaved edits and reverts on cancel", async () => {
+    const user = userEvent.setup();
+    const a = mkNote({ id: "thr_a", title: "Note A", body: "A body" });
+    const b = mkNote({ id: "thr_b", title: "Note B", body: "B body" });
+    const { openNote } = renderSwitchable(a, b);
+
+    // Diverge the draft from Note A's body.
+    const textarea = screen.getByRole("textbox");
+    await user.clear(textarea);
+    await user.type(textarea, "A body — edited");
+
+    // Attempt to switch to Note B.
+    await user.click(screen.getByRole("button", { name: "switch-to-B" }));
+
+    // The guard reverts navigation back to A and opens the discard dialog.
+    expect(openNote).toHaveBeenCalledWith("thr_a");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/Discard unsaved changes in "Note A"\?/);
+
+    // Cancel: dialog closes, we stay on A (the edited draft is still shown).
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByRole("textbox")).toHaveValue("A body — edited");
+  });
+
+  it("navigates to the target note when discard is confirmed", async () => {
+    const user = userEvent.setup();
+    const a = mkNote({ id: "thr_a", title: "Note A", body: "A body" });
+    const b = mkNote({ id: "thr_b", title: "Note B", body: "B body" });
+    const { openNote } = renderSwitchable(a, b);
+
+    const textarea = screen.getByRole("textbox");
+    await user.clear(textarea);
+    await user.type(textarea, "A body — edited");
+
+    await user.click(screen.getByRole("button", { name: "switch-to-B" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+
+    // Confirm re-navigates to B (guard bypassed) and the dialog is gone.
+    expect(openNote).toHaveBeenCalledWith("thr_b");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 });

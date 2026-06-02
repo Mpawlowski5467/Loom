@@ -13,6 +13,7 @@ from agents.loom.weaver_prompts import (
     SKELETON_SECTIONS,
 )
 from core.exceptions import ProviderConfigError, ProviderError
+from core.tokens import truncate_to_tokens
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -21,6 +22,12 @@ if TYPE_CHECKING:
     from core.providers import BaseProvider
 
 logger = logging.getLogger(__name__)
+
+# Token budgets for source content embedded in prompts. These replace the old
+# character slices (3000/4000 chars) with token-accurate caps so a dense note
+# can't silently blow the context window.
+_CLASSIFY_CONTENT_TOKENS = 1500
+_BODY_CONTENT_TOKENS = 2000
 
 
 def _required_headings(vault_root: Path, note_type: str) -> str:
@@ -46,7 +53,8 @@ async def classify_capture(content: str, chat_provider: BaseProvider | None) -> 
         return classify_heuristic(content)
 
     user_message = (
-        f"Classify this capture:\n\n---\n{content[:3000]}\n---\n\n"
+        f"Classify this capture:\n\n---\n"
+        f"{truncate_to_tokens(content, _CLASSIFY_CONTENT_TOKENS)}\n---\n\n"
         "Respond with type, folder, title, and tags."
     )
 
@@ -98,7 +106,8 @@ async def generate_note_body(
         "Produce the markdown body for the new note.\n\n"
         f"Required ## headings — use these EXACT headings in this EXACT order, "
         f"and use NO other ## headings:\n{headings}\n\n"
-        f"Source content:\n---\n{raw_content[:4000]}\n---\n\n"
+        f"Source content:\n---\n"
+        f"{truncate_to_tokens(raw_content, _BODY_CONTENT_TOKENS)}\n---\n\n"
         "Return only the body. Start with the first `## ` heading. "
         "Every required heading must appear, even if its section is one line."
     )
@@ -128,7 +137,8 @@ async def format_content(
         "Format this user content into the required note structure.\n\n"
         f"Required ## headings — use these EXACT headings in this EXACT order, "
         f"and use NO other ## headings:\n{headings}\n\n"
-        f"User content:\n---\n{content[:4000]}\n---\n\n"
+        f"User content:\n---\n"
+        f"{truncate_to_tokens(content, _BODY_CONTENT_TOKENS)}\n---\n\n"
         "Return only the body. Start with the first `## ` heading. "
         "Every required heading must appear, even if its section is one line."
     )

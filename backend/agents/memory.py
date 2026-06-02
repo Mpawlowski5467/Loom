@@ -20,6 +20,7 @@ from typing import TYPE_CHECKING
 
 from agents.changelog import log_action
 from core.notes import now_iso
+from core.tokens import truncate_to_tokens
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -29,6 +30,12 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 RECENT_ENTRIES_TO_KEEP = 5
+
+# Hard cap on the material handed to the summarizer LLM. Without this a long
+# history of older entries could exceed the context window. The recent entries
+# kept verbatim are written separately (see ``entries_to_keep``) and are NOT
+# part of this capped text, so no recent [[wikilink]] gets orphaned mid-token.
+_SUMMARY_INPUT_TOKENS = 6000
 
 # Stale-lock threshold: if a .lock file is older than this, assume the
 # process that wrote it died and reclaim the lock. Summarization itself
@@ -49,6 +56,7 @@ def _get_async_lock(vault_root: Path, agent_name: str) -> asyncio.Lock:
         lock = asyncio.Lock()
         _ASYNC_LOCKS[key] = lock
     return lock
+
 
 # -- Entry boundary pattern: each entry starts with "## <ISO timestamp>" -----
 _ENTRY_RE = re.compile(r"(?=^## \d{4}-\d{2}-\d{2}T)", re.MULTILINE)
@@ -107,9 +115,7 @@ async def summarize_memory(
             )
             return ""
         try:
-            return await _summarize_memory_inner(
-                vault_root, agent_name, chat_provider
-            )
+            return await _summarize_memory_inner(vault_root, agent_name, chat_provider)
         finally:
             _release_file_lock(lock_path)
 
@@ -157,6 +163,11 @@ async def _summarize_memory_inner(
         # Nothing to summarize yet — just write raw entries as-is
         _write_memory(memory_path, "", entries_to_keep)
         return ""
+
+    # Cap the material handed to the LLM so a long history can't blow the
+    # context window. Recent entries kept verbatim are written separately and
+    # are unaffected by this truncation.
+    content_to_summarize = truncate_to_tokens(content_to_summarize, _SUMMARY_INPUT_TOKENS)
 
     # Build the prompt
     system_prompt = _SYSTEM_PROMPT

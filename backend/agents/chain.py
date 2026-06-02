@@ -21,6 +21,11 @@ from pydantic import ValidationError
 
 from agents.sanitize import scrub_untrusted
 from core.notes import parse_note
+from core.tokens import truncate_to_tokens
+
+# Token budget for related-note bodies pulled into the read chain (replaces the
+# old 2000-char slice).
+_RELATED_BODY_TOKENS = 1000
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -223,7 +228,9 @@ class ReadChain:
                                 {
                                     "title": linked.title,
                                     "id": linked.id,
-                                    "body": scrub_untrusted(linked.body[:2000]),
+                                    "body": scrub_untrusted(
+                                        truncate_to_tokens(linked.body, _RELATED_BODY_TOKENS)
+                                    ),
                                 }
                             )
 

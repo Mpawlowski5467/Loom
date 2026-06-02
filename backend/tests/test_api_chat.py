@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from starlette.testclient import TestClient
 
 from agents.chat import ChatHistory
@@ -399,3 +400,160 @@ class TestListSessions:
             resp = client.get("/api/chat/sessions")
 
         assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# council_stream — SSE generator (api/routers/chat_stream.py)
+# ---------------------------------------------------------------------------
+
+
+class _FakeChat:
+    """Minimal ChatHistory stand-in for driving council_stream directly."""
+
+    def __init__(self) -> None:
+        self.saved: list[tuple[str, str, str]] = []
+
+    def load_recent(self, _agent: str, limit: int = 10):  # noqa: ARG002
+        return []
+
+    def save_message(self, agent: str, role: str, content: str) -> None:
+        self.saved.append((agent, role, content))
+
+
+def _parse_sse(frames: list[str]) -> list[tuple[str, str]]:
+    """Parse raw SSE frame strings into (event, data) pairs."""
+    parsed: list[tuple[str, str]] = []
+    for frame in frames:
+        event = ""
+        data = ""
+        for line in frame.splitlines():
+            if line.startswith("event: "):
+                event = line[len("event: ") :]
+            elif line.startswith("data: "):
+                data = line[len("data: ") :]
+        parsed.append((event, data))
+    return parsed
+
+
+class TestCouncilStream:
+    @pytest.mark.asyncio
+    async def test_error_frame_on_midstream_failure(self) -> None:
+        """A ProviderError mid-aggregator-stream emits an error frame and ends.
+
+        The per-agent fan-out succeeds (so a `contributions` frame is emitted),
+        but the aggregator's chat_stream yields one token then raises — the
+        generator must surface `event: error` and terminate cleanly.
+        """
+        import json
+
+        from api.routers.chat import _AGGREGATOR_SYSTEM, _COUNCIL_PERSONAS, _ask_agent
+        from api.routers.chat_stream import council_stream
+        from core.exceptions import ProviderError
+
+        async def good_chat(messages, system=""):  # noqa: ARG001
+            return "agent take"
+
+        async def failing_stream(messages, system=""):  # noqa: ARG001
+            yield "partial"
+            raise ProviderError("fake", "stream died")
+
+        provider = MagicMock()
+        provider.chat = good_chat
+        provider.chat_stream = failing_stream
+
+        chat = _FakeChat()
+        frames: list[str] = []
+        with patch("core.providers.get_chat_provider", return_value=provider):
+            async for frame in council_stream(
+                "How is my vault?",
+                chat,
+                personas=_COUNCIL_PERSONAS,
+                aggregator_system=_AGGREGATOR_SYSTEM,
+                ask_agent=_ask_agent,
+            ):
+                frames.append(frame)
+
+        events = _parse_sse(frames)
+        names = [e for e, _ in events]
+
+        # Contributions came first (fan-out succeeded), then a streamed token,
+        # then the error frame; no `done` frame after the failure.
+        assert "contributions" in names
+        assert "token" in names
+        assert names[-1] == "error"
+        assert "done" not in names
+
+        error_data = json.loads(next(d for e, d in events if e == "error"))
+        assert "stream died" in error_data["message"]
+
+        # One contributions frame, one per Loom persona inside it.
+        contrib_data = json.loads(next(d for e, d in events if e == "contributions"))
+        assert len(contrib_data["agent_contributions"]) == len(_COUNCIL_PERSONAS)
+
+    @pytest.mark.asyncio
+    async def test_provider_unavailable_emits_error_first(self) -> None:
+        """If the chat provider can't be built, the first frame is an error."""
+        from api.routers.chat import _AGGREGATOR_SYSTEM, _COUNCIL_PERSONAS, _ask_agent
+        from api.routers.chat_stream import council_stream
+        from core.exceptions import ProviderConfigError
+
+        def _raise() -> None:
+            raise ProviderConfigError("no provider configured")
+
+        chat = _FakeChat()
+        frames: list[str] = []
+        with patch("core.providers.get_chat_provider", side_effect=_raise):
+            async for frame in council_stream(
+                "hi",
+                chat,
+                personas=_COUNCIL_PERSONAS,
+                aggregator_system=_AGGREGATOR_SYSTEM,
+                ask_agent=_ask_agent,
+            ):
+                frames.append(frame)
+
+        events = _parse_sse(frames)
+        assert len(events) == 1
+        assert events[0][0] == "error"
+
+    @pytest.mark.asyncio
+    async def test_happy_path_streams_tokens_then_done(self) -> None:
+        """A clean run emits contributions, token(s), then a done frame."""
+        import json
+
+        from api.routers.chat import _AGGREGATOR_SYSTEM, _COUNCIL_PERSONAS, _ask_agent
+        from api.routers.chat_stream import council_stream
+
+        async def good_chat(messages, system=""):  # noqa: ARG001
+            return "agent take"
+
+        async def good_stream(messages, system=""):  # noqa: ARG001
+            for tok in ("Hello", " ", "world"):
+                yield tok
+
+        provider = MagicMock()
+        provider.chat = good_chat
+        provider.chat_stream = good_stream
+
+        chat = _FakeChat()
+        frames: list[str] = []
+        with patch("core.providers.get_chat_provider", return_value=provider):
+            async for frame in council_stream(
+                "status?",
+                chat,
+                personas=_COUNCIL_PERSONAS,
+                aggregator_system=_AGGREGATOR_SYSTEM,
+                ask_agent=_ask_agent,
+            ):
+                frames.append(frame)
+
+        events = _parse_sse(frames)
+        names = [e for e, _ in events]
+        assert names[0] == "contributions"
+        assert "token" in names
+        assert names[-1] == "done"
+
+        done_data = json.loads(next(d for e, d in events if e == "done"))
+        assert done_data["assistant_text"] == "Hello world"
+        # The aggregated reply was persisted to the council history.
+        assert chat.saved and chat.saved[-1][1] == "council"

@@ -160,6 +160,39 @@ class TestSummarizeMemory:
         assert "2026-03-14" in user_msg or "2026-03-13" in user_msg
 
     @pytest.mark.asyncio
+    async def test_summarizer_input_is_token_capped(self, tmp_path: Path):
+        """A giant log must not feed an unbounded prompt to the LLM."""
+        from agents.memory import _SUMMARY_INPUT_TOKENS
+        from core.tokens import count_tokens
+
+        root = tmp_path / "vault"
+        logs_dir = root / "agents" / "weaver" / "logs"
+        logs_dir.mkdir(parents=True)
+
+        # Build a log far larger than the cap: many entries, lots of prose each.
+        big_entries = []
+        for i in range(60):
+            body = " ".join(f"token{i}_{j}" for j in range(200))
+            big_entries.append(
+                f"## 2026-03-13T{i % 24:02d}:00:00+00:00\n\n"
+                f"- **Agent:** weaver\n- **Action:** created\n- **Detail:** {body}\n"
+            )
+        (logs_dir / "2026-03-13.md").write_text(
+            "# Changelog\n\n" + "\n\n".join(big_entries), encoding="utf-8"
+        )
+
+        chat_mock = AsyncMock()
+        chat_mock.chat = AsyncMock(return_value="## Patterns\n\nCondensed.\n")
+
+        await summarize_memory(root, "weaver", chat_mock)
+
+        assert chat_mock.chat.called
+        user_msg = chat_mock.chat.call_args.kwargs["messages"][0]["content"]
+        # The capped content dominates the prompt; allow a small margin for the
+        # surrounding boilerplate ("Agent: ...", headers, instructions).
+        assert count_tokens(user_msg) <= _SUMMARY_INPUT_TOKENS + 200
+
+    @pytest.mark.asyncio
     async def test_preserves_existing_summary(self, tmp_path: Path):
         """When re-summarizing, existing summary content is fed to the LLM."""
         root = _setup_agent(tmp_path, num_entries=8)

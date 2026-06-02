@@ -6,8 +6,8 @@ Loom is a local-first, privacy-respecting AI knowledge base that lives on your m
 
 > **Status legend.** This document is both a description of what ships today *and* the north-star design. Sections carry one of three tags — ✅ shipped · 🟡 partial · 🔭 planned (not yet built). Quick map:
 >
-> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle chat), the Rules Engine, the Graph UI (Paper theme, orbit mode, display controls).
-> - 🟡 **Partial**: custom agents (registry + Board UI exist; execution wiring pending), Scribe daily logs, Sentinel AI validation.
+> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle chat), custom agents (registry + Board UI + execution — running one writes a capture for triage), the Rules Engine, the Graph UI (Paper theme, orbit mode, display controls).
+> - 🟡 **Partial**: Scribe daily logs, Sentinel AI validation.
 > - 🔭 **Planned**: the Bridge (integrations), the Prompt Compiler, multi-file attachments.
 >
 > Where a section describes something not yet built, it opens with a 🔭 callout.

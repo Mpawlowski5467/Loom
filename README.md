@@ -12,7 +12,7 @@
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![React](https://img.shields.io/badge/react-19-61dafb)
 ![License](https://img.shields.io/badge/license-MIT-green)
-![Status](https://img.shields.io/badge/status-in%20development-orange)
+![Status](https://img.shields.io/badge/status-open%20beta-orange)
 
 ---
 
@@ -432,7 +432,7 @@ Loom/
 │   │   ├── editor/       # markdown render + plain editing
 │   │   └── styles/       # tokens.css, base.css, views/*
 │   └── public/
-├── docs/                 # architecture-ref.md, style-guide.md
+├── docs/                 # ARCHITECTURE.md, architecture-ref.md, getting-started.md, style-guide.md, wireframes/
 ├── examples/
 │   └── demo-vault/       # ready-to-use sample vault
 ├── scripts/              # seed and utility scripts
@@ -476,16 +476,17 @@ pytest backend/tests/
 cd frontend
 npm run lint
 npm run format
-npm run test
+npm run test:run   # `npm run test` runs vitest in watch mode
 ```
 
 CI runs on push via `.github/workflows/ci.yml`.
 
 ## Status
 
-In active development. What works today:
+**Open beta (0.4.0).** Loom runs end-to-end and is stable for daily local use; it
+is not yet a hardened, internet-exposable 1.0 (see *Known gaps*). What works today:
 
-- All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel)
+- All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with the read-before-write chain
 - Both Shuttle Layer agents (Researcher, Standup) plus user-defined custom agents
 - Graph, Board, Inbox, and Thread views
 - First-run onboarding wizard (vault, theme, provider)
@@ -494,21 +495,28 @@ In active development. What works today:
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
 - Provider system (OpenAI, Anthropic, xAI, OpenRouter, Ollama)
-- Custom agents — define your own from the Board; running one produces a capture for triage
 - File watcher, rate limiting, health/readiness probes
 - One-command Docker run (single container serves UI + API)
 
-In flight:
+**Resilience & correctness** (the focus of recent work):
+- Bounded provider retry (backoff + jitter) at the trace chokepoint — a transient blip no longer fails a whole search or index pass (OpenRouter keeps its own 429 loop)
+- Index-drift detection: notes that land in the metadata index but miss the vector store are reconciled on startup, surfaced via `/api/health`, and shown as a "rebuilding" banner
+- Idempotent capture pipeline — a crash between note-write and archive can't create a duplicate on retry
+- Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
+- A true end-to-end pipeline test (capture → Weaver → index → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes
+- Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
+
+**In flight:**
 - Scribe's daily-log generation works; the summary phrasing is still being tuned
 - Sentinel's AI-assisted validation works (LLM path with a deterministic fallback); rule coverage is being broadened
 - Standup `generate()` works; no external calendar link yet
 
-Known gaps:
-- Provider API keys are stored in plain text in `config.yaml` — no encryption or OS-keychain support yet
-- The API has no auth layer — safe on localhost, but do not expose the port without putting it behind your own auth
-- A few board child components and the `useGraph*` hooks remain untested (backend + the rest of the frontend are well covered)
+**Known gaps (the road to 1.0):**
+- **No auth layer.** Safe on localhost; do not expose the port to a LAN/internet without your own reverse proxy + auth — see [SECURITY.md](SECURITY.md)
+- **Provider API keys are stored in plain text** in `config.yaml` — no encryption or OS-keychain support yet
+- `AppContext` still hosts most global frontend state (one large provider); a few Board child components and the `useGraph*` hooks remain untested (backend and the rest of the frontend are well covered)
 
-See [`docs/architecture-ref.md`](docs/architecture-ref.md) for the full design and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 
 ## Wireframes
 

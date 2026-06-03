@@ -59,7 +59,9 @@ def _validate_known(name: str) -> None:
 
 
 @router.post("/{name}/test", response_model=TestProviderResponse)
-async def test_provider(name: str, payload: ProviderTestRequest | None = None) -> TestProviderResponse:
+async def test_provider(
+    name: str, payload: ProviderTestRequest | None = None
+) -> TestProviderResponse:
     """Test credentials against a provider without persisting them.
 
     Pulls the stored config off disk as a baseline, layers any overrides
@@ -75,7 +77,9 @@ async def test_provider(name: str, payload: ProviderTestRequest | None = None) -
     runtime = ProviderInput(
         name=name,
         type=provider_type(name),
-        api_key=body.api_key if body.api_key is not None else (existing.api_key if existing else "") or "",
+        api_key=body.api_key
+        if body.api_key is not None
+        else (existing.api_key if existing else "") or "",
         host=body.host if body.host is not None else (existing.host if existing else "") or "",
         chat_model=existing.chat_model if existing else "",
         embed_model=(existing.embed_model if existing else "") or "",

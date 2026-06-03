@@ -198,9 +198,7 @@ class BaseAgent(ABC):
         # Run the read chain off the event loop — it does blocking file I/O
         # (vault.yaml, prime.md, related notes) that would otherwise stall the
         # server on large vaults.
-        chain_result = await asyncio.to_thread(
-            self._chain.execute, self.name, target_path
-        )
+        chain_result = await asyncio.to_thread(self._chain.execute, self.name, target_path)
 
         if not chain_result.success:
             failed_names = [s.name for s in chain_result.failed_required]

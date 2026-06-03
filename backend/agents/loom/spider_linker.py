@@ -48,12 +48,22 @@ async def apply_links(
             continue
 
         wrote_forward = await _add_link_to_note(
-            vault_root, source_path, target_path, title, ts,
-            f"Spider linked to [[{title}]]", title_map,
+            vault_root,
+            source_path,
+            target_path,
+            title,
+            ts,
+            f"Spider linked to [[{title}]]",
+            title_map,
         )
         wrote_back = await _add_link_to_note(
-            vault_root, target_path, source_path, source_note.title, ts,
-            f"Spider added backlink from [[{source_note.title}]]", title_map,
+            vault_root,
+            target_path,
+            source_path,
+            source_note.title,
+            ts,
+            f"Spider added backlink from [[{source_note.title}]]",
+            title_map,
         )
         # Only count as newly-linked if at least one direction actually
         # wrote. If both sides already had the link, we report nothing
@@ -71,7 +81,7 @@ async def _add_link_to_note(
     link_title: str,
     ts: str,
     reason: str,
-    title_map: dict[str, "Path"],
+    title_map: dict[str, Path],
 ) -> bool:
     """Append a wikilink to a note if the target isn't already linked.
 
@@ -93,7 +103,7 @@ async def _add_link_to_note(
         # ``title_map`` from the note index keys by lowercased title only,
         # but users write ``[[alpha-topic]]`` as often as ``[[Alpha Topic]]``,
         # and both must resolve to the same file when checking for dupes.
-        rich_map: dict[str, "Path"] = dict(title_map)
+        rich_map: dict[str, Path] = dict(title_map)
         for resolved_path in title_map.values():
             rich_map.setdefault(resolved_path.stem.lower(), resolved_path)
         # Also index the target by its own stem so the resolve-by-path

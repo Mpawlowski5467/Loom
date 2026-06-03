@@ -59,9 +59,7 @@ def _resolve_safe_subpath(threads_root: Path, rel: str) -> Path:
     try:
         candidate.relative_to(threads_root_resolved)
     except ValueError as exc:
-        raise HTTPException(
-            status_code=400, detail="Path escapes the vault"
-        ) from exc
+        raise HTTPException(status_code=400, detail="Path escapes the vault") from exc
     return candidate
 
 
@@ -236,15 +234,11 @@ def rename_path(
     if not _NAME_RE.match(body.new_name):
         raise HTTPException(
             status_code=400,
-            detail=(
-                "Invalid name: use letters, digits, dashes, or underscores only"
-            ),
+            detail=("Invalid name: use letters, digits, dashes, or underscores only"),
         )
 
     if src.is_dir() and src.name in RESERVED_FOLDERS and src.parent == tdir:
-        raise HTTPException(
-            status_code=400, detail=f"Cannot rename core folder '{src.name}'"
-        )
+        raise HTTPException(status_code=400, detail=f"Cannot rename core folder '{src.name}'")
 
     new_name = body.new_name + (src.suffix if src.is_file() else "")
     dst = src.parent / new_name

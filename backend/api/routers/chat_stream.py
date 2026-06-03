@@ -84,9 +84,7 @@ async def council_stream(
     history = [m.to_llm_message() for m in recent]
 
     try:
-        contributions = await fan_out_agents(
-            ask_agent, provider, personas, history, message
-        )
+        contributions = await fan_out_agents(ask_agent, provider, personas, history, message)
     except Exception as exc:
         yield sse("error", {"message": f"Fan-out failed: {exc}"})
         return
@@ -111,9 +109,7 @@ async def council_stream(
     assistant_chunks: list[str] = []
     try:
         set_caller("council")
-        async for chunk in provider.chat_stream(
-            messages=messages, system=aggregator_system
-        ):
+        async for chunk in provider.chat_stream(messages=messages, system=aggregator_system):
             assistant_chunks.append(chunk)
             yield sse("token", chunk)
     except (ProviderError, ProviderConfigError) as exc:

@@ -53,9 +53,7 @@ class TestVaultManagerValidators:
         with pytest.raises(VaultPathError):
             initialized_vault.resolve_capture_path("../../outside.md")
 
-    def test_resolve_capture_path_rejects_non_md(
-        self, initialized_vault: VaultManager
-    ) -> None:
+    def test_resolve_capture_path_rejects_non_md(self, initialized_vault: VaultManager) -> None:
         with pytest.raises(VaultPathError):
             initialized_vault.resolve_capture_path("captures/raw.txt")
 
@@ -74,21 +72,15 @@ class TestVaultManagerValidators:
 class TestChangelogRouteTraversal:
     """``GET /api/changelog`` must reject malicious agent / date params."""
 
-    def test_traversal_in_agent(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_traversal_in_agent(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/changelog", params={"agent": "../../etc", "date": "2026-04-24"})
         assert r.status_code == 400
 
-    def test_traversal_in_date(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_traversal_in_date(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/changelog", params={"agent": "weaver", "date": "../../passwd"})
         assert r.status_code == 400
 
-    def test_unknown_agent(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_unknown_agent(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/changelog", params={"agent": "evil", "date": "2026-04-24"})
         assert r.status_code == 400
 
@@ -101,21 +93,15 @@ class TestChatHistoryRouteTraversal:
     and arbitrary date strings reaching the validator.
     """
 
-    def test_invalid_date_format(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_invalid_date_format(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/chat/history/notadate")
         assert r.status_code == 400
 
-    def test_date_with_extension(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_date_with_extension(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/chat/history/2026-04-24.md")
         assert r.status_code == 400
 
-    def test_invalid_agent(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
+    def test_invalid_agent(self, client: TestClient, initialized_vault: VaultManager) -> None:
         r = client.get("/api/chat/history/2026-04-24", params={"agent": "../../etc"})
         assert r.status_code == 400
 
@@ -129,12 +115,8 @@ class TestCapturesProcessRouteTraversal:
         r = client.post("/api/captures/process", json={"capture_path": "/etc/passwd"})
         assert r.status_code == 400
 
-    def test_relative_traversal(
-        self, client: TestClient, initialized_vault: VaultManager
-    ) -> None:
-        r = client.post(
-            "/api/captures/process", json={"capture_path": "../../etc/shadow.md"}
-        )
+    def test_relative_traversal(self, client: TestClient, initialized_vault: VaultManager) -> None:
+        r = client.post("/api/captures/process", json={"capture_path": "../../etc/shadow.md"})
         assert r.status_code == 400
 
     def test_non_markdown_extension(

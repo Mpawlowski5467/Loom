@@ -52,9 +52,7 @@ class TestSnapTags:
 
     def test_typo_snapped_to_existing(self) -> None:
         # 'consensu' (missing s) → 'consensus' (1 insertion).
-        final, snapped = snap_tags(
-            ["consensu"], {"raft", "paxos", "consensus"}
-        )
+        final, snapped = snap_tags(["consensu"], {"raft", "paxos", "consensus"})
         assert final == ["consensus"]
         assert snapped == [("consensu", "consensus")]
 
@@ -98,9 +96,7 @@ class TestSnapTags:
         assert final == ["raft"]
 
     def test_dedups(self) -> None:
-        final, _ = snap_tags(
-            ["raft", "Raft", "RAFT"], {"raft"}
-        )
+        final, _ = snap_tags(["raft", "Raft", "RAFT"], {"raft"})
         assert final == ["raft"]
 
     def test_caps_at_max_tags(self) -> None:
@@ -113,9 +109,7 @@ class TestSnapTags:
         assert final == []
 
     def test_caps_at_max_tags_real(self) -> None:
-        final, _ = snap_tags(
-            ["one", "two", "three", "four", "five", "six"], set(), max_tags=3
-        )
+        final, _ = snap_tags(["one", "two", "three", "four", "five", "six"], set(), max_tags=3)
         assert len(final) == 3
         assert final == ["one", "two", "three"]
 
@@ -123,9 +117,7 @@ class TestSnapTags:
         """End-to-end: classifier produces 'consensu' (typo) + 'paxos' +
         new 'tla+'. Expect snap on 'consensu', keep the rest."""
         vault = {"raft", "consensus", "paxos", "distributed", "ddia"}
-        final, snapped = snap_tags(
-            ["paxos", "consensu", "tla+", "distributed"], vault
-        )
+        final, snapped = snap_tags(["paxos", "consensu", "tla+", "distributed"], vault)
         assert "consensus" in final
         assert "paxos" in final
         assert "tla+" in final

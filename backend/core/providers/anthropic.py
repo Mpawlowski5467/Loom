@@ -50,7 +50,9 @@ class AnthropicProvider(BaseProvider):
             )
             block = resp.content[0]
             if not isinstance(block, TextBlock):
-                raise ProviderError("anthropic", f"Unexpected response block type: {type(block).__name__}")
+                raise ProviderError(
+                    "anthropic", f"Unexpected response block type: {type(block).__name__}"
+                )
             return block.text
         except anthropic.APIError as exc:
             raise ProviderError("anthropic", str(exc)) from exc

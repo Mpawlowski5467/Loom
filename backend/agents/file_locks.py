@@ -36,7 +36,7 @@ if TYPE_CHECKING:
 # WeakValueDictionary so locks for paths nobody is using anymore are GC'd.
 # Without weak refs, a long-running process accumulates one lock per
 # ever-touched path.
-_LOCKS: "weakref.WeakValueDictionary[str, asyncio.Lock]" = weakref.WeakValueDictionary()
+_LOCKS: weakref.WeakValueDictionary[str, asyncio.Lock] = weakref.WeakValueDictionary()
 
 
 def _key(path: Path) -> str:
@@ -57,7 +57,7 @@ def _get_lock(path: Path) -> asyncio.Lock:
 
 
 @contextlib.asynccontextmanager
-async def path_lock(path: Path) -> "AsyncIterator[None]":
+async def path_lock(path: Path) -> AsyncIterator[None]:
     """Async context manager that serializes writers on ``path``.
 
     Two coroutines calling ``async with path_lock(p):`` against the same

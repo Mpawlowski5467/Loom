@@ -79,9 +79,7 @@ def test_update_system_rejected(client: TestClient) -> None:
 
 def test_delete_custom(client: TestClient) -> None:
     _init_vault(client)
-    created = client.post(
-        "/api/agents/registry", json={"name": "Doomed"}
-    ).json()
+    created = client.post("/api/agents/registry", json={"name": "Doomed"}).json()
     resp = client.delete(f"/api/agents/registry/{created['id']}")
     assert resp.status_code == 204
 

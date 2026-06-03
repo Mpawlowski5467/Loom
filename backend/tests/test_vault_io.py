@@ -44,13 +44,13 @@ class TestWriteNote:
     def test_rejects_archive_path(self, tmp_path: Path) -> None:
         vault = _vault(tmp_path)
         archived = vault / "threads" / ".archive" / "old.md"
-        with pytest.raises(VaultIOError, match=".archive"):
+        with pytest.raises(VaultIOError, match=r"\.archive"):
             write_note(vault, archived, {"id": "x"}, "")
 
     def test_rejects_prime_md(self, tmp_path: Path) -> None:
         vault = _vault(tmp_path)
         prime = vault / "rules" / "prime.md"
-        with pytest.raises(VaultIOError, match="prime.md"):
+        with pytest.raises(VaultIOError, match=r"prime\.md"):
             write_note(vault, prime, {"id": "x"}, "")
 
     def test_rejects_non_md(self, tmp_path: Path) -> None:

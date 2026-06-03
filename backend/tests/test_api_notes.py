@@ -115,9 +115,7 @@ def test_create_note(client: TestClient, seeded_vault: Path) -> None:
     assert data["type"] == "topic"
 
 
-def test_create_note_does_not_overwrite_same_title(
-    client: TestClient, seeded_vault: Path
-) -> None:
+def test_create_note_does_not_overwrite_same_title(client: TestClient, seeded_vault: Path) -> None:
     """Two notes with the same title in the same folder must both survive.
 
     Regression: the direct-write fallback used to clobber an existing file whose

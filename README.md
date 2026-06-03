@@ -483,7 +483,7 @@ CI runs on push via `.github/workflows/ci.yml`.
 
 ## Status
 
-**Open beta (0.4.0).** Loom runs end-to-end and is stable for daily local use; it
+**Open beta (0.5.0).** Loom runs end-to-end and is stable for daily local use; it
 is not yet a hardened, internet-exposable 1.0 (see *Known gaps*). What works today:
 
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with the read-before-write chain

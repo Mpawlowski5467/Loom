@@ -96,8 +96,6 @@ def _check_writable(vault_root: Path, path: Path) -> Path:
     try:
         resolved.relative_to(threads_dir)
     except ValueError as exc:
-        raise VaultIOError(
-            f"Path {resolved} is outside the vault's threads/ directory"
-        ) from exc
+        raise VaultIOError(f"Path {resolved} is outside the vault's threads/ directory") from exc
 
     return resolved

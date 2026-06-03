@@ -119,9 +119,7 @@ def get_trace_store() -> TraceStore:
 # request's caller label — that exact bug caused bubble calls to be tagged
 # as the running captures pipeline. ContextVar is per-task, so each
 # coroutine sees only its own caller.
-_caller_var: "contextvars.ContextVar[str]" = contextvars.ContextVar(
-    "loom_trace_caller", default=""
-)
+_caller_var: contextvars.ContextVar[str] = contextvars.ContextVar("loom_trace_caller", default="")
 
 
 def set_caller(label: str) -> None:

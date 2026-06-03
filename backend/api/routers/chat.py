@@ -372,9 +372,7 @@ async def _council_reply(message: str, chat) -> _Reply:
     # Fan out in parallel. Each agent call carries the prior conversation +
     # the new user turn so each persona has the same context. Caller tag is
     # per-agent so the trace store + activity pulse attribute correctly.
-    contributions = await fan_out_agents(
-        _ask_agent, provider, _COUNCIL_PERSONAS, history, message
-    )
+    contributions = await fan_out_agents(_ask_agent, provider, _COUNCIL_PERSONAS, history, message)
 
     # Aggregate. The aggregator sees the five raw contributions plus the
     # original user turn and produces the single council voice. If a

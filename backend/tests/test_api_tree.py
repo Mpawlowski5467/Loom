@@ -52,9 +52,7 @@ def test_create_folder_nested(client: TestClient, active_vault: Path) -> None:
     assert (active_vault / "topics" / "python").is_dir()
 
 
-def test_create_folder_rejects_traversal(
-    client: TestClient, active_vault: Path
-) -> None:
+def test_create_folder_rejects_traversal(client: TestClient, active_vault: Path) -> None:
     resp = client.post("/api/tree/folder", json={"path": "../outside"})
     assert resp.status_code == 400
     # Ensure no folder was created at the parent level.
@@ -85,9 +83,7 @@ def test_create_folder_conflict(client: TestClient, active_vault: Path) -> None:
 # -- POST /api/tree/move ------------------------------------------------------
 
 
-def test_move_file_between_folders(
-    client: TestClient, active_vault: Path, note_index
-) -> None:
+def test_move_file_between_folders(client: TestClient, active_vault: Path, note_index) -> None:
     src = _write_note(active_vault / "topics", "python.md", "thr_aaa111")
     note_index.refresh_file(src)
     resp = client.post(
@@ -99,9 +95,7 @@ def test_move_file_between_folders(
     assert (active_vault / "projects" / "python.md").exists()
 
 
-def test_move_folder_into_folder(
-    client: TestClient, active_vault: Path
-) -> None:
+def test_move_folder_into_folder(client: TestClient, active_vault: Path) -> None:
     (active_vault / "research").mkdir()
     resp = client.post(
         "/api/tree/move",
@@ -142,9 +136,7 @@ def test_move_conflict(client: TestClient, active_vault: Path) -> None:
 # -- PATCH /api/tree/rename ---------------------------------------------------
 
 
-def test_rename_file_preserves_suffix(
-    client: TestClient, active_vault: Path, note_index
-) -> None:
+def test_rename_file_preserves_suffix(client: TestClient, active_vault: Path, note_index) -> None:
     src = _write_note(active_vault / "topics", "python.md", "thr_aaa111")
     note_index.refresh_file(src)
     resp = client.patch(
@@ -166,9 +158,7 @@ def test_rename_folder(client: TestClient, active_vault: Path) -> None:
     assert (active_vault / "studies").is_dir()
 
 
-def test_rename_core_folder_rejected(
-    client: TestClient, active_vault: Path
-) -> None:
+def test_rename_core_folder_rejected(client: TestClient, active_vault: Path) -> None:
     (active_vault / "topics").mkdir(exist_ok=True)
     resp = client.patch(
         "/api/tree/rename",
@@ -189,9 +179,7 @@ def test_rename_invalid_name(client: TestClient, active_vault: Path) -> None:
 # -- DELETE /api/tree/path/{rel_path:path} ------------------------------------
 
 
-def test_archive_file(
-    client: TestClient, active_vault: Path, note_index
-) -> None:
+def test_archive_file(client: TestClient, active_vault: Path, note_index) -> None:
     src = _write_note(active_vault / "topics", "scratch.md", "thr_xxx")
     note_index.refresh_file(src)
     resp = client.delete("/api/tree/path/topics/scratch.md")
@@ -209,17 +197,13 @@ def test_archive_folder(client: TestClient, active_vault: Path) -> None:
     assert (active_vault / ".archive" / "research" / "a.md").exists()
 
 
-def test_archive_core_folder_rejected(
-    client: TestClient, active_vault: Path
-) -> None:
+def test_archive_core_folder_rejected(client: TestClient, active_vault: Path) -> None:
     (active_vault / "topics").mkdir(exist_ok=True)
     resp = client.delete("/api/tree/path/topics")
     assert resp.status_code == 400
 
 
-def test_hard_delete_file(
-    client: TestClient, active_vault: Path, note_index
-) -> None:
+def test_hard_delete_file(client: TestClient, active_vault: Path, note_index) -> None:
     src = _write_note(active_vault / "topics", "doomed.md", "thr_d")
     note_index.refresh_file(src)
     resp = client.delete("/api/tree/path/topics/doomed.md?hard=true")

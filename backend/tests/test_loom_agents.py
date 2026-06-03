@@ -190,9 +190,7 @@ class TestSpider:
         assert total >= 0  # May vary based on existing links
 
     @pytest.mark.asyncio
-    async def test_does_not_duplicate_link_across_kebab_and_title_case(
-        self, tmp_path: Path
-    ):
+    async def test_does_not_duplicate_link_across_kebab_and_title_case(self, tmp_path: Path):
         """Regression: Spider used to append [[Title Case]] even when the body
         already contained [[kebab-case]] for the same note. The duplicate
         check compared raw wikilink strings; after lowercasing, ``inventory
@@ -228,7 +226,6 @@ class TestSpider:
         )
         # Add the reverse link to alpha-topic so both sides are pre-wired.
         alpha_path = root / "threads" / "topics" / "alpha-topic.md"
-        alpha = parse_note(alpha_path)
         alpha_path.write_text(
             alpha_path.read_text().rstrip() + "\n\n[[dup-source]]\n",
             encoding="utf-8",
@@ -687,9 +684,7 @@ class TestPipeline:
             agent_name="weaver",
             action="created",
         )
-        with patch.object(
-            Sentinel, "validate_action", new=AsyncMock(return_value=fake_validation)
-        ):
+        with patch.object(Sentinel, "validate_action", new=AsyncMock(return_value=fake_validation)):
             result = await runner.run_pipeline(capture_path)
 
         # Note still got created — we can't un-call the LLM. But the

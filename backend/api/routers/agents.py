@@ -355,7 +355,7 @@ def _short_target(target: str, vault_root: Path) -> str:
         return ""
     threads = str(vault_root / "threads") + "/"
     if target.startswith(threads):
-        return target[len(threads):]
+        return target[len(threads) :]
     return Path(target).name
 
 
@@ -407,9 +407,7 @@ def get_changelog_feed(
     for i, e in enumerate(merged[:limit]):
         is_sentinel = e["agent"] == "sentinel"
         chain_status = "ok" if e["chain"] == "pass" else "fail" if e["chain"] == "fail" else "warn"
-        sentinel_status = (
-            _verdict_from_details(e["details"]) if is_sentinel else chain_status
-        )
+        sentinel_status = _verdict_from_details(e["details"]) if is_sentinel else chain_status
         out.append(
             ChangelogFeedEvent(
                 id=f"ev_{i}_{e['ts']}",

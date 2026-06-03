@@ -89,11 +89,7 @@ def _list_dates_with_traces(traces_dir: Path) -> list[str]:
     """Return sorted (newest first) YYYY-MM-DD directory names containing traces."""
     if not traces_dir.exists():
         return []
-    dates = [
-        d.name
-        for d in traces_dir.iterdir()
-        if d.is_dir() and _DATE_RE.match(d.name)
-    ]
+    dates = [d.name for d in traces_dir.iterdir() if d.is_dir() and _DATE_RE.match(d.name)]
     dates.sort(reverse=True)
     return dates
 

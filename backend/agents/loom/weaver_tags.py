@@ -55,7 +55,7 @@ def _levenshtein_le_1(a: str, b: str) -> bool:
 
     if la == lb:
         # One substitution.
-        diffs = sum(1 for x, y in zip(a, b) if x != y)
+        diffs = sum(1 for x, y in zip(a, b, strict=True) if x != y)
         return diffs == 1
 
     # One insertion / deletion. Walk both strings, allowing exactly one skip.
@@ -98,7 +98,7 @@ def _levenshtein_le_2(a: str, b: str) -> bool:
 
 
 def snap_tags(
-    raw_tags: "Iterable[str]",
+    raw_tags: Iterable[str],
     vault_tags: set[str],
     *,
     max_tags: int = 5,

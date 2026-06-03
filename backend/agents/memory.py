@@ -12,6 +12,7 @@ and produces a condensed memory.md that:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import os
 import re
@@ -332,9 +333,7 @@ def _acquire_file_lock(lock_path: Path) -> bool:
 
 
 def _release_file_lock(lock_path: Path) -> None:
-    try:
+    # Lock might have been removed by stale reclaim from another process;
+    # nothing to do in that case.
+    with contextlib.suppress(OSError):
         lock_path.unlink()
-    except OSError:
-        # Lock might have been removed by stale reclaim from another process;
-        # nothing to do.
-        pass

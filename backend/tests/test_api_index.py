@@ -48,6 +48,96 @@ class TestIndexStatus:
 
 
 # ---------------------------------------------------------------------------
+# GET /api/index/stats
+# ---------------------------------------------------------------------------
+
+
+class TestIndexStats:
+    def test_stats_not_initialized(self, client: TestClient) -> None:
+        """GET /api/index/stats with no indexer returns a clean empty payload."""
+        with (
+            patch("api.routers.index.get_indexer", return_value=None),
+            patch("api.health._unindexed_count", return_value=3),
+        ):
+            resp = client.get("/api/index/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is False
+        assert data["total_chunks"] == 0
+        assert data["distinct_notes"] == 0
+        # The drift signal is reported even when the table is absent.
+        assert data["unindexed_count"] == 3
+        assert data["type_breakdown"] == {}
+
+    def test_stats_not_ready(self, client: TestClient) -> None:
+        """A table that exists but has no data still returns the empty payload."""
+        mock_indexer = MagicMock()
+        type(mock_indexer).is_ready = PropertyMock(return_value=False)
+
+        with (
+            patch("api.routers.index.get_indexer", return_value=mock_indexer),
+            patch("api.health._unindexed_count", return_value=0),
+        ):
+            resp = client.get("/api/index/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is False
+        assert data["total_chunks"] == 0
+
+    def test_stats_populated(self, client: TestClient) -> None:
+        """A ready index reports counts and a per-type chunk breakdown."""
+        # Fake the Arrow scan: 6 chunks across 3 notes, two note types.
+        note_ids = ["n1", "n1", "n1", "n2", "n2", "n3"]
+        note_types = ["topic", "topic", "topic", "project", "project", "daily"]
+
+        arrow = MagicMock()
+        arrow.column.side_effect = lambda name: MagicMock(
+            to_pylist=lambda: note_ids if name == "note_id" else note_types
+        )
+        table = MagicMock()
+        table.count_rows.return_value = 6
+        table.to_arrow.return_value.select.return_value = arrow
+
+        mock_indexer = MagicMock()
+        type(mock_indexer).is_ready = PropertyMock(return_value=True)
+        mock_indexer.open_table.return_value = table
+
+        with (
+            patch("api.routers.index.get_indexer", return_value=mock_indexer),
+            patch("api.health._unindexed_count", return_value=1),
+        ):
+            resp = client.get("/api/index/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is True
+        assert data["total_chunks"] == 6
+        assert data["distinct_notes"] == 3
+        assert data["unindexed_count"] == 1
+        assert data["avg_chunks_per_note"] == 2.0
+        assert data["type_breakdown"] == {"topic": 3, "project": 2, "daily": 1}
+
+    def test_stats_table_read_error_degrades(self, client: TestClient) -> None:
+        """If reading the table raises, stats degrade to the empty payload."""
+        mock_indexer = MagicMock()
+        type(mock_indexer).is_ready = PropertyMock(return_value=True)
+        mock_indexer.open_table.side_effect = RuntimeError("corrupt table")
+
+        with (
+            patch("api.routers.index.get_indexer", return_value=mock_indexer),
+            patch("api.health._unindexed_count", return_value=0),
+        ):
+            resp = client.get("/api/index/stats")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["ready"] is False
+        assert data["total_chunks"] == 0
+
+
+# ---------------------------------------------------------------------------
 # POST /api/index/reindex
 # ---------------------------------------------------------------------------
 

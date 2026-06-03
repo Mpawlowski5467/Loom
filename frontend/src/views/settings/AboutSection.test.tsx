@@ -7,15 +7,22 @@ import { AboutSection } from "./AboutSection";
 import type {
   DiagnosticsResponse,
   HealthResponse,
+  IndexStats,
 } from "../../api/diagnostics";
 
-const { getDiagnostics, getHealth, resetOnboarding } = vi.hoisted(() => ({
-  getDiagnostics: vi.fn(),
-  getHealth: vi.fn(),
-  resetOnboarding: vi.fn(),
-}));
+const { getDiagnostics, getHealth, getIndexStats, resetOnboarding } =
+  vi.hoisted(() => ({
+    getDiagnostics: vi.fn(),
+    getHealth: vi.fn(),
+    getIndexStats: vi.fn(),
+    resetOnboarding: vi.fn(),
+  }));
 
-vi.mock("../../api/diagnostics", () => ({ getDiagnostics, getHealth }));
+vi.mock("../../api/diagnostics", () => ({
+  getDiagnostics,
+  getHealth,
+  getIndexStats,
+}));
 vi.mock("../../api/onboarding", () => ({ resetOnboarding }));
 
 const DIAG: DiagnosticsResponse = {
@@ -36,6 +43,24 @@ const HEALTH: HealthResponse = {
   },
 } as HealthResponse;
 
+const INDEX_STATS: IndexStats = {
+  ready: true,
+  total_chunks: 128,
+  distinct_notes: 37,
+  unindexed_count: 2,
+  avg_chunks_per_note: 3.5,
+  type_breakdown: { topic: 80, project: 30, daily: 18 },
+};
+
+const INDEX_EMPTY: IndexStats = {
+  ready: false,
+  total_chunks: 0,
+  distinct_notes: 0,
+  unindexed_count: 4,
+  avg_chunks_per_note: 0,
+  type_breakdown: {},
+};
+
 function renderSection() {
   const refreshConfig = vi.fn().mockResolvedValue(undefined);
   const value = { refreshConfig } as unknown as AppContextValue;
@@ -53,6 +78,7 @@ function renderSection() {
 beforeEach(() => {
   getDiagnostics.mockReset().mockResolvedValue(DIAG);
   getHealth.mockReset().mockResolvedValue(HEALTH);
+  getIndexStats.mockReset().mockResolvedValue(INDEX_STATS);
   resetOnboarding.mockReset().mockResolvedValue(undefined);
 });
 
@@ -113,5 +139,25 @@ describe("AboutSection", () => {
     getDiagnostics.mockRejectedValue(new Error("backend down"));
     renderSection();
     expect(await screen.findByText("backend down")).toBeInTheDocument();
+  });
+
+  it("renders the search-index stats and type breakdown when populated", async () => {
+    renderSection();
+    expect(await screen.findByText("Vector index")).toBeInTheDocument();
+    expect(screen.getByText("128")).toBeInTheDocument(); // total chunks
+    expect(screen.getByText("37")).toBeInTheDocument(); // distinct notes
+    expect(screen.getByText("3.5")).toBeInTheDocument(); // avg chunks/note
+    // Type breakdown rows.
+    expect(screen.getByText("topic")).toBeInTheDocument();
+    expect(screen.getByText("80")).toBeInTheDocument();
+    expect(screen.getByText("project")).toBeInTheDocument();
+  });
+
+  it("shows a not-indexed hint when the index is empty", async () => {
+    getIndexStats.mockResolvedValue(INDEX_EMPTY);
+    renderSection();
+    await screen.findByText("Vector index");
+    expect(screen.getByText(/No vector index yet/)).toBeInTheDocument();
+    expect(screen.getByText(/4 note\(s\) await indexing/)).toBeInTheDocument();
   });
 });

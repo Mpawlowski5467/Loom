@@ -7,8 +7,10 @@ import { useApp } from "../../context/app-ctx";
 import {
   getDiagnostics,
   getHealth,
+  getIndexStats,
   type DiagnosticsResponse,
   type HealthResponse,
+  type IndexStats,
 } from "../../api/diagnostics";
 
 export function AboutSection(): ReactNode {
@@ -17,6 +19,7 @@ export function AboutSection(): ReactNode {
     null,
   );
   const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
   const rerunOnboarding = async () => {
@@ -33,10 +36,11 @@ export function AboutSection(): ReactNode {
   };
 
   useEffect(() => {
-    void Promise.all([getDiagnostics(), getHealth()])
-      .then(([diag, report]) => {
+    void Promise.all([getDiagnostics(), getHealth(), getIndexStats()])
+      .then(([diag, report, stats]) => {
         setDiagnostics(diag);
         setHealth(report);
+        setIndexStats(stats);
       })
       .catch((err) => {
         setMessage(err instanceof Error ? err.message : "Diagnostics failed");
@@ -151,6 +155,62 @@ export function AboutSection(): ReactNode {
           Re-run onboarding
         </button>
       </div>
+      <div className="settings-kicker">Search index</div>
+      <h1 className="settings-title">Vector index</h1>
+      {indexStats && !indexStats.ready ? (
+        <p className="settings-copy settings-copy-tight">
+          No vector index yet. Configure an embed provider and reindex
+          (Settings → Providers) so semantic search has data.
+          {indexStats.unindexed_count > 0 &&
+            ` ${indexStats.unindexed_count} note(s) await indexing.`}
+        </p>
+      ) : (
+        <>
+          <div className="settings-diagnostics-grid">
+            <InfoRow
+              label="Chunks"
+              value={indexStats?.total_chunks.toString() ?? "…"}
+            />
+            <InfoRow
+              label="Notes indexed"
+              value={indexStats?.distinct_notes.toString() ?? "…"}
+            />
+            <InfoRow
+              label="Unindexed"
+              value={indexStats?.unindexed_count.toString() ?? "…"}
+            />
+            <InfoRow
+              label="Avg chunks / note"
+              value={indexStats?.avg_chunks_per_note.toFixed(1) ?? "…"}
+            />
+          </div>
+          {indexStats &&
+            Object.keys(indexStats.type_breakdown).length > 0 && (
+              <div className="settings-about-card">
+                <div>
+                  <div className="settings-field-label">Chunks by type</div>
+                  <ul className="settings-health-components">
+                    {Object.entries(indexStats.type_breakdown)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([type, count]) => (
+                        <li
+                          key={type}
+                          className="settings-health-component"
+                        >
+                          <span className="settings-health-component-name">
+                            {type}
+                          </span>
+                          <span className="settings-health-component-detail">
+                            {count}
+                          </span>
+                        </li>
+                      ))}
+                  </ul>
+                </div>
+              </div>
+            )}
+        </>
+      )}
       <div className="settings-link-row">
         <a href={`${API_BASE}/api/health`} target="_blank" rel="noreferrer">
           Health <ExternalLink size={13} aria-hidden="true" />
@@ -164,6 +224,13 @@ export function AboutSection(): ReactNode {
         </a>
         <a href={`${API_BASE}/api/traces`} target="_blank" rel="noreferrer">
           LLM traces <ExternalLink size={13} aria-hidden="true" />
+        </a>
+        <a
+          href={`${API_BASE}/api/index/stats`}
+          target="_blank"
+          rel="noreferrer"
+        >
+          Index stats <ExternalLink size={13} aria-hidden="true" />
         </a>
       </div>
       {message && <div className="settings-inline-status">{message}</div>}

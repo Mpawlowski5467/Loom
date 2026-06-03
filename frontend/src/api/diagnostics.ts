@@ -27,3 +27,16 @@ export function getDiagnostics(
 export function getHealth(signal?: AbortSignal): Promise<HealthResponse> {
   return apiClient.get<HealthResponse>("/api/health", signal);
 }
+
+export interface IndexStats {
+  ready: boolean;
+  total_chunks: number;
+  distinct_notes: number;
+  unindexed_count: number;
+  avg_chunks_per_note: number;
+  type_breakdown: Record<string, number>;
+}
+
+export function getIndexStats(signal?: AbortSignal): Promise<IndexStats> {
+  return apiClient.get<IndexStats>("/api/index/stats", signal);
+}

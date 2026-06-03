@@ -1,5 +1,7 @@
 """Vector index management API routes."""
 
+from collections import Counter
+
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 
@@ -14,6 +16,17 @@ class IndexStatus(BaseModel):
 
     ready: bool
     message: str
+
+
+class IndexStats(BaseModel):
+    """Read-only statistics about the vector index contents."""
+
+    ready: bool
+    total_chunks: int
+    distinct_notes: int
+    unindexed_count: int
+    avg_chunks_per_note: float
+    type_breakdown: dict[str, int]
 
 
 class ReindexResult(BaseModel):
@@ -35,6 +48,52 @@ def index_status() -> IndexStatus:
             ready=False, message="Index exists but contains no data. Run POST /api/index/reindex."
         )
     return IndexStatus(ready=True, message="Vector index is ready.")
+
+
+@router.get("/stats")
+def index_stats() -> IndexStats:
+    """Return read-only statistics about the vector index contents.
+
+    Reports chunk/note counts, the drift signal (notes present in NoteIndex but
+    absent from vectors), and a per-type chunk breakdown. Returns zeros when no
+    index exists yet rather than erroring, so the UI can render a clean
+    "not indexed" state.
+    """
+    from api.health import _unindexed_count
+
+    unindexed = _unindexed_count()
+    indexer = get_indexer()
+    empty = IndexStats(
+        ready=False,
+        total_chunks=0,
+        distinct_notes=0,
+        unindexed_count=unindexed,
+        avg_chunks_per_note=0.0,
+        type_breakdown={},
+    )
+    if indexer is None or not indexer.is_ready:
+        return empty
+
+    try:
+        table = indexer.open_table()
+        total = table.count_rows()
+        # Project to the two scalar columns we summarize — avoids materializing
+        # the (large) vector column. Vault indices are small, so a full scan is
+        # cheap and exact.
+        arrow = table.to_arrow().select(["note_id", "note_type"])
+        note_ids = {nid for nid in arrow.column("note_id").to_pylist() if nid}
+        type_breakdown = dict(Counter(arrow.column("note_type").to_pylist()))
+    except Exception:  # noqa: BLE001 — same defensive posture as is_ready
+        return empty
+
+    return IndexStats(
+        ready=True,
+        total_chunks=total,
+        distinct_notes=len(note_ids),
+        unindexed_count=unindexed,
+        avg_chunks_per_note=round(total / len(note_ids), 1) if note_ids else 0.0,
+        type_breakdown=type_breakdown,
+    )
 
 
 @router.post("/reindex")

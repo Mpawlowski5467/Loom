@@ -6,6 +6,7 @@ import { SuggestionCard } from "./SuggestionCard";
 import { toNodeType, type CardData, type CardLink } from "./types";
 import type { CapturePreview } from "../../api/captures";
 import type { Capture, Note } from "../../data/types";
+import { formatDateTime } from "../../data/formatDate";
 
 /** Per-capture state of the lazily-fetched Weaver preview. */
 export type PreviewState =
@@ -109,9 +110,7 @@ export function DetailPane({
       <div className="inbox-detail-title">{capture.title}</div>
       <div className="inbox-detail-meta">
         <span>{capture.folder}/</span>
-        <span>
-          received {capture.receivedAt.slice(5, 16).replace("T", " ")}
-        </span>
+        <span>received {formatDateTime(capture.receivedAt)}</span>
       </div>
       {renderMarkdown(capture.body, { bodyClass: "inbox-detail-body" })}
 

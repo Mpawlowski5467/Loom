@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Wikilink } from "../../components/primitives/Wikilink";
 import type { Capture, Note } from "../../data/types";
+import { formatMonthDay, formatTime } from "../../data/formatDate";
 
 interface Props {
   capture: Capture;
@@ -61,7 +62,7 @@ export function CaptureCard({
           <span>{c.folder}/</span>
           <span>·</span>
           <span>
-            {c.receivedAt.slice(11, 16)} · {c.receivedAt.slice(5, 10)}
+            {formatTime(c.receivedAt)} · {formatMonthDay(c.receivedAt)}
           </span>
         </div>
         {filedNote && (

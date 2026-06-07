@@ -3,8 +3,13 @@ import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { GraphDisplay } from "../context/app-ctx";
 import type { Note, NoteId } from "../data/types";
-import { buildGraph, createSigma } from "./sigma-setup";
+import {
+  buildGraph,
+  createSigma,
+  readNodePalette,
+} from "./sigma-setup";
 import { applyConstellationLayout, easeInOutCubic, type XY } from "./layouts";
+import { structuralKey, contentKey } from "./graphKeys";
 import { attachDrag } from "./dragHandlers";
 import { createFrameLoop, type FrameLoop } from "./frameLoop";
 import {
@@ -72,6 +77,14 @@ export function useGraphInstance(args: {
   const teardownRef = useRef<(() => void) | null>(null);
   const baseSizesRef = useRef<Map<string, number>>(new Map());
   const basePositionsRef = useRef<Map<string, XY>>(new Map());
+  // Latest notes, readable from the deferred build closure without making
+  // ``notes`` a build-effect dependency (the structural key gates rebuilds).
+  const notesRef = useRef<Note[]>(notes);
+  notesRef.current = notes;
+  // Survives rebuilds: the live node positions snapshotted before teardown,
+  // so a structural rebuild re-seeds existing nodes (incl. dragged ones)
+  // instead of reshuffling the whole graph from scratch.
+  const positionCacheRef = useRef<Map<string, XY>>(new Map());
   const orbitTargetsRef = useRef<Map<string, XY>>(new Map());
   const activeTweenRef = useRef<TweenHandle | null>(null);
   const breathingRemoveRef = useRef<(() => void) | null>(null);
@@ -81,8 +94,17 @@ export function useGraphInstance(args: {
   const [sigmaReady, setSigmaReady] = useState(0);
   const [building, setBuilding] = useState(false);
 
+  // Rebuild only when the graph STRUCTURE changes (nodes/edges added or
+  // removed) — not on every body/title/tag edit. structuralKey is a stable
+  // string, so an edit that leaves structure intact yields an equal dep and
+  // React skips this effect; the separate content-sync effect below patches
+  // title/type changes in place. This avoids a sigma.kill() + 220-iteration
+  // ForceAtlas2 on the main thread (and the camera reset + lost pan/zoom) on
+  // every save.
+  const structKey = structuralKey(notes);
+
   useEffect(() => {
-    if (!hostRef.current || notes.length === 0) return;
+    if (!hostRef.current || notesRef.current.length === 0) return;
 
     let cancelled = false;
     setBuilding(true);
@@ -90,12 +112,19 @@ export function useGraphInstance(args: {
     const buildRaf = requestAnimationFrame(() => {
       const host = hostRef.current;
       if (cancelled || !host) return;
+      const notes = notesRef.current;
       const heavyNow = notes.length > PERF_BUDGET_NODES;
 
       const { graph, baseSizes } = buildGraph(notes);
       baseSizesRef.current = baseSizes;
       graphRef.current = graph;
-      basePositionsRef.current = applyConstellationLayout(graph);
+      // Seed from the cached layout so existing nodes keep their positions
+      // (and any dragged placement) across a structural rebuild; only genuinely
+      // new nodes get a fresh spiral slot + a short settling pass.
+      basePositionsRef.current = applyConstellationLayout(
+        graph,
+        positionCacheRef.current,
+      );
 
       // Static size baseline at the current scale; breathing (when active)
       // overwrites it each frame.
@@ -229,6 +258,17 @@ export function useGraphInstance(args: {
       }, 200);
 
       teardownRef.current = () => {
+        // Snapshot live positions so the next structural rebuild can re-seed
+        // existing nodes (preserving layout + any dragged placement).
+        const snapshot = new Map<string, XY>();
+        graph.forEachNode((id, attrs) => {
+          snapshot.set(id, {
+            x: attrs["x"] as number,
+            y: attrs["y"] as number,
+          });
+        });
+        positionCacheRef.current = snapshot;
+
         window.clearTimeout(resetTimer);
         ro.disconnect();
         sigma.getCamera().off("updated", onCameraUpdate);
@@ -264,7 +304,36 @@ export function useGraphInstance(args: {
       teardownRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notes]);
+  }, [structKey]);
+
+  // Content sync: when a note's title or type changes but the structure does
+  // not, patch the affected node attributes in place and refresh — far cheaper
+  // than a full rebuild. Keyed on contentKey so it only fires on real changes.
+  // Skipped on a structural change because the build effect above (which shares
+  // the same render) already rebuilds with fresh content.
+  const contKey = contentKey(notes);
+  useEffect(() => {
+    const sigma = sigmaRef.current;
+    const graph = graphRef.current;
+    if (!sigma || !graph) return;
+    const palette = readNodePalette();
+    let changed = false;
+    for (const n of notesRef.current) {
+      if (!graph.hasNode(n.id)) continue;
+      if (graph.getNodeAttribute(n.id, "label") !== n.title) {
+        graph.setNodeAttribute(n.id, "label", n.title);
+        changed = true;
+      }
+      if (graph.getNodeAttribute(n.id, "noteType") !== n.type) {
+        graph.setNodeAttribute(n.id, "noteType", n.type);
+        graph.setNodeAttribute(n.id, "color", palette[n.type]);
+        changed = true;
+      }
+    }
+    if (changed) sigma.refresh({ skipIndexation: true });
+    // sigmaReady gates the first run until the instance exists; contKey drives
+    // subsequent content-only updates.
+  }, [contKey, sigmaReady]);
 
   return {
     sigmaRef,

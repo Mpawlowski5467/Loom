@@ -36,15 +36,21 @@ export function AboutSection(): ReactNode {
   };
 
   useEffect(() => {
+    let cancelled = false;
     void Promise.all([getDiagnostics(), getHealth(), getIndexStats()])
       .then(([diag, report, stats]) => {
+        if (cancelled) return;
         setDiagnostics(diag);
         setHealth(report);
         setIndexStats(stats);
       })
       .catch((err) => {
+        if (cancelled) return;
         setMessage(err instanceof Error ? err.message : "Diagnostics failed");
       });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const copyVaultPath = async () => {

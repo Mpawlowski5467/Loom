@@ -2,10 +2,12 @@ import { describe, it, expect } from "vitest";
 import Graph from "graphology";
 import {
   easeInOutCubic,
+  applyConstellationLayout,
   computeOrbitScene,
   computeOrbitLayout,
   ORBIT_SCENES,
   type OrbitScene,
+  type XY,
 } from "./layouts";
 
 /** Build a small star + chain graph rooted at "focus".
@@ -95,5 +97,53 @@ describe("computeOrbitLayout", () => {
     expect(computeOrbitLayout(g, "focus")).toEqual(
       computeOrbitScene(g, "focus", "rings"),
     );
+  });
+});
+
+describe("applyConstellationLayout — seeding", () => {
+  it("returns a finite position for every node with no seed", () => {
+    const g = mkGraph();
+    const pos = applyConstellationLayout(g);
+    for (const id of ["focus", "n1", "n2", "n3", "iso"]) {
+      const p = pos.get(id)!;
+      expect(Number.isFinite(p.x)).toBe(true);
+      expect(Number.isFinite(p.y)).toBe(true);
+    }
+  });
+
+  it("keeps fully-seeded node positions exactly (no FA2 reshuffle)", () => {
+    const g = mkGraph();
+    const seed = new Map<string, XY>([
+      ["focus", { x: 10, y: 20 }],
+      ["n1", { x: 30, y: 40 }],
+      ["n2", { x: 50, y: 60 }],
+      ["n3", { x: 70, y: 80 }],
+      ["iso", { x: 90, y: 100 }],
+    ]);
+    const pos = applyConstellationLayout(g, seed);
+    // Every node is seeded → 0 iterations → positions returned verbatim.
+    for (const [id, xy] of seed) {
+      expect(pos.get(id)).toEqual(xy);
+    }
+  });
+
+  it("places a new (unseeded) node while keeping the graph finite", () => {
+    const g = mkGraph();
+    g.addNode("fresh", { noteType: "topic" });
+    g.addEdge("focus", "fresh");
+    // Seed everything except the new node.
+    const seed = new Map<string, XY>([
+      ["focus", { x: 0, y: 0 }],
+      ["n1", { x: 100, y: 0 }],
+      ["n2", { x: 200, y: 0 }],
+      ["n3", { x: 0, y: 100 }],
+      ["iso", { x: 0, y: 200 }],
+    ]);
+    const pos = applyConstellationLayout(g, seed);
+    const fresh = pos.get("fresh")!;
+    expect(Number.isFinite(fresh.x)).toBe(true);
+    expect(Number.isFinite(fresh.y)).toBe(true);
+    // The new node got a real placement (not left at the origin default).
+    expect(fresh.x !== 0 || fresh.y !== 0).toBe(true);
   });
 });

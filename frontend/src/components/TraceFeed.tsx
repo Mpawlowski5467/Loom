@@ -54,11 +54,15 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
     let cancelled = false;
     let timer: number | null = null;
     const tick = async () => {
-      try {
-        const next = await listTraces(limit);
-        if (!cancelled) setLive(next);
-      } catch {
-        // best-effort
+      // Skip the fetch while the tab is backgrounded (mirrors
+      // useHealthPolling / useAgentPolling) so a hidden window does no work.
+      if (!document.hidden) {
+        try {
+          const next = await listTraces(limit);
+          if (!cancelled) setLive(next);
+        } catch {
+          // best-effort
+        }
       }
       if (!cancelled) timer = window.setTimeout(tick, pollMs);
     };

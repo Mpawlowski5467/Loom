@@ -23,11 +23,15 @@ export function RunFeed({ limit = 20, pollMs = 3000 }: Props): ReactNode {
     let cancelled = false;
     let timer: number | null = null;
     const tick = async () => {
-      try {
-        const next = await listRuns(limit);
-        if (!cancelled) setRuns(next);
-      } catch {
-        // best-effort
+      // Skip the fetch while the tab is backgrounded (mirrors
+      // useHealthPolling / useAgentPolling) so a hidden window does no work.
+      if (!document.hidden) {
+        try {
+          const next = await listRuns(limit);
+          if (!cancelled) setRuns(next);
+        } catch {
+          // best-effort
+        }
       }
       if (!cancelled) timer = window.setTimeout(tick, pollMs);
     };

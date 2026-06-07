@@ -22,6 +22,7 @@ import {
   updateNote as apiUpdateNote,
 } from "../api/notes";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { formatDate, formatDateTime } from "../data/formatDate";
 import { Trash2 } from "lucide-react";
 
 export function ThreadView(): ReactNode {
@@ -232,7 +233,12 @@ export function ThreadView(): ReactNode {
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
-                if (e.key === "Enter") beginTitleEdit();
+                // Match CaptureCard: activate on Enter or Space, and
+                // preventDefault so Space doesn't scroll the page.
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  beginTitleEdit();
+                }
               }}
               title="Click to rename"
             >
@@ -245,7 +251,7 @@ export function ThreadView(): ReactNode {
               <Chip key={t}>#{t}</Chip>
             ))}
             <span className="spacer" />
-            <span>modified {note.modified.slice(0, 10)}</span>
+            <span>modified {formatDate(note.modified)}</span>
             <Button
               variant={editing ? "active" : "default"}
               onClick={() => setEditing(!editing)}
@@ -331,7 +337,7 @@ export function ThreadView(): ReactNode {
                 const actor = isYou
                   ? "YOU"
                   : h.by.replace("agent:", "").toUpperCase();
-                const when = h.at.slice(5, 10) + " " + h.at.slice(11, 16);
+                const when = formatDateTime(h.at);
                 return (
                   <div key={i} className="history-entry">
                     <span

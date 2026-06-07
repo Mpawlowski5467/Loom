@@ -108,6 +108,16 @@
   padding: 48px 24px;
   font-style: normal;
 }
+.inbox-empty-error {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 48px 24px;
+  font-style: normal;
+}
+.inbox-empty-error .inbox-empty-title {
+  color: var(--you);
+}
 .inbox-empty-title {
   font-family: var(--serif);
   font-style: italic;

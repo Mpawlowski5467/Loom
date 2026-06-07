@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { fetchTrace } from "../api/traces";
 import type { TraceDetail } from "../api/traces";
+import { useFocusTrap } from "./useFocusTrap";
 
 interface Props {
   traceId: string;
@@ -41,22 +42,21 @@ export function TraceModal({ traceId, onClose }: Props): ReactNode {
   const trace = current?.trace ?? null;
   const error = current?.error ?? null;
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+  // Trap focus, restore it on close, and handle Escape at the window level.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
 
   return (
     <div
-      role="dialog"
-      aria-modal="true"
       onClick={onClose}
       className="trace-modal-overlay"
     >
-      <div onClick={(e) => e.stopPropagation()} className="trace-modal">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        onClick={(e) => e.stopPropagation()}
+        className="trace-modal"
+      >
         <header className="trace-modal-header">
           <h3>LLM call</h3>
           <button

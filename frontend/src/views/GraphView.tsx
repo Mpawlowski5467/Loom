@@ -19,6 +19,7 @@ import type { GraphTuning } from "../graph/tuning";
 export function GraphView(): ReactNode {
   const {
     notes,
+    notesLoaded,
     openNote,
     graphMode,
     setGraphMode,
@@ -202,7 +203,10 @@ export function GraphView(): ReactNode {
     [pushToast],
   );
 
-  const empty = notes.length === 0;
+  // Only show "empty" once the initial load has settled — otherwise a
+  // populated vault flashes "your graph is empty" for the whole cold fetch.
+  const empty = notesLoaded && notes.length === 0;
+  const loadingNotes = !notesLoaded && notes.length === 0;
 
   return (
     <div className="graph-view">
@@ -227,12 +231,18 @@ export function GraphView(): ReactNode {
             zIndex: 4,
           }}
         />
+        {loadingNotes && (
+          <div className="graph-loading" role="status">
+            <span className="graph-loading-orbit" aria-hidden />
+            loading your vault…
+          </div>
+        )}
         {empty && (
           <div className="graph-empty">
             Your graph is empty — capture a note to start weaving.
           </div>
         )}
-        {!empty && building && (
+        {!empty && !loadingNotes && building && (
           <div className="graph-loading" role="status">
             <span className="graph-loading-orbit" aria-hidden />
             arranging {stats.nodes} nodes…

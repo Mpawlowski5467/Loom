@@ -89,7 +89,11 @@ interface Spies {
 
 function renderInbox(
   captures: Capture[],
-  opts: { selectedCaptureId?: string | null } = {},
+  opts: {
+    selectedCaptureId?: string | null;
+    capturesLoaded?: boolean;
+    capturesError?: string | null;
+  } = {},
 ): Spies {
   const spies: Spies = {
     selectCapture: vi.fn(),
@@ -102,6 +106,8 @@ function renderInbox(
   const value = {
     notes: [],
     captures,
+    capturesLoaded: opts.capturesLoaded ?? true,
+    capturesError: opts.capturesError ?? null,
     selectedCaptureId: opts.selectedCaptureId ?? null,
     noteById: () => undefined,
     ...spies,
@@ -151,6 +157,23 @@ describe("InboxView — listing & filtering", () => {
   it("shows the empty-inbox state with no captures", () => {
     renderInbox([]);
     expect(screen.getByText("Inbox is clear")).toBeInTheDocument();
+  });
+
+  it("shows a loading state before captures have loaded", () => {
+    renderInbox([], { capturesLoaded: false });
+    expect(screen.getByText("Loading captures…")).toBeInTheDocument();
+    // Must NOT claim the inbox is clear mid-fetch.
+    expect(screen.queryByText("Inbox is clear")).not.toBeInTheDocument();
+  });
+
+  it("shows an error state when the captures fetch failed", () => {
+    renderInbox([], {
+      capturesLoaded: true,
+      capturesError: "Network error",
+    });
+    expect(screen.getByText("Couldn’t load captures")).toBeInTheDocument();
+    expect(screen.getByText(/Network error/)).toBeInTheDocument();
+    expect(screen.queryByText("Inbox is clear")).not.toBeInTheDocument();
   });
 
   it("shows a no-match message when the filter excludes everything", async () => {

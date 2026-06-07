@@ -1,4 +1,11 @@
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import {
+  useDeferredValue,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Button } from "../components/primitives/Button";
@@ -50,6 +57,19 @@ export function ThreadView(): ReactNode {
 
   const dirty = !!note && draft !== note.body;
   const canSave = dirty && !saving;
+
+  // The textarea binds to `draft` (immediate), but the live preview renders a
+  // deferred copy: on a long/code-heavy note React can interrupt the full
+  // markdown re-parse so typing stays responsive. Memoize so identical text
+  // doesn't re-render the pipeline on unrelated state changes.
+  const deferredDraft = useDeferredValue(draft);
+  const preview = useMemo(
+    () =>
+      renderMarkdown(deferredDraft, {
+        bodyClass: "thread-body editor-preview-body",
+      }),
+    [deferredDraft],
+  );
 
   // Keep latest draft/editing readable from the note-switch guard below.
   const draftRef = useRef(draft);
@@ -284,9 +304,7 @@ export function ThreadView(): ReactNode {
             </div>
             <div className="editor-preview">
               <div className="editor-pane-h">PREVIEW · RENDERED</div>
-              {renderMarkdown(draft, {
-                bodyClass: "thread-body editor-preview-body",
-              })}
+              {preview}
             </div>
           </div>
         ) : (

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { Dot } from "../components/primitives/Dot";
+import { useFocusTrap } from "../components/useFocusTrap";
 import {
   recentNotes,
   searchNotesRemote,
@@ -24,6 +25,13 @@ export function Palette(): ReactNode {
 
   const recent = useMemo(() => recentNotes(notes, 8), [notes]);
   const trimmed = q.trim();
+
+  // Trap focus within the palette and restore it to the trigger on close.
+  // The input self-focuses below, so skip the hook's initial focus.
+  const dialogRef = useFocusTrap<HTMLDivElement>({
+    onEscape: () => setPaletteOpen(false),
+    skipInitialFocus: true,
+  });
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -97,7 +105,11 @@ export function Palette(): ReactNode {
       aria-modal="true"
       onClick={() => setPaletteOpen(false)}
     >
-      <div className="palette" onClick={(e) => e.stopPropagation()}>
+      <div
+        ref={dialogRef}
+        className="palette"
+        onClick={(e) => e.stopPropagation()}
+      >
         <input
           ref={inputRef}
           className="palette-input"

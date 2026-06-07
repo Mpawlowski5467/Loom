@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { useFocusTrap } from "./useFocusTrap";
 
 interface ConfirmModalProps {
   title: string;
@@ -30,6 +31,9 @@ export function ConfirmModal({
 }: ConfirmModalProps): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Cancel carries autoFocus; Escape stays inline (it must respect `busy`), so
+  // the hook only provides Tab-trapping and focus restore.
+  const dialogRef = useFocusTrap<HTMLDivElement>({ skipInitialFocus: true });
 
   const confirm = async () => {
     if (busy) return;
@@ -57,6 +61,7 @@ export function ConfirmModal({
   return (
     <div className="settings-modal-backdrop" role="presentation">
       <div
+        ref={dialogRef}
         className="settings-modal"
         role="dialog"
         aria-modal="true"

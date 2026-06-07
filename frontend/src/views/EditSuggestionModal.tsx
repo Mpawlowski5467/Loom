@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Capture } from "../data/types";
+import { useFocusTrap } from "../components/useFocusTrap";
 import {
   captureRelPath,
   commitCapture,
@@ -66,6 +67,12 @@ export function EditSuggestionModal({
     onClose();
   };
 
+  // Title input carries autoFocus; route Escape through the dirty-aware guard.
+  const dialogRef = useFocusTrap<HTMLDivElement>({
+    onEscape: requestClose,
+    skipInitialFocus: true,
+  });
+
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
@@ -107,7 +114,7 @@ export function EditSuggestionModal({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") requestClose();
+    // Escape is handled by useFocusTrap at the window level.
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
   };
 
@@ -116,9 +123,9 @@ export function EditSuggestionModal({
       className="settings-modal-backdrop"
       role="presentation"
       onClick={requestClose}
-      onKeyDown={onKey}
     >
       <div
+        ref={dialogRef}
         className="settings-modal"
         role="dialog"
         aria-modal="true"

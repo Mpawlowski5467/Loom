@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { createNote, getTree, type NoteRecord } from "../api/notes";
+import { useFocusTrap } from "../components/useFocusTrap";
 
 interface Props {
   onClose: () => void;
@@ -38,6 +39,11 @@ export function NewNoteModal({
   const [folders, setFolders] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Title input carries autoFocus, so skip the hook's initial focus.
+  const dialogRef = useFocusTrap<HTMLDivElement>({
+    onEscape: onClose,
+    skipInitialFocus: true,
+  });
 
   useEffect(() => {
     let cancelled = false;
@@ -89,7 +95,7 @@ export function NewNoteModal({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
+    // Escape is handled by useFocusTrap at the window level.
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
   };
 
@@ -98,9 +104,9 @@ export function NewNoteModal({
       className="settings-modal-backdrop"
       role="presentation"
       onClick={onClose}
-      onKeyDown={onKey}
     >
       <div
+        ref={dialogRef}
         className="settings-modal"
         role="dialog"
         aria-modal="true"

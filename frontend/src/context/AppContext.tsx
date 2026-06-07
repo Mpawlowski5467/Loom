@@ -518,6 +518,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [captures, setCaptures] = useState<Capture[]>(
     demo ? capturesSeed : [],
   );
+  const [capturesLoaded, setCapturesLoaded] = useState<boolean>(() => demo);
+  const [capturesError, setCapturesError] = useState<string | null>(null);
   const [selectedCaptureId, selectCapture] = useState<string | null>(
     demo ? capturesSeed[0]?.id ?? null : null,
   );
@@ -527,6 +529,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     // so the tree shows its empty state rather than a perpetual skeleton.
     if (demo || !loomConfig.onboardingComplete || loomConfig.offline) {
       setNotesLoaded(true);
+      setCapturesLoaded(true);
       return;
     }
     const ctrl = new AbortController();
@@ -558,6 +561,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
         if (ctrl.signal.aborted) return;
         const loaded = records.map(backendCaptureToFrontend);
         setCaptures(loaded);
+        setCapturesError(null);
         selectCapture((current) => {
           if (current && loaded.some((c) => c.id === current)) return current;
           return loaded[0]?.id ?? null;
@@ -565,11 +569,13 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       })
       .catch((err) => {
         if ((err as DOMException)?.name === "AbortError") return;
-        pushToast({
-          icon: "!",
-          agent: "loom",
-          body: err instanceof Error ? err.message : "Failed to load captures",
-        });
+        const msg =
+          err instanceof Error ? err.message : "Failed to load captures";
+        setCapturesError(msg);
+        pushToast({ icon: "!", agent: "loom", body: msg });
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setCapturesLoaded(true);
       });
 
     return () => ctrl.abort();
@@ -678,6 +684,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       removeNote,
 
       captures,
+      capturesLoaded,
+      capturesError,
       selectedCaptureId,
       selectCapture,
       setCaptureStatus,
@@ -724,6 +732,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       newNoteOpen,
       newNoteTitle,
       captures,
+      capturesLoaded,
+      capturesError,
       selectedCaptureId,
       extraFolders,
       // Stable callbacks / setters (referentially stable, listed for completeness)

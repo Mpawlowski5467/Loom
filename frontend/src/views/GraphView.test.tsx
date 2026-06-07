@@ -80,9 +80,14 @@ function mkNote(id: string, links: string[] = []): Note {
   };
 }
 
-function renderGraph(notes: Note[], graphMode: "constellation" | "orbit" = "constellation") {
+function renderGraph(
+  notes: Note[],
+  graphMode: "constellation" | "orbit" = "constellation",
+  notesLoaded = true,
+) {
   const value = {
     notes,
+    notesLoaded,
     openNote: vi.fn(),
     graphMode,
     setGraphMode: vi.fn(),
@@ -118,6 +123,13 @@ describe("GraphView", () => {
     expect(screen.getByText(/Your graph is empty/)).toBeInTheDocument();
     // No stats line for an empty graph.
     expect(screen.queryByText(/nodes ·/)).not.toBeInTheDocument();
+  });
+
+  it("shows a loading state instead of the empty prompt during the initial fetch", () => {
+    renderGraph([], "constellation", false);
+    expect(screen.getByText(/loading your vault/)).toBeInTheDocument();
+    // Must NOT flash "empty" before the load settles.
+    expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
   });
 
   it("renders the node and edge counts", () => {

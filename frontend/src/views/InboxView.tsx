@@ -21,6 +21,8 @@ export function InboxView(): ReactNode {
   const {
     notes,
     captures,
+    capturesLoaded,
+    capturesError,
     selectedCaptureId,
     selectCapture,
     setCaptureStatus,
@@ -417,7 +419,20 @@ export function InboxView(): ReactNode {
         </div>
         <div className="inbox-scroll">
           {filteredCaptures.length === 0 &&
-            (captures.length === 0 ? (
+            (!capturesLoaded && captures.length === 0 ? (
+              <div className="inbox-empty" role="status">
+                Loading captures…
+              </div>
+            ) : capturesError && captures.length === 0 ? (
+              <div className="inbox-empty inbox-empty-error" role="alert">
+                <span className="inbox-empty-title">
+                  Couldn’t load captures
+                </span>
+                <span className="inbox-empty-hint">
+                  {capturesError}. Check the backend and reload.
+                </span>
+              </div>
+            ) : captures.length === 0 ? (
               <div className="inbox-empty inbox-empty-zero">
                 <span className="inbox-empty-title">Inbox is clear</span>
                 <span className="inbox-empty-hint">

@@ -119,6 +119,8 @@ export interface AppContextValue {
   addFolder: (path: string) => void;
 
   captures: Capture[];
+  capturesLoaded: boolean;
+  capturesError: string | null;
   selectedCaptureId: string | null;
   selectCapture: (id: string | null) => void;
   setCaptureStatus: (id: string, s: CaptureStatus) => void;

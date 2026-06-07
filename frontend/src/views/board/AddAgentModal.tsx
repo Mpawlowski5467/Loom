@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { useFocusTrap } from "../../components/useFocusTrap";
 import {
   createCustomAgent,
   updateCustomAgent,
@@ -25,6 +26,11 @@ export function AddAgentModal({
   );
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Name input carries autoFocus; route Escape through the window-level trap.
+  const dialogRef = useFocusTrap<HTMLDivElement>({
+    onEscape: onClose,
+    skipInitialFocus: true,
+  });
 
   const canSubmit = name.trim().length > 0 && !busy;
 
@@ -53,7 +59,7 @@ export function AddAgentModal({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    if (e.key === "Escape") onClose();
+    // Escape is handled by useFocusTrap at the window level.
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
   };
 
@@ -62,9 +68,9 @@ export function AddAgentModal({
       className="settings-modal-backdrop"
       role="presentation"
       onClick={onClose}
-      onKeyDown={onKey}
     >
       <div
+        ref={dialogRef}
         className="settings-modal"
         role="dialog"
         aria-modal="true"

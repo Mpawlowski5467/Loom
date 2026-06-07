@@ -5,6 +5,8 @@ interface GroqIconProps {
   className?: string;
 }
 
+// Brand mark sourced from @lobehub/icons-static-svg. Rendered monochrome via
+// currentColor so it tints with the surrounding theme accent.
 export function GroqIcon({ size = 16, className }: GroqIconProps): ReactNode {
   return (
     <svg
@@ -17,9 +19,8 @@ export function GroqIcon({ size = 16, className }: GroqIconProps): ReactNode {
       fill="currentColor"
     >
       <path
-        d="M5 3h14a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2Zm0 2v14h14V5H5Z"
+        d="M12.036 2c-3.853-.035-7 3-7.036 6.781-.035 3.782 3.055 6.872 6.908 6.907h2.42v-2.566h-2.292c-2.407.028-4.38-1.866-4.408-4.23-.029-2.362 1.901-4.298 4.308-4.326h.1c2.407 0 4.358 1.915 4.365 4.278v6.305c0 2.342-1.944 4.25-4.323 4.279a4.375 4.375 0 01-3.033-1.252l-1.851 1.818A7 7 0 0012.029 22h.092c3.803-.056 6.858-3.083 6.879-6.816v-6.5C18.907 4.963 15.817 2 12.036 2z"
       />
-      <path d="M13.5 7.5 8 13h3.2l-1.7 4 5.5-5.5h-3.2l1.7-4Z" />
     </svg>
   );
 }

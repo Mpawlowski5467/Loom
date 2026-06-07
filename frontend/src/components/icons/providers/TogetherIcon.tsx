@@ -5,6 +5,8 @@ interface TogetherIconProps {
   className?: string;
 }
 
+// Brand mark sourced from @lobehub/icons-static-svg. Rendered monochrome via
+// currentColor so it tints with the surrounding theme accent.
 export function TogetherIcon({ size = 16, className }: TogetherIconProps): ReactNode {
   return (
     <svg
@@ -16,12 +18,15 @@ export function TogetherIcon({ size = 16, className }: TogetherIconProps): React
       className={className}
       fill="currentColor"
     >
-      <circle cx="8" cy="8" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="16" cy="8" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="15.5" r="3.4" fill="none" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="9.5" r="1.3" />
-      <circle cx="10" cy="13" r="1.3" />
-      <circle cx="14" cy="13" r="1.3" />
+      <path
+        d="M23.197 4.503A6 6 0 0015 2.307a5.973 5.973 0 00-2.995 4.933l5.996.008v.515h-5.996c.039.937.298 1.87.8 2.74a6 6 0 1010.39-6z"
+      />
+      <path
+        d="M.805 4.5A6 6 0 003 12.697a5.972 5.972 0 005.77.127L5.779 7.627l.446-.257 2.997 5.192A6 6 0 10.804 4.5z"
+      />
+      <path
+        d="M12 23.894a6 6 0 005.999-6c0-2.13-1.1-3.996-2.775-5.06l-3.005 5.189-.444-.258 2.997-5.192A6 6 0 1012 23.894z"
+      />
     </svg>
   );
 }

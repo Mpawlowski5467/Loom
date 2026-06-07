@@ -16,6 +16,8 @@ export interface TraceDetail {
   response: string;
   duration_ms: number;
   error: string;
+  run_id?: string;
+  step?: string;
 }
 
 export interface TraceSummary {
@@ -27,6 +29,8 @@ export interface TraceSummary {
   duration_ms: number;
   error: string;
   response_preview: string;
+  run_id?: string;
+  step?: string;
 }
 
 export function fetchTrace(id: string): Promise<TraceDetail> {

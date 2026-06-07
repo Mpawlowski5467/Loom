@@ -6,7 +6,18 @@ import asyncio
 
 import pytest
 
-from core.traces import clear_caller, get_caller, set_caller
+from core.traces import (
+    TraceRecord,
+    TraceStore,
+    clear_caller,
+    clear_run,
+    get_caller,
+    get_run,
+    get_step,
+    set_caller,
+    set_run,
+    set_step,
+)
 
 
 class TestCallerBasics:
@@ -115,3 +126,95 @@ class TestCallerConcurrencyIsolation:
         assert ("pipeline", "weaver") in captured
         assert ("pipeline_end", "weaver") in captured
         assert ("council", "council:spider") in captured
+
+
+class TestRunStepContext:
+    """run_id / step ContextVars used to group flat traces into a run shape."""
+
+    def test_run_default_empty(self) -> None:
+        async def check():
+            return get_run(), get_step()
+
+        assert asyncio.run(check()) == ("", "")
+
+    def test_set_run_and_step(self) -> None:
+        async def check():
+            set_run("run_1")
+            set_step("search")
+            return get_run(), get_step()
+
+        assert asyncio.run(check()) == ("run_1", "search")
+
+    def test_clear_run_also_clears_step(self) -> None:
+        async def check():
+            set_run("run_1")
+            set_step("search")
+            clear_run()
+            return get_run(), get_step()
+
+        assert asyncio.run(check()) == ("", "")
+
+    def test_trace_record_carries_run_and_step(self) -> None:
+        rec = TraceRecord(
+            provider="p",
+            model="m",
+            messages=[],
+            system="",
+            response="hi",
+            duration_ms=5,
+            run_id="run_x",
+            step="synthesize",
+        )
+        d = rec.to_dict()
+        assert d["run_id"] == "run_x"
+        assert d["step"] == "synthesize"
+
+    @pytest.mark.asyncio
+    async def test_concurrent_runs_isolated(self) -> None:
+        observed: dict[str, str] = {}
+
+        async def task(run_id: str) -> None:
+            set_run(run_id)
+            await asyncio.sleep(0.01)
+            observed[run_id] = get_run()
+
+        await asyncio.gather(task("run_a"), task("run_b"))
+        assert observed == {"run_a": "run_a", "run_b": "run_b"}
+
+
+class TestTraceStoreRuns:
+    """The run-summary persistence + by_run join the Runs API depends on."""
+
+    def test_by_run_filters_and_orders(self) -> None:
+        store = TraceStore()
+        store.add(TraceRecord("p", "m", [], "", "a", 1, run_id="r1", step="search"))
+        store.add(TraceRecord("p", "m", [], "", "b", 1, run_id="r2", step="search"))
+        store.add(TraceRecord("p", "m", [], "", "c", 1, run_id="r1", step="synthesize"))
+
+        r1 = store.by_run("r1")
+        assert [t.response for t in r1] == ["a", "c"]
+        assert store.by_run("missing") == []
+
+    def test_write_and_read_run_summary(self, tmp_path) -> None:
+        store = TraceStore()
+        store.set_disk_dir(tmp_path)
+        summary = {
+            "run_id": "run_42",
+            "agent": "researcher",
+            "status": "ok",
+            "started": "2026-06-06T10:00:00+00:00",
+            "ended": "2026-06-06T10:00:01+00:00",
+            "duration_ms": 30,
+            "steps": [{"name": "search", "status": "ok", "duration_ms": 30, "trace_ids": []}],
+        }
+        store.write_run_summary(summary)
+
+        listed = store.list_run_summaries()
+        assert len(listed) == 1
+        assert listed[0]["run_id"] == "run_42"
+        assert store.get_run_summary("run_42")["agent"] == "researcher"
+        assert store.get_run_summary("nope") is None
+
+    def test_write_run_summary_noop_without_disk(self) -> None:
+        # No disk dir configured → silently skipped, never raises.
+        TraceStore().write_run_summary({"run_id": "x", "started": "2026-06-06T00:00:00+00:00"})

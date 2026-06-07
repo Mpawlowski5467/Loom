@@ -6,12 +6,15 @@ import {
   listTracesDisk,
   type TraceSummary,
 } from "../api/traces";
+import { RunFeed } from "./RunFeed";
 import { TraceModal } from "./TraceModal";
 
 interface Props {
   limit?: number;
   pollMs?: number;
 }
+
+type Tab = "calls" | "runs";
 
 const FILTER_LS_KEY = "loom.traceFeed.caller";
 const ALL = "__all__";
@@ -41,6 +44,7 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
   const [openId, setOpenId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>(() => loadStoredFilter());
   const [loadingOlder, setLoadingOlder] = useState(false);
+  const [tab, setTab] = useState<Tab>("calls");
   const olderDateCursor = useRef<string | null>(null);
   const dateExhausted = useRef<boolean>(false);
 
@@ -133,23 +137,46 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
 
   return (
     <aside aria-label="LLM call log" className="trace-feed">
-      <div className="trace-feed-header">
-        <span>llm calls</span>
-        <select
-          aria-label="Filter trace caller"
-          value={filter}
-          onChange={onFilterChange}
-          className="trace-feed-filter"
+      <div className="trace-feed-header" role="tablist" aria-label="Trace view">
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "calls"}
+          onClick={() => setTab("calls")}
+          className={`trace-feed-tab${tab === "calls" ? " active" : ""}`}
         >
-          <option value={ALL}>all ({allItems.length})</option>
-          {callers.map((c) => (
-            <option key={c} value={c}>
-              {c}
-            </option>
-          ))}
-        </select>
-        <span>{visible.length}</span>
+          llm calls
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={tab === "runs"}
+          onClick={() => setTab("runs")}
+          className={`trace-feed-tab${tab === "runs" ? " active" : ""}`}
+        >
+          runs
+        </button>
+        {tab === "calls" && (
+          <>
+            <select
+              aria-label="Filter trace caller"
+              value={filter}
+              onChange={onFilterChange}
+              className="trace-feed-filter"
+            >
+              <option value={ALL}>all ({allItems.length})</option>
+              {callers.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
+            <span>{visible.length}</span>
+          </>
+        )}
       </div>
+      {tab === "runs" && <RunFeed />}
+      {tab === "calls" && (
       <div className="trace-feed-body">
         {visible.length === 0 && (
           <div className="trace-feed-empty">
@@ -192,7 +219,8 @@ export function TraceFeed({ limit = 20, pollMs = 2000 }: Props): ReactNode {
               : "load older"}
         </button>
       </div>
-      {openId && (
+      )}
+      {tab === "calls" && openId && (
         <TraceModal traceId={openId} onClose={() => setOpenId(null)} />
       )}
     </aside>

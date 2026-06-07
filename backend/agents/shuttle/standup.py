@@ -96,31 +96,32 @@ class Standup(BaseAgent):
         date_str = target_date.isoformat()
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
-            changelog_text = self._collect_changelog(target_date)
-            modified_notes = self._find_modified_notes(target_date)
-            notes_count = len(modified_notes)
+            from agents.shuttle.graph_runtime import run_scope
+            from agents.shuttle.standup_graph import build_standup_graph
 
-            if not changelog_text.strip() and not modified_notes:
+            graph = build_standup_graph(self, target_date)
+
+            async with run_scope("standup"):
+                final = await graph.ainvoke({"date_str": date_str})
+
+            notes_count = final.get("notes_modified", 0)
+
+            if final.get("skipped"):
                 return {
                     "action": "skipped",
                     "details": f"No activity for {date_str}",
                     "result": StandupResult(recap="", date=date_str, notes_modified=0),
                 }
 
-            notes_text = "\n".join(f"- [[{n['title']}]] ({n['type']})" for n in modified_notes)
-
-            recap = await self._generate_recap(date_str, changelog_text, notes_text)
-            capture_id, capture_path = self._save_capture(date_str, recap)
-
             return {
                 "action": "created",
                 "details": f"Standup for {date_str}: {notes_count} notes, recap saved",
                 "result": StandupResult(
-                    recap=recap,
+                    recap=final.get("recap", ""),
                     date=date_str,
                     notes_modified=notes_count,
-                    capture_id=capture_id,
-                    capture_path=str(capture_path),
+                    capture_id=final.get("capture_id", ""),
+                    capture_path=final.get("capture_path", ""),
                 ),
             }
 

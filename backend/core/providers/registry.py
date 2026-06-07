@@ -35,7 +35,7 @@ from core.providers.openai_compatible import (
 )
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
-from core.traces import TraceRecord, get_caller, get_trace_store
+from core.traces import TraceRecord, get_caller, get_run, get_step, get_trace_store
 
 logger = logging.getLogger(__name__)
 
@@ -370,6 +370,8 @@ class TracedProvider(BaseProvider):
                     duration_ms=duration_ms,
                     error=error_text,
                     caller=caller,
+                    run_id=get_run(),
+                    step=get_step(),
                 )
             )
         except Exception:  # pragma: no cover - tracing must never break a chat call

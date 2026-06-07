@@ -60,6 +60,10 @@ class ResearchResult:
 class Researcher(BaseAgent):
     """Researcher queries the vault and synthesizes answers from found context."""
 
+    # Read chain for the in-flight query, stashed so the graph's synthesize
+    # node can reach it without threading a heavy object through graph state.
+    _last_chain: ReadChainResult | None = None
+
     @property
     def name(self) -> str:
         return "researcher"
@@ -81,23 +85,26 @@ class Researcher(BaseAgent):
         captures_dir.mkdir(parents=True, exist_ok=True)
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
-            # Search the vault for relevant context
-            vault_context, refs = await self._search_vault(question)
+            from agents.shuttle.graph_runtime import run_scope
+            from agents.shuttle.researcher_graph import build_researcher_graph
 
-            # Synthesize answer
-            answer = await self._synthesize(question, vault_context, chain)
+            # Stash the read chain so the synthesize node can reach it without
+            # threading a heavy object through graph state.
+            self._last_chain = chain
+            graph = build_researcher_graph(self)
 
-            # Save as capture
-            capture_id, capture_path = self._save_capture(question, answer, refs)
+            async with run_scope("researcher"):
+                final = await graph.ainvoke({"question": question})
 
+            refs = final.get("refs", [])
             return {
                 "action": "researched",
                 "details": f"Answered '{question[:60]}' citing {len(refs)} note(s)",
                 "result": ResearchResult(
-                    answer=answer,
+                    answer=final.get("answer", ""),
                     referenced_notes=refs,
-                    capture_id=capture_id,
-                    capture_path=str(capture_path),
+                    capture_id=final.get("capture_id", ""),
+                    capture_path=final.get("capture_path", ""),
                 ),
             }
 

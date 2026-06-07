@@ -5,6 +5,8 @@ interface XaiIconProps {
   className?: string;
 }
 
+// Brand mark sourced from @lobehub/icons-static-svg. Rendered monochrome via
+// currentColor so it tints with the surrounding theme accent.
 export function XaiIcon({ size = 16, className }: XaiIconProps): ReactNode {
   return (
     <svg
@@ -16,8 +18,9 @@ export function XaiIcon({ size = 16, className }: XaiIconProps): ReactNode {
       className={className}
       fill="currentColor"
     >
-      <path d="M3.6 3h3.4l5 7.1L7 3h3.5l3.6 5.1L11.4 12 18 21h-3.4l-5.1-7.2L13 21H9.5L5.8 15.8 8.4 12 3.6 3z" />
-      <path d="M16.2 3H20l-5 7 5 11h-3.6l-3.7-8.2L16.2 3z" />
+      <path
+        d="M6.469 8.776L16.512 23h-4.464L2.005 8.776H6.47zm-.004 7.9l2.233 3.164L6.467 23H2l4.465-6.324zM22 2.582V23h-3.659V7.764L22 2.582zM22 1l-9.952 14.095-2.233-3.163L17.533 1H22z"
+      />
     </svg>
   );
 }

@@ -22,6 +22,24 @@
   color: var(--ink-3);
 }
 
+.trace-feed-tab {
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+  padding: 2px 0;
+  border-bottom: 2px solid transparent;
+  transition: color 140ms var(--ease);
+}
+.trace-feed-tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--agent);
+}
+
 .trace-feed-filter {
   margin-left: auto;
   background: var(--bg-base);
@@ -105,6 +123,65 @@
 }
 .trace-feed-more:disabled {
   cursor: default;
+}
+
+/* ── Run steps (multi-step run timeline) ───────────────────────── */
+.run-steps {
+  list-style: none;
+  margin: 0;
+  padding: 4px 12px 8px 24px;
+  background: var(--bg-base);
+  border-bottom: 1px solid var(--rule);
+}
+
+.run-step {
+  padding: 4px 0;
+  border-left: 2px solid var(--rule-2);
+  padding-left: 10px;
+  margin-left: 2px;
+}
+
+.run-step-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-2);
+}
+.run-step-row.error {
+  color: var(--you);
+}
+.run-step-name {
+  color: var(--ink);
+}
+.run-step-dur {
+  margin-left: auto;
+  color: var(--ink-3);
+}
+
+.run-step-error {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--you);
+  margin-top: 2px;
+}
+
+.run-step-call {
+  display: block;
+  margin-top: 3px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sm);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--agent);
+  padding: 2px 6px;
+  transition: background 140ms var(--ease);
+}
+.run-step-call:hover {
+  background: var(--bg-surface);
 }
 
 /* ── Trace modal (raw call inspector) ──────────────────────────── */

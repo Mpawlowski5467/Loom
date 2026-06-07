@@ -30,6 +30,8 @@ class TraceSummary(BaseModel):
     duration_ms: int
     error: str
     response_preview: str
+    run_id: str = ""
+    step: str = ""
 
 
 class TraceDetail(BaseModel):
@@ -43,6 +45,32 @@ class TraceDetail(BaseModel):
     response: str
     duration_ms: int
     error: str
+    run_id: str = ""
+    step: str = ""
+
+
+class RunStep(BaseModel):
+    name: str
+    status: str
+    duration_ms: int
+    trace_ids: list[str]
+    error: str = ""
+
+
+class RunSummary(BaseModel):
+    run_id: str
+    agent: str
+    status: str
+    started: str
+    ended: str
+    duration_ms: int
+    steps: list[RunStep]
+
+
+class RunDetail(RunSummary):
+    """A run plus the full trace record for each step's LLM calls."""
+
+    traces: dict[str, list[TraceDetail]]
 
 
 def _preview(text: str, n: int = 140) -> str:
@@ -68,6 +96,8 @@ def list_traces(
             duration_ms=r.duration_ms,
             error=r.error,
             response_preview=_preview(r.response),
+            run_id=r.run_id,
+            step=r.step,
         )
         for r in items
     ]
@@ -136,6 +166,8 @@ def list_traces_disk(
             duration_ms=int(r.get("duration_ms", 0)),
             error=str(r.get("error", "")),
             response_preview=_preview(str(r.get("response", ""))),
+            run_id=str(r.get("run_id", "")),
+            step=str(r.get("step", "")),
         )
         for r in records
     ]
@@ -151,6 +183,60 @@ def list_trace_dates(
 ) -> DiskDateList:
     """List YYYY-MM-DD directories that have persisted traces (newest first)."""
     return DiskDateList(dates=_list_dates_with_traces(_traces_disk_dir(vm)))
+
+
+def _run_summary_model(data: dict) -> RunSummary:
+    """Coerce a persisted run-summary dict into the response model."""
+    return RunSummary(
+        run_id=str(data.get("run_id", "")),
+        agent=str(data.get("agent", "")),
+        status=str(data.get("status", "ok")),
+        started=str(data.get("started", "")),
+        ended=str(data.get("ended", "")),
+        duration_ms=int(data.get("duration_ms", 0)),
+        steps=[
+            RunStep(
+                name=str(s.get("name", "")),
+                status=str(s.get("status", "ok")),
+                duration_ms=int(s.get("duration_ms", 0)),
+                trace_ids=list(s.get("trace_ids", [])),
+                error=str(s.get("error", "")),
+            )
+            for s in data.get("steps", [])
+        ],
+    )
+
+
+@router.get("/runs", response_model=list[RunSummary])
+def list_runs(limit: int = Query(50, ge=1, le=200)) -> list[RunSummary]:
+    """Return recent multi-step agent runs, newest first.
+
+    A run reifies the *shape* of a graph invocation (its ordered steps) so the
+    UI can show "Researcher → search → synthesize → save" as one connected run
+    rather than a flat list of LLM calls.
+    """
+    return [_run_summary_model(s) for s in get_trace_store().list_run_summaries(limit=limit)]
+
+
+@router.get("/runs/{run_id}", response_model=RunDetail)
+def get_run_detail(run_id: str) -> RunDetail:
+    """Return one run with the full trace record for each step's LLM calls.
+
+    Step trace records are read from the in-memory ring buffer (joined by
+    ``run_id``); steps with no LLM call simply have an empty list.
+    """
+    data = get_trace_store().get_run_summary(run_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail=f"Run {run_id} not found")
+
+    summary = _run_summary_model(data)
+    by_id = {t.id: t for t in get_trace_store().by_run(run_id)}
+    traces: dict[str, list[TraceDetail]] = {}
+    for st in summary.steps:
+        traces[st.name] = [
+            TraceDetail(**by_id[tid].to_dict()) for tid in st.trace_ids if tid in by_id
+        ]
+    return RunDetail(**summary.model_dump(), traces=traces)
 
 
 def _find_on_disk(traces_dir: Path, trace_id: str) -> dict | None:

@@ -20,7 +20,18 @@ from core.exceptions import ProviderConfigError
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
-_KNOWN: list[str] = ["openai", "anthropic", "xai", "openrouter", "ollama"]
+_KNOWN: list[str] = [
+    "openai",
+    "anthropic",
+    "xai",
+    "openrouter",
+    "ollama",
+    "groq",
+    "deepseek",
+    "together",
+    "mistral",
+    "gemini",
+]
 
 
 class ProvidersResponse(BaseModel):

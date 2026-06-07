@@ -52,6 +52,21 @@ class OpenRouterProviderConfig(BaseModel):
     chat_model: str = "openai/gpt-4o-mini"
 
 
+class OpenAICompatProviderConfig(BaseModel):
+    """Settings shared by OpenAI-compatible providers (Groq, DeepSeek, Together,
+    Mistral, Gemini).
+
+    ``base_url`` defaults to empty here; each provider class fills in its own
+    hosted endpoint when the value is blank. ``embed_model`` is optional — most
+    of these vendors are chat-only, but Mistral and Gemini support embeddings.
+    """
+
+    api_key: str | None = None
+    base_url: str = ""
+    chat_model: str = ""
+    embed_model: str | None = None
+
+
 class BaseProvider(ABC):
     """Unified interface for AI providers."""
 

@@ -207,7 +207,6 @@
 .settings-provider-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   width: 100%;
   padding: 13px 14px;
@@ -217,9 +216,27 @@
   text-align: left;
 }
 
-.settings-provider-head span {
+/* Brand icon chip — tinted via currentColor to the agent accent. */
+.settings-provider-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--r-sm);
+  background: var(--bg-elevated);
+  border: 1px solid var(--rule);
+  color: var(--agent);
+}
+
+/* The label block (name + status). Grows so the checkmark is pushed to the
+   far right; the icon stays a fixed-width chip on the left. */
+.settings-provider-head > span:not(.settings-provider-icon) {
   display: grid;
   gap: 2px;
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .settings-provider-head strong {

@@ -98,10 +98,10 @@ describe("ProvidersSection — hydration", () => {
     ).toBeInTheDocument();
   });
 
-  it("always shows the plaintext-key storage note", async () => {
+  it("shows the encryption-at-rest storage note", async () => {
     renderSection([mkSettingsProvider()]);
     expect(
-      await screen.findByText(/Keys are stored unencrypted/),
+      await screen.findByText(/Keys are encrypted at rest/),
     ).toBeInTheDocument();
   });
 

@@ -6,9 +6,16 @@ Two layers:
 * :class:`GlobalConfig` — YAML-persisted state at ``~/.loom/config.yaml``
   (providers, active vault, UI prefs, onboarding gate).
 
-API keys live on ``ProviderConfig.api_key`` and are persisted in plain text
-under ``~/.loom/config.yaml`` (file permissions are the only protection).
-``GlobalConfig.public()`` returns a redacted view safe for the frontend.
+API keys live on ``ProviderConfig.api_key``. In memory they are plain text;
+on disk (``~/.loom/config.yaml``) they are encrypted at rest with a machine-
+local master key (see :mod:`core.secrets`) and written with an ``enc:v1:``
+prefix. :meth:`GlobalConfig.load` transparently decrypts; :meth:`GlobalConfig.save`
+transparently encrypts. Legacy plaintext keys are read as-is and re-encrypted on
+the next save. ``GlobalConfig.to_public()`` returns a redacted view (no keys)
+safe for the frontend.
+
+Encryption at rest protects ``config.yaml`` if it leaks on its own; it does not
+add API authentication, so the backend port must still not be exposed.
 """
 
 from __future__ import annotations
@@ -158,24 +165,55 @@ class GlobalConfig(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> Self:
-        """Load from a YAML file, returning defaults if the file is missing."""
+        """Load from a YAML file, decrypting provider keys in the process.
+
+        Provider ``api_key`` values written with the ``enc:v1:`` prefix are
+        decrypted to plain text in memory; legacy plaintext keys pass through
+        unchanged (and get re-encrypted on the next :meth:`save`). Returns
+        defaults if the file is missing.
+        """
         if not path.exists():
             return cls()
         data = yaml.safe_load(path.read_text()) or {}
-        return cls.model_validate(data)
+        cfg = cls.model_validate(data)
+        cfg._decrypt_keys()
+        return cfg
 
     def save(self, path: Path) -> None:
-        """Write to a YAML file, creating parent directories as needed."""
+        """Write to a YAML file, encrypting provider keys at rest.
+
+        Encryption happens on a deep copy so the in-memory config keeps its
+        plaintext keys (the running app needs them). Writes atomically via a
+        temp file. Creates parent directories as needed.
+        """
         path.parent.mkdir(parents=True, exist_ok=True)
+        to_write = self.model_copy(deep=True)
+        to_write._encrypt_keys()
         tmp_path = path.with_suffix(f"{path.suffix}.tmp")
         tmp_path.write_text(
             yaml.safe_dump(
-                self.model_dump(exclude_none=True, mode="json"),
+                to_write.model_dump(exclude_none=True, mode="json"),
                 default_flow_style=False,
                 sort_keys=False,
             ),
         )
         tmp_path.replace(path)
+
+    def _decrypt_keys(self) -> None:
+        """Decrypt every provider ``api_key`` in place (encrypted → plaintext)."""
+        from core.secrets import decrypt
+
+        for provider in self.providers.values():
+            if provider.api_key:
+                provider.api_key = decrypt(provider.api_key)
+
+    def _encrypt_keys(self) -> None:
+        """Encrypt every provider ``api_key`` in place (plaintext → encrypted)."""
+        from core.secrets import encrypt
+
+        for provider in self.providers.values():
+            if provider.api_key:
+                provider.api_key = encrypt(provider.api_key)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""

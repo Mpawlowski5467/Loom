@@ -29,6 +29,9 @@ export function ProviderAccordion(props: Props): ReactNode {
         aria-expanded={props.open}
         onClick={props.onToggle}
       >
+        <span className="settings-provider-icon" aria-hidden="true">
+          <props.meta.icon size={18} />
+        </span>
         <span>
           <strong>{props.meta.label}</strong>
           <small>{configured ? "Configured" : "Not configured"}</small>

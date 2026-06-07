@@ -8,16 +8,35 @@ from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
     OllamaProviderConfig,
+    OpenAICompatProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openai_compatible import (
+    DeepSeekProvider,
+    GeminiProvider,
+    GroqProvider,
+    MistralProvider,
+    OpenAICompatibleProvider,
+    TogetherProvider,
+)
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
 
 _LOCAL_PROVIDERS = frozenset({"ollama"})
+
+#: OpenAI-compatible providers, mapped to their provider class. Each is built
+#: the same way (shared config model); the class supplies the default base_url.
+_OPENAI_COMPAT_PROVIDERS: dict[str, type[OpenAICompatibleProvider]] = {
+    "groq": GroqProvider,
+    "deepseek": DeepSeekProvider,
+    "together": TogetherProvider,
+    "mistral": MistralProvider,
+    "gemini": GeminiProvider,
+}
 
 
 class ProviderInput(BaseModel):
@@ -90,6 +109,16 @@ def build_provider_from_input(p: ProviderInput) -> BaseProvider:
                 api_key=p.api_key or None,
                 base_url=p.base_url or "https://openrouter.ai/api/v1",
                 chat_model=p.chat_model or "openai/gpt-4o-mini",
+            )
+        )
+    compat_cls = _OPENAI_COMPAT_PROVIDERS.get(p.name)
+    if compat_cls is not None:
+        return compat_cls(
+            OpenAICompatProviderConfig(
+                api_key=p.api_key or None,
+                base_url=p.base_url or "",  # blank => provider's default endpoint
+                chat_model=p.chat_model or "",
+                embed_model=p.embed_model or None,
             )
         )
     raise ProviderConfigError(f"Unknown provider '{p.name}'.")

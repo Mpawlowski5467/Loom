@@ -195,9 +195,11 @@ export function ProvidersSection(): ReactNode {
       <div className="settings-kicker">Providers</div>
       <h1 className="settings-title">AI Providers</h1>
       <div className="settings-banner settings-banner-note" role="note">
-        <strong>Keys are stored unencrypted.</strong> Provider API keys are
-        saved in plain text in <code>config.yaml</code> on this machine. Keep
-        that file private; don't expose the backend port to other devices.
+        <strong>Keys are encrypted at rest.</strong> Provider API keys are
+        encrypted with a machine-local key before being written to{" "}
+        <code>config.yaml</code>. This protects the file if it leaks on its own —
+        but the API has no authentication yet, so still don't expose the backend
+        port to other devices.
       </div>
       <DefaultProviderPicker
         names={configuredNames}

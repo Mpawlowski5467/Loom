@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, patch
 import yaml
 
 from core.config import GlobalConfig, ProviderConfig
+from core.secrets import decrypt, is_encrypted
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -67,10 +68,12 @@ class TestSaveProviders:
         assert data["default_chat_provider"] == "openai"
         assert data["default_embed_provider"] == "openai"
 
-        # Verify persisted YAML
+        # Verify persisted YAML — the key is encrypted at rest, not plaintext.
         saved = yaml.safe_load(cfg_path.read_text())
         assert "openai" in saved["providers"]
-        assert saved["providers"]["openai"]["api_key"] == "sk-test-key"
+        stored_key = saved["providers"]["openai"]["api_key"]
+        assert is_encrypted(stored_key)
+        assert decrypt(stored_key) == "sk-test-key"
 
     def test_save_multiple_providers(self, client: TestClient, tmp_path: Path) -> None:
         """Saving multiple providers stores all of them."""
@@ -175,7 +178,7 @@ class TestSaveProviders:
 
         assert resp.status_code == 200
         saved = yaml.safe_load(cfg_path.read_text())
-        assert saved["providers"]["openai"]["api_key"] == "sk-new"
+        assert decrypt(saved["providers"]["openai"]["api_key"]) == "sk-new"
         assert saved["providers"]["openai"]["chat_model"] == "gpt-4o-mini"
 
     def test_default_provider_selection(self, client: TestClient, tmp_path: Path) -> None:
@@ -387,4 +390,4 @@ class TestSaveProvidersKeyPreservation:
             )
 
         saved = yaml.safe_load(cfg_path.read_text())
-        assert saved["providers"]["openai"]["api_key"] == "sk-original"
+        assert decrypt(saved["providers"]["openai"]["api_key"]) == "sk-original"

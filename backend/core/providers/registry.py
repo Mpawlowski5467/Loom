@@ -19,12 +19,20 @@ from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
     OllamaProviderConfig,
+    OpenAICompatProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openai_compatible import (
+    DeepSeekProvider,
+    GeminiProvider,
+    GroqProvider,
+    MistralProvider,
+    TogetherProvider,
+)
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
 from core.traces import TraceRecord, get_caller, get_trace_store
@@ -53,6 +61,11 @@ _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
     "ollama": OllamaProviderConfig,
     "xai": XAIProviderConfig,
     "openrouter": OpenRouterProviderConfig,
+    "groq": OpenAICompatProviderConfig,
+    "deepseek": OpenAICompatProviderConfig,
+    "together": OpenAICompatProviderConfig,
+    "mistral": OpenAICompatProviderConfig,
+    "gemini": OpenAICompatProviderConfig,
 }
 
 _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
@@ -61,6 +74,11 @@ _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
     "ollama": OllamaProvider,
     "xai": XAIProvider,
     "openrouter": OpenRouterProvider,
+    "groq": GroqProvider,
+    "deepseek": DeepSeekProvider,
+    "together": TogetherProvider,
+    "mistral": MistralProvider,
+    "gemini": GeminiProvider,
 }
 
 

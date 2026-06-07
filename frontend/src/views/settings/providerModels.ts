@@ -1,16 +1,42 @@
+import type { ReactNode } from "react";
 import type { SettingsProviderInput } from "../../api/settings";
+import {
+  AnthropicIcon,
+  DeepSeekIcon,
+  GeminiIcon,
+  GroqIcon,
+  MistralIcon,
+  OllamaIcon,
+  OpenAIIcon,
+  OpenRouterIcon,
+  TogetherIcon,
+  XaiIcon,
+} from "../../components/icons/providers";
 
 export type ProviderName =
   | "openai"
   | "anthropic"
   | "xai"
   | "openrouter"
-  | "ollama";
+  | "ollama"
+  | "groq"
+  | "deepseek"
+  | "together"
+  | "mistral"
+  | "gemini";
+
+/** Inline-SVG icon component used for a provider (tinted via currentColor). */
+export type ProviderIcon = (props: {
+  size?: number;
+  className?: string;
+}) => ReactNode;
 
 export interface ProviderMeta {
   name: ProviderName;
   label: string;
   type: "cloud" | "local";
+  /** Brand icon, rendered in the provider list + accordion header. */
+  icon: ProviderIcon;
   defaultChat: string;
   defaultEmbed: string;
   defaultHost: string;
@@ -38,6 +64,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "openai",
     label: "OpenAI",
     type: "cloud",
+    icon: OpenAIIcon,
     defaultChat: "gpt-4o-mini",
     defaultEmbed: "text-embedding-3-small",
     defaultHost: "",
@@ -51,6 +78,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "anthropic",
     label: "Anthropic",
     type: "cloud",
+    icon: AnthropicIcon,
     defaultChat: "claude-sonnet-4-20250514",
     defaultEmbed: "",
     defaultHost: "",
@@ -64,6 +92,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "xai",
     label: "xAI",
     type: "cloud",
+    icon: XaiIcon,
     defaultChat: "grok-3",
     defaultEmbed: "",
     defaultHost: "",
@@ -77,6 +106,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "openrouter",
     label: "OpenRouter",
     type: "cloud",
+    icon: OpenRouterIcon,
     defaultChat: "google/gemma-4-31b-it:free",
     defaultEmbed: "",
     defaultHost: "",
@@ -103,6 +133,7 @@ export const PROVIDERS: ProviderMeta[] = [
     name: "ollama",
     label: "Ollama",
     type: "local",
+    icon: OllamaIcon,
     defaultChat: "llama3",
     defaultEmbed: "nomic-embed-text",
     defaultHost: "http://localhost:11434",
@@ -111,6 +142,96 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: false,
     defaultBaseUrl: "",
+  },
+  {
+    name: "groq",
+    label: "Groq",
+    type: "cloud",
+    icon: GroqIcon,
+    defaultChat: "llama-3.3-70b-versatile",
+    defaultEmbed: "",
+    defaultHost: "",
+    chatModels: [
+      "llama-3.3-70b-versatile",
+      "llama-3.1-8b-instant",
+      "moonshotai/kimi-k2-instruct",
+      "openai/gpt-oss-120b",
+    ],
+    embedModels: [],
+    supportsEmbed: false,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.groq.com/openai/v1",
+  },
+  {
+    name: "deepseek",
+    label: "DeepSeek",
+    type: "cloud",
+    icon: DeepSeekIcon,
+    defaultChat: "deepseek-chat",
+    defaultEmbed: "",
+    defaultHost: "",
+    chatModels: ["deepseek-chat", "deepseek-reasoner"],
+    embedModels: [],
+    supportsEmbed: false,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.deepseek.com/v1",
+  },
+  {
+    name: "together",
+    label: "Together AI",
+    type: "cloud",
+    icon: TogetherIcon,
+    defaultChat: "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+    defaultEmbed: "BAAI/bge-base-en-v1.5",
+    defaultHost: "",
+    chatModels: [
+      "meta-llama/Llama-3.3-70B-Instruct-Turbo",
+      "Qwen/Qwen2.5-72B-Instruct-Turbo",
+      "deepseek-ai/DeepSeek-V3",
+      "mistralai/Mixtral-8x7B-Instruct-v0.1",
+    ],
+    embedModels: ["BAAI/bge-base-en-v1.5", "BAAI/bge-large-en-v1.5"],
+    supportsEmbed: true,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.together.xyz/v1",
+  },
+  {
+    name: "mistral",
+    label: "Mistral",
+    type: "cloud",
+    icon: MistralIcon,
+    defaultChat: "mistral-large-latest",
+    defaultEmbed: "mistral-embed",
+    defaultHost: "",
+    chatModels: [
+      "mistral-large-latest",
+      "mistral-small-latest",
+      "open-mistral-nemo",
+      "codestral-latest",
+    ],
+    embedModels: ["mistral-embed"],
+    supportsEmbed: true,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.mistral.ai/v1",
+  },
+  {
+    name: "gemini",
+    label: "Google Gemini",
+    type: "cloud",
+    icon: GeminiIcon,
+    defaultChat: "gemini-2.0-flash",
+    defaultEmbed: "text-embedding-004",
+    defaultHost: "",
+    chatModels: [
+      "gemini-2.0-flash",
+      "gemini-2.0-flash-lite",
+      "gemini-1.5-pro",
+      "gemini-1.5-flash",
+    ],
+    embedModels: ["text-embedding-004"],
+    supportsEmbed: true,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
   },
 ];
 

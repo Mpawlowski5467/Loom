@@ -223,6 +223,8 @@ Every provider resolves through a central **registry** and is wrapped in a `Trac
 
 The UI reads recent traces from `/api/traces` and older ones from `/api/traces/disk`. The "raw call" link on any chat message opens the exact request/response behind it — there is no hidden prompt.
 
+**Runs.** A trace also carries the `run` and `step` it belongs to. When an agent runs as a LangGraph `StateGraph` (the capture pipeline, the Shuttle agents), each step is recorded under one run id and a run summary — its ordered steps, including no-LLM steps like Spider's deterministic linking or `enforce` — is written to `.loom/traces/<date>/run-<id>.json`. The Board "Runs" view (`RunFeed`) reads `/api/traces/runs` and `/api/traces/runs/{id}`, showing a multi-step run as one connected timeline you can drill into per step rather than a scattered list of calls.
+
 ---
 
 ## 4. Layer 3: The Agent Board
@@ -365,6 +367,8 @@ Configurable per agent with the read chain as the non-negotiable baseline:
 Agents coordinate through two mechanisms:
 - **Pipelines** for complex workflows: capture arrives → Weaver creates note → Spider links it → Scribe updates index → Sentinel validates
 - **Event-driven** for real-time reactions: file modified → re-index, new capture detected → trigger Weaver
+
+The pipeline is implemented as a **LangGraph `StateGraph`** (`agents/loom/pipeline_graph.py`): `weaver → spider → scribe → sentinel → enforce`, with conditional edges that short-circuit an empty capture and loop back to Weaver once on a `failed` Sentinel verdict before enforcing. `AgentRunner.run_pipeline` drives the graph and `POST /api/captures/process` calls it. The Shuttle agents (Researcher, Standup) are graphs too. Nodes wrap the existing agent methods and call Loom's own provider layer — LangGraph orchestrates; no LangChain models are used. Each run is recorded step-by-step for the **Runs** observability view (§ Tracing).
 
 ### 4.10 Custom Agents
 
@@ -1055,7 +1059,8 @@ Attachments appear as smaller secondary nodes connected to their parent note, vi
 | Vector DB | LanceDB |
 | Storage | Markdown files + YAML frontmatter |
 | AI Models | Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama) |
-| Tracing | In-memory ring + on-disk mirror (`/api/traces`) |
+| Agent orchestration | LangGraph `StateGraph` (capture pipeline + Shuttle agents); nodes call Loom's own providers — no LangChain models |
+| Tracing | In-memory ring + on-disk mirror (`/api/traces`); run/step-grouped runs (`/api/traces/runs`) |
 | Streaming | Server-Sent Events (Council chat) |
 | Prompt Compiler | 🔭 Planned — Markdown templates + Python optimization pipeline |
 | Theme | Paper by default; navy / forest / sepia variants |

@@ -5,6 +5,33 @@ All notable changes to Loom are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **LangGraph agent orchestration** — the capture pipeline and the Shuttle
+  agents now run as LangGraph `StateGraph`s instead of imperative call chains.
+  The pipeline (`agents/loom/pipeline_graph.py`) is
+  `weaver → spider → scribe → sentinel → enforce` with conditional edges: it
+  short-circuits an empty capture and **loops back to Weaver once on a `failed`
+  Sentinel verdict** (regenerate → re-validate, then enforce regardless).
+  Researcher (`search → synthesize → save`) and Standup
+  (`collect → generate/skip → save`) are graphs too. Graph nodes wrap the
+  existing agent methods (read-before-write, changelog, and memory still fire)
+  and call Loom's own provider layer — LangGraph orchestrates only, so **no
+  LangChain model objects** are pulled in. Adds `langgraph>=0.2`.
+- **Runs observability** — every trace is tagged with the `run` and `step` it
+  belongs to, and a run summary (ordered steps, including no-LLM steps like
+  Spider's deterministic linking and `enforce`) is written to
+  `.loom/traces/<date>/run-<id>.json`. New `GET /api/traces/runs` and
+  `GET /api/traces/runs/{id}` endpoints, plus a Board **Runs** view (`RunFeed`)
+  that shows a multi-step run as one connected timeline you can drill into per
+  step. The flat `/api/traces` view is unchanged.
+
+### Changed
+- `POST /api/captures/process` now drives the capture pipeline through
+  `AgentRunner.run_pipeline` (the LangGraph pipeline) instead of an inline
+  Weaver + finalize chain. Response shape is unchanged.
+
 ## [0.5.0] - 2026-06-01
 
 Resilience, correctness, and approachability pass. Loom now survives the common

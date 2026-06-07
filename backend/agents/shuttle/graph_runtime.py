@@ -24,7 +24,9 @@ from typing import TYPE_CHECKING, Any
 from core.notes import generate_id, now_iso
 from core.traces import (
     clear_run,
+    get_caller,
     get_trace_store,
+    set_caller,
     set_run,
     set_step,
 )
@@ -114,7 +116,7 @@ async def run_scope(agent: str) -> AsyncIterator[RunRecorder]:
 
 
 @asynccontextmanager
-async def step(name: str) -> AsyncIterator[StepRecord]:
+async def step(name: str, caller: str | None = None) -> AsyncIterator[StepRecord]:
     """Enter a graph node: tag its provider calls with ``name`` and record its
     timing, status, and any LLM traces into the active run.
 
@@ -122,12 +124,23 @@ async def step(name: str) -> AsyncIterator[StepRecord]:
     ids before and after, so even a step that fans out several calls is
     attributed correctly. A step that raises is recorded as ``error`` and the
     exception re-raised so LangGraph can route on it.
+
+    ``caller`` optionally sets the trace caller for the duration of the step
+    (and restores the prior one on exit). The Loom pipeline uses this so its
+    steps keep the per-agent caller attribution the flat-trace view and the
+    activity pulse rely on; the Shuttle graphs omit it because their
+    ``execute_with_chain`` wrapper already owns the caller.
     """
     record = StepRecord(name=name)
     recorder = _recorder_var.get()
     if recorder is not None:
         recorder.steps.append(record)
     set_step(name)
+
+    prior_caller: str | None = None
+    if caller is not None:
+        prior_caller = get_caller()
+        set_caller(caller)
 
     store = get_trace_store()
     run_id = recorder.run_id if recorder is not None else ""
@@ -143,5 +156,7 @@ async def step(name: str) -> AsyncIterator[StepRecord]:
     finally:
         record.duration_ms = int((time.perf_counter() - start) * 1000)
         set_step("")
+        if prior_caller is not None:
+            set_caller(prior_caller)
         if run_id:
             record.trace_ids = [t.id for t in store.by_run(run_id) if t.id not in before]

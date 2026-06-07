@@ -5,6 +5,7 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 ## Stack
 
 - **Backend**: Python 3.11+ / FastAPI
+- **Agent orchestration**: LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs; nodes call Loom's own provider layer, so no LangChain provider stack is pulled in.
 - **Frontend**: React + TypeScript / Sigma.js (graph) / hand-rolled markdown renderer
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
@@ -82,6 +83,7 @@ Task prompts: @docs/tasks/
 **Implemented**
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
 - Both Shuttle Layer agents (Researcher, Standup)
+- LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Spider→Scribe→Sentinel→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
 - 4 views: GraphView (Sigma.js — constellation + orbit, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
@@ -89,7 +91,7 @@ Task prompts: @docs/tasks/
 - Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
 - Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
 - Provider system: OpenAI, Anthropic, xAI, OpenRouter, Ollama — chat + embed independently configurable
-- Streaming Loom Council chat (SSE fan-out, ≤3 concurrent) + LLM trace system (in-mem ring + disk mirror, "raw call" inspector via `/api/traces`)
+- Streaming Loom Council chat (SSE fan-out, ≤3 concurrent) + LLM trace system (in-mem ring + disk mirror, "raw call" inspector via `/api/traces`). Traces carry a `run`/`step` tag so multi-step graph runs surface as connected runs in the Board "Runs" view (`/api/traces/runs`, `/api/traces/runs/{id}`; frontend `RunFeed`).
 - Multi-vault management via `/api/vaults`
 - Cmd+K palette, file tree with filter bar, toasts
 - CI in `.github/workflows/`, LICENSE present

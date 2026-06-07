@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -30,11 +29,14 @@ class PipelineResult:
     def __init__(self) -> None:
         self.note: Note | None = None
         self.links_added: list[str] = []
+        self.suggested: list[str] = []
         self.index_updated: bool = False
         self.validation: ValidationResult | None = None
         self.errors: list[str] = []
         # Sentinel enforcement: capture is archived unless verdict==failed.
         self.capture_archived: bool = False
+        self.review_required: bool = False  # True on failed verdict
+        self.flagged: bool = False  # True on warning verdict
 
     @property
     def success(self) -> bool:
@@ -46,10 +48,13 @@ class PipelineResult:
             "note_id": self.note.id if self.note else None,
             "note_title": self.note.title if self.note else None,
             "links_added": self.links_added,
+            "suggested": self.suggested,
             "index_updated": self.index_updated,
             "validation": self.validation.to_dict() if self.validation else None,
             "errors": self.errors,
             "capture_archived": self.capture_archived,
+            "review_required": self.review_required,
+            "flagged": self.flagged,
         }
 
 
@@ -97,20 +102,27 @@ class AgentRunner:
                 )
         return agents
 
-    async def run_pipeline(self, capture_path: Path) -> PipelineResult:
+    async def run_pipeline(self, capture_path: Path, refresh_index: Any = None) -> PipelineResult:
         """Run the full capture pipeline: Weaver → Spider → Scribe → Sentinel.
 
-        Steps:
-          1. Weaver processes capture into a structured note
-          2. Spider scans the new note for connections
-          3. Scribe updates the target folder's _index.md
-          4. Sentinel validates the created note
+        Orchestrated as a LangGraph ``StateGraph`` (see
+        :mod:`agents.loom.pipeline_graph`). The graph adds a Sentinel-retry
+        loop: a ``failed`` verdict routes back to Weaver once to regenerate the
+        note, then re-validates; if it still fails the capture stays in the
+        inbox flagged for review. Each step is recorded under one run id, so the
+        whole pipeline shows up as a connected run in the Runs view.
 
         Idempotent on re-run: if a previous run already created the note but
-        crashed before archiving the capture, re-processing detects the
-        existing note (by capture-id source) and skips straight to archiving,
-        so a retry finishes the job instead of creating a duplicate.
+        crashed before archiving the capture, re-processing detects the existing
+        note (by capture-id source) and finishes enforcement only, instead of
+        creating a duplicate.
+
+        ``refresh_index`` is an optional ``Callable[[Path], None]`` the live
+        endpoint passes to keep the search index hot after writes.
         """
+        from agents.loom.pipeline_graph import build_pipeline_graph
+        from agents.shuttle.graph_runtime import run_scope, step
+
         result = PipelineResult()
 
         # Idempotency guard: an already-archived capture is a no-op. (The file
@@ -118,93 +130,85 @@ class AgentRunner:
         if not capture_path.exists():
             return result
 
-        weaver = get_weaver()
-        if weaver is None:
-            result.errors.append("Weaver agent not initialized")
-            return result
+        # A missing Weaver is handled inside the graph's weaver node (it records
+        # the error and short-circuits to END); we don't pre-check here so a
+        # test patching agents.loom.weaver.get_weaver is honored — the graph
+        # imports the getter lazily at build time, this module's top-level
+        # import would hold a stale reference.
 
         # If this capture was already filed (crash between note-write and
-        # archive), reuse the existing note and skip re-creation — keyed on the
-        # stable capture id, never the title.
+        # archive), reuse the existing note and finish enforcement only — keyed
+        # on the stable capture id, never the title. This bypasses the graph
+        # (Weaver must not re-create) but still records a run for visibility.
         existing = self._existing_note_for_capture(capture_path)
         if existing is not None:
-            result.note = existing
             logger.info(
-                "Capture %s already filed as note %s — finishing archive only",
+                "Capture %s already filed as note %s — finishing enforcement only",
                 capture_path.name,
                 existing.id,
             )
-        else:
-            # Step 1: Weaver processes capture
-            try:
-                note, weaver_chain = await weaver.process_capture_full(capture_path)
-                if note is None:
-                    result.errors.append("Weaver returned no note (empty capture?)")
-                    return result
-                result.note = note
-            except Exception as exc:
-                logger.warning("Weaver failed during pipeline run", exc_info=True)
-                result.errors.append(f"Weaver failed: {exc}")
-                return result
+            result.note = existing
+            async with run_scope("pipeline"), step("enforce"):
+                self._enforce_into_result(
+                    capture_path, _resolve_path(existing.file_path), None, result
+                )
+            return result
 
-            note_path = _resolve_path(note.file_path)
+        graph = build_pipeline_graph(self, refresh_index)
+        async with run_scope("pipeline"):
+            final = await graph.ainvoke({"capture_path": str(capture_path), "errors": []})
 
-            # Step 2: Spider links
-            spider = get_spider()
-            if spider is not None:
-                try:
-                    result.links_added = await spider.scan_for_connections(note_path)
-                except Exception as exc:
-                    logger.warning("Spider failed during pipeline run", exc_info=True)
-                    result.errors.append(f"Spider failed: {exc}")
-
-            # Step 3: Scribe updates folder index
-            scribe = get_scribe()
-            if scribe is not None:
-                try:
-                    folder_path = note_path.parent
-                    await scribe.update_index(folder_path)
-                    result.index_updated = True
-                except Exception as exc:
-                    logger.warning("Scribe failed during pipeline run", exc_info=True)
-                    result.errors.append(f"Scribe failed: {exc}")
-
-            # Step 4: Sentinel validates
-            sentinel = get_sentinel()
-            if sentinel is not None:
-                try:
-                    # Reuse the chain Weaver already ran (same vault.yaml + prime.md)
-                    # instead of re-reading it all from disk. Fall back to a fresh
-                    # run only if Weaver didn't surface one.
-                    chain_result = weaver_chain
-                    if chain_result is None:
-                        from agents.chain import ReadChain
-
-                        chain = ReadChain(self._vault_root)
-                        chain_result = await asyncio.to_thread(chain.execute, "sentinel", note_path)
-                    result.validation = await sentinel.validate_action(
-                        "weaver", "created", note_path, chain_result
-                    )
-                except Exception as exc:
-                    logger.warning("Sentinel failed during pipeline run", exc_info=True)
-                    result.errors.append(f"Sentinel failed: {exc}")
-
-        # Step 5: Sentinel enforcement on the capture. Archive unless the
-        # verdict was "failed" — in that case the capture stays put so the
-        # user notices it needs manual review. Weaver itself no longer
-        # archives so this gate is the single decision point.
-        verdict = result.validation.status if result.validation else ""
-        if verdict != "failed":
-            try:
-                from agents.loom.weaver_io import archive_capture
-
-                archive_capture(self._vault_root, "weaver", capture_path)
-                result.capture_archived = True
-            except Exception as exc:
-                logger.warning("Capture archive failed during pipeline", exc_info=True)
-                result.errors.append(f"Archive failed: {exc}")
-
+        result.note = final.get("note")
+        result.links_added = final.get("linked", [])
+        result.suggested = final.get("suggested", [])
+        result.index_updated = final.get("index_updated", False)
+        result.validation = final.get("validation")
+        result.errors = final.get("errors", [])
+        # Enforcement ran inside the graph's enforce node and mutated the
+        # PipelineResult flags via _enforce_into_result; mirror them back here.
+        result.capture_archived = bool(final.get("capture_archived", result.capture_archived))
+        result.review_required = bool(final.get("review_required", result.review_required))
+        result.flagged = bool(final.get("flagged", result.flagged))
         return result
+
+    def _enforce_verdict(
+        self,
+        capture_path: Path,
+        note_path: Path | None,
+        validation: ValidationResult | None,
+        errors: list[str],
+    ) -> dict[str, bool]:
+        """Graph enforce-node hook: apply Sentinel's verdict, return flag deltas.
+
+        Returns a dict the graph merges into state so run_pipeline can mirror
+        the enforcement outcome onto its PipelineResult.
+        """
+        from agents.loom.enforcement import enforce_verdict
+
+        verdict = validation.status if validation else ""
+        reasons = list(validation.reasons) if validation else []
+        outcome = enforce_verdict(self._vault_root, capture_path, note_path, verdict, reasons)
+        return {
+            "capture_archived": outcome.capture_archived,
+            "review_required": outcome.review_required,
+            "flagged": outcome.flagged,
+        }
+
+    def _enforce_into_result(
+        self,
+        capture_path: Path,
+        note_path: Path | None,
+        validation: ValidationResult | None,
+        result: PipelineResult,
+    ) -> None:
+        """Enforce a verdict and write the flags straight onto a PipelineResult.
+
+        Used by the idempotent already-filed branch, which doesn't run the graph.
+        """
+        flags = self._enforce_verdict(capture_path, note_path, validation, result.errors)
+        result.capture_archived = flags["capture_archived"]
+        result.review_required = flags["review_required"]
+        result.flagged = flags["flagged"]
 
     async def run_scheduled(self, agent_name: str, **kwargs: Any) -> dict[str, Any]:
         """Trigger a scheduled agent run by name.

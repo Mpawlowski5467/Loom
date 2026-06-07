@@ -200,7 +200,7 @@ sequenceDiagram
 
 ### Providers, and every call traced
 
-All five providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. The "raw call" link anywhere in the UI reads straight from `/api/traces`.
+All five providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. Each trace is also tagged with the `run` and `step` it belongs to, so a multi-step agent run (e.g. the capture pipeline: `weaver → spider → scribe → sentinel → enforce`) shows up as one connected run in the **Runs** view, not a scattered list of calls. The "raw call" link anywhere in the UI reads straight from `/api/traces`; the Runs view reads `/api/traces/runs`.
 
 ```mermaid
 flowchart LR
@@ -311,6 +311,7 @@ flowchart LR
 | Layer | Tools |
 |---|---|
 | Backend | Python 3.11+, FastAPI, Pydantic v2, Uvicorn |
+| Agent orchestration | LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs over Loom's own providers (no LangChain provider stack) |
 | Frontend | React 19, TypeScript 5.9, Vite |
 | Graph | Sigma.js 3 + graphology (force-atlas2 layout) |
 | Editor | Custom Markdown renderer (`frontend/src/editor/renderMarkdown.tsx`) with `[[wikilink]]` support |
@@ -462,6 +463,7 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `POST` | `/api/onboarding/status` / `/complete` | First-run wizard gate |
 | `POST` | `/api/providers/{name}/test` | Test provider credentials without saving |
 | `GET` | `/api/traces` | Recent LLM traces (`/api/traces/disk` pages older ones by date) |
+| `GET` | `/api/traces/runs` | Multi-step agent runs, newest first (`/api/traces/runs/{id}` for one run's step timeline + per-step traces) |
 | `GET` | `/api/health` / `/api/ready` | Health + readiness probes |
 
 ## Development

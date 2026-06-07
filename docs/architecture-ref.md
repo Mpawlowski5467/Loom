@@ -70,6 +70,15 @@ history:
 
 **Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`); the 7 built-ins stay read-only. Running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's system prompt, and writes a capture for triage.
 
+## Orchestration
+
+Multi-step agent work runs as **LangGraph `StateGraph`s**, not imperative call chains:
+
+- **Capture pipeline** (`agents/loom/pipeline_graph.py`): `weaver → spider → scribe → sentinel → enforce`. Conditional edges short-circuit to `END` on an empty capture and loop back to Weaver once on a `failed` Sentinel verdict (regenerate → re-validate, then enforce regardless). `AgentRunner.run_pipeline` drives it; `POST /api/captures/process` calls that.
+- **Shuttle graphs** (`agents/shuttle/researcher_graph.py`, `standup_graph.py`): Researcher = `search → synthesize → save`; Standup = `collect → (conditional) → generate/skip → save`.
+
+Graph nodes wrap the existing agent methods (so the read-before-write chain, changelog, and memory still fire) and call Loom's own provider layer — LangGraph is the orchestrator only; **no LangChain model objects**, so the dependency stays small. The shared run/step recorder + enforcement live in `agents/shuttle/graph_runtime.py` and `agents/loom/enforcement.py`.
+
 ## Read-Before-Write Chain
 
 ```
@@ -173,6 +182,8 @@ Embed and chat models are independent. Mix and match.
 ## Tracing
 
 Every provider is wrapped in a `TracedProvider` that records each call (provider, model, messages, response, duration, caller). Stored in a 500-entry in-memory ring + mirrored to disk at `.loom/traces/<date>/`. Read via `/api/traces` (recent) and `/api/traces/disk` (by date). The UI's "raw call" link opens the exact exchange.
+
+**Run/step grouping**: each trace also carries the `run` and `step` it was made under (set by the LangGraph run scope via `contextvars`, the same mechanism as `caller`). A graph run also writes a run summary to `.loom/traces/<date>/run-<id>.json` capturing its ordered steps — including steps that made no LLM call (e.g. Spider's deterministic linking, `enforce`). This reifies a multi-step run's *shape* instead of a flat call list. Read via `/api/traces/runs` (recent runs) and `/api/traces/runs/{id}` (one run's step timeline + each step's traces); the Board "Runs" view (`RunFeed`) renders it.
 
 ## Council Streaming
 

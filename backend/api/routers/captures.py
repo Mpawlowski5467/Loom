@@ -218,27 +218,41 @@ async def process_capture(
     if not capture_path.exists():
         raise HTTPException(status_code=404, detail=f"Capture not found: {body.capture_path}")
 
-    from core.traces import clear_caller, set_caller
+    from agents.runner import AgentRunner
+
+    # Build the runner from the request's injected vault rather than the global
+    # singleton: the singleton is for scheduled/background runs and may point at
+    # a different active vault than this request's dependency-injected one.
+    runner = AgentRunner(vm.active_vault_dir())
 
     try:
-        set_caller("weaver")
-        note, weaver_chain = await weaver.process_capture_full(capture_path)
+        # Drive the LangGraph capture pipeline (Weaver → Spider → Scribe →
+        # Sentinel with a Sentinel-retry loop). Passing index.refresh_file keeps
+        # the search index hot after each write, matching the old inline path.
+        result = await runner.run_pipeline(capture_path, refresh_index=index.refresh_file)
+        note = result.note
         if note is None:
-            return ProcessResult(processed=False, error="Empty capture, skipped")
-        outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
+            err = "; ".join(result.errors) if result.errors else "Empty capture, skipped"
+            return ProcessResult(processed=False, error=err)
+        validation = result.validation
         return ProcessResult(
             processed=True,
             note_id=note.id,
             note_title=note.title,
             note_type=note.type,
             target_path=note.file_path,
-            **outcome,
+            linked=result.links_added,
+            suggested=result.suggested,
+            validation=validation.status if validation else "",
+            validation_mode=validation.mode_summary if validation else "",
+            validation_reasons=list(validation.reasons) if validation else [],
+            capture_archived=result.capture_archived,
+            review_required=result.review_required,
+            flagged=result.flagged,
         )
     except Exception as exc:
         logger.warning("Capture processing failed", exc_info=True)
         return ProcessResult(processed=False, error=str(exc))
-    finally:
-        clear_caller()
 
 
 async def _finalize_note(

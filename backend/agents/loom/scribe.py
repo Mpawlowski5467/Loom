@@ -12,6 +12,11 @@ from pydantic import ValidationError
 
 from agents.base import BaseAgent
 from agents.file_locks import path_lock
+from agents.loom.scribe_notes import (
+    build_notes_referenced,
+    normalize_sections,
+    summarize_changelog_activity,
+)
 from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import (
     generate_id,
@@ -142,6 +147,15 @@ class Scribe(BaseAgent):
                 }
 
             body = await self._generate_daily_body(date_str, changelog_text)
+            # Rebuild the notes section from the changelog (ground truth) and
+            # repair the model's section structure before writing. The model is
+            # never trusted for which notes were touched.
+            notes_section = build_notes_referenced(
+                changelog_text,
+                self._vault_root,
+                self_note=f"{date_str}.md",
+            )
+            body = normalize_sections(body, notes_section)
 
             # Write or update the daily note. Lock covers the read-modify-write
             # so a concurrent run for the same date can't lose history entries.
@@ -228,7 +242,14 @@ class Scribe(BaseAgent):
         return "\n".join(lines)
 
     async def _generate_daily_body(self, date_str: str, changelog_text: str) -> str:
-        """Generate daily log body from changelog entries."""
+        """Generate the raw daily log body from changelog entries.
+
+        Returns the model's draft when a chat provider is configured, otherwise
+        a deterministic fallback. Either way the caller runs the result through
+        :func:`normalize_sections`, which repairs structure and splices in the
+        trustworthy ``## Notes Referenced`` section — so this method only has to
+        supply ``## Summary`` and ``## Activity`` content.
+        """
         if self._chat_provider is not None:
             try:
                 return await self._chat_provider.chat(
@@ -241,9 +262,19 @@ class Scribe(BaseAgent):
                     system=_DAILY_LOG_SYSTEM,
                 )
             except (ProviderError, ProviderConfigError):
-                logger.warning("LLM daily log failed, using raw changelog", exc_info=True)
+                logger.warning("LLM daily log failed, using deterministic fallback", exc_info=True)
 
-        return f"## Summary\n\nActivity log for {date_str}.\n\n## Activity\n\n{changelog_text}\n"
+        return self._fallback_daily_body(date_str, changelog_text)
+
+    @staticmethod
+    def _fallback_daily_body(date_str: str, changelog_text: str) -> str:
+        """Deterministic daily body when no chat provider is available.
+
+        Emits ``## Summary`` and ``## Activity`` from the changelog itself. The
+        ``## Notes Referenced`` section is added by :func:`normalize_sections`.
+        """
+        activity = summarize_changelog_activity(changelog_text)
+        return f"## Summary\n\nActivity log for {date_str}.\n\n## Activity\n\n{activity}\n"
 
     def _collect_folder_notes(self, folder_path: Path) -> list[dict[str, Any]]:
         """Collect metadata + preview for all notes in a folder."""

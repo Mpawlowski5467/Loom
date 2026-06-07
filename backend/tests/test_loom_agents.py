@@ -426,6 +426,438 @@ class TestScribe:
         content = await scribe.generate_daily_log(date(2020, 1, 1))
         assert content == ""
 
+    @pytest.mark.asyncio
+    async def test_daily_log_repairs_malformed_model_output(self, tmp_path: Path):
+        """A weak model emits the wrong notes header, hallucinated note prose,
+        preamble and a closing remark — all must be repaired before writing,
+        and ``## Notes Referenced`` must reflect the *real* changelog notes."""
+        from unittest.mock import AsyncMock
+
+        root = _setup_vault(tmp_path)
+        # Spider touched two real topic notes today (their Targets are real
+        # note paths under threads/). Weaver archived a capture (excluded).
+        log_action(
+            root,
+            "spider",
+            "linked",
+            str(root / "threads" / "topics" / "alpha-topic.md"),
+            details="Suggested 3: Bob Kumar, Beta Topic, TCP/IP networking",
+        )
+        log_action(
+            root,
+            "spider",
+            "linked",
+            str(root / "threads" / "topics" / "beta-topic.md"),
+            details="Auto-linked 1: Alpha Topic",
+        )
+        log_action(
+            root,
+            "weaver",
+            "archived",
+            str(root / "threads" / "captures" / "raw-inbox.md"),
+            details="Archived processed capture -> raw-inbox.md",
+        )
+
+        malformed = (
+            "Here is your daily log for today!\n\n"
+            "## Summary\n\n"
+            "We made good progress on distributed systems.\n\n"
+            "## Notes\n\n"  # wrong section name
+            "recognizing the strong correlation between 'Vector Database' and "
+            "'Embeddings', I created [[alpha-topic.md]] and "
+            "[[some-hallucinated-note.md]].\n\n"  # hallucinated, .md filenames
+            "Let me know if you need anything else!\n"  # trailing remark
+        )
+        provider = AsyncMock()
+        provider.chat = AsyncMock(return_value=malformed)
+        scribe = Scribe(root, chat_provider=provider)
+
+        utc_today = date.fromisoformat(now_iso()[:10])
+        await scribe.generate_daily_log(utc_today)
+
+        daily_path = root / "threads" / "daily" / f"{utc_today.isoformat()}.md"
+        body = parse_note(daily_path).body
+
+        # Exactly the required sections, correctly named.
+        assert "## Summary" in body
+        assert "## Activity" in body
+        assert body.count("## Notes Referenced") == 1
+        # The near-miss "## Notes" header was renamed, not left as-is.
+        assert "## Notes\n" not in body
+        # Notes Referenced holds the real touched notes, by title, deduped.
+        assert "[[Alpha Topic]]" in body
+        assert "[[Beta Topic]]" in body
+        # None of the hallucinated content survived.
+        assert "hallucinated" not in body
+        assert "correlation" not in body
+        assert "[[alpha-topic.md]]" not in body  # filename link replaced by title
+        # Preamble and closing remark stripped.
+        assert "Here is your daily log" not in body
+        assert "Let me know if you need" not in body
+        # The archived capture must not appear.
+        assert "raw-inbox" not in body.lower()
+
+    @pytest.mark.asyncio
+    async def test_daily_log_notes_from_weaver_arrow_path(self, tmp_path: Path):
+        """Weaver records the note it created only in its Details line, as a
+        relative path after an arrow. That note must appear in Notes Referenced
+        even though the Target is the captures/ folder."""
+        from unittest.mock import AsyncMock
+
+        root = _setup_vault(tmp_path)
+        log_action(
+            root,
+            "weaver",
+            "created",
+            str(root / "threads" / "captures"),  # folder target — excluded
+            details=("Processed capture 'meeting.md' -> projects/gamma-project.md"),
+        )
+
+        provider = AsyncMock()
+        provider.chat = AsyncMock(return_value="## Summary\n\nDid work.\n")
+        scribe = Scribe(root, chat_provider=provider)
+
+        utc_today = date.fromisoformat(now_iso()[:10])
+        await scribe.generate_daily_log(utc_today)
+
+        daily_path = root / "threads" / "daily" / f"{utc_today.isoformat()}.md"
+        body = parse_note(daily_path).body
+        assert "[[Gamma Project]]" in body  # resolved from the arrow path
+
+    @pytest.mark.asyncio
+    async def test_fallback_emits_all_required_sections(self, tmp_path: Path):
+        """Without a chat provider, the daily log still has Summary, Activity
+        and a deterministic Notes Referenced built from the changelog."""
+        root = _setup_vault(tmp_path)
+        log_action(
+            root,
+            "spider",
+            "linked",
+            str(root / "threads" / "topics" / "alpha-topic.md"),
+            details="Suggested 1: Beta Topic",
+        )
+
+        scribe = Scribe(root, chat_provider=None)
+        utc_today = date.fromisoformat(now_iso()[:10])
+        await scribe.generate_daily_log(utc_today)
+
+        daily_path = root / "threads" / "daily" / f"{utc_today.isoformat()}.md"
+        body = parse_note(daily_path).body
+        assert "## Summary" in body
+        assert "## Activity" in body
+        assert "## Notes Referenced" in body
+        assert "[[Alpha Topic]]" in body
+
+
+# =============================================================================
+# Scribe deterministic-notes helper tests (no LLM)
+# =============================================================================
+
+
+class TestScribeNotes:
+    """Unit tests for the pure helpers behind Scribe's daily log."""
+
+    @staticmethod
+    def _changelog(root: Path, entries: list[str]) -> str:
+        """Assemble a changelog string with real ``Target:`` paths."""
+        return "\n".join(entries)
+
+    def test_build_notes_resolves_titles_from_targets(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        alpha = root / "threads" / "topics" / "alpha-topic.md"
+        beta = root / "threads" / "topics" / "beta-topic.md"
+        changelog = (
+            f"## ts1\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {alpha}\n- **Chain:** pass\n- **Details:** x\n\n"
+            f"## ts2\n\n- **Agent:** sentinel\n- **Action:** validated\n"
+            f"- **Target:** {beta}\n- **Chain:** pass\n- **Details:** y\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert section.startswith("## Notes Referenced")
+        assert "[[Alpha Topic]]" in section
+        assert "[[Beta Topic]]" in section
+        # Sorted, one per line.
+        assert section.index("[[Alpha Topic]]") < section.index("[[Beta Topic]]")
+
+    def test_build_notes_excludes_captures_archive_and_folders(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        # A real note in captures/ and .archive/, plus folder + non-note targets.
+        _write_note(
+            root,
+            "captures",
+            "inbox-item.md",
+            {
+                "id": "thr_cap999",
+                "title": "Inbox Item",
+                "type": "capture",
+                "tags": [],
+                "created": now_iso(),
+                "modified": now_iso(),
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "raw\n",
+        )
+        archived = root / "threads" / ".archive" / "old-note.md"
+        archived.write_text(
+            build_frontmatter(
+                {
+                    "id": "thr_arc999",
+                    "title": "Old Note",
+                    "type": "topic",
+                    "tags": [],
+                    "created": now_iso(),
+                    "modified": now_iso(),
+                    "author": "user",
+                    "status": "archived",
+                    "history": [],
+                }
+            )
+            + "\nbody\n",
+            encoding="utf-8",
+        )
+        alpha = root / "threads" / "topics" / "alpha-topic.md"
+        changelog = (
+            f"## a\n\n- **Agent:** weaver\n- **Action:** created\n"
+            f"- **Target:** {root / 'threads' / 'captures'}\n- **Chain:** pass\n"
+            f"- **Details:** Vault stuff\n\n"
+            f"## b\n\n- **Agent:** weaver\n- **Action:** archived\n"
+            f"- **Target:** {root / 'threads' / 'captures' / 'inbox-item.md'}\n"
+            f"- **Chain:** pass\n- **Details:** archived\n\n"
+            f"## c\n\n- **Agent:** archivist\n- **Action:** archived\n"
+            f"- **Target:** {archived}\n- **Chain:** pass\n- **Details:** archived\n\n"
+            f"## d\n\n- **Agent:** archivist\n- **Action:** audited\n"
+            f"- **Target:** {root / 'threads'}\n- **Chain:** pass\n"
+            f"- **Details:** Vault audit: 3 notes\n\n"
+            f"## e\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {alpha}\n- **Chain:** pass\n- **Details:** x\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert "[[Alpha Topic]]" in section
+        assert "Inbox Item" not in section
+        assert "Old Note" not in section
+
+    def test_build_notes_uses_weaver_arrow_path_not_prose(self, tmp_path: Path):
+        """Only the post-arrow relative path in Details is treated as a note;
+        path-shaped tokens elsewhere in prose are ignored."""
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        changelog = (
+            f"## a\n\n- **Agent:** weaver\n- **Action:** created\n"
+            f"- **Target:** {root / 'threads' / 'captures'}\n- **Chain:** pass\n"
+            "- **Details:** Processed capture 'note.md' -> topics/beta-topic.md\n\n"
+            f"## b\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {root / 'threads' / 'topics' / 'alpha-topic.md'}\n"
+            "- **Chain:** pass\n"
+            "- **Details:** Suggested: see docs/readme.md and projects/ignored.md here\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert "[[Beta Topic]]" in section  # from the arrow path
+        assert "[[Alpha Topic]]" in section  # from the Target
+        # The non-arrow path-shaped tokens in prose must not be picked up.
+        assert "Readme" not in section
+        assert "Ignored" not in section
+
+    def test_build_notes_survives_malformed_frontmatter(self, tmp_path: Path):
+        """A note with non-dict frontmatter must fall back to a humanized stem,
+        never crash and abort the whole section."""
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        good = root / "threads" / "topics" / "alpha-topic.md"
+        broken = root / "threads" / "topics" / "broken-note.md"
+        broken.write_text("---\njust a bare string\n---\nbody\n", encoding="utf-8")
+        changelog = (
+            f"## a\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {good}\n- **Chain:** pass\n- **Details:** x\n\n"
+            f"## b\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {broken}\n- **Chain:** pass\n- **Details:** y\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert "[[Alpha Topic]]" in section
+        assert "[[Broken Note]]" in section  # humanized stem, not a crash
+
+    def test_normalize_preserves_headerless_prose_as_summary(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        out = normalize_sections("I shipped the search pipeline today.", notes)
+        assert "search pipeline" in out
+        assert "## Summary" in out
+
+    def test_build_notes_humanizes_unresolvable_path(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        # A note file with no frontmatter title -> humanized stem fallback.
+        no_title = root / "threads" / "projects" / "my-cool-note.md"
+        no_title.write_text("just body, no frontmatter\n", encoding="utf-8")
+        changelog = (
+            f"## a\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {no_title}\n- **Chain:** pass\n- **Details:** x\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert "[[My Cool Note]]" in section
+
+    def test_build_notes_dedupes_across_target_and_arrow(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        beta = root / "threads" / "topics" / "beta-topic.md"
+        changelog = (
+            f"## a\n\n- **Agent:** weaver\n- **Action:** created\n"
+            f"- **Target:** {root / 'threads' / 'captures'}\n- **Chain:** pass\n"
+            "- **Details:** Processed capture 'x.md' -> topics/beta-topic.md\n\n"
+            f"## b\n\n- **Agent:** spider\n- **Action:** linked\n"
+            f"- **Target:** {beta}\n- **Chain:** pass\n- **Details:** y\n"
+        )
+        section = build_notes_referenced(changelog, root)
+        assert section.count("[[Beta Topic]]") == 1
+
+    def test_build_notes_excludes_self_note(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        utc_today = now_iso()[:10]
+        own = root / "threads" / "daily" / f"{utc_today}.md"
+        own.write_text(
+            build_frontmatter(
+                {
+                    "id": "thr_self00",
+                    "title": utc_today,
+                    "type": "daily",
+                    "tags": [],
+                    "created": now_iso(),
+                    "modified": now_iso(),
+                    "author": "agent:scribe",
+                    "status": "active",
+                    "history": [],
+                }
+            )
+            + "\nbody\n",
+            encoding="utf-8",
+        )
+        changelog = (
+            f"## a\n\n- **Agent:** scribe\n- **Action:** created\n"
+            f"- **Target:** {own}\n- **Chain:** pass\n- **Details:** Daily log\n"
+        )
+        section = build_notes_referenced(changelog, root, self_note=f"{utc_today}.md")
+        assert utc_today not in section
+        assert "No notes touched today" in section
+
+    def test_build_notes_empty_changelog_placeholder(self, tmp_path: Path):
+        from agents.loom.scribe_notes import build_notes_referenced
+
+        root = _setup_vault(tmp_path)
+        section = build_notes_referenced("", root)
+        assert section.startswith("## Notes Referenced")
+        assert "No notes touched today" in section
+
+    def test_normalize_renames_near_miss_headers(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        body = "## Summary:\n\nDid things.\n\n## Notes\n\nhallucinated list\n"
+        out = normalize_sections(body, notes)
+        assert "## Summary\n" in out
+        assert "## Summary:" not in out
+        assert out.count("## Notes Referenced") == 1
+        assert "## Notes\n" not in out
+        assert "[[Alpha]]" in out
+        assert "hallucinated" not in out
+
+    def test_normalize_inserts_missing_required_sections(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        out = normalize_sections("## Summary\n\nA summary only.\n", notes)
+        assert "## Summary" in out
+        assert "## Activity" in out
+        assert "## Notes Referenced" in out
+
+    def test_normalize_strips_preamble_and_trailing(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        body = (
+            "Hello, here is your log!\n\n"
+            "## Summary\n\nWork done.\n\n"
+            "## Activity\n\n- did stuff\n\n"
+            "Thanks, bye!\n"
+        )
+        out = normalize_sections(body, notes)
+        assert "Hello, here is your log" not in out
+        assert "Thanks, bye" not in out
+        assert out.strip().startswith("## Summary")
+
+    def test_normalize_keeps_optional_themes_in_order(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        body = (
+            "## Activity\n\n- did stuff\n\n"
+            "## Themes\n\n- distributed systems\n\n"
+            "## Summary\n\nGood day.\n"
+        )
+        out = normalize_sections(body, notes)
+        # Canonical order: Summary, Themes, Activity, Notes Referenced.
+        assert (
+            out.index("## Summary")
+            < out.index("## Themes")
+            < out.index("## Activity")
+            < out.index("## Notes Referenced")
+        )
+
+    def test_normalize_handles_no_headers(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        out = normalize_sections("just prose, no headers at all", notes)
+        assert "## Summary" in out
+        assert "## Activity" in out
+        assert "## Notes Referenced" in out
+
+    def test_normalize_is_idempotent(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        body = "preamble\n## Notes\nbad\n## Summary\nS\n"
+        once = normalize_sections(body, notes)
+        twice = normalize_sections(once, notes)
+        assert once == twice
+
+    def test_normalize_ignores_fenced_pseudo_headers(self):
+        from agents.loom.scribe_notes import normalize_sections
+
+        notes = "## Notes Referenced\n\n[[Alpha]]\n"
+        body = (
+            "## Summary\n\nDid work.\n\n"
+            "```\n## Activity\nthis is fenced, not a real header\n```\n\n"
+            "## Activity\n\n- the real activity\n"
+        )
+        out = normalize_sections(body, notes)
+        # The real Activity content wins; the fenced one didn't replace it.
+        assert "- the real activity" in out
+
+    def test_summarize_activity_skips_noise(self):
+        from agents.loom.scribe_notes import summarize_changelog_activity
+
+        changelog = (
+            "## a\n\n- **Agent:** spider\n- **Action:** scanned\n"
+            "- **Target:** /v/threads/topics/x.md\n- **Chain:** pass\n- **Details:** d\n\n"
+            "## b\n\n- **Agent:** weaver\n- **Action:** created\n"
+            "- **Target:** /v/threads/topics/y.md\n- **Chain:** pass\n- **Details:** d\n"
+        )
+        out = summarize_changelog_activity(changelog)
+        assert "weaver created" in out
+        assert "scanned" not in out  # noise action filtered
+
 
 # =============================================================================
 # Sentinel tests

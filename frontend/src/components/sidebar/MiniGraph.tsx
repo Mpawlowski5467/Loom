@@ -1,16 +1,6 @@
 import { useMemo } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
-import type { NodeType } from "../../data/types";
-
-const COLOR: Record<NodeType, string> = {
-  project: "#2d4a7c",
-  topic: "#4a6b3a",
-  people: "#6b3a6b",
-  daily: "#8c877d",
-  capture: "#a8722a",
-  custom: "#2d6b6b",
-};
 
 interface Props {
   focusId: string;
@@ -48,7 +38,7 @@ export function MiniGraph({ focusId }: Props): ReactNode {
             y1={cy}
             x2={x}
             y2={y}
-            stroke="rgba(26,24,21,0.18)"
+            stroke="var(--edge-color)"
             strokeWidth={1}
           />
         );
@@ -94,7 +84,7 @@ export function MiniGraph({ focusId }: Props): ReactNode {
         const y = cy + Math.sin(a) * r;
         return (
           <g key={`n${n.id}`} style={{ cursor: "pointer" }} onClick={() => openNote(n.id)}>
-            <circle cx={x} cy={y} r={3.5} fill={COLOR[n.type]} />
+            <circle cx={x} cy={y} r={3.5} fill={`var(--node-${n.type})`} />
             <text
               x={x}
               y={y - 7}

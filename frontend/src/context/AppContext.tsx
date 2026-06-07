@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
@@ -372,6 +372,16 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [council, setCouncil] = useState<CouncilMessage[]>(
     demo ? councilSeed : [],
   );
+  // Tracks the in-flight Council SSE stream so a new send (or unmount) can
+  // cancel it — a Council turn costs ~6 provider calls, so a leaked/duplicated
+  // stream wastes a tight per-account budget.
+  const councilAbortRef = useRef<AbortController | null>(null);
+  useEffect(
+    () => () => {
+      councilAbortRef.current?.abort();
+    },
+    [],
+  );
   // Load persisted council history once on mount so a page refresh doesn't
   // wipe the conversation. Skip in demo mode where seed messages are intentional.
   useEffect(() => {
@@ -402,6 +412,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const postCouncilMessage = useCallback(async (body: string) => {
     if (!body.trim()) return;
+    // Cancel any stream still in flight before starting another, so a rapid
+    // double-send doesn't run two uncancelled SSE fetches concurrently.
+    councilAbortRef.current?.abort();
+    const ctrl = new AbortController();
+    councilAbortRef.current = ctrl;
     const now = Date.now();
     const youMsg: CouncilMessage = {
       id: `cm_${now}`,
@@ -435,6 +450,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
     try {
       await streamCouncilMessage(body, {
+        signal: ctrl.signal,
         onEvent: (event) => {
           if (event.kind === "contributions") {
             // Per-agent sub-bubbles arrive once fan-out completes; drop any
@@ -482,10 +498,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       // ``done`` event (e.g. network drop mid-response).
       updateReply((m) => (m.pending ? { pending: false } : {}));
     } catch (err) {
+      // An abort is a deliberate supersede/unmount, not a failure — leave the
+      // bubble as-is (the newer send owns the UI now).
+      if ((err as DOMException)?.name === "AbortError") return;
       updateReply({
         body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
         pending: false,
       });
+    } finally {
+      // Only clear the ref if this call still owns it — a superseding send may
+      // have already swapped in its own controller.
+      if (councilAbortRef.current === ctrl) councilAbortRef.current = null;
     }
   }, []);
 

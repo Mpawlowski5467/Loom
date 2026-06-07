@@ -39,8 +39,13 @@ export function Council(): ReactNode {
     el.scrollTop = el.scrollHeight;
   }, [council]);
 
+  // A Council turn is in flight while the trailing reply bubble is still
+  // pending. Block new sends until it resolves so we don't fan out a second
+  // ~6-call stream over the first.
+  const streaming = council.length > 0 && council[council.length - 1].pending;
+
   const send = () => {
-    if (!text.trim()) return;
+    if (!text.trim() || streaming) return;
     postCouncilMessage(text.trim());
     setText("");
   };
@@ -133,8 +138,9 @@ export function Council(): ReactNode {
       <div className="council-input">
         <input
           className="input"
-          placeholder="ask the council…"
+          placeholder={streaming ? "council is responding…" : "ask the council…"}
           value={text}
+          disabled={streaming}
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

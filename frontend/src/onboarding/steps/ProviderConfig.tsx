@@ -319,6 +319,8 @@ export function ProviderConfig({
                   className={`onb-test-result ${
                     result.ok ? "onb-test-ok" : "onb-test-fail"
                   }`}
+                  role="status"
+                  aria-live="polite"
                 >
                   {result.ok
                     ? `OK — ${result.latency_ms}ms`

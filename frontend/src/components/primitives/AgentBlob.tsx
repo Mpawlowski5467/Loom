@@ -2,14 +2,16 @@ import { useId } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import type { AgentState } from "../../data/types";
 
-const AGENT_COLORS: Record<string, string> = {
-  weaver: "#4a6b3a",
-  spider: "#2d4a7c",
-  scribe: "#a8722a",
-  archivist: "#6b3a6b",
-  sentinel: "#2d6b6b",
-  researcher: "#1a1815",
-  standup: "#a83a2c",
+// Map each agent to a theme token (not a frozen hex) so blobs re-color with the
+// active theme — the paper-ink researcher blob was near-invisible on dark themes.
+const AGENT_COLOR_VARS: Record<string, string> = {
+  weaver: "--node-topic",
+  spider: "--node-project",
+  scribe: "--node-capture",
+  archivist: "--node-people",
+  sentinel: "--node-custom",
+  researcher: "--ink-2",
+  standup: "--you",
 };
 
 const AGENT_GLYPHS: Record<string, string> = {
@@ -48,7 +50,7 @@ export function AgentBlob({
   size = 36,
   showGlyph = true,
 }: AgentBlobProps): ReactNode {
-  const color = AGENT_COLORS[agent] ?? "#5c5851";
+  const color = `var(${AGENT_COLOR_VARS[agent] ?? "--ink-2"})`;
   const glyph = AGENT_GLYPHS[agent] ?? "•";
   const seed = charSeed(agent);
   const begin = `-${(seed % 30) / 10}s`;

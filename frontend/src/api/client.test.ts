@@ -150,10 +150,55 @@ describe("apiClient", () => {
     expect(err.message).toBe("Server Error");
   });
 
-  it("threads an abort signal through to fetch", async () => {
+  it("passes an abort signal to fetch so the request is cancellable", async () => {
     const fetchFn = stubFetch(async () => mockResponse({ body: "{}" }));
     const controller = new AbortController();
     await apiClient.get("/health", controller.signal);
-    expect(fetchFn.mock.calls[0]![1]!.signal).toBe(controller.signal);
+    // The signal handed to fetch is the composed timeout+caller signal, not the
+    // caller's raw one — assert a signal is present rather than identity.
+    expect(fetchFn.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("aborts the request when the caller's signal is already aborted", async () => {
+    let seenAborted = false;
+    stubFetch(async (_url, init) => {
+      seenAborted = init.signal?.aborted ?? false;
+      const e = new DOMException("aborted", "AbortError");
+      throw e;
+    });
+    const controller = new AbortController();
+    controller.abort();
+    const err = await apiClient.get("/health", controller.signal).catch((e) => e);
+    expect(seenAborted).toBe(true);
+    // A caller abort surfaces as a raw AbortError, not a wrapped ApiError.
+    expect((err as DOMException).name).toBe("AbortError");
+    expect(err).not.toBeInstanceOf(ApiError);
+  });
+
+  it("maps a timeout to an offline ApiError with a timeout code", async () => {
+    vi.useFakeTimers();
+    try {
+      // Fetch that rejects only when its signal aborts (simulates a hung
+      // backend that never responds until the timeout fires).
+      stubFetch(
+        (_url, init) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener("abort", () =>
+              reject(new DOMException("aborted", "AbortError")),
+            );
+          }),
+      );
+      const promise = apiClient
+        .get("/slow", undefined)
+        .catch((e) => e as ApiError);
+      await vi.advanceTimersByTimeAsync(20_000);
+      const err = await promise;
+      expect(err).toBeInstanceOf(ApiError);
+      expect(err.status).toBe(0);
+      expect(err.code).toBe("timeout");
+      expect(err.offline).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

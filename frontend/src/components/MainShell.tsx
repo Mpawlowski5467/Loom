@@ -16,6 +16,7 @@ import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
 import { UnindexedBanner } from "./UnindexedBanner";
+import { ErrorBoundary } from "./ErrorBoundary";
 
 const SPLASH_KEY = "loom.splash.seen";
 
@@ -116,17 +117,23 @@ export function MainShell(): ReactNode {
       )}
       {tab === "settings" ? (
         <div className="app-main">
-          <SettingsView />
+          <ErrorBoundary label="settings" resetKey={tab}>
+            <SettingsView />
+          </ErrorBoundary>
         </div>
       ) : (
         <div className="app-main">
           <Tree />
           <div className="workspace">
             <div className="workspace-main">
-              {tab === "graph" && <GraphView />}
-              {tab === "thread" && <ThreadView />}
-              {tab === "inbox" && <InboxView />}
-              {tab === "board" && <BoardView />}
+              {/* Keyed by tab so a view that throws is contained and switching
+                  tabs recovers it without a full page reload. */}
+              <ErrorBoundary label="this view" resetKey={tab}>
+                {tab === "graph" && <GraphView />}
+                {tab === "thread" && <ThreadView />}
+                {tab === "inbox" && <InboxView />}
+                {tab === "board" && <BoardView />}
+              </ErrorBoundary>
             </div>
           </div>
         </div>

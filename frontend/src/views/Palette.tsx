@@ -97,17 +97,18 @@ export function Palette(): ReactNode {
       aria-modal="true"
       onClick={() => setPaletteOpen(false)}
     >
-      <div
-        className="palette"
-        role="combobox"
-        aria-expanded="true"
-        aria-haspopup="listbox"
-        onClick={(e) => e.stopPropagation()}
-      >
+      <div className="palette" onClick={(e) => e.stopPropagation()}>
         <input
           ref={inputRef}
           className="palette-input"
           placeholder="search vault semantically…"
+          role="combobox"
+          aria-expanded="true"
+          aria-controls="palette-listbox"
+          aria-activedescendant={
+            results.length > 0 ? `palette-opt-${sel}` : undefined
+          }
+          aria-autocomplete="list"
           value={q}
           onChange={(e) => onQueryChange(e.target.value)}
           onKeyDown={(e) => {
@@ -126,27 +127,43 @@ export function Palette(): ReactNode {
             }
           }}
         />
-        <div className="palette-list" role="listbox">
+        <div className="palette-list" role="listbox" id="palette-listbox">
           {isLoading && (
-            <div className="palette-item" style={{ color: "var(--ink-3)" }}>
+            <div
+              className="palette-item"
+              style={{ color: "var(--ink-3)" }}
+              role="status"
+              aria-live="polite"
+            >
               <em>searching…</em>
             </div>
           )}
           {currentOutcome?.kind === "error" && (
-            <div className="palette-item" style={{ color: "var(--ink-3)" }}>
+            <div
+              className="palette-item"
+              style={{ color: "var(--ink-3)" }}
+              role="status"
+              aria-live="polite"
+            >
               <em>search unavailable — backend offline</em>
             </div>
           )}
           {!isLoading &&
             currentOutcome?.kind !== "error" &&
             results.length === 0 && (
-              <div className="palette-item" style={{ color: "var(--ink-3)" }}>
+              <div
+                className="palette-item"
+                style={{ color: "var(--ink-3)" }}
+                role="status"
+                aria-live="polite"
+              >
                 <em>no matches</em>
               </div>
             )}
           {results.map((r, i) => (
             <div
               key={r.note_id}
+              id={`palette-opt-${i}`}
               role="option"
               aria-selected={i === sel}
               className="palette-item"

@@ -57,6 +57,47 @@ export function getNote(id: string, signal?: AbortSignal): Promise<NoteRecord> {
   );
 }
 
+/**
+ * Run an async mapper over ``items`` with at most ``concurrency`` in flight at
+ * once. Bounds the request fan-out so a large vault doesn't fire hundreds of
+ * simultaneous ``getNote`` calls and trip the backend's per-IP rate limit.
+ */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let next = 0;
+  const worker = async (): Promise<void> => {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = { status: "fulfilled", value: await mapper(items[i]) };
+      } catch (reason) {
+        results[i] = { status: "rejected", reason };
+      }
+    }
+  };
+  const pool = Math.max(1, Math.min(concurrency, items.length));
+  await Promise.all(Array.from({ length: pool }, () => worker()));
+  return results;
+}
+
+/** Max concurrent ``getNote`` requests during the initial vault load. */
+const LOAD_CONCURRENCY = 8;
+
+/**
+ * Load every note in the active vault: page the metadata list, then fetch each
+ * note's full body.
+ *
+ * The list endpoint returns metadata only, so this is necessarily an N+1. To
+ * stay resilient at real-vault scale it (a) caps concurrent fetches so the load
+ * doesn't trip the backend rate limit, and (b) uses settle-not-reject semantics
+ * so a single failed note (429, corrupt frontmatter, locked file) is skipped
+ * rather than zeroing out the entire result. An ``AbortError`` still propagates
+ * so an in-flight load can be cancelled.
+ */
 export async function loadAllNotes(signal?: AbortSignal): Promise<NoteRecord[]> {
   const limit = 200;
   const records: NoteRecord[] = [];
@@ -66,12 +107,24 @@ export async function loadAllNotes(signal?: AbortSignal): Promise<NoteRecord[]> 
   while (offset < total) {
     const page = await listNoteRecords(offset, limit, signal);
     total = page.total;
-    const full = await Promise.all(
-      page.notes.map((n) => getNote(n.id, signal)),
-    );
-    records.push(...full);
-    offset += page.notes.length;
     if (page.notes.length === 0) break;
+
+    const settled = await mapWithConcurrency(
+      page.notes,
+      LOAD_CONCURRENCY,
+      (n) => getNote(n.id, signal),
+    );
+    for (const result of settled) {
+      if (result.status === "fulfilled") {
+        records.push(result.value);
+      } else if ((result.reason as DOMException)?.name === "AbortError") {
+        // The whole load was cancelled — stop and surface it to the caller.
+        throw result.reason;
+      }
+      // Any other per-note failure is skipped: a bad note must not blank the
+      // entire vault.
+    }
+    offset += page.notes.length;
   }
 
   return records;

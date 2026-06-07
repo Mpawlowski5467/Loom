@@ -3,6 +3,7 @@ import type Sigma from "sigma";
 import type { Note } from "../data/types";
 import type { FrameTick } from "./frameLoop";
 import type { GraphTuning } from "./tuning";
+import { readCssVar } from "../theme/readCssVar";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const XHTML_NS = "http://www.w3.org/1999/xhtml";
@@ -50,7 +51,9 @@ export function createLens(opts: {
 
   const maskCircle = document.createElementNS(SVG_NS, "circle");
   maskCircle.setAttribute("r", "0");
-  maskCircle.setAttribute("fill", "#f5f1e8");
+  // Surface fill is re-read from the active theme each visible frame (see
+  // tick) so the disc never freezes the paper palette on a dark theme.
+  maskCircle.setAttribute("fill", readCssVar("--bg-base", "#f5f1e8"));
   lensG.appendChild(maskCircle);
 
   const dashCircle = document.createElementNS(SVG_NS, "circle");
@@ -115,13 +118,16 @@ export function createLens(opts: {
       }
       if (firstNonHeadingLine && firstH2) break;
     }
+    const ink = readCssVar("--ink", "#1a1815");
+    const ink2 = readCssVar("--ink-2", "#5c5851");
+    const ink3 = readCssVar("--ink-3", "#8c877d");
     const typeColor =
-      (graph.getNodeAttribute(id, "color") as string) ?? "#1a1815";
+      (graph.getNodeAttribute(id, "color") as string) ?? ink;
 
     content.textContent = "";
     const wrap = document.createElement("div");
     wrap.style.cssText =
-      "font-family: Fraunces, serif; color: #1a1815; line-height: 1.4; " +
+      `font-family: Fraunces, serif; color: ${ink}; line-height: 1.4; ` +
       "padding: 12%; box-sizing: border-box; width: 100%; height: 100%; " +
       "display: flex; flex-direction: column; justify-content: center; " +
       "text-align: center; overflow: hidden;";
@@ -135,14 +141,14 @@ export function createLens(opts: {
     const metaEl = document.createElement("div");
     metaEl.style.cssText =
       "font-family: 'JetBrains Mono', monospace; font-size: 8px; " +
-      "color: #8c877d; margin-bottom: 4px;";
+      `color: ${ink3}; margin-bottom: 4px;`;
     metaEl.textContent = `${note.type} · ${connections} conn`;
     wrap.appendChild(metaEl);
 
     if (firstNonHeadingLine) {
       const leadEl = document.createElement("div");
       leadEl.style.cssText =
-        "font-size: 9.5px; color: #5c5851; font-style: italic;";
+        `font-size: 9.5px; color: ${ink2}; font-style: italic;`;
       leadEl.textContent = firstNonHeadingLine;
       wrap.appendChild(leadEl);
     }
@@ -225,11 +231,16 @@ export function createLens(opts: {
       const ny = graph.getNodeAttribute(desiredId, "y") as number;
       const p = sigma.graphToViewport({ x: nx, y: ny });
       const typeColor =
-        (graph.getNodeAttribute(desiredId, "color") as string) ?? "#1a1815";
+        (graph.getNodeAttribute(desiredId, "color") as string) ??
+        readCssVar("--ink", "#1a1815");
       lensG.setAttribute("display", "");
       lensG.setAttribute("transform", `translate(${p.x},${p.y})`);
       lensG.style.color = typeColor;
       lensG.style.opacity = String(Math.min(1, settled * 1.5));
+      // Re-read the surface each visible frame so a runtime theme swap (which
+      // updates colors in place without rebuilding the lens) repaints the disc
+      // instead of leaving a frozen paper-cream circle on a dark theme.
+      maskCircle.setAttribute("fill", readCssVar("--bg-base", "#f5f1e8"));
       maskCircle.setAttribute("r", String(r));
       clipCircle.setAttribute("r", String(r));
       dashCircle.setAttribute("r", String(r + 6));

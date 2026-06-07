@@ -135,4 +135,24 @@ describe("createFrameLoop", () => {
     expect(live).toHaveBeenCalledTimes(1);
     expect(removed).not.toHaveBeenCalled();
   });
+
+  it("stops cleanly when the sole tick removes itself mid-frame (no zombie loop)", () => {
+    const loop = createFrameLoop(() => {});
+    let remove: (() => void) | null = null;
+    // A self-removing tick: the only animator unsubscribes during its own
+    // frame (mirrors a scene tween completing and stop()-ing the loop).
+    remove = loop.add(() => {
+      remove?.();
+      return false;
+    });
+    expect(clock.queued).toBe(1);
+    clock.flush();
+    // After the tick removes itself, the loop must NOT reschedule another
+    // frame — otherwise it spins forever with an empty tick set.
+    expect(loop.size).toBe(0);
+    expect(clock.queued).toBe(0);
+    // And a subsequent flush has nothing to run.
+    clock.flush();
+    expect(clock.queued).toBe(0);
+  });
 });

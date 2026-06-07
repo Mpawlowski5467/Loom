@@ -229,4 +229,44 @@ describe("loadAllNotes", () => {
     const records = await loadAllNotes();
     expect(records).toEqual([]);
   });
+
+  it("skips an individual note that fails instead of zeroing the whole load", async () => {
+    const getSpy = vi.spyOn(apiClient, "get");
+    getSpy.mockImplementation((path: string) => {
+      if (path.startsWith("/api/notes?")) {
+        return Promise.resolve({
+          notes: [meta("a"), meta("bad"), meta("c")],
+          total: 3,
+          offset: 0,
+          limit: 200,
+        });
+      }
+      const id = decodeURIComponent(path.split("/").pop()!);
+      // One note 429s / is corrupt; the other two load fine.
+      if (id === "bad") return Promise.reject(new Error("429 rate limited"));
+      return Promise.resolve(mkRecord({ id }));
+    });
+
+    const records = await loadAllNotes();
+    expect(records.map((r) => r.id).sort()).toEqual(["a", "c"]);
+  });
+
+  it("propagates an AbortError so a cancelled load surfaces", async () => {
+    const getSpy = vi.spyOn(apiClient, "get");
+    getSpy.mockImplementation((path: string) => {
+      if (path.startsWith("/api/notes?")) {
+        return Promise.resolve({
+          notes: [meta("a")],
+          total: 1,
+          offset: 0,
+          limit: 200,
+        });
+      }
+      return Promise.reject(
+        new DOMException("aborted", "AbortError"),
+      );
+    });
+
+    await expect(loadAllNotes()).rejects.toMatchObject({ name: "AbortError" });
+  });
 });

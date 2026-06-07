@@ -31,7 +31,12 @@ export function createFrameLoop(onRefresh: () => void): FrameLoop {
       if (tick(now)) needsRefresh = true;
     }
     if (needsRefresh) onRefresh();
-    raf = requestAnimationFrame(frame);
+    // Guard the reschedule on ``running``: when the only tick removes itself
+    // mid-frame (e.g. a scene tween completing -> ticks.size 0 -> stop()),
+    // stop() flips running=false and cancels this already-firing frame (a
+    // no-op). Without this guard we'd schedule a fresh frame anyway, leaving a
+    // forever-running empty loop that burns CPU with no teardown.
+    if (running) raf = requestAnimationFrame(frame);
   };
 
   const start = (): void => {

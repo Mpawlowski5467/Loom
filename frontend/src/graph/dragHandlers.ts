@@ -29,16 +29,41 @@ export function attachDrag(args: AttachDragArgs): () => void {
   let draggedNode: string | null = null;
   let movedDuringPress = false;
   let sim: DragSim | null = null;
+  // A released sim keeps its own rAF chain alive until kinetic energy settles
+  // (~0.5–1s). We hold onto it here so teardown can halt that post-release
+  // animation — otherwise the loop would keep mutating the graph / refreshing a
+  // destroyed Sigma instance after detach. Cleared when the settle completes.
+  let settlingSim: DragSim | null = null;
+  // Bounds how long we hold the settling-sim reference: physics settles well
+  // within this window, so this timer drops the ref after a natural settle even
+  // if the user never interacts again (no lingering dead-object reference).
+  let settleClearTimer: ReturnType<typeof setTimeout> | null = null;
   let lastGraphX = 0;
   let lastGraphY = 0;
   let prevGraphX = 0;
   let prevGraphY = 0;
+
+  // Max settle window in ms; physics converges before this. Generous so a
+  // released sim is never dropped mid-animation, only after it has stopped.
+  const SETTLE_CLEAR_MS = 2000;
+
+  const clearSettling = () => {
+    if (settleClearTimer !== null) {
+      clearTimeout(settleClearTimer);
+      settleClearTimer = null;
+    }
+    if (settlingSim) {
+      settlingSim.stop();
+      settlingSim = null;
+    }
+  };
 
   const stopSim = () => {
     if (sim) {
       sim.stop();
       sim = null;
     }
+    clearSettling();
   };
 
   const onDownNode = (payload: {
@@ -116,8 +141,15 @@ export function attachDrag(args: AttachDragArgs): () => void {
       }, 0);
       const vx = lastGraphX - prevGraphX;
       const vy = lastGraphY - prevGraphY;
-      sim.release(vx, vy);
+      // A prior settling sim has either already finished or been superseded;
+      // halt it before tracking the new one so we never hold more than one.
+      clearSettling();
+      // The released sim keeps animating until it settles. Track it so detach
+      // can stop it, and arm a timer to drop the ref after a natural settle.
+      settlingSim = sim;
       sim = null;
+      settlingSim.release(vx, vy);
+      settleClearTimer = setTimeout(clearSettling, SETTLE_CLEAR_MS);
     } else {
       stopSim();
     }

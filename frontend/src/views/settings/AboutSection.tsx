@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import { Clipboard, ExternalLink, RotateCcw } from "lucide-react";
 import { API_BASE } from "../../api/client";
 import { resetOnboarding } from "../../api/onboarding";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { useApp } from "../../context/app-ctx";
 import {
   getDiagnostics,
@@ -21,18 +22,14 @@ export function AboutSection(): ReactNode {
   const [health, setHealth] = useState<HealthResponse | null>(null);
   const [indexStats, setIndexStats] = useState<IndexStats | null>(null);
   const [message, setMessage] = useState<string | null>(null);
+  // Accessible confirm dialog (replaces window.confirm) for re-running onboarding.
+  const [confirmRerun, setConfirmRerun] = useState(false);
 
+  // Runs after the user confirms in the modal. Errors propagate so the
+  // ConfirmModal shows them inline and stays open for a retry.
   const rerunOnboarding = async () => {
-    const ok = window.confirm(
-      "Re-run the onboarding wizard? Your vault and provider settings are kept.",
-    );
-    if (!ok) return;
-    try {
-      await resetOnboarding();
-      await refreshConfig();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Couldn't reset onboarding.");
-    }
+    await resetOnboarding();
+    await refreshConfig();
   };
 
   useEffect(() => {
@@ -155,7 +152,7 @@ export function AboutSection(): ReactNode {
         <button
           className="btn btn-md"
           type="button"
-          onClick={() => void rerunOnboarding()}
+          onClick={() => setConfirmRerun(true)}
         >
           <RotateCcw size={14} aria-hidden="true" />
           Re-run onboarding
@@ -240,6 +237,16 @@ export function AboutSection(): ReactNode {
         </a>
       </div>
       {message && <div className="settings-inline-status">{message}</div>}
+      {confirmRerun && (
+        <ConfirmModal
+          title="Re-run the onboarding wizard?"
+          body="Your vault and provider settings are kept. You'll step through the first-run wizard again."
+          confirmLabel="Re-run onboarding"
+          destructive={false}
+          onConfirm={rerunOnboarding}
+          onClose={() => setConfirmRerun(false)}
+        />
+      )}
     </div>
   );
 }

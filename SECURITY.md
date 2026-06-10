@@ -25,10 +25,15 @@ with auth + TLS, and only then change the compose port binding.
 ## Known limitations (intentional for v1, documented)
 
 - **No API authentication.** Safe on localhost; unsafe when exposed (see above).
-- **Provider API keys are stored in plain text.** Keys live in `~/.loom/config.yaml`
-  and, if you use Docker, optionally in `.env`. File permissions are the only
-  protection. Keep `.env` private — it is git-ignored by default. OS-keychain /
-  encrypted storage is not yet implemented.
+- **Provider API keys are encrypted at rest, but this is defense-in-depth, not
+  auth.** Keys in `~/.loom/config.yaml` are encrypted with Fernet (AES-128-CBC +
+  HMAC) under a machine-local master key, written with the `enc:v1:` prefix;
+  legacy plaintext values are transparently re-encrypted on first load. The
+  master key (`~/.loom/.secret.key`) sits next to the data, so this protects
+  against casual disclosure of the config file (backups, screen-shares), **not**
+  against an attacker who can read the whole `~/.loom` directory. If you use
+  Docker, keys may also pass through `.env` (git-ignored) at startup. OS-keychain
+  storage is still not implemented.
 - **LLM traces record message content.** The trace store (`/api/traces`, mirrored
   to `.loom/traces/`) records the messages and responses sent to providers so you
   can inspect raw calls. Provider keys are sent as HTTP headers and are **not**

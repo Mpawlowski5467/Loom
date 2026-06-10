@@ -5,7 +5,7 @@ import contextlib
 import logging
 import time
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from api.routers.settings_helpers import (
@@ -17,6 +17,7 @@ from api.routers.settings_helpers import (
 from core.config import GlobalConfig, ProviderConfig, settings
 from core.exceptions import ProviderConfigError
 from core.providers import reset_registry
+from core.vault import VaultManager, get_vault_manager
 
 logger = logging.getLogger(__name__)
 
@@ -98,14 +99,21 @@ async def get_providers() -> GetProvidersResponse:
 
 
 @router.post("/settings/providers")
-async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
+async def save_providers(
+    body: SaveProvidersRequest,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> SaveProvidersResponse:
     """Persist provider configuration to ~/.loom/config.yaml.
 
     Accepts the full provider list from the frontend settings UI,
     maps it onto the backend GlobalConfig format, saves to disk,
     and resets the provider registry so new settings take effect
-    immediately. An empty ``api_key`` for an existing provider is
-    treated as "no change" so the masked-key UX doesn't wipe credentials.
+    immediately. Resetting closes the cached providers, so we then
+    rebuild every service that captured a reference to them (agents,
+    indexer, searcher) against the fresh registry — otherwise their
+    next LLM/embedding call fails until a restart. An empty ``api_key``
+    for an existing provider is treated as "no change" so the masked-key
+    UX doesn't wipe credentials.
     """
     config_path = settings.config_path
     cfg = GlobalConfig.load(config_path)
@@ -161,6 +169,12 @@ async def save_providers(body: SaveProvidersRequest) -> SaveProvidersResponse:
     )
 
     await reset_registry()
+
+    # Rebind agents + indexer/searcher to the fresh registry. Imported locally
+    # to avoid an import cycle (api.runtime pulls in a large dependency graph).
+    from api.runtime import reinit_providers_dependent_services
+
+    reinit_providers_dependent_services(vm.active_vault_dir())
 
     return SaveProvidersResponse(
         saved=len(providers),

@@ -96,6 +96,51 @@ def write_note(
     return parse_note(file_path)
 
 
+def archive_note(
+    vault_root: Path,
+    agent_name: str,
+    note_path: Path,
+    reason: str,
+) -> Path:
+    """Move a note into ``threads/.archive/`` (deletion = archive).
+
+    Used by the capture pipeline's Sentinel-retry loop to retire the rejected
+    first-attempt note when Weaver regenerates a replacement, so one capture
+    never leaves two active notes both tagged ``source: capture:<id>``. Updates
+    the note's frontmatter (``status=archived`` + history) before moving it.
+    """
+    archive_dir = vault_root / "threads" / ".archive"
+    archive_dir.mkdir(parents=True, exist_ok=True)
+
+    note = parse_note(note_path)
+    ts = now_iso()
+    meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
+    meta["status"] = "archived"
+    meta["modified"] = ts
+    meta.setdefault("history", []).append(
+        {"action": "archived", "by": f"agent:{agent_name}", "at": ts, "reason": reason},
+    )
+    _vault_write_note(vault_root, note_path, meta, note.body)
+
+    dest = archive_dir / note_path.name
+    if dest.exists():
+        safe_ts = ts.replace(":", "-")
+        dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
+    shutil.move(str(note_path), str(dest))
+    get_note_index().remove_file(note_path)
+
+    log_action(
+        vault_root,
+        agent_name,
+        "archived",
+        str(note_path),
+        details=f"Archived superseded note → {dest.name} ({reason})",
+        chain_status="pass",
+    )
+    logger.info("Archived superseded note: %s → %s", note_path.name, dest)
+    return dest
+
+
 def archive_capture(vault_root: Path, agent_name: str, capture_path: Path) -> Path:
     """Move a processed capture into ``threads/.archive/``.
 

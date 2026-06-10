@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { AddAgentModal } from "./AddAgentModal";
 import { AgentCard } from "./AgentCard";
 import { formatRelativeTime, renderTarget } from "./boardHelpers";
@@ -37,6 +38,8 @@ export function CardsMode(): ReactNode {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
+  // Accessible confirm dialog (replaces window.confirm) for deleting an agent.
+  const [confirmDelete, setConfirmDelete] = useState<Agent | null>(null);
 
   const handleRun = async (a: Agent) => {
     const key = a.name.toLowerCase();
@@ -72,19 +75,12 @@ export function CardsMode(): ReactNode {
     }
   };
 
-  const handleDelete = async (a: Agent) => {
-    if (!window.confirm(`Delete custom agent "${a.name}"?`)) return;
-    try {
-      await deleteCustomAgent(a.id);
-      await refreshCustomAgents();
-      pushToast({ icon: "🗑", agent: "archivist", body: `Deleted agent ${a.name}` });
-    } catch (err) {
-      pushToast({
-        icon: "⚠",
-        agent: "sentinel",
-        body: err instanceof Error ? err.message : "Delete failed",
-      });
-    }
+  // Deletion runs after the user confirms in the modal. Errors propagate so the
+  // ConfirmModal shows them inline and stays open for a retry.
+  const deleteNow = async (a: Agent) => {
+    await deleteCustomAgent(a.id);
+    await refreshCustomAgents();
+    pushToast({ icon: "🗑", agent: "archivist", body: `Deleted agent ${a.name}` });
   };
 
   // Per-agent last event: changelog is sorted newest-first, so the first hit
@@ -110,7 +106,7 @@ export function CardsMode(): ReactNode {
         running={runningAgents.has(key)}
         onRun={() => void handleRun(a)}
         onEdit={() => void handleEdit(a)}
-        onDelete={() => void handleDelete(a)}
+        onDelete={() => setConfirmDelete(a)}
       />
     );
   };
@@ -171,6 +167,16 @@ export function CardsMode(): ReactNode {
             await refreshCustomAgents();
             setEditing(null);
           }}
+        />
+      )}
+      {confirmDelete && (
+        <ConfirmModal
+          title={`Delete custom agent "${confirmDelete.name}"?`}
+          body="This removes the agent and its registry entry. This can't be undone."
+          confirmLabel="Delete"
+          destructive
+          onConfirm={() => deleteNow(confirmDelete)}
+          onClose={() => setConfirmDelete(null)}
         />
       )}
     </div>

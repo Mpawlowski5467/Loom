@@ -5,6 +5,8 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { Pluggable } from "unified";
 import { Wikilink } from "../components/primitives/Wikilink";
+import { walkHeadings } from "./renderMarkdown";
+import type { HastNode } from "./renderMarkdown";
 
 /* ── remark plugin: [[wikilink]] / [[target|label]] → <loom-wikilink> ── */
 
@@ -66,33 +68,20 @@ function remarkWikilink() {
 
 /* ── rehype plugin: deterministic heading ids in document order ── */
 
-interface HastNode {
-  type: string;
-  tagName?: string;
-  properties?: Record<string, unknown>;
-  children?: HastNode[];
-}
-
-const HEADING_TAG = /^h[1-6]$/;
-
-function assignHeadingIds(node: HastNode, counter: { n: number }): void {
-  if (
-    node.type === "element" &&
-    node.tagName &&
-    HEADING_TAG.test(node.tagName)
-  ) {
-    node.properties = node.properties ?? {};
-    if (node.properties.id == null) {
-      node.properties.id = `loom-h-${counter.n++}`;
-    }
-  }
-  if (node.children) {
-    for (const child of node.children) assignHeadingIds(child, counter);
-  }
-}
-
+/**
+ * Stamp sequential ``loom-h-<n>`` ids onto every rendered h1–h6 in document
+ * order. Uses the shared {@link walkHeadings} traversal so the ids on the live
+ * DOM match the Thread outline built by ``extractHeadings`` exactly (see
+ * ``renderMarkdown.tsx``).
+ */
 function rehypeHeadingIds() {
-  return (tree: HastNode): void => assignHeadingIds(tree, { n: 0 });
+  return (tree: HastNode): void =>
+    walkHeadings(tree, { n: 0 }, (node, id) => {
+      node.properties = node.properties ?? {};
+      if (node.properties.id == null) {
+        node.properties.id = id;
+      }
+    });
 }
 
 /* ── components ── */

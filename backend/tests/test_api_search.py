@@ -86,6 +86,18 @@ def test_search_empty_query(client: TestClient, seeded_vault: Path) -> None:
     assert resp.status_code == 422  # validation error: min_length=1
 
 
+def test_search_query_too_long(client: TestClient, seeded_vault: Path) -> None:
+    """A query past the max length is rejected before any (paid) embed call."""
+    resp = client.get("/api/search", params={"q": "a" * 1001})
+    assert resp.status_code == 422  # validation error: max_length=1000
+
+
+def test_search_query_at_max_length(client: TestClient, seeded_vault: Path) -> None:
+    """A query exactly at the max length is still accepted."""
+    resp = client.get("/api/search", params={"q": "a" * 1000})
+    assert resp.status_code == 200
+
+
 def test_search_snippet(client: TestClient, seeded_vault: Path) -> None:
     resp = client.get("/api/search?q=dynamic")
     data = resp.json()

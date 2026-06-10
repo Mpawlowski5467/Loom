@@ -1,12 +1,19 @@
 """Graph builder: scan vault notes and produce nodes + edges for react-force-graph-2d."""
 
 import json
+import logging
 from datetime import UTC, datetime
 from pathlib import Path
 
-from pydantic import BaseModel, Field
+import yaml
+from pydantic import BaseModel, Field, ValidationError
 
-from core.notes import parse_note
+from core.notes import atomic_write_text, parse_note
+
+logger = logging.getLogger(__name__)
+
+# Bump when the graph.json on-disk format changes in a way that needs migration.
+GRAPH_SCHEMA_VERSION = 1
 
 
 class GraphNode(BaseModel):
@@ -32,6 +39,9 @@ class VaultGraph(BaseModel):
     nodes: list[GraphNode] = Field(default_factory=list)
     edges: list[GraphEdge] = Field(default_factory=list)
     updated_at: str = ""
+    # Stamped onto graph.json so the format can be migrated later. Defaults to
+    # the current version so an older file that predates the field loads cleanly.
+    schema_version: int = GRAPH_SCHEMA_VERSION
 
 
 def build_graph(threads_dir: Path) -> VaultGraph:
@@ -48,7 +58,14 @@ def build_graph(threads_dir: Path) -> VaultGraph:
     note_links: dict[str, list[str]] = {}  # note id -> list of wikilink targets (raw)
 
     for md_path in md_files:
-        note = parse_note(md_path)
+        try:
+            note = parse_note(md_path)
+        except (OSError, ValueError, yaml.YAMLError, ValidationError):
+            # One unreadable/malformed note must not take down the whole graph
+            # (which would 500 /api/graph and kill the watcher's rebuild thread).
+            # Skip it and keep building from the good notes.
+            logger.warning("Skipping malformed note in graph build: %s", md_path, exc_info=True)
+            continue
         if not note.id:
             continue
 
@@ -94,14 +111,26 @@ def save_graph(graph: VaultGraph, loom_dir: Path) -> Path:
     loom_dir.mkdir(parents=True, exist_ok=True)
     graph.updated_at = datetime.now(UTC).isoformat()
     path = loom_dir / "graph.json"
-    path.write_text(json.dumps(graph.model_dump(), indent=2))
+    # Atomic write: the watcher's timer thread and request threads can read/write
+    # graph.json concurrently; a torn read would 500 load_graph. graph.json is
+    # not itself a vault note, so don't re-flag the graph dirty (avoids recursion).
+    atomic_write_text(path, json.dumps(graph.model_dump(), indent=2), mark_graph_dirty=False)
     return path
 
 
 def load_graph(loom_dir: Path) -> VaultGraph | None:
-    """Load graph.json if it exists."""
+    """Load graph.json if it exists.
+
+    Returns ``None`` when the file is absent or a transient torn/corrupt read
+    fails to parse, so callers degrade gracefully (rebuild) instead of 500ing.
+    """
     path = loom_dir / "graph.json"
     if not path.exists():
         return None
-    data = json.loads(path.read_text())
+    try:
+        data = json.loads(path.read_text())
+    except (OSError, json.JSONDecodeError):
+        logger.warning("graph.json unreadable or corrupt; rebuilding: %s", path, exc_info=True)
+        return None
+    # A file predating schema_version still validates (the model defaults it).
     return VaultGraph.model_validate(data)

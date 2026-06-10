@@ -12,6 +12,30 @@ from core.notes import note_to_file_content
 from core.vault import VaultManager, get_vault_manager
 
 
+@pytest.fixture(autouse=True)
+def _hermetic_globals():
+    """Reset process-global singletons before each test.
+
+    Two module-level singletons otherwise leak state across tests in a way that
+    depends on run order:
+
+    - the slowapi rate limiter accumulates per-IP counts, and the TestClient is
+      always the same IP, so create-heavy suites trip newly-added route limits;
+    - ``core.note_index`` is a module singleton that agent code reaches via
+      ``get_note_index()`` (not the DI override), so one test's built index can
+      change another's results.
+
+    Resetting both at setup makes every test start from the clean state it gets
+    when run in isolation.
+    """
+    import core.note_index as note_index_mod
+    from core.rate_limit import limiter
+
+    limiter.reset()
+    note_index_mod._note_index = None
+    yield
+
+
 @pytest.fixture()
 def tmp_loom_home(tmp_path: Path) -> LoomSettings:
     """Return LoomSettings rooted in a temp directory."""

@@ -26,7 +26,12 @@ export function MiniGraph({ focusId }: Props): ReactNode {
   const r = 60;
 
   return (
-    <svg viewBox="0 0 260 180" className="mini-graph" aria-hidden="true">
+    <svg
+      viewBox="0 0 260 180"
+      className="mini-graph"
+      role="group"
+      aria-label={`Local graph around ${focus.title}`}
+    >
       {neighbors.map((n, i) => {
         const a = (i / neighbors.length) * Math.PI * 2 - Math.PI / 2;
         const x = cx + Math.cos(a) * r;
@@ -83,7 +88,22 @@ export function MiniGraph({ focusId }: Props): ReactNode {
         const x = cx + Math.cos(a) * r;
         const y = cy + Math.sin(a) * r;
         return (
-          <g key={`n${n.id}`} style={{ cursor: "pointer" }} onClick={() => openNote(n.id)}>
+          <g
+            key={`n${n.id}`}
+            style={{ cursor: "pointer" }}
+            role="button"
+            tabIndex={0}
+            aria-label={`Open ${n.title}`}
+            onClick={() => openNote(n.id)}
+            onKeyDown={(e) => {
+              // Activate on Enter or Space; preventDefault so Space doesn't
+              // scroll the sidebar.
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                openNote(n.id);
+              }
+            }}
+          >
             <circle cx={x} cy={y} r={3.5} fill={`var(--node-${n.type})`} />
             <text
               x={x}

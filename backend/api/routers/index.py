@@ -1,14 +1,20 @@
 """Vector index management API routes."""
 
+import asyncio
 from collections import Counter
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 
+from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 from index.indexer import get_indexer
 
 router = APIRouter(prefix="/api/index", tags=["index"])
+
+# Serializes reindex/rebuild so two requests (or the scheduled reindex) can't
+# race a drop_table/create_table against each other on the same index.
+_reindex_lock = asyncio.Lock()
 
 
 class IndexStatus(BaseModel):
@@ -97,7 +103,9 @@ def index_stats() -> IndexStats:
 
 
 @router.post("/reindex")
+@limiter.limit(WRITE_LIMIT)
 async def reindex_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> ReindexResult:
     """Trigger a full reindex of the vault."""
@@ -105,7 +113,9 @@ async def reindex_vault(
 
 
 @router.post("/rebuild")
+@limiter.limit(WRITE_LIMIT)
 async def rebuild_index(
+    request: Request,  # noqa: ARG001 — required by slowapi
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> ReindexResult:
     """Rebuild the index from scratch (alias for reindex)."""
@@ -113,13 +123,19 @@ async def rebuild_index(
 
 
 async def _do_reindex(vm: VaultManager) -> ReindexResult:
-    """Shared reindex logic."""
+    """Shared reindex logic.
+
+    Acquires ``_reindex_lock`` so the drop/create cycle is serialized — a second
+    request waits for the first to finish rather than racing the same table.
+    """
     indexer = get_indexer()
     if indexer is None:
         raise HTTPException(
             status_code=503,
             detail="Vector indexer not initialized. Configure an embed provider in ~/.loom/config.yaml.",
         )
-    threads_dir = vm.active_threads_dir()
-    total = await indexer.reindex_vault(threads_dir)
+    # Await the lock (rather than 409) so concurrent reindex requests queue.
+    async with _reindex_lock:
+        threads_dir = vm.active_threads_dir()
+        total = await indexer.reindex_vault(threads_dir)
     return ReindexResult(chunks_indexed=total)

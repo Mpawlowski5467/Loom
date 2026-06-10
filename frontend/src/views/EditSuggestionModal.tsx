@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Capture } from "../data/types";
+import { ConfirmModal } from "../components/ConfirmModal";
 import { useFocusTrap } from "../components/useFocusTrap";
 import {
   captureRelPath,
@@ -49,6 +50,9 @@ export function EditSuggestionModal({
   const [tagsInput, setTagsInput] = useState(initialTags);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Accessible confirm dialog (replaces window.confirm) for the dirty-discard
+  // guard below.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const trimmedTitle = title.trim();
   const canSubmit = trimmedTitle.length > 0 && !busy;
@@ -59,9 +63,15 @@ export function EditSuggestionModal({
     folder !== initialFolder ||
     tagsInput !== initialTags;
 
-  // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist.
+  // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist: route
+  // the discard confirmation through the accessible ConfirmModal instead of
+  // window.confirm. With no unsaved edits, close immediately.
   const requestClose = () => {
-    if (dirty && !window.confirm("Discard your changes to this suggestion?")) {
+    // While the discard confirm is up, its own Escape/Cancel owns dismissal —
+    // don't let the focus-trap's window-level Escape re-open it.
+    if (confirmDiscard) return;
+    if (dirty) {
+      setConfirmDiscard(true);
       return;
     }
     onClose();
@@ -119,6 +129,7 @@ export function EditSuggestionModal({
   };
 
   return (
+    <>
     <div
       className="settings-modal-backdrop"
       role="presentation"
@@ -210,5 +221,17 @@ export function EditSuggestionModal({
         </div>
       </div>
     </div>
+
+      {confirmDiscard && (
+        <ConfirmModal
+          title="Discard your changes to this suggestion?"
+          body="Your edits to the title, type, folder, and tags will be lost."
+          confirmLabel="Discard"
+          destructive
+          onConfirm={onClose}
+          onClose={() => setConfirmDiscard(false)}
+        />
+      )}
+    </>
   );
 }

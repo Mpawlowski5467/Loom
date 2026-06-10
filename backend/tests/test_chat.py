@@ -2,7 +2,10 @@
 
 from pathlib import Path
 
+import pytest
+
 from agents.chat import ChatHistory, ChatMessage
+from core.vault import VaultPathError
 
 
 def _setup_vault(tmp_path: Path) -> Path:
@@ -198,6 +201,41 @@ class TestListSessions:
 
         sessions = chat.list_sessions("researcher")
         assert sessions == []
+
+
+class TestChatDirValidation:
+    """_chat_dir validates the agent name as defense-in-depth."""
+
+    def test_chat_dir_rejects_traversal_name(self, tmp_path: Path):
+        """A traversal agent name is rejected before any filesystem access."""
+        root = _setup_vault(tmp_path)
+        chat = ChatHistory(root)
+
+        with pytest.raises(VaultPathError):
+            chat._chat_dir("../../x")
+
+    def test_chat_dir_allows_council(self, tmp_path: Path):
+        """The _council pseudo-agent is allowed."""
+        root = _setup_vault(tmp_path)
+        chat = ChatHistory(root)
+
+        assert chat._chat_dir("_council") == root / "agents" / "_council" / "chat"
+
+    def test_load_recent_rejects_traversal_name(self, tmp_path: Path):
+        """load_recent (which calls _chat_dir directly) rejects bad names."""
+        root = _setup_vault(tmp_path)
+        chat = ChatHistory(root)
+
+        with pytest.raises(VaultPathError):
+            chat.load_recent("../../x")
+
+    def test_list_sessions_rejects_traversal_name(self, tmp_path: Path):
+        """list_sessions (which calls _chat_dir directly) rejects bad names."""
+        root = _setup_vault(tmp_path)
+        chat = ChatHistory(root)
+
+        with pytest.raises(VaultPathError):
+            chat.list_sessions("../../x")
 
 
 class TestToLlmMessage:

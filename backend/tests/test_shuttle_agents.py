@@ -311,6 +311,12 @@ class TestShuttleBoundary:
         result = await researcher.query("test question")
 
         assert "captures" in result.capture_path
+        # The capture actually landed under threads/captures/ on disk.
+        assert (
+            Path(result.capture_path)
+            .resolve()
+            .is_relative_to((root / "threads" / "captures").resolve())
+        )
 
     @pytest.mark.asyncio
     async def test_standup_writes_only_to_captures(self, tmp_path: Path):
@@ -322,3 +328,37 @@ class TestShuttleBoundary:
         result = await standup.generate()
 
         assert "captures" in result.capture_path
+        assert (
+            Path(result.capture_path)
+            .resolve()
+            .is_relative_to((root / "threads" / "captures").resolve())
+        )
+
+    def test_researcher_save_rejects_path_outside_captures(self, tmp_path: Path):
+        """A capture path escaping captures/ is refused (tier boundary)."""
+        from agents.shuttle import researcher as researcher_mod
+
+        bad = tmp_path / "vault" / "threads" / "projects" / "leak.md"
+        with pytest.raises(ValueError, match="captures"):
+            researcher_mod._assert_capture_path(bad)
+
+    def test_standup_save_rejects_path_outside_captures(self, tmp_path: Path):
+        """Standup refuses to write outside captures/ (tier boundary)."""
+        from agents.shuttle import standup as standup_mod
+
+        bad = tmp_path / "vault" / "threads" / "daily" / "leak.md"
+        with pytest.raises(ValueError, match="captures"):
+            standup_mod._assert_capture_path(bad)
+
+    def test_save_routes_through_vault_io_chokepoint(self, tmp_path: Path):
+        """A path outside threads/ is refused by the vault_io chokepoint.
+
+        Proves shuttle writes go through vault_io.write_note (not raw
+        atomic_write_text), so its path validation is in force.
+        """
+        from core.vault_io import VaultIOError, write_note
+
+        root = _setup_vault(tmp_path)
+        # agents/ is outside threads/ — vault_io must reject it.
+        with pytest.raises(VaultIOError):
+            write_note(root, root / "agents" / "researcher" / "leak.md", {"id": "x"}, "body")

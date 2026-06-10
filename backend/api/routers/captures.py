@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import yaml
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 
 from core.note_index import NoteIndex, get_note_index
@@ -148,6 +148,35 @@ def _extract_preview(body: str, max_lines: int = 2) -> str:
     return "\n".join(lines[:max_lines])
 
 
+def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
+    """Map a :class:`PipelineResult` to the API ``ProcessResult`` envelope.
+
+    Shared by ``/process`` and ``/process-all`` so both report the same fields
+    (validation verdict + enforcement outcomes), instead of ``/process-all``
+    running a degraded Weaver-only path.
+    """
+    note = result.note
+    if note is None:
+        err = "; ".join(result.errors) if result.errors else "Empty capture, skipped"
+        return ProcessResult(processed=False, error=err)
+    validation = result.validation
+    return ProcessResult(
+        processed=True,
+        note_id=note.id,
+        note_title=note.title,
+        note_type=note.type,
+        target_path=note.file_path,
+        linked=result.links_added,
+        suggested=result.suggested,
+        validation=validation.status if validation else "",
+        validation_mode=validation.mode_summary if validation else "",
+        validation_reasons=list(validation.reasons) if validation else [],
+        capture_archived=result.capture_archived,
+        review_required=result.review_required,
+        flagged=result.flagged,
+    )
+
+
 def _list_captures(captures_dir: Path) -> list[CaptureItem]:
     """List all markdown files in captures/ with metadata and preview."""
     items: list[CaptureItem] = []
@@ -181,11 +210,19 @@ def _list_captures(captures_dir: Path) -> list[CaptureItem]:
 
 @router.get("")
 def get_captures(
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> list[CaptureItem]:
-    """Return all capture files with metadata and preview text."""
+    """Return capture files with metadata and preview text, newest first.
+
+    Paginated via ``offset``/``limit`` (default 200) so a very large inbox
+    doesn't return every capture body in a single unbounded response. The
+    common case (a handful of captures) is unaffected.
+    """
     captures_dir = vm.active_threads_dir() / "captures"
-    return _list_captures(captures_dir)
+    items = _list_captures(captures_dir)
+    return items[offset : offset + limit]
 
 
 @router.post("/process")
@@ -230,26 +267,7 @@ async def process_capture(
         # Sentinel with a Sentinel-retry loop). Passing index.refresh_file keeps
         # the search index hot after each write, matching the old inline path.
         result = await runner.run_pipeline(capture_path, refresh_index=index.refresh_file)
-        note = result.note
-        if note is None:
-            err = "; ".join(result.errors) if result.errors else "Empty capture, skipped"
-            return ProcessResult(processed=False, error=err)
-        validation = result.validation
-        return ProcessResult(
-            processed=True,
-            note_id=note.id,
-            note_title=note.title,
-            note_type=note.type,
-            target_path=note.file_path,
-            linked=result.links_added,
-            suggested=result.suggested,
-            validation=validation.status if validation else "",
-            validation_mode=validation.mode_summary if validation else "",
-            validation_reasons=list(validation.reasons) if validation else [],
-            capture_archived=result.capture_archived,
-            review_required=result.review_required,
-            flagged=result.flagged,
-        )
+        return _pipeline_result_to_process_result(result)
     except Exception as exc:
         logger.warning("Capture processing failed", exc_info=True)
         return ProcessResult(processed=False, error=str(exc))
@@ -311,30 +329,15 @@ async def _finalize_note(
     except Exception:
         logger.warning("Sentinel validation failed for new note", exc_info=True)
 
-    # Sentinel enforcement. Three outcomes:
-    #   passed  → archive capture, ship the note clean
-    #   warning → archive capture, annotate the new note as "flagged"
-    #   failed  → keep capture in inbox marked review_required;
-    #             the note exists but the user is warned to check it
-    capture_archived = False
-    review_required = False
-    flagged = False
-    if validation_status == "failed":
-        review_required = True
-        _annotate_note_review_required(note_path, validation_reasons)
-        _flag_capture_for_review(capture_path, validation_reasons)
-    else:
-        # passed or warning (or no sentinel) → archive the capture.
-        try:
-            from agents.loom.weaver_io import archive_capture
+    # Sentinel enforcement via the shared verdict logic (passed/warning →
+    # archive capture; warning → flag note; failed → keep capture in inbox
+    # marked review_required). Single implementation, shared with the pipeline
+    # graph — no duplicated annotate/archive logic here.
+    from agents.loom.enforcement import enforce_verdict
 
-            archive_capture(vm.active_vault_dir(), "weaver", capture_path)
-            capture_archived = True
-        except Exception:
-            logger.warning("Capture archive failed", exc_info=True)
-        if validation_status == "warning":
-            flagged = True
-            _annotate_note_flagged(note_path, validation_reasons)
+    outcome = enforce_verdict(
+        vm.active_vault_dir(), capture_path, note_path, validation_status, validation_reasons
+    )
 
     return {
         "linked": linked,
@@ -342,53 +345,10 @@ async def _finalize_note(
         "validation": validation_status,
         "validation_mode": validation_mode,
         "validation_reasons": validation_reasons,
-        "capture_archived": capture_archived,
-        "review_required": review_required,
-        "flagged": flagged,
+        "capture_archived": outcome.capture_archived,
+        "review_required": outcome.review_required,
+        "flagged": outcome.flagged,
     }
-
-
-def _annotate_note_review_required(note_path: Path, reasons: list[str]) -> None:
-    """Mark a Sentinel-failed note with ``review_required: true`` in frontmatter."""
-    _annotate_frontmatter(
-        note_path,
-        {"review_required": True, "review_reasons": reasons},
-    )
-
-
-def _annotate_note_flagged(note_path: Path, reasons: list[str]) -> None:
-    """Mark a Sentinel-warning note with ``flagged: true`` in frontmatter."""
-    _annotate_frontmatter(
-        note_path,
-        {"flagged": True, "flag_reasons": reasons},
-    )
-
-
-def _flag_capture_for_review(capture_path: Path, reasons: list[str]) -> None:
-    """Mark a capture that Sentinel rejected so the inbox shows the warning."""
-    _annotate_frontmatter(
-        capture_path,
-        {"review_required": True, "review_reasons": reasons},
-    )
-
-
-def _annotate_frontmatter(path: Path, fields: dict) -> None:
-    """Read a note, merge ``fields`` into frontmatter, write atomically.
-
-    Best-effort: failure is logged but does not raise — the user-visible
-    flow (note created, capture maybe archived) is more important than
-    the annotation.
-    """
-    try:
-        from core.notes import atomic_write_text, build_frontmatter
-
-        note = parse_note(path)
-        meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
-        meta.update(fields)
-        new_content = build_frontmatter(meta) + "\n" + note.body
-        atomic_write_text(path, new_content)
-    except Exception:
-        logger.warning("Failed to annotate %s", path, exc_info=True)
 
 
 @router.post("/preview")
@@ -545,11 +505,16 @@ async def process_all_captures(
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> ProcessAllResult:
-    """Process all pending captures in the inbox through Weaver."""
+    """Process all pending captures through the full capture pipeline.
+
+    Each capture runs the same Weaver → Spider → Scribe → Sentinel → enforce
+    pipeline (with the Sentinel-retry loop and idempotency guard) as
+    ``/process`` — not a degraded Weaver-only path that skipped linking,
+    validation, and archiving and left every capture in the inbox.
+    """
     from agents.loom.weaver import get_weaver
 
-    weaver = get_weaver()
-    if weaver is None:
+    if get_weaver() is None:
         raise HTTPException(
             status_code=503,
             detail="Weaver agent not initialized. Configure a chat provider.",
@@ -560,24 +525,18 @@ async def process_all_captures(
         return ProcessAllResult(total=0, processed=0, results=[])
 
     md_files = sorted(captures_dir.glob("*.md"))
+    if not md_files:
+        return ProcessAllResult(total=0, processed=0, results=[])
+
+    from agents.runner import AgentRunner
+
+    runner = AgentRunner(vm.active_vault_dir())
     results: list[ProcessResult] = []
 
     for capture_path in md_files:
         try:
-            note = await weaver.process_capture(capture_path)
-            if note is None:
-                results.append(ProcessResult(processed=False, error="Empty capture"))
-                continue
-            index.refresh_file(Path(note.file_path))
-            results.append(
-                ProcessResult(
-                    processed=True,
-                    note_id=note.id,
-                    note_title=note.title,
-                    note_type=note.type,
-                    target_path=note.file_path,
-                )
-            )
+            result = await runner.run_pipeline(capture_path, refresh_index=index.refresh_file)
+            results.append(_pipeline_result_to_process_result(result))
         except Exception as exc:
             logger.warning("Capture processing failed for %s", capture_path, exc_info=True)
             results.append(ProcessResult(processed=False, error=str(exc)))

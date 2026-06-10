@@ -7,10 +7,13 @@ export function Toasts(): ReactNode {
   return (
     <div className="toast-region" aria-live="polite" aria-label="Notifications">
       {toasts.map((t) => (
-        <div
+        // A real <button> so keyboard users can dismiss (Enter/Space) — the
+        // parent region's aria-live still announces each toast on arrival.
+        <button
           key={t.id}
+          type="button"
           className="toast"
-          role="status"
+          aria-label="Dismiss notification"
           onClick={() => dismissToast(t.id)}
         >
           {t.agent ? (
@@ -24,7 +27,7 @@ export function Toasts(): ReactNode {
             {t.agent && <span className="agent-tag">{t.agent}</span>}
             {t.body}
           </span>
-        </div>
+        </button>
       ))}
     </div>
   );

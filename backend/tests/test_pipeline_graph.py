@@ -155,6 +155,69 @@ class TestSentinelRetryLoop:
         assert final["capture_archived"] is False
 
 
+class TestRetryOrphanHandling:
+    @pytest.mark.asyncio
+    async def test_successful_retry_archives_the_first_attempt_note(self, monkeypatch) -> None:
+        """A regenerated note must retire the rejected first attempt, so one
+        capture never leaves two active notes with the same capture source."""
+        note_a = _note("/tmp/vault/threads/topics/a.md")
+        note_b = _note("/tmp/vault/threads/topics/b.md")
+        weaver = MagicMock()
+        weaver.process_capture_full = AsyncMock(
+            side_effect=[(note_a, _STUB_CHAIN), (note_b, _STUB_CHAIN)]
+        )
+        sentinel = MagicMock()
+        sentinel.validate_action = AsyncMock(side_effect=[_verdict("failed"), _verdict("passed")])
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel)
+
+        import agents.loom.weaver_io as weaver_io
+
+        archive_mock = MagicMock()
+        monkeypatch.setattr(weaver_io, "archive_note", archive_mock)
+
+        runner = _fake_runner()
+        graph = build_pipeline_graph(runner)
+        async with run_scope("pipeline"):
+            await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+
+        # The first-attempt note (a.md) was archived exactly once; the surviving
+        # note is the retry's (b.md), which never gets archived.
+        assert archive_mock.call_count == 1
+        archived_path = archive_mock.call_args.args[2]
+        assert archived_path == Path("/tmp/vault/threads/topics/a.md")
+
+    @pytest.mark.asyncio
+    async def test_failed_retry_with_no_note_still_enforces(self, monkeypatch) -> None:
+        """If the retry Weaver run produces no note, enforce must still run
+        (flagging the capture) rather than dropping to END in limbo."""
+        weaver = MagicMock()
+        # Attempt 1 produces a note; the retry regenerates nothing.
+        weaver.process_capture_full = AsyncMock(side_effect=[(_note(), _STUB_CHAIN), (None, None)])
+        sentinel = MagicMock()
+        sentinel.validate_action = AsyncMock(return_value=_verdict("failed"))
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel)
+
+        import agents.loom.weaver_io as weaver_io
+
+        archive_mock = MagicMock()
+        monkeypatch.setattr(weaver_io, "archive_note", archive_mock)
+
+        runner = _fake_runner()
+        runner._enforce_verdict = MagicMock(
+            return_value={"capture_archived": False, "review_required": True, "flagged": False}
+        )
+        graph = build_pipeline_graph(runner)
+        async with run_scope("pipeline") as rec:
+            final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+            steps = [s.name for s in rec.steps]
+
+        assert "weaver-retry" in steps
+        assert steps[-1] == "enforce"  # enforce always runs, even on a failed retry
+        assert final["review_required"] is True
+        # The first-attempt note is kept (not archived) so enforce can flag it.
+        archive_mock.assert_not_called()
+
+
 class TestRunShapeRecording:
     @pytest.mark.asyncio
     async def test_sentinel_llm_call_attributed_to_step(self, monkeypatch) -> None:

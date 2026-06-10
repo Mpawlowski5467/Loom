@@ -104,35 +104,39 @@ describe("ProviderConfig", () => {
     expect(screen.getByText("OK — 12ms")).toBeInTheDocument();
   });
 
-  it("skip button confirms, then clears providers and submits", async () => {
+  it("skip opens a confirm dialog, then clears providers and submits", async () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     const onSubmit = vi.fn();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     renderProviderConfig({ onChange, onSubmit });
 
+    // "Skip for now" opens an accessible dialog rather than window.confirm.
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
+    expect(screen.getByRole("dialog")).toHaveAttribute("aria-modal", "true");
+    expect(onSubmit).not.toHaveBeenCalled();
 
-    expect(confirmSpy).toHaveBeenCalled();
+    // The dialog's confirm button reuses the "Skip for now" label.
+    const skipButtons = screen.getAllByRole("button", { name: "Skip for now" });
+    await user.click(skipButtons[skipButtons.length - 1]);
+
     expect(onChange).toHaveBeenCalledWith({
       providers: [],
       chatProvider: null,
       embedProvider: null,
     });
     expect(onSubmit).toHaveBeenCalled();
-    confirmSpy.mockRestore();
   });
 
-  it("skip is a no-op when the confirm is dismissed", async () => {
+  it("skip is a no-op when the confirm dialog is cancelled", async () => {
     const user = userEvent.setup();
     const onSubmit = vi.fn();
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
     renderProviderConfig({ onSubmit });
 
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onSubmit).not.toHaveBeenCalled();
-    confirmSpy.mockRestore();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("Finish stays disabled until the chosen providers pass a test", async () => {

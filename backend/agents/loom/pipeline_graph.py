@@ -83,6 +83,10 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
     async def weaver_node(state: PipelineState) -> PipelineState:
         attempts = state.get("weaver_attempts", 0)
         errors = list(state.get("errors", []))
+        # The prior attempt's note (set on a Sentinel-retry). Retired below once
+        # the retry produces a replacement, so one capture never leaves two
+        # active notes both tagged source: capture:<id>.
+        prev_note_path = state.get("note_path")
         label = "weaver" if attempts == 0 else "weaver-retry"
         async with step(label, caller="weaver"):
             weaver = get_weaver()
@@ -97,8 +101,26 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
                 return {"note": None, "errors": errors, "weaver_attempts": attempts + 1}
         if note is None:
             # Empty capture is a clean skip, not an error — leave errors as-is
-            # so the endpoint reports "Empty capture, skipped".
+            # so the endpoint reports "Empty capture, skipped". On a *retry* that
+            # failed to regenerate, the prior note_path/verdict survive in state
+            # and route_after_weaver sends us to enforce (see there).
             return {"note": None, "errors": errors, "weaver_attempts": attempts + 1}
+        # Successful retry → archive the rejected first-attempt note.
+        if attempts > 0 and prev_note_path and prev_note_path != note.file_path:
+            try:
+                from agents.loom.weaver_io import archive_note
+
+                await asyncio.to_thread(
+                    archive_note,
+                    runner._vault_root,
+                    "weaver",
+                    _resolve(prev_note_path),
+                    "Superseded by Sentinel-retry regeneration",
+                )
+            except Exception:  # noqa: BLE001 - archiving the orphan is best-effort
+                logger.warning(
+                    "Failed to archive superseded note %s", prev_note_path, exc_info=True
+                )
         if refresh_index is not None:
             refresh_index(_resolve(note.file_path))
         return {
@@ -165,9 +187,21 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
         return {"validation": validation, "errors": errors}
 
     def route_after_weaver(state: PipelineState) -> str:
-        """Short-circuit to END when Weaver produced no note (empty capture or
-        init failure) — there is nothing to link, index, validate, or archive."""
-        return "spider" if state.get("note") is not None else "end"
+        """Route after Weaver.
+
+        - Note produced → continue to spider.
+        - No note on the *first* attempt (empty capture / init failure) → END;
+          there's nothing to link, index, validate, or archive.
+        - No note on a *retry* (Weaver failed to regenerate) → enforce: the
+          prior attempt's note and its failed verdict are still in state, so
+          enforce flags the capture review_required instead of leaving it in
+          limbo (enforce must always run on the retry path).
+        """
+        if state.get("note") is not None:
+            return "spider"
+        if state.get("weaver_attempts", 0) > 1 and state.get("note_path"):
+            return "enforce"
+        return "end"
 
     def route_after_sentinel(state: PipelineState) -> str:
         """Loop back to Weaver once on a failed verdict, else enforce."""
@@ -196,7 +230,9 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
     graph.add_node("sentinel", sentinel_node)
     graph.add_node("enforce", enforce_node)
     graph.add_edge(START, "weaver")
-    graph.add_conditional_edges("weaver", route_after_weaver, {"spider": "spider", "end": END})
+    graph.add_conditional_edges(
+        "weaver", route_after_weaver, {"spider": "spider", "enforce": "enforce", "end": END}
+    )
     graph.add_edge("spider", "scribe")
     graph.add_edge("scribe", "sentinel")
     graph.add_conditional_edges(

@@ -21,8 +21,9 @@ from core.notes import parse_note_meta
 logger = logging.getLogger(__name__)
 
 _DEBOUNCE_SECONDS = 0.5
-_BATCH_REINDEX_SECONDS = 30 * 60  # 30 minutes
+_RECONCILE_SECONDS = 30 * 60  # 30 minutes
 _INDEX_TIMEOUT_SECONDS = 30
+_RECONCILE_TIMEOUT_SECONDS = 300
 _WORKER_POLL_SECONDS = 1.0
 
 
@@ -143,16 +144,25 @@ class _VaultEventHandler(FileSystemEventHandler):
             finally:
                 self._task_queue.task_done()
 
-    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> None:
-        """Run an async coroutine on the main loop, with a bounded wait."""
-        if self._loop is not None and not self._loop.is_closed():
-            future = asyncio.run_coroutine_threadsafe(coro, self._loop)
-            try:
-                future.result(timeout=_INDEX_TIMEOUT_SECONDS)
-            except Exception:
-                logger.warning("Async operation failed", exc_info=True)
-        else:
+    def _run_async(self, coro: Coroutine[Any, Any, Any]) -> bool:
+        """Run an async coroutine on the main loop, with a bounded wait.
+
+        Returns ``True`` if it completed cleanly, ``False`` if the loop was
+        unavailable or the coroutine raised/timed out. The boolean is what lets
+        ``_do_vector_index`` track real failures — previously this swallowed the
+        exception, so the failure-marking branch below was dead code and a
+        failed retry was wrongly cleared from ``_failed_paths``.
+        """
+        if self._loop is None or self._loop.is_closed():
             logger.warning("Event loop unavailable — skipping async operation")
+            return False
+        future = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        try:
+            future.result(timeout=_INDEX_TIMEOUT_SECONDS)
+        except Exception:
+            logger.warning("Async operation failed", exc_info=True)
+            return False
+        return True
 
     def _do_vector_index(self, path: Path) -> None:
         from index.indexer import get_indexer
@@ -160,16 +170,13 @@ class _VaultEventHandler(FileSystemEventHandler):
         indexer = get_indexer()
         if indexer is None:
             return
-        try:
-            self._run_async(indexer.index_note(path))
-        except Exception:
-            logger.warning("Vector index update failed for %s", path, exc_info=True)
-            with self._failed_lock:
-                self._failed_paths.add(path)
-        else:
-            # Indexed cleanly — clear any prior failure marker for this path.
-            with self._failed_lock:
+        ok = self._run_async(indexer.index_note(path))
+        with self._failed_lock:
+            if ok:
+                # Indexed cleanly — clear any prior failure marker for this path.
                 self._failed_paths.discard(path)
+            else:
+                self._failed_paths.add(path)
 
     # -- Index-drift tracking ----------------------------------------------
 
@@ -242,10 +249,16 @@ class _VaultEventHandler(FileSystemEventHandler):
         if searcher is not None:
             searcher.set_graph(graph)
 
+        # Push a live signal to any open UI so it re-fetches instead of waiting
+        # for a manual reload. Hops onto the event loop from this timer thread.
+        from core.events import VAULT_CHANGED, get_event_hub
+
+        get_event_hub().publish_threadsafe(self._loop, VAULT_CHANGED)
+
 
 _observer: BaseObserver | None = None
 _handler: _VaultEventHandler | None = None
-_batch_timer: threading.Timer | None = None
+_reconcile_timer: threading.Timer | None = None
 
 
 def failed_index_paths() -> int:
@@ -267,36 +280,42 @@ def seed_retryable(paths: list[Path]) -> None:
         _handler.queue_retry(paths)
 
 
-def _schedule_batch_reindex(
+def _schedule_reconcile(
     threads_dir: Path,
     loom_dir: Path,
     loop: asyncio.AbstractEventLoop | None = None,
 ) -> None:
-    """Schedule periodic full vector reindex."""
-    global _batch_timer
+    """Schedule a periodic *differential* index reconcile.
 
-    def _do_batch() -> None:
+    Replaces the old 30-minute full reindex (which dropped the table and
+    re-embedded every chunk — continuous embedding spend, an empty index during
+    each rebuild, and a hard wall at the timeout). ``reconcile_vault`` only
+    embeds notes missing from the store and drops orphaned chunks, so periodic
+    drift healing costs almost nothing when the vault is idle.
+    """
+    global _reconcile_timer
+
+    def _do_reconcile() -> None:
         from index.indexer import get_indexer
 
         indexer = get_indexer()
         if indexer is not None:
-            logger.info("Running scheduled batch reindex")
             try:
                 if loop is not None and not loop.is_closed():
                     future = asyncio.run_coroutine_threadsafe(
-                        indexer.reindex_vault(threads_dir), loop
+                        indexer.reconcile_vault(threads_dir), loop
                     )
-                    future.result(timeout=300)
+                    future.result(timeout=_RECONCILE_TIMEOUT_SECONDS)
                 else:
-                    logger.warning("Event loop unavailable — skipping batch reindex")
+                    logger.warning("Event loop unavailable — skipping index reconcile")
             except Exception:
-                logger.warning("Batch reindex failed", exc_info=True)
+                logger.warning("Index reconcile failed", exc_info=True)
         # Reschedule
-        _schedule_batch_reindex(threads_dir, loom_dir, loop)
+        _schedule_reconcile(threads_dir, loom_dir, loop)
 
-    _batch_timer = threading.Timer(_BATCH_REINDEX_SECONDS, _do_batch)
-    _batch_timer.daemon = True
-    _batch_timer.start()
+    _reconcile_timer = threading.Timer(_RECONCILE_SECONDS, _do_reconcile)
+    _reconcile_timer.daemon = True
+    _reconcile_timer.start()
 
 
 def start_watcher(
@@ -329,22 +348,22 @@ def start_watcher(
     _observer.daemon = True
     _observer.start()
 
-    # Start periodic batch reindex
-    _schedule_batch_reindex(threads_dir, loom_dir, loop)
+    # Start periodic differential reconcile
+    _schedule_reconcile(threads_dir, loom_dir, loop)
 
     logger.info("File watcher started for %s", threads_dir)
     return _observer
 
 
 def stop_watcher() -> None:
-    """Stop the active file watcher, worker thread, and batch reindex timer."""
-    global _observer, _handler, _batch_timer
+    """Stop the active file watcher, worker thread, and reconcile timer."""
+    global _observer, _handler, _reconcile_timer
     if _observer is not None:
         _observer.stop()
         _observer = None
     if _handler is not None:
         _handler.stop()
         _handler = None
-    if _batch_timer is not None:
-        _batch_timer.cancel()
-        _batch_timer = None
+    if _reconcile_timer is not None:
+        _reconcile_timer.cancel()
+        _reconcile_timer = None

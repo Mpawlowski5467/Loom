@@ -9,11 +9,13 @@ from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from slowapi.errors import RateLimitExceeded
+from starlette.middleware.base import RequestResponseEndpoint
+from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
 from api.exception_handlers import register_exception_handlers
@@ -24,6 +26,7 @@ from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
 from api.routers.diagnostics import router as diagnostics_router
+from api.routers.events import router as events_router
 from api.routers.graph import router as graph_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
@@ -41,6 +44,33 @@ from core.vault import get_vault_manager
 from core.watcher import stop_watcher
 
 logger = logging.getLogger(__name__)
+
+# Localhost-only hosts the API answers to by default. ``testserver`` is the
+# Host header Starlette's TestClient sends, so it must stay in the default set
+# or every test would 400 on the TrustedHostMiddleware check.
+_DEFAULT_ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*.localhost", "testserver"]
+
+# Security headers applied to every response. Kept deliberately minimal: no CSP,
+# which would risk breaking the SPA's inline/hashed bundles.
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Referrer-Policy": "no-referrer",
+}
+
+
+def _allowed_hosts() -> list[str]:
+    """Resolve the allowed Host headers for TrustedHostMiddleware.
+
+    Defaults to localhost-style hosts plus ``testserver`` (TestClient). A user
+    exposing the port can override via the ``LOOM_ALLOWED_HOSTS`` env var, a
+    comma-separated list (e.g. ``"loom.example.com,localhost"``).
+    """
+    raw = os.environ.get("LOOM_ALLOWED_HOSTS")
+    if not raw:
+        return list(_DEFAULT_ALLOWED_HOSTS)
+    hosts = [h.strip() for h in raw.split(",") if h.strip()]
+    return hosts or list(_DEFAULT_ALLOWED_HOSTS)
 
 
 @asynccontextmanager
@@ -80,6 +110,21 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# DNS-rebinding defense: reject requests whose Host header is not a known
+# localhost-style host (or a user-configured one). Without this, a malicious
+# page could rebind DNS and reach the unauthenticated localhost API.
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts())
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    """Attach minimal hardening headers to every response."""
+    response = await call_next(request)
+    for header, value in _SECURITY_HEADERS.items():
+        response.headers.setdefault(header, value)
+    return response
+
+
 register_exception_handlers(app)
 
 app.include_router(vaults_router)
@@ -98,6 +143,7 @@ app.include_router(onboarding_router)
 app.include_router(providers_router)
 app.include_router(diagnostics_router)
 app.include_router(traces_router)
+app.include_router(events_router)
 
 
 @app.get("/api/health")

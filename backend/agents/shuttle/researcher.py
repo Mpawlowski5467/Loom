@@ -14,7 +14,8 @@ from pydantic import ValidationError
 
 from agents.base import BaseAgent
 from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
+from core.notes import generate_id, now_iso
+from core.vault_io import write_note
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -37,6 +38,17 @@ thorough answer. Rules:
 - Organize your answer with clear structure if it's complex
 - Do not invent facts — only use information from the provided context
 """
+
+
+def _assert_capture_path(path: Path) -> None:
+    """Enforce the Shuttle tier boundary: writes must land under captures/.
+
+    ``vault_io.write_note`` already constrains writes to ``threads/*.md``;
+    this narrows it to ``threads/captures/`` specifically, documenting and
+    enforcing in code that Shuttle agents never touch note folders directly.
+    """
+    if "captures" not in path.parts:
+        raise ValueError(f"Shuttle agents may only write under captures/, got {path}")
 
 
 @dataclass
@@ -237,7 +249,8 @@ class Researcher(BaseAgent):
 
         filename = f"research-{capture_id}.md"
         path = captures_dir / filename
-        atomic_write_text(path, note_to_file_content(meta, body))
+        _assert_capture_path(path)
+        write_note(self._vault_root, path, meta, body)
         return capture_id, path
 
 

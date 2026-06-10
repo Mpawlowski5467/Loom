@@ -124,7 +124,7 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 - Editor: custom markdown renderer ([`frontend/src/editor/renderMarkdown.tsx`](../frontend/src/editor/renderMarkdown.tsx)) with `[[wikilink]]` support and inline marks
 - Create note: modal → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
-- Auto-refresh: 5-10s interval
+- Live refresh: the UI holds an SSE stream (`GET /api/events/stream`) and re-fetches notes/captures (one debounced reload per burst) when the file watcher emits a `vault-changed` event, so agent/external edits reach an open UI without a manual reload. The Board additionally polls agent activity on a short, tab/visibility-gated interval.
 - Bidirectional sync: graph ↔ file tree
 - Graph display panel: labels/size/spacing/edge-thickness/breathing/travelers, persisted to localStorage
 - Board: two modes — cards (agent grid) and pulse (live activity)

@@ -129,12 +129,14 @@ async def send_message(
     role = "assistant" if body.agent in SHUTTLE_AGENTS else "council"
     assistant_msg = chat.save_message(body.agent, role, reply.text)
 
-    # The aggregator trace is the *last* one we recorded (since fan-out
-    # contributions complete before it). For shuttle agents the last trace
-    # is just the agent's call.
+    # Resolve the "raw call" trace. For the council, the aggregator call is
+    # tagged ``council`` — filter by it so a concurrent request's trace can't
+    # be mis-attributed here. Shuttle agents don't set a caller, so fall back
+    # to the most recent trace for them.
     from core.traces import get_trace_store
 
-    recent = get_trace_store().list(limit=1)
+    caller = None if body.agent in SHUTTLE_AGENTS else "council"
+    recent = get_trace_store().list(limit=1, caller=caller)
     trace_id = recent[0].id if recent else ""
 
     return SendMessageResponse(
@@ -153,6 +155,9 @@ def get_history(
 ) -> ChatHistoryResponse:
     """Load recent chat history for an agent."""
     from agents.chat import get_chat_history
+
+    if agent not in ALLOWED_TARGETS:
+        raise HTTPException(status_code=400, detail=f"Invalid agent: {agent!r}")
 
     chat = get_chat_history()
     if chat is None:
@@ -200,6 +205,9 @@ def list_sessions(
 ) -> ChatSessionList:
     """List available chat session dates for an agent."""
     from agents.chat import get_chat_history
+
+    if agent not in ALLOWED_TARGETS:
+        raise HTTPException(status_code=400, detail=f"Invalid agent: {agent!r}")
 
     chat = get_chat_history()
     if chat is None:
@@ -393,11 +401,15 @@ async def _ask_agent(
     """Call the chat provider in one agent's voice. Errors are captured, not raised."""
     from core.traces import get_trace_store
 
+    caller = f"council:{agent}"
     messages = [*history, {"role": "user", "content": message}]
     try:
-        set_caller(f"council:{agent}")
+        set_caller(caller)
         text = await provider.chat(messages=messages, system=persona)
-        recent = get_trace_store().list(limit=1)
+        # Filter by this agent's own caller label: the council fans out
+        # concurrently, so the globally-most-recent trace may belong to a
+        # sibling agent. The caller filter pins it to *this* agent's call.
+        recent = get_trace_store().list(limit=1, caller=caller)
         trace_id = recent[0].id if recent else ""
         return AgentContribution(agent=agent, content=text, trace_id=trace_id)
     except (ProviderError, ProviderConfigError) as exc:

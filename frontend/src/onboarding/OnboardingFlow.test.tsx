@@ -69,7 +69,11 @@ describe("OnboardingFlow", () => {
     await user.click(screen.getByRole("button", { name: "Begin →" }));
     await user.click(screen.getByRole("button", { name: "Next →" }));
     await user.click(screen.getByRole("button", { name: "Next →" }));
+    // "Skip for now" opens a confirm dialog (it replaced window.confirm); the
+    // dialog's confirm button reuses the label, so click the last match.
     await user.click(screen.getByRole("button", { name: "Skip for now" }));
+    const skipButtons = screen.getAllByRole("button", { name: "Skip for now" });
+    await user.click(skipButtons[skipButtons.length - 1]);
 
     await waitFor(() =>
       expect(completeOnboardingMock).toHaveBeenCalledWith({

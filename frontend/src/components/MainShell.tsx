@@ -109,7 +109,9 @@ export function MainShell(): ReactNode {
   return (
     <div className="app">
       {showSplash && <Splash onDone={dismissSplash} />}
-      <Nav />
+      <ErrorBoundary label="the navigation bar">
+        <Nav />
+      </ErrorBoundary>
       {providerMissing && <ProviderBanner />}
       {offline && <OfflineBanner />}
       {!offline && unindexedCount > 0 && (
@@ -123,7 +125,9 @@ export function MainShell(): ReactNode {
         </div>
       ) : (
         <div className="app-main">
-          <Tree />
+          <ErrorBoundary label="the file tree">
+            <Tree />
+          </ErrorBoundary>
           <div className="workspace">
             <div className="workspace-main">
               {/* Keyed by tab so a view that throws is contained and switching
@@ -144,7 +148,11 @@ export function MainShell(): ReactNode {
           {offline ? "offline" : "local-first"}
         </span>
       </footer>
-      {paletteOpen && <Palette />}
+      {paletteOpen && (
+        <ErrorBoundary label="the command palette" resetKey={paletteOpen}>
+          <Palette />
+        </ErrorBoundary>
+      )}
       {newNoteOpen && (
         <NewNoteModal
           initialTitle={newNoteTitle ?? ""}
@@ -170,7 +178,9 @@ export function MainShell(): ReactNode {
           }}
         />
       )}
-      <Toasts />
+      <ErrorBoundary label="notifications">
+        <Toasts />
+      </ErrorBoundary>
       <LoomRibbon />
     </div>
   );

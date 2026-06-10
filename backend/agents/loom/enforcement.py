@@ -45,8 +45,12 @@ def enforce_verdict(
     if verdict == "failed":
         outcome.review_required = True
         if note_path is not None:
-            _annotate_frontmatter(note_path, {"review_required": True, "review_reasons": reasons})
-        _annotate_frontmatter(capture_path, {"review_required": True, "review_reasons": reasons})
+            annotate_frontmatter(
+                vault_dir, note_path, {"review_required": True, "review_reasons": reasons}
+            )
+        annotate_frontmatter(
+            vault_dir, capture_path, {"review_required": True, "review_reasons": reasons}
+        )
         return outcome
 
     # passed or warning (or no sentinel) → archive the capture.
@@ -60,18 +64,24 @@ def enforce_verdict(
     if verdict == "warning":
         outcome.flagged = True
         if note_path is not None:
-            _annotate_frontmatter(note_path, {"flagged": True, "flag_reasons": reasons})
+            annotate_frontmatter(vault_dir, note_path, {"flagged": True, "flag_reasons": reasons})
     return outcome
 
 
-def _annotate_frontmatter(path: Path, fields: dict) -> None:
-    """Read a note, merge ``fields`` into frontmatter, write atomically."""
+def annotate_frontmatter(vault_dir: Path, path: Path, fields: dict) -> None:
+    """Read a note, merge ``fields`` into frontmatter, write through ``vault_io``.
+
+    Unknown user frontmatter keys are preserved (carried in ``Note.extra`` and
+    re-emitted by ``build_frontmatter``). Best-effort: a failure is logged,
+    never raised — annotation matters less than the user-visible note flow.
+    """
     try:
-        from core.notes import atomic_write_text, build_frontmatter, parse_note
+        from core.notes import parse_note
+        from core.vault_io import write_note
 
         note = parse_note(path)
         meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
         meta.update(fields)
-        atomic_write_text(path, build_frontmatter(meta) + "\n" + note.body)
+        write_note(vault_dir, path, meta, note.body)
     except Exception:
         logger.warning("Failed to annotate %s", path, exc_info=True)

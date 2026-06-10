@@ -286,6 +286,35 @@ class TestGetHistory:
         assert data["agent"] == "researcher"
         assert len(data["messages"]) == 1
 
+    def test_get_history_path_traversal_returns_400(
+        self, client: TestClient, vault_manager, note_index, tmp_path: Path
+    ) -> None:
+        """GET /api/chat/history with a traversal agent name returns 400.
+
+        The agent param must be validated against ALLOWED_TARGETS so a name
+        like ``../../x`` can't escape the vault before any filesystem access.
+        """
+        _seed_notes(vault_manager, note_index, [])
+        chat = _init_chat(tmp_path)
+
+        with patch("agents.chat.get_chat_history", return_value=chat):
+            resp = client.get("/api/chat/history", params={"agent": "../../x"})
+
+        assert resp.status_code == 400
+        assert "Invalid agent" in resp.json()["detail"]
+
+    def test_get_history_unknown_agent_returns_400(
+        self, client: TestClient, vault_manager, note_index, tmp_path: Path
+    ) -> None:
+        """GET /api/chat/history with an unknown (but harmless) agent returns 400."""
+        _seed_notes(vault_manager, note_index, [])
+        chat = _init_chat(tmp_path)
+
+        with patch("agents.chat.get_chat_history", return_value=chat):
+            resp = client.get("/api/chat/history", params={"agent": "weaver"})
+
+        assert resp.status_code == 400
+
     def test_get_history_not_initialized_returns_503(
         self, client: TestClient, vault_manager, note_index
     ) -> None:
@@ -390,6 +419,19 @@ class TestListSessions:
         assert resp.status_code == 200
         assert resp.json()["sessions"] == []
 
+    def test_list_sessions_path_traversal_returns_400(
+        self, client: TestClient, vault_manager, note_index, tmp_path: Path
+    ) -> None:
+        """GET /api/chat/sessions with a traversal agent name returns 400."""
+        _seed_notes(vault_manager, note_index, [])
+        chat = _init_chat(tmp_path)
+
+        with patch("agents.chat.get_chat_history", return_value=chat):
+            resp = client.get("/api/chat/sessions", params={"agent": "../../x"})
+
+        assert resp.status_code == 400
+        assert "Invalid agent" in resp.json()["detail"]
+
     def test_list_sessions_not_initialized_returns_503(
         self, client: TestClient, vault_manager, note_index
     ) -> None:
@@ -400,6 +442,66 @@ class TestListSessions:
             resp = client.get("/api/chat/sessions")
 
         assert resp.status_code == 503
+
+
+# ---------------------------------------------------------------------------
+# _ask_agent — per-agent trace attribution under concurrency
+# ---------------------------------------------------------------------------
+
+
+class TestAskAgentTraceAttribution:
+    @pytest.mark.asyncio
+    async def test_trace_id_filters_by_own_caller(self) -> None:
+        """_ask_agent picks the trace tagged with ITS caller, not the last one.
+
+        The council fans out concurrently, so the globally-most-recent trace
+        may belong to a sibling agent. _ask_agent must filter by its own
+        ``council:<agent>`` caller label so each contribution gets its own id.
+        """
+        from api.routers.chat import _ask_agent
+        from core.traces import TraceRecord, get_caller, get_trace_store
+
+        store = get_trace_store()
+
+        async def recording_chat(messages, system=""):  # noqa: ARG001
+            # Mimic TracedProvider: record a trace tagged with the live caller.
+            store.add(
+                TraceRecord(
+                    provider="fake",
+                    model="m",
+                    messages=messages,
+                    system=system,
+                    response="ok",
+                    duration_ms=1,
+                    caller=get_caller(),
+                )
+            )
+            return "ok"
+
+        provider = MagicMock()
+        provider.chat = recording_chat
+
+        # Simulate a sibling agent's trace landing in the store *after* ours
+        # would be: ask weaver (records council:weaver), then inject a newer
+        # sibling trace, then assert weaver's contribution still points at its
+        # own trace — not the newer sibling one.
+        weaver = await _ask_agent(provider, "weaver", "persona", [], "hi")
+        store.add(
+            TraceRecord(
+                provider="fake",
+                model="m",
+                messages=[],
+                system="",
+                response="sibling",
+                duration_ms=1,
+                caller="council:spider",
+            )
+        )
+
+        assert weaver.trace_id  # got an id
+        picked = store.get(weaver.trace_id)
+        assert picked is not None
+        assert picked.caller == "council:weaver"
 
 
 # ---------------------------------------------------------------------------
@@ -557,3 +659,65 @@ class TestCouncilStream:
         assert done_data["assistant_text"] == "Hello world"
         # The aggregated reply was persisted to the council history.
         assert chat.saved and chat.saved[-1][1] == "council"
+
+    @pytest.mark.asyncio
+    async def test_upstream_stream_closed_on_client_disconnect(self) -> None:
+        """Cancelling the SSE generator mid-stream closes the upstream stream.
+
+        A disconnected client cancels our ``async for``; the generator's
+        ``finally`` must call ``aclose()`` on the provider's stream so the
+        upstream connection isn't leaked.
+        """
+        from api.routers.chat import _AGGREGATOR_SYSTEM, _COUNCIL_PERSONAS, _ask_agent
+        from api.routers.chat_stream import council_stream
+
+        closed = {"value": False}
+
+        async def good_chat(messages, system=""):  # noqa: ARG001
+            return "agent take"
+
+        class _TrackedStream:
+            """Async generator stand-in that records when it's closed."""
+
+            def __init__(self) -> None:
+                self._tokens = iter(("Hello", " ", "world", "!"))
+
+            def __aiter__(self) -> "_TrackedStream":
+                return self
+
+            async def __anext__(self) -> str:
+                try:
+                    return next(self._tokens)
+                except StopIteration:
+                    raise StopAsyncIteration from None
+
+            async def aclose(self) -> None:
+                closed["value"] = True
+
+        def chat_stream(messages, system=""):  # noqa: ARG001
+            return _TrackedStream()
+
+        provider = MagicMock()
+        provider.chat = good_chat
+        provider.chat_stream = chat_stream
+
+        chat = _FakeChat()
+        with patch("core.providers.get_chat_provider", return_value=provider):
+            gen = council_stream(
+                "status?",
+                chat,
+                personas=_COUNCIL_PERSONAS,
+                aggregator_system=_AGGREGATOR_SYSTEM,
+                ask_agent=_ask_agent,
+            )
+            # Pull frames until the first streamed token, then simulate the
+            # client disconnecting by closing the outer generator.
+            saw_token = False
+            async for frame in gen:
+                if frame.startswith("event: token"):
+                    saw_token = True
+                    break
+            assert saw_token
+            await gen.aclose()
+
+        assert closed["value"] is True

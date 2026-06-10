@@ -5,7 +5,9 @@ from __future__ import annotations
 import contextvars
 import json
 import logging
+import re
 import secrets
+import shutil
 import threading
 from collections import deque
 from datetime import UTC, datetime
@@ -15,6 +17,10 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 _MAX_TRACES = 500
+
+# Disk traces live under ``<traces_dir>/YYYY-MM-DD/``; retention deletes only
+# directories whose name matches this exact pattern, never anything else.
+_DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
 
 class TraceRecord:
@@ -137,16 +143,27 @@ class TraceStore:
             logger.warning("Failed to persist run summary %s", run_id, exc_info=True)
 
     def list_run_summaries(self, limit: int = 50) -> list[dict[str, Any]]:
-        """Return recent run summaries from disk, newest first."""
+        """Return recent run summaries from disk, newest first.
+
+        Run files are named ``run-<random-hex>.json``, so their filenames carry
+        no ordering. Candidate files are sorted by modification time (newest
+        first) *before* truncating to ``limit`` so the newest runs survive the
+        cut; the surviving summaries are then re-sorted by their ``started``
+        field for the final most-recent-first ordering the Runs view expects.
+        """
         if self._disk_dir is None or not self._disk_dir.exists():
             return []
-        files: list[Path] = []
+        files: list[tuple[float, Path]] = []
         for date_dir in self._disk_dir.iterdir():
             if date_dir.is_dir():
-                files.extend(date_dir.glob("run-*.json"))
-        files.sort(key=lambda p: p.name, reverse=True)
+                for path in date_dir.glob("run-*.json"):
+                    try:
+                        files.append((path.stat().st_mtime, path))
+                    except OSError:
+                        continue
+        files.sort(key=lambda item: item[0], reverse=True)
         summaries: list[dict[str, Any]] = []
-        for path in files:
+        for _mtime, path in files:
             try:
                 summaries.append(json.loads(path.read_text(encoding="utf-8")))
             except (OSError, json.JSONDecodeError):
@@ -177,6 +194,46 @@ _store = TraceStore()
 
 def get_trace_store() -> TraceStore:
     return _store
+
+
+def prune_old_traces(traces_dir: Path, keep_days: int = 30) -> int:
+    """Delete trace date-directories older than ``keep_days``.
+
+    The on-disk trace store (per-call JSON files + run summaries) grows
+    unboundedly, so this should be called periodically by a scheduler (it has
+    no natural call site here — invoking it on every :meth:`TraceStore.add`
+    would be far too hot). It is intentionally conservative: it only removes
+    directories whose name is an exact ``YYYY-MM-DD`` date strictly older than
+    the cutoff, ignores everything else, and swallows per-directory errors so a
+    single un-removable directory never aborts the sweep.
+
+    Args:
+        traces_dir: Root directory holding ``YYYY-MM-DD`` trace subdirectories.
+        keep_days: Number of days to retain (today counts as day 0). Directories
+            dated more than this many days before today are removed.
+
+    Returns:
+        The number of date-directories removed.
+    """
+    if keep_days < 0 or not traces_dir.exists():
+        return 0
+    today = datetime.now(UTC).date()
+    removed = 0
+    for child in traces_dir.iterdir():
+        if not child.is_dir() or not _DATE_DIR_RE.match(child.name):
+            continue
+        try:
+            dir_date = datetime.strptime(child.name, "%Y-%m-%d").date()
+        except ValueError:
+            continue
+        if (today - dir_date).days <= keep_days:
+            continue
+        try:
+            shutil.rmtree(child)
+            removed += 1
+        except OSError:
+            logger.warning("Failed to prune trace dir %s", child, exc_info=True)
+    return removed
 
 
 # Caller tagging uses ContextVar (not threading.local) because Loom runs on

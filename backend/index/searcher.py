@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
@@ -73,10 +74,14 @@ class VectorSearcher:
 
         # Vector search — fetch more than limit so post-filters still yield enough
         fetch_k = limit * 4
-        db = self._indexer.get_db()
-        table = db.open_table("chunks")
 
-        raw_results = table.search(query_vec).limit(fetch_k).to_list()
+        def _vector_query() -> list[dict[str, Any]]:
+            # LanceDB open/search/to_list are blocking — keep them off the loop.
+            db = self._indexer.get_db()
+            table = db.open_table("chunks")
+            return table.search(query_vec).limit(fetch_k).to_list()
+
+        raw_results = await asyncio.to_thread(_vector_query)
 
         if not raw_results:
             return []

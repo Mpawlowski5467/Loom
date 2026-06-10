@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RefObject } from "react";
+import type { Note } from "../../../data/types";
 import { useApp } from "../../../context/app-ctx";
 import {
   archiveTreePath,
@@ -17,13 +18,58 @@ import {
 } from "./treeModel";
 
 /**
+ * Drop archived note(s) from app state after a successful ``archiveTreePath``.
+ *
+ * Tree paths are relative to ``threads/`` — the same form ``notePathOf`` yields
+ * — so resolution matches on that. A file archive comes with the exact
+ * ``noteId`` from the context menu (the most reliable signal); a folder archive
+ * has no id, so every note whose path sits under ``<path>/`` is removed.
+ *
+ * @returns the ids that were removed, so the caller can react when the active
+ *   note was one of them.
+ */
+function removeArchivedNotes(
+  notes: Note[],
+  path: string,
+  noteId: string | undefined,
+  removeNote: (id: string) => void,
+): Set<string> {
+  const removed = new Set<string>();
+
+  // File archive: trust the explicit id, falling back to a path match for
+  // robustness (e.g. an id that no longer resolves cleanly).
+  if (noteId) {
+    removed.add(noteId);
+  } else {
+    const direct = notes.find((n) => notePathOf(n) === path);
+    if (direct) removed.add(direct.id);
+  }
+
+  // Folder archive: every note whose path is within the archived folder.
+  const prefix = `${path}/`;
+  for (const note of notes) {
+    if (notePathOf(note).startsWith(prefix)) removed.add(note.id);
+  }
+
+  for (const id of removed) removeNote(id);
+  return removed;
+}
+
+/**
  * All the imperative tree interactions — new folder, drag-to-move, and the
  * context menu's rename / archive — plus their shared transient state. Kept out
  * of the Tree component so the view stays focused on rendering.
  */
 export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
-  const { notes, currentNoteId, addFolder, pushToast, updateNote, setTab } =
-    useApp();
+  const {
+    notes,
+    currentNoteId,
+    addFolder,
+    pushToast,
+    updateNote,
+    removeNote,
+    setTab,
+  } = useApp();
 
   // New-folder flow.
   const [creating, setCreating] = useState(false);
@@ -187,8 +233,12 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
       return;
     try {
       await archiveTreePath(path);
+      // The backend moved the note(s) to threads/.archive/, but app state is
+      // only loaded once per vault — drop the archived note(s) here so the tree,
+      // graph, backlinks, and palette don't keep pointing at moved files.
+      const removed = removeArchivedNotes(notes, path, noteId, removeNote);
       pushToast({ icon: "📦", agent: "archivist", body: `Archived ${last}` });
-      if (noteId && currentNoteId === noteId) setTab("graph");
+      if (currentNoteId && removed.has(currentNoteId)) setTab("graph");
     } catch (err) {
       pushToast({
         icon: "⚠",

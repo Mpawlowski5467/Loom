@@ -1,11 +1,14 @@
 """Notes CRUD API routes."""
 
+import asyncio
 import logging
 import shutil
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
+from agents.file_locks import path_lock
 from core.note_index import NoteIndex, get_note_index
 from core.notes import (
     Note,
@@ -19,6 +22,8 @@ from core.notes import (
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
+from core.vault_io import VaultIOError
+from core.vault_io import write_note as vault_write_note
 
 logger = logging.getLogger(__name__)
 
@@ -44,12 +49,26 @@ class UpdateNoteRequest(BaseModel):
     tags: list[str] | None = None
     type: str | None = None
     title: str | None = None
+    # Optimistic concurrency: the ``modified`` timestamp the client last saw.
+    # When present and stale (the note changed underneath — an agent edit or
+    # another tab), the update is rejected with 409 instead of silently
+    # clobbering the other write. Omit for last-write-wins (legacy clients).
+    base_modified: str | None = None
 
 
 class NoteListResponse(BaseModel):
     """Paginated list of note metadata."""
 
     notes: list[NoteMeta]
+    total: int
+    offset: int
+    limit: int
+
+
+class BulkNotesResponse(BaseModel):
+    """Paginated list of full notes (frontmatter + body)."""
+
+    notes: list[Note]
     total: int
     offset: int
     limit: int
@@ -71,6 +90,39 @@ def list_notes(
     total = len(all_metas)
     page = all_metas[offset : offset + limit]
     return NoteListResponse(notes=page, total=total, offset=offset, limit=limit)
+
+
+@router.get("/bulk")
+@limiter.limit(READ_LIMIT)
+async def list_notes_bulk(
+    request: Request,  # noqa: ARG001 — required by slowapi
+    offset: int = Query(0, ge=0),
+    limit: int = Query(200, ge=1, le=1000),
+    index: NoteIndex = Depends(get_note_index),  # noqa: B008
+) -> BulkNotesResponse:
+    """List full notes (frontmatter + body) in one paginated request.
+
+    Lets the frontend hydrate the whole vault without N+1 ``GET /{note_id}``
+    calls that hammer the per-IP read limiter and silently drop notes past the
+    cap. Bodies are read from disk off the event loop; an unreadable note is
+    skipped rather than failing the page.
+    """
+    all_metas = sorted(index.all_metas(), key=lambda m: m.title.lower())
+    total = len(all_metas)
+    page = all_metas[offset : offset + limit]
+
+    def _read_page() -> list[Note]:
+        notes: list[Note] = []
+        for meta in page:
+            path = Path(meta.file_path)
+            try:
+                notes.append(parse_note(path))
+            except (OSError, ValueError):
+                logger.warning("Skipping unreadable note in bulk load: %s", path)
+        return notes
+
+    notes = await asyncio.to_thread(_read_page)
+    return BulkNotesResponse(notes=notes, total=total, offset=offset, limit=limit)
 
 
 @router.get("/{note_id}")
@@ -118,9 +170,14 @@ async def create_note(
         except Exception:
             logger.warning("Weaver create_from_modal failed, falling back", exc_info=True)
 
-    # Direct creation fallback (no Weaver or Weaver failed)
+    # Direct creation fallback (no Weaver or Weaver failed).
     tdir = vm.active_threads_dir()
-    target_dir = tdir / folder
+    # Containment guard (H1): ``folder`` is attacker-influenced and was joined
+    # straight into the path, so ``../../tmp`` could write outside the vault.
+    # Resolve and require the target stays under threads/.
+    target_dir = (tdir / folder).resolve()
+    if not target_dir.is_relative_to(tdir.resolve()):
+        raise HTTPException(status_code=400, detail=f"Invalid folder: {folder!r}")
     target_dir.mkdir(parents=True, exist_ok=True)
 
     note_id = generate_id()
@@ -148,7 +205,12 @@ async def create_note(
     # Mirrors weaver_io.write_note's collision handling.
     if file_path.exists():
         file_path = target_dir / f"{stem}-{note_id}.md"
-    atomic_write_text(file_path, note_to_file_content(meta, body.content))
+    # Route through the vault_io chokepoint so the write is re-validated against
+    # the threads/ boundary (defense in depth behind the folder check above).
+    try:
+        vault_write_note(vm.active_vault_dir(), file_path, meta, body.content)
+    except VaultIOError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     # Eagerly update the index so the new note is immediately findable
     index.refresh_file(file_path)
@@ -158,56 +220,70 @@ async def create_note(
 
 @router.put("/{note_id}")
 @limiter.limit(WRITE_LIMIT)
-def update_note(
+async def update_note(
     request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str,
     body: UpdateNoteRequest,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> Note:
-    """Update a note's body, tags, or type."""
+    """Update a note's body, tags, or type.
+
+    Serializes against concurrent agent edits (Spider/Scribe) via the shared
+    ``path_lock`` and supports optimistic concurrency through
+    ``base_modified``: if the note changed since the client loaded it, the
+    update is rejected with 409 rather than silently dropping the other edit.
+    """
     path = index.get_path_by_id(note_id)
     if path is None or not path.exists():
         raise HTTPException(status_code=404, detail=f"Note '{note_id}' not found")
 
-    note = parse_note(path)
-    ts = now_iso()
+    # Hold the per-path lock across the whole read-modify-write so a racing
+    # agent backlink insertion can't be lost (and vice versa).
+    async with path_lock(path):
+        note = parse_note(path)
 
-    # Build updated meta dict from current note
-    meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
-    meta["modified"] = ts
+        if body.base_modified is not None and body.base_modified != note.modified:
+            raise HTTPException(
+                status_code=409,
+                detail="Note was modified since it was loaded; reload and retry.",
+            )
 
-    if body.tags is not None:
-        meta["tags"] = body.tags
-    if body.type is not None:
-        meta["type"] = body.type
-    title_changed = body.title is not None and body.title.strip() != note.title
-    if title_changed:
-        meta["title"] = body.title.strip() if body.title else note.title
+        ts = now_iso()
+        meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
+        meta["modified"] = ts
 
-    meta["history"].append(
-        {"action": "edited", "by": "user", "at": ts, "reason": "Updated via API"},
-    )
+        if body.tags is not None:
+            meta["tags"] = body.tags
+        if body.type is not None:
+            meta["type"] = body.type
+        title_changed = body.title is not None and body.title.strip() != note.title
+        if title_changed:
+            meta["title"] = body.title.strip() if body.title else note.title
 
-    new_body = body.body if body.body is not None else note.body
-    atomic_write_text(path, note_to_file_content(meta, new_body))
+        meta["history"].append(
+            {"action": "edited", "by": "user", "at": ts, "reason": "Updated via API"},
+        )
 
-    # If the title changed, rename the file to match the new kebab stem.
-    if title_changed:
-        new_stem = to_kebab(meta["title"]) or path.stem
-        new_path = path.with_name(f"{new_stem}.md")
-        if new_path != path:
-            if new_path.exists():
-                raise HTTPException(
-                    status_code=409,
-                    detail=f"A note already exists at {new_path.name}",
-                )
-            path.rename(new_path)
-            index.remove_file(path)
-            path = new_path
+        new_body = body.body if body.body is not None else note.body
+        vault_write_note(vm.active_vault_dir(), path, meta, new_body)
 
-    index.refresh_file(path)
+        # If the title changed, rename the file to match the new kebab stem.
+        if title_changed:
+            new_stem = to_kebab(meta["title"]) or path.stem
+            new_path = path.with_name(f"{new_stem}.md")
+            if new_path != path:
+                if new_path.exists():
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"A note already exists at {new_path.name}",
+                    )
+                path.rename(new_path)
+                index.remove_file(path)
+                path = new_path
 
-    return parse_note(path)
+        index.refresh_file(path)
+        return parse_note(path)
 
 
 @router.delete("/{note_id}")

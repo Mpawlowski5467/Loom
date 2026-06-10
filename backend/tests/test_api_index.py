@@ -1,8 +1,11 @@
 """Tests for the index API routes in api/routers/index.py."""
 
+import asyncio
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 from starlette.testclient import TestClient
+
+from api.routers import index as index_router
 
 # ---------------------------------------------------------------------------
 # GET /api/index/status
@@ -188,3 +191,45 @@ class TestRebuild:
         assert resp.status_code == 200
         data = resp.json()
         assert data["chunks_indexed"] == 10
+
+
+# ---------------------------------------------------------------------------
+# Reindex serialization
+# ---------------------------------------------------------------------------
+
+
+class TestReindexLock:
+    def test_lock_exists(self) -> None:
+        """The module exposes an asyncio.Lock guarding the drop/create cycle."""
+        assert isinstance(index_router._reindex_lock, asyncio.Lock)
+
+    def test_concurrent_reindex_serialized(self) -> None:
+        """A second reindex waits for the first; their bodies never overlap."""
+
+        async def run() -> int:
+            active = 0
+            max_active = 0
+
+            async def fake_reindex(_threads_dir: object) -> int:
+                nonlocal active, max_active
+                active += 1
+                max_active = max(max_active, active)
+                await asyncio.sleep(0)  # yield so a racing call could interleave
+                active -= 1
+                return 1
+
+            mock_indexer = MagicMock()
+            mock_indexer.reindex_vault = AsyncMock(side_effect=fake_reindex)
+            vm = MagicMock()
+            vm.active_threads_dir.return_value = "threads"
+
+            with patch("api.routers.index.get_indexer", return_value=mock_indexer):
+                await asyncio.gather(
+                    index_router._do_reindex(vm),
+                    index_router._do_reindex(vm),
+                )
+            return max_active
+
+        max_active = asyncio.run(run())
+        # The lock means at most one reindex body runs at a time.
+        assert max_active == 1

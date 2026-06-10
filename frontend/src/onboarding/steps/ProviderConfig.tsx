@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
+import { ConfirmModal } from "../../components/ConfirmModal";
 import { testProvider } from "../../api/providers";
 import type {
   OnboardingProviderPayload,
@@ -113,6 +114,8 @@ export function ProviderConfig({
     Record<string, TestProviderResponse | null>
   >({});
   const [testing, setTesting] = useState<string | null>(null);
+  // Accessible confirm dialog (replaces window.confirm) for skipping setup.
+  const [confirmSkip, setConfirmSkip] = useState(false);
 
   const togglePicked = (opt: ProviderOption) => {
     const exists = providers.find((p) => p.name === opt.name);
@@ -173,12 +176,9 @@ export function ProviderConfig({
     }
   };
 
-  const skip = () => {
-    const ok = window.confirm(
-      "Skip provider setup? Agents, search, and graph linking stay offline " +
-        "until you add a provider in Settings → Providers.",
-    );
-    if (!ok) return;
+  // Runs after the user confirms in the modal: clear any drafted providers and
+  // submit so onboarding finishes in the offline (no-provider) state.
+  const skipConfirmed = () => {
     onChange({ providers: [], chatProvider: null, embedProvider: null });
     onSubmit();
   };
@@ -382,7 +382,7 @@ export function ProviderConfig({
         <button
           className="btn btn-md"
           type="button"
-          onClick={skip}
+          onClick={() => setConfirmSkip(true)}
           disabled={submitting}
         >
           Skip for now
@@ -395,6 +395,17 @@ export function ProviderConfig({
           {submitting ? "Saving…" : "Finish →"}
         </button>
       </div>
+
+      {confirmSkip && (
+        <ConfirmModal
+          title="Skip provider setup?"
+          body="Agents, search, and graph linking stay offline until you add a provider in Settings → Providers."
+          confirmLabel="Skip for now"
+          destructive={false}
+          onConfirm={skipConfirmed}
+          onClose={() => setConfirmSkip(false)}
+        />
+      )}
     </div>
   );
 }

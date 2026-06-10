@@ -78,6 +78,23 @@ def init_agents(vault_dir: Path) -> None:
         logger.warning("AgentRunner initialization failed", exc_info=True)
 
 
+def reinit_providers_dependent_services(vault_dir: Path) -> None:
+    """Rebuild provider-holding services after the provider registry is reset.
+
+    Saving provider settings calls ``reset_registry()``, which ``close()``s the
+    cached providers. Agents (``BaseAgent._chat_provider``) and the
+    indexer/searcher captured references to those now-closed clients at init
+    time, so without this their next LLM/embedding call fails until a restart.
+    Re-running the inits rebinds every service to the fresh registry.
+    Best-effort: each sub-init logs and swallows its own failure.
+    """
+    if not vault_dir.exists():
+        return
+    init_vector_index(vault_dir)
+    init_agents(vault_dir)
+    logger.info("Provider-dependent services reinitialized for %s", vault_dir)
+
+
 def init_chat(vault_dir: Path) -> None:
     """Initialize chat persistence for ``vault_dir``."""
     try:

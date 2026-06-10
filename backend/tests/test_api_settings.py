@@ -258,6 +258,7 @@ class TestSaveProviders:
         with (
             patch("api.routers.settings.settings") as mock_settings,
             patch("api.routers.settings.reset_registry", new_callable=AsyncMock) as mock_reset,
+            patch("api.runtime.reinit_providers_dependent_services"),
         ):
             mock_settings.config_path = cfg_path
 
@@ -277,6 +278,41 @@ class TestSaveProviders:
             )
 
         mock_reset.assert_called_once()
+
+    def test_reinit_services_called_after_reset(self, client: TestClient, tmp_path: Path) -> None:
+        """Saving providers rebuilds provider-dependent services post-reset.
+
+        ``reset_registry()`` closes the cached providers that agents and the
+        indexer/searcher captured at init time. The route must re-init those
+        services against the fresh registry, otherwise their next LLM/embedding
+        call fails until a restart.
+        """
+        cfg_path = _setup_config(tmp_path)
+
+        with (
+            patch("api.routers.settings.settings") as mock_settings,
+            patch("api.routers.settings.reset_registry", new_callable=AsyncMock),
+            patch("api.runtime.reinit_providers_dependent_services") as mock_reinit,
+        ):
+            mock_settings.config_path = cfg_path
+
+            resp = client.post(
+                "/api/settings/providers",
+                json={
+                    "providers": [
+                        {
+                            "name": "openai",
+                            "type": "cloud",
+                            "api_key": "sk-test",
+                            "chat_model": "gpt-4o",
+                            "is_default": True,
+                        }
+                    ]
+                },
+            )
+
+        assert resp.status_code == 200
+        mock_reinit.assert_called_once()
 
     def test_invalid_body_422(self, client: TestClient) -> None:
         """Missing required `providers` key returns 422."""

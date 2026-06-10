@@ -102,8 +102,8 @@ Task prompts: @docs/tasks/
 - Standup `generate()` works; no external calendar link yet
 
 **Known gaps**
-- Provider API keys stored in plain text in `config.yaml` (no encryption/keychain yet)
-- No auth layer on the API (safe on localhost; do not expose the port as-is)
+- Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
+- No auth layer on the API (safe on localhost; do not expose the port as-is). `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
 - AppContext still hosts most global state; only `useAgentPolling` is split out so far
 - Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested
 

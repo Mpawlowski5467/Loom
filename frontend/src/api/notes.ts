@@ -27,6 +27,13 @@ export interface NoteListResponse {
   limit: number;
 }
 
+export interface BulkNotesResponse {
+  notes: NoteRecord[];
+  total: number;
+  offset: number;
+  limit: number;
+}
+
 export interface CreateNotePayload {
   title: string;
   type?: string;
@@ -57,73 +64,43 @@ export function getNote(id: string, signal?: AbortSignal): Promise<NoteRecord> {
   );
 }
 
+/** Notes returned per bulk page. Comfortably under the backend read limit. */
+const BULK_PAGE_SIZE = 500;
+
 /**
- * Run an async mapper over ``items`` with at most ``concurrency`` in flight at
- * once. Bounds the request fan-out so a large vault doesn't fire hundreds of
- * simultaneous ``getNote`` calls and trip the backend's per-IP rate limit.
+ * Fetch a page of full notes (frontmatter + body) in a single request via the
+ * bulk endpoint — no per-note round-trips.
  */
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  concurrency: number,
-  mapper: (item: T) => Promise<R>,
-): Promise<PromiseSettledResult<R>[]> {
-  const results: PromiseSettledResult<R>[] = new Array(items.length);
-  let next = 0;
-  const worker = async (): Promise<void> => {
-    while (next < items.length) {
-      const i = next++;
-      try {
-        results[i] = { status: "fulfilled", value: await mapper(items[i]) };
-      } catch (reason) {
-        results[i] = { status: "rejected", reason };
-      }
-    }
-  };
-  const pool = Math.max(1, Math.min(concurrency, items.length));
-  await Promise.all(Array.from({ length: pool }, () => worker()));
-  return results;
+export function listNotesBulk(
+  offset = 0,
+  limit = BULK_PAGE_SIZE,
+  signal?: AbortSignal,
+): Promise<BulkNotesResponse> {
+  return apiClient.get<BulkNotesResponse>(
+    `/api/notes/bulk?offset=${offset}&limit=${limit}`,
+    signal,
+  );
 }
 
-/** Max concurrent ``getNote`` requests during the initial vault load. */
-const LOAD_CONCURRENCY = 8;
-
 /**
- * Load every note in the active vault: page the metadata list, then fetch each
- * note's full body.
+ * Load every note in the active vault by paging the bulk endpoint.
  *
- * The list endpoint returns metadata only, so this is necessarily an N+1. To
- * stay resilient at real-vault scale it (a) caps concurrent fetches so the load
- * doesn't trip the backend rate limit, and (b) uses settle-not-reject semantics
- * so a single failed note (429, corrupt frontmatter, locked file) is skipped
- * rather than zeroing out the entire result. An ``AbortError`` still propagates
- * so an in-flight load can be cancelled.
+ * This replaces the old N+1 (one ``getNote`` per note) that fired hundreds of
+ * requests and tripped the backend's per-IP read limiter at a few hundred
+ * notes — silently dropping notes past the cap. One request per
+ * ``BULK_PAGE_SIZE`` notes stays well under the limit. An ``AbortError`` from a
+ * cancelled load still propagates so an in-flight load can be cancelled.
  */
 export async function loadAllNotes(signal?: AbortSignal): Promise<NoteRecord[]> {
-  const limit = 200;
   const records: NoteRecord[] = [];
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
 
   while (offset < total) {
-    const page = await listNoteRecords(offset, limit, signal);
+    const page = await listNotesBulk(offset, BULK_PAGE_SIZE, signal);
     total = page.total;
     if (page.notes.length === 0) break;
-
-    const settled = await mapWithConcurrency(
-      page.notes,
-      LOAD_CONCURRENCY,
-      (n) => getNote(n.id, signal),
-    );
-    for (const result of settled) {
-      if (result.status === "fulfilled") {
-        records.push(result.value);
-      } else if ((result.reason as DOMException)?.name === "AbortError") {
-        // The whole load was cancelled — stop and surface it to the caller.
-        throw result.reason;
-      }
-      // Any other per-note failure is skipped: a bad note must not blank the
-      // entire vault.
-    }
+    records.push(...page.notes);
     offset += page.notes.length;
   }
 
@@ -135,13 +112,22 @@ export interface UpdateNotePayload {
   tags?: string[];
   type?: string;
   title?: string;
+  /**
+   * The ``modified`` timestamp the client last saw. When set and stale (the
+   * note changed underneath — agent edit, another tab), the backend rejects
+   * the update with 409 instead of clobbering the other write.
+   */
+  base_modified?: string;
 }
 
 export function updateNote(
   id: string,
   payload: UpdateNotePayload,
 ): Promise<NoteRecord> {
-  return apiClient.put<NoteRecord>(`/api/notes/${id}`, payload);
+  return apiClient.put<NoteRecord>(
+    `/api/notes/${encodeURIComponent(id)}`,
+    payload,
+  );
 }
 
 export function archiveNote(
@@ -190,8 +176,12 @@ export function archiveTreePath(
   hard = false,
 ): Promise<{ status: string; path: string }> {
   const qs = hard ? "?hard=true" : "";
+  // Encode each path segment (preserving the ``/`` separators) so a filename
+  // containing ``#``, ``?``, or ``%`` — entirely possible for vault files
+  // edited outside Loom — doesn't truncate or corrupt the request URL.
+  const encoded = path.split("/").map(encodeURIComponent).join("/");
   return apiClient.delete<{ status: string; path: string }>(
-    `/api/tree/path/${path}${qs}`,
+    `/api/tree/path/${encoded}${qs}`,
   );
 }
 

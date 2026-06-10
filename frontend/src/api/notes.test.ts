@@ -8,7 +8,6 @@ import {
   notePathOf,
   loadAllNotes,
   type NoteRecord,
-  type NoteMetaRecord,
 } from "./notes";
 import type { Note } from "../data/types";
 
@@ -185,66 +184,51 @@ describe("loadAllNotes", () => {
     vi.restoreAllMocks();
   });
 
-  function meta(id: string): NoteMetaRecord {
-    // NoteMetaRecord omits body + wikilinks; drop them from a full record.
-    const full = mkRecord({ id });
-    const rest: Record<string, unknown> = { ...full };
-    delete rest["body"];
-    delete rest["wikilinks"];
-    return rest as unknown as NoteMetaRecord;
-  }
-
-  it("pages through the list and fetches each note in full", async () => {
+  it("pages through the bulk endpoint, accumulating full notes", async () => {
     const getSpy = vi.spyOn(apiClient, "get");
-    // Page 1: list (2 notes, total 3), then 2 full fetches.
+    // Bulk page 1 returns 2 of 3 notes; page 2 returns the last.
     getSpy.mockImplementation((path: string) => {
-      if (path.startsWith("/api/notes?offset=0")) {
+      if (path.startsWith("/api/notes/bulk?offset=0")) {
         return Promise.resolve({
-          notes: [meta("a"), meta("b")],
+          notes: [mkRecord({ id: "a" }), mkRecord({ id: "b" })],
           total: 3,
           offset: 0,
-          limit: 200,
+          limit: 500,
         });
       }
-      if (path.startsWith("/api/notes?offset=2")) {
+      if (path.startsWith("/api/notes/bulk?offset=2")) {
         return Promise.resolve({
-          notes: [meta("c")],
+          notes: [mkRecord({ id: "c" })],
           total: 3,
           offset: 2,
-          limit: 200,
+          limit: 500,
         });
       }
-      // Individual note fetch — path like /api/notes/<id>.
-      const id = decodeURIComponent(path.split("/").pop()!);
-      return Promise.resolve(mkRecord({ id }));
+      throw new Error(`unexpected path ${path}`);
     });
 
     const records = await loadAllNotes();
     expect(records.map((r) => r.id).sort()).toEqual(["a", "b", "c"]);
+    // No per-note N+1 — only the two bulk page requests.
+    expect(getSpy).toHaveBeenCalledTimes(2);
   });
 
   it("stops when a page returns no notes", async () => {
     const getSpy = vi.spyOn(apiClient, "get");
-    getSpy.mockResolvedValue({ notes: [], total: 99, offset: 0, limit: 200 });
+    getSpy.mockResolvedValue({ notes: [], total: 99, offset: 0, limit: 500 });
     const records = await loadAllNotes();
     expect(records).toEqual([]);
   });
 
-  it("skips an individual note that fails instead of zeroing the whole load", async () => {
+  it("returns whatever the bulk endpoint provides (server skips bad notes)", async () => {
     const getSpy = vi.spyOn(apiClient, "get");
-    getSpy.mockImplementation((path: string) => {
-      if (path.startsWith("/api/notes?")) {
-        return Promise.resolve({
-          notes: [meta("a"), meta("bad"), meta("c")],
-          total: 3,
-          offset: 0,
-          limit: 200,
-        });
-      }
-      const id = decodeURIComponent(path.split("/").pop()!);
-      // One note 429s / is corrupt; the other two load fine.
-      if (id === "bad") return Promise.reject(new Error("429 rate limited"));
-      return Promise.resolve(mkRecord({ id }));
+    // The backend bulk endpoint drops an unreadable note server-side, so the
+    // client simply gets the survivors — no client-side per-note skipping.
+    getSpy.mockResolvedValue({
+      notes: [mkRecord({ id: "a" }), mkRecord({ id: "c" })],
+      total: 2,
+      offset: 0,
+      limit: 500,
     });
 
     const records = await loadAllNotes();
@@ -253,20 +237,7 @@ describe("loadAllNotes", () => {
 
   it("propagates an AbortError so a cancelled load surfaces", async () => {
     const getSpy = vi.spyOn(apiClient, "get");
-    getSpy.mockImplementation((path: string) => {
-      if (path.startsWith("/api/notes?")) {
-        return Promise.resolve({
-          notes: [meta("a")],
-          total: 1,
-          offset: 0,
-          limit: 200,
-        });
-      }
-      return Promise.reject(
-        new DOMException("aborted", "AbortError"),
-      );
-    });
-
+    getSpy.mockRejectedValue(new DOMException("aborted", "AbortError"));
     await expect(loadAllNotes()).rejects.toMatchObject({ name: "AbortError" });
   });
 });

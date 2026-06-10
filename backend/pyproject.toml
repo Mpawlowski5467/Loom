@@ -17,12 +17,15 @@ dependencies = [
     "openai>=1.0",
     "anthropic>=0.39",
     "httpx>=0.27",
-    "lancedb>=0.15",
+    # Upper bounds on the two pre-1.0 / fast-moving deps the code couples to
+    # tightly (LanceDB table/Arrow APIs; LangGraph StateGraph). A new major can
+    # break those silently — pin a ceiling so the bump is a deliberate review.
+    "lancedb>=0.15,<1",
     "pyarrow>=17.0",
     "tiktoken>=0.7",
     "slowapi>=0.1.9",
     "cryptography>=42.0",
-    "langgraph>=0.2",
+    "langgraph>=0.2,<2",
 ]
 
 [project.optional-dependencies]

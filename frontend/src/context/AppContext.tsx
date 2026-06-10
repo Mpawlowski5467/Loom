@@ -21,6 +21,7 @@ import { notes as notesSeed } from "../data/notes";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
+import { subscribeVaultEvents } from "../api/events";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
@@ -524,6 +525,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     demo ? capturesSeed[0]?.id ?? null : null,
   );
 
+  // Bumped to force a re-fetch of notes + captures — e.g. when the backend
+  // pushes a `vault-changed` SSE event (an agent or external edit landed).
+  const [reloadTick, setReloadTick] = useState(0);
+
   useEffect(() => {
     // No live fetch in demo/offline/pre-onboarding — treat as already loaded
     // so the tree shows its empty state rather than a perpetual skeleton.
@@ -585,7 +590,25 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     loomConfig.offline,
     loomConfig.onboardingComplete,
     pushToast,
+    reloadTick,
   ]);
+
+  // Live refresh: subscribe to backend vault-change events and re-fetch (one
+  // debounced reload per burst of edits) so an agent's writes reach an open UI
+  // without a manual reload. Only when live — never in demo/offline/pre-onboarding.
+  useEffect(() => {
+    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) return;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const unsubscribe = subscribeVaultEvents(() => {
+      // Coalesce a burst of file writes into a single reload.
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => setReloadTick((tick) => tick + 1), 400);
+    });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsubscribe();
+    };
+  }, [demo, loomConfig.offline, loomConfig.onboardingComplete]);
 
   const setCaptureStatus = useCallback((id: string, s: CaptureStatus) => {
     setCaptures((prev) =>

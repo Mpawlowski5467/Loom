@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, HTTPException, status
@@ -17,6 +18,8 @@ from core.config import (
 )
 from core.exceptions import InvalidVaultNameError, VaultExistsError
 from core.vault import get_vault_manager
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/onboarding", tags=["onboarding"])
 
@@ -144,4 +147,21 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
         steps_done=payload.steps_done,
     )
     config.save(settings.config_path)
+
+    # Bring provider-dependent services live so the freshly configured provider
+    # works without a server restart. At startup (pre-onboarding) the registry
+    # had no provider and agents were initialized with chat=None; reset the
+    # registry to pick up the saved config, then rebuild the index + agents for
+    # the onboarded vault. Best-effort — a reinit hiccup must not fail the
+    # wizard's completion.
+    try:
+        from api.runtime import reinit_providers_dependent_services
+        from core.providers import reset_registry
+
+        await reset_registry()
+        vm.set_active_vault(payload.vault_name)
+        reinit_providers_dependent_services(vm.active_vault_dir())
+    except Exception:
+        logger.warning("Post-onboarding service reinitialization failed", exc_info=True)
+
     return config.to_public()

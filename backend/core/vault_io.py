@@ -73,7 +73,11 @@ def _check_writable(vault_root: Path, path: Path) -> Path:
     """Validate the path is a safe write target under the vault."""
     threads_dir = (vault_root / "threads").resolve()
     try:
-        resolved = path.resolve() if path.exists() else path.absolute()
+        # Always resolve(strict=False) — unlike absolute(), it collapses ``..``
+        # segments even for not-yet-existing targets, so a path like
+        # ``threads/../rules/x.md`` can't slip past the lexical containment and
+        # prime.md checks below.
+        resolved = path.resolve()
     except OSError as exc:
         raise VaultIOError(f"Cannot resolve path: {exc}") from exc
 

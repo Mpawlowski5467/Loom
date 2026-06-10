@@ -14,10 +14,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python 3.11
+      # Match the runtime Docker image (python:3.12-slim) so CI exercises the
+      # same interpreter the container ships.
+      - name: Set up Python 3.12
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.12"
 
       - name: Cache pip packages
         uses: actions/cache@v4
@@ -35,6 +37,13 @@ jobs:
 
       - name: Check formatting with ruff
         run: ruff format --check backend/
+
+      # mypy is configured strict but the codebase has a pre-existing type-error
+      # backlog, so this runs for visibility without gating the build yet.
+      # Remove continue-on-error once the backlog is cleared to make it a gate.
+      - name: Type-check with mypy (non-blocking)
+        continue-on-error: true
+        run: cd backend && mypy .
 
       - name: Run tests
         run: cd backend && pytest

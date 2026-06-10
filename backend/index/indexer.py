@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
-import contextlib
+import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 import lancedb
@@ -18,6 +19,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 TABLE_NAME = "chunks"
+
+# Note ids are generated as ``thr_<hex>``; constrain the delete predicate to a
+# safe character class so a crafted frontmatter id can't inject into the
+# LanceDB ``where`` clause and delete other rows.
+_NOTE_ID_RE = re.compile(r"^[A-Za-z0-9_-]+$")
 
 
 def _rows_from_chunks(chunks: list[Chunk], vectors: list[list[float]]) -> list[dict[str, Any]]:
@@ -87,14 +93,22 @@ class VectorIndexer:
 
         Uses asyncio.gather to parallelize up to batch_size concurrent calls.
         """
-        import asyncio
-
         vectors: list[list[float]] = []
         for i in range(0, len(chunks), batch_size):
             batch = chunks[i : i + batch_size]
             batch_vecs = await asyncio.gather(*(self._embed.embed(c.embed_text) for c in batch))
             vectors.extend(batch_vecs)
         return vectors
+
+    def _upsert_rows(self, note_id: str, rows: list[dict[str, Any]]) -> None:
+        """Replace a note's chunks in the table (sync — run via ``to_thread``)."""
+        if self._table_exists():
+            table = self.get_db().open_table(TABLE_NAME)
+            self._delete_by_note_id(table, note_id)
+            table.add(rows)
+        else:
+            # First note indexed — create table from data (infers the schema).
+            self.get_db().create_table(TABLE_NAME, data=rows)
 
     async def index_note(self, note_path: Path) -> int:
         """Parse, chunk, embed, and upsert a single note. Returns chunk count."""
@@ -106,13 +120,8 @@ class VectorIndexer:
         vectors = await self._embed_chunks(chunks)
         rows = _rows_from_chunks(chunks, vectors)
 
-        if self._table_exists():
-            table = self.get_db().open_table(TABLE_NAME)
-            self._delete_by_note_id(table, note_id)
-            table.add(rows)
-        else:
-            # First note indexed — create table from data
-            self.get_db().create_table(TABLE_NAME, data=rows)
+        # LanceDB writes are blocking — keep them off the event loop.
+        await asyncio.to_thread(self._upsert_rows, note_id, rows)
 
         logger.info("Indexed %d chunks for note %s", len(rows), note_id)
         return len(rows)
@@ -125,19 +134,34 @@ class VectorIndexer:
         self._delete_by_note_id(table, note_id)
         logger.info("Removed chunks for note %s", note_id)
 
+    def _swap_table(self, all_rows: list[dict[str, Any]]) -> None:
+        """Atomically-ish replace the table contents (sync — run via ``to_thread``).
+
+        The drop happens only *after* every row is embedded, so the live index
+        stays queryable for the whole rebuild instead of being empty for the
+        (possibly minutes-long) embed window.
+        """
+        db = self.get_db()
+        if all_rows:
+            if self._table_exists():
+                db.drop_table(TABLE_NAME)
+            db.create_table(TABLE_NAME, data=all_rows)
+        elif self._table_exists():
+            # Genuinely empty vault — clear stale chunks.
+            db.drop_table(TABLE_NAME)
+
     async def reindex_vault(self, threads_dir: Path) -> int:
-        """Full reindex of every note in threads/. Returns total chunk count."""
+        """Full reindex of every note in threads/. Returns total chunk count.
+
+        Embeds everything first, then swaps the table in one step (see
+        :meth:`_swap_table`) so search never sees an empty index mid-rebuild.
+        """
         if not threads_dir.exists():
             return 0
 
         md_files = [p for p in threads_dir.rglob("*.md") if ".archive" not in p.parts]
 
-        # Drop old table for a clean reindex
-        db = self.get_db()
-        if self._table_exists():
-            db.drop_table(TABLE_NAME)
-
-        # Collect all rows first, then create table from data
+        # Embed every note BEFORE touching the live table.
         all_rows: list[dict[str, Any]] = []
         for md_path in md_files:
             chunks = chunk_file(md_path)
@@ -146,11 +170,60 @@ class VectorIndexer:
             vectors = await self._embed_chunks(chunks)
             all_rows.extend(_rows_from_chunks(chunks, vectors))
 
-        if all_rows:
-            db.create_table(TABLE_NAME, data=all_rows)
+        await asyncio.to_thread(self._swap_table, all_rows)
 
         logger.info("Reindexed vault: %d chunks from %d files", len(all_rows), len(md_files))
         return len(all_rows)
+
+    async def reconcile_vault(self, threads_dir: Path) -> dict[str, int]:
+        """Differentially heal the index against the filesystem.
+
+        Embeds only notes that are *missing* from the vector store and drops
+        chunks for notes whose files no longer exist. Unlike
+        :meth:`reindex_vault` it never re-embeds unchanged notes, so it is cheap
+        enough to run on a periodic timer without burning embedding spend.
+
+        Returns:
+            A ``{"added": n, "removed": m}`` count of notes added and orphaned
+            note-ids removed.
+        """
+        if not threads_dir.exists():
+            return {"added": 0, "removed": 0}
+
+        from core.notes import parse_note_meta
+
+        file_ids: dict[str, Path] = {}
+        for md_path in threads_dir.rglob("*.md"):
+            if ".archive" in md_path.parts:
+                continue
+            try:
+                note_id = parse_note_meta(md_path).id
+            except (OSError, ValueError):
+                continue
+            if note_id:
+                file_ids[note_id] = md_path
+
+        indexed = await asyncio.to_thread(self.indexed_note_ids)
+
+        added = 0
+        for note_id in file_ids.keys() - indexed:
+            try:
+                await self.index_note(file_ids[note_id])
+                added += 1
+            except Exception:  # noqa: BLE001 - one bad note shouldn't abort reconcile
+                logger.warning("Reconcile: index failed for %s", file_ids[note_id], exc_info=True)
+
+        removed = 0
+        for note_id in indexed - file_ids.keys():
+            try:
+                await asyncio.to_thread(self.remove_note, note_id)
+                removed += 1
+            except Exception:  # noqa: BLE001
+                logger.warning("Reconcile: remove failed for %s", note_id, exc_info=True)
+
+        if added or removed:
+            logger.info("Reconciled index: +%d note(s), -%d orphaned", added, removed)
+        return {"added": added, "removed": removed}
 
     @property
     def is_ready(self) -> bool:
@@ -183,9 +256,20 @@ class VectorIndexer:
 
     @staticmethod
     def _delete_by_note_id(table: lancedb.table.Table, note_id: str) -> None:
-        """Delete all rows matching a note_id."""
-        with contextlib.suppress(Exception):
+        """Delete all rows matching a note_id.
+
+        The note_id is validated against a safe character class before being
+        interpolated into the LanceDB predicate, so a crafted frontmatter id
+        can't inject into the ``where`` clause. Delete failures are logged
+        rather than silently swallowed (a swallowed failure leaves stale chunks).
+        """
+        if not _NOTE_ID_RE.match(note_id):
+            logger.warning("Refusing to delete chunks for unsafe note_id: %r", note_id)
+            return
+        try:
             table.delete(f"note_id = '{note_id}'")
+        except Exception:  # noqa: BLE001 - lancedb raises a variety of driver errors
+            logger.warning("Failed to delete chunks for note %s", note_id, exc_info=True)
 
 
 # ---------------------------------------------------------------------------

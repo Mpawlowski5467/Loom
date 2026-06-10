@@ -23,6 +23,12 @@ class HistoryEntry(BaseModel):
     reason: str = ""
 
 
+# Bump when the on-disk note frontmatter schema changes in a way that needs
+# migration. Stamped onto notes when absent so future format changes have a
+# value to dispatch on.
+NOTE_SCHEMA_VERSION = 1
+
+
 class NoteMeta(BaseModel):
     """Frontmatter fields (returned in list views, no body)."""
 
@@ -37,6 +43,11 @@ class NoteMeta(BaseModel):
     links: list[str] = Field(default_factory=list)
     status: str = "active"
     history: list[HistoryEntry] = Field(default_factory=list)
+    schema_version: int = NOTE_SCHEMA_VERSION
+    # Unknown frontmatter keys (user-added custom fields) preserved verbatim so
+    # an agent round-trip (parse → mutate known fields → write) never silently
+    # drops them. Hoisted back to top-level frontmatter by ``build_frontmatter``.
+    extra: dict[str, Any] = Field(default_factory=dict)
     # Derived at parse time — not stored in frontmatter
     file_path: str = ""
 
@@ -80,6 +91,22 @@ def _coerce_meta(meta: dict[str, Any]) -> dict[str, Any]:
     return out
 
 
+def _split_known_extra(meta: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Partition a frontmatter mapping into known model fields and extras.
+
+    Keys not recognized by ``NoteMeta`` are user-added custom frontmatter and
+    are preserved separately so they survive an agent round-trip.
+    """
+    known: dict[str, Any] = {}
+    extra: dict[str, Any] = {}
+    for k, v in meta.items():
+        if k in NoteMeta.model_fields and k not in {"extra", "file_path"}:
+            known[k] = v
+        else:
+            extra[k] = v
+    return known, extra
+
+
 def parse_note(path: Path) -> Note:
     """Parse a markdown file into a Note model."""
     text = path.read_text(encoding="utf-8")
@@ -88,14 +115,19 @@ def parse_note(path: Path) -> Note:
 
     fm_match = _FRONTMATTER_RE.match(text)
     if fm_match:
-        meta = yaml.safe_load(fm_match.group(1)) or {}
-        meta = _coerce_meta(meta)
+        loaded = yaml.safe_load(fm_match.group(1))
+        # Frontmatter that isn't a mapping (e.g. a bare scalar between the
+        # fences) would blow up downstream ``.items()`` / field access — treat
+        # it as empty rather than letting one malformed note crash callers.
+        meta = _coerce_meta(loaded) if isinstance(loaded, dict) else {}
         body = text[fm_match.end() :]
 
     wikilinks = _WIKILINK_RE.findall(body)
+    known, extra = _split_known_extra(meta)
 
     return Note(
-        **{k: v for k, v in meta.items() if k in Note.model_fields},
+        **known,
+        extra=extra,
         body=body,
         wikilinks=wikilinks,
         file_path=str(path),
@@ -109,18 +141,31 @@ def parse_note_meta(path: Path) -> NoteMeta:
 
     fm_match = _FRONTMATTER_RE.match(text)
     if fm_match:
-        meta = yaml.safe_load(fm_match.group(1)) or {}
-        meta = _coerce_meta(meta)
+        loaded = yaml.safe_load(fm_match.group(1))
+        meta = _coerce_meta(loaded) if isinstance(loaded, dict) else {}
+
+    known, extra = _split_known_extra(meta)
 
     return NoteMeta(
-        **{k: v for k, v in meta.items() if k in NoteMeta.model_fields},
+        **known,
+        extra=extra,
         file_path=str(path),
     )
 
 
 def build_frontmatter(meta: dict[str, Any]) -> str:
-    """Serialize a dict into YAML frontmatter block."""
-    dumped: str = yaml.safe_dump(meta, default_flow_style=False, sort_keys=False)
+    """Serialize a dict into a YAML frontmatter block.
+
+    ``extra`` (preserved unknown user fields) is hoisted back to top-level
+    keys, and the derived ``file_path`` is never serialized. Known fields take
+    precedence over extras on the (by-construction impossible) key collision.
+    """
+    out = {k: v for k, v in meta.items() if k not in {"extra", "file_path"}}
+    extra = meta.get("extra") or {}
+    if isinstance(extra, dict):
+        for k, v in extra.items():
+            out.setdefault(k, v)
+    dumped: str = yaml.safe_dump(out, default_flow_style=False, sort_keys=False)
     return "---\n" + dumped + "---\n"
 
 

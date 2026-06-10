@@ -56,6 +56,15 @@ export function useGraphScene(args: {
 
   const [orbitScene, setOrbitScene] = useState<OrbitScene>("rings");
   const prevReadyRef = useRef(-1);
+  // Latest notes, readable from the effect without making ``notes`` a
+  // dependency. The effect only needs notes for the orbit-mode focus fallback
+  // (notes[0]?.id); keeping the array out of the deps means a notes-array
+  // identity change that leaves graph structure intact (e.g. a rename or
+  // drag-move producing a new array with the same structural key) does NOT
+  // re-run this effect — so it can't trigger a fresh ForceAtlas2 relayout or a
+  // camera recenter on the constellation branch.
+  const notesRef = useRef<Note[]>(notes);
+  notesRef.current = notes;
 
   useEffect(() => {
     const sigma = sigmaRef.current;
@@ -88,7 +97,7 @@ export function useGraphScene(args: {
       return;
     }
 
-    const focusId = graphFocusId ?? notes[0]?.id;
+    const focusId = graphFocusId ?? notesRef.current[0]?.id;
     if (!focusId) return;
     let sceneIdx = 0;
 
@@ -120,8 +129,12 @@ export function useGraphScene(args: {
       activeTweenRef.current?.cancel();
       activeTweenRef.current = null;
     };
+    // ``notes`` is intentionally NOT a dependency — it is read via notesRef for
+    // the orbit focus fallback only. Including it would re-run the relayout on
+    // any notes-array identity change (rename/drag-move), reshuffling the
+    // constellation and losing pan/zoom. sigmaReady gates genuine rebuilds.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphMode, graphFocusId, notes, sigmaReady]);
+  }, [graphMode, graphFocusId, sigmaReady]);
 
   return orbitScene;
 }

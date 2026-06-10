@@ -3,12 +3,13 @@
 import logging
 
 import yaml
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel, Field, ValidationError
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.note_index import NoteIndex, get_note_index
 from core.notes import parse_note
+from core.rate_limit import READ_LIMIT, limiter
 from index.searcher import get_searcher
 
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ router = APIRouter(prefix="/api/search", tags=["search"])
 
 MAX_RESULTS = 20
 SNIPPET_LEN = 150
+MAX_QUERY_LEN = 1000
 
 
 class SearchResult(BaseModel):
@@ -123,8 +125,10 @@ def _keyword_search(
 
 
 @router.get("")
+@limiter.limit(READ_LIMIT)
 async def search_notes(
-    q: str = Query(..., min_length=1, description="Search query"),
+    request: Request,  # noqa: ARG001 — required by slowapi
+    q: str = Query(..., min_length=1, max_length=MAX_QUERY_LEN, description="Search query"),
     note_type: str | None = Query(None, alias="type", description="Filter by note type"),
     tags: str | None = Query(None, description="Filter by tags (comma-separated)"),
     context: str | None = Query(None, description="Context note ID for graph-aware boosting"),

@@ -77,7 +77,13 @@ class ChatHistory:
         self._vault_root = vault_root
 
     def _chat_dir(self, agent: str) -> Path:
-        """Return the chat directory for an agent or _council."""
+        """Return the chat directory for an agent or _council.
+
+        Validates ``agent`` as defense-in-depth before any filesystem access,
+        so a path-traversal name (e.g. ``"../../x"``) is rejected even when a
+        route forgets to validate. Raises ``VaultPathError`` on a bad name.
+        """
+        VaultManager.validate_agent_name(agent)
         if agent == COUNCIL_AGENT:
             return self._vault_root / "agents" / "_council" / "chat"
         return self._vault_root / "agents" / agent / "chat"
@@ -87,9 +93,8 @@ class ChatHistory:
 
         Both ``agent`` and ``date_str`` are validated as a defense-in-depth
         guard — even if a route forgets to validate, this method refuses
-        path-traversal attempts.
+        path-traversal attempts. ``agent`` is validated by ``_chat_dir``.
         """
-        VaultManager.validate_agent_name(agent)
         date_str = date_str or _today_str()
         VaultManager.validate_date(date_str)
         chat_dir = self._chat_dir(agent)

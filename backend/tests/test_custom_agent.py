@@ -104,6 +104,67 @@ class TestCustomAgent:
         result = await agent.run()
         assert Path(result.capture_path).exists()
 
+    @pytest.mark.asyncio
+    async def test_capture_lands_under_threads_captures(self, tmp_path: Path):
+        """Custom-agent writes go through vault_io into threads/captures/."""
+        root = _setup_vault(tmp_path)
+        agent = CustomAgent(root, _record(), chat_provider=None)
+
+        result = await agent.run()
+
+        assert (
+            Path(result.capture_path)
+            .resolve()
+            .is_relative_to((root / "threads" / "captures").resolve())
+        )
+
+    def test_assert_capture_path_rejects_outside_captures(self, tmp_path: Path):
+        """The tier-boundary guard refuses paths outside captures/."""
+        from agents.shuttle import custom as custom_mod
+
+        bad = tmp_path / "vault" / "threads" / "projects" / "leak.md"
+        with pytest.raises(ValueError, match="captures"):
+            custom_mod._assert_capture_path(bad)
+
+
+class TestCustomContextSort:
+    def test_context_picks_most_recently_modified_first(self, tmp_path: Path):
+        """_gather_context sorts by meta.modified (the real field), newest first."""
+        from core.note_index import get_note_index
+        from core.notes import build_frontmatter
+
+        root = _setup_vault(tmp_path)
+
+        def _note(name: str, modified: str) -> None:
+            meta = {
+                "id": f"thr_{name}",
+                "title": name.title(),
+                "type": "topic",
+                "tags": [],
+                "created": "2026-01-01T00:00:00+00:00",
+                "modified": modified,
+                "author": "user",
+                "status": "active",
+                "history": [],
+            }
+            (root / "threads" / "topics" / f"{name}.md").write_text(
+                build_frontmatter(meta) + f"\n## Body\n\n{name} content.\n",
+                encoding="utf-8",
+            )
+
+        _note("oldest", "2026-01-02T00:00:00+00:00")
+        _note("newest", "2026-06-01T00:00:00+00:00")
+        _note("middle", "2026-03-01T00:00:00+00:00")
+
+        index = get_note_index()
+        index.build(root / "threads")
+
+        agent = CustomAgent(root, _record(), chat_provider=None)
+        context = agent._gather_context()
+
+        # The newest note's body must appear before the oldest in the digest.
+        assert context.index("newest content") < context.index("oldest content")
+
 
 class TestRunnerDispatch:
     @pytest.mark.asyncio

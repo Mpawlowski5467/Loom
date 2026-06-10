@@ -17,7 +17,8 @@ from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
 from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import atomic_write_text, generate_id, note_to_file_content, now_iso
+from core.notes import generate_id, now_iso
+from core.vault_io import write_note
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -31,6 +32,17 @@ logger = logging.getLogger(__name__)
 # and bounded regardless of vault size.
 _MAX_CONTEXT_NOTES = 8
 _MAX_NOTE_CHARS = 600
+
+
+def _assert_capture_path(path: Path) -> None:
+    """Enforce the Shuttle tier boundary: writes must land under captures/.
+
+    ``vault_io.write_note`` already constrains writes to ``threads/*.md``;
+    this narrows it to ``threads/captures/`` specifically, documenting and
+    enforcing in code that Shuttle agents never touch note folders directly.
+    """
+    if "captures" not in path.parts:
+        raise ValueError(f"Shuttle agents may only write under captures/, got {path}")
 
 
 @dataclass
@@ -106,8 +118,10 @@ class CustomAgent(BaseAgent):
             return "No vault notes available."
 
         entries = list(index.all_entries())
-        # Most-recently-modified first; bounded.
-        entries.sort(key=lambda e: getattr(e, "modified", "") or "", reverse=True)
+        # Most-recently-modified first; bounded. IndexEntry has no ``modified``
+        # attribute — the real field is the frontmatter timestamp on ``meta``
+        # (ISO8601, so it sorts lexically).
+        entries.sort(key=lambda e: e.meta.modified or "", reverse=True)
         parts: list[str] = []
         for entry in entries[:_MAX_CONTEXT_NOTES]:
             try:
@@ -178,5 +192,6 @@ class CustomAgent(BaseAgent):
             ],
         }
         path = captures_dir / f"{self._id}-{capture_id}.md"
-        atomic_write_text(path, note_to_file_content(meta, body))
+        _assert_capture_path(path)
+        write_note(self._vault_root, path, meta, body)
         return capture_id, path

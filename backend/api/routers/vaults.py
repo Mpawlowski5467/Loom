@@ -6,10 +6,11 @@ import asyncio
 import io
 import shutil
 import tarfile
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -21,7 +22,8 @@ from core.exceptions import (
 )
 from core.note_index import NoteIndex, get_note_index
 from core.platform import reveal_in_explorer
-from core.vault import VaultManager, get_vault_manager
+from core.rate_limit import WRITE_LIMIT, limiter
+from core.vault import VaultManager, VaultPathError, get_vault_manager
 
 router = APIRouter(prefix="/api/vaults", tags=["vaults"])
 
@@ -89,7 +91,9 @@ class RenameVaultRequest(BaseModel):
 
 
 @router.post("", status_code=201)
+@limiter.limit(WRITE_LIMIT)
 def create_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     body: CreateVaultRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008,
 ) -> VaultResponse:
@@ -134,7 +138,14 @@ def vault_exists(
 
     ``scaffolded`` reuses ``vault_exists`` semantics — the directory must
     contain a ``vault.yaml`` for it to count as a real Loom vault.
+
+    The name is validated before any filesystem probe so this route cannot be
+    used as an existence oracle for arbitrary ``<name>/vault.yaml`` paths.
     """
+    try:
+        vm.validate_vault_name(name)
+    except InvalidVaultNameError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
     exists = vm.vault_exists(name)
     return VaultExistsResponse(name=name, exists=exists, scaffolded=exists)
 
@@ -159,6 +170,9 @@ async def set_active_vault(
     except VaultNotFoundError as e:
         raise HTTPException(status_code=404, detail=str(e)) from e
     try:
+        # ``reload_active_vault_runtime`` rebinds the file watcher and index to
+        # the running loop, so it must execute on the loop (it takes the loop as
+        # an argument) — it is intentionally not offloaded to a worker thread.
         reload_active_vault_runtime(
             vm,
             loop=asyncio.get_running_loop(),
@@ -198,7 +212,9 @@ def reveal_vault(
 
 
 @router.post("/{name}/archive", response_model=ArchiveVaultResponse)
+@limiter.limit(WRITE_LIMIT)
 async def archive_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     name: str,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
@@ -217,7 +233,7 @@ async def archive_vault(
         _release_active_handles()
 
     archived_path = _archive_path(source)
-    shutil.move(str(source), str(archived_path))
+    await asyncio.to_thread(shutil.move, str(source), str(archived_path))
     remaining = vm.list_vaults()
 
     if not remaining:
@@ -240,7 +256,9 @@ async def archive_vault(
 
 
 @router.delete("/{name}", status_code=204)
+@limiter.limit(WRITE_LIMIT)
 async def delete_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     name: str,
     hard: bool = Query(False, description="If true, permanently delete the vault"),
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
@@ -268,7 +286,7 @@ async def delete_vault(
     if _should_release_handles(vm, name, old_active, source):
         _release_active_handles()
 
-    shutil.rmtree(source)
+    await asyncio.to_thread(shutil.rmtree, source)
 
     remaining = vm.list_vaults()
     if not remaining:
@@ -281,7 +299,9 @@ async def delete_vault(
 
 
 @router.get("/{name}/export")
+@limiter.limit(WRITE_LIMIT)
 def export_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     name: str,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> StreamingResponse:
@@ -317,8 +337,70 @@ def export_vault(
     )
 
 
+@router.post("/{name}/import", response_model=VaultResponse, status_code=201)
+@limiter.limit(WRITE_LIMIT)
+async def import_vault(
+    request: Request,
+    name: str,
+    overwrite: bool = Query(False, description="Replace an existing non-empty vault"),
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> VaultResponse:
+    """Restore a vault from an uploaded export tarball.
+
+    The ``.tar.gz`` archive is sent as the raw request body (rather than a
+    multipart upload, to avoid a ``python-multipart`` dependency). It is
+    extracted with the ``data`` filter (rejecting absolute paths, traversal
+    members, links, and devices) and every member is additionally asserted to
+    land inside the destination vault directory. Refuses to clobber an existing
+    non-empty vault unless ``?overwrite=true`` is passed.
+
+    Args:
+        request: Incoming request; its body is the gzipped tarball.
+        name: Destination vault name to restore into.
+        overwrite: When ``True``, replace an existing vault of this name.
+        vm: Injected vault manager.
+
+    Returns:
+        Metadata for the restored vault.
+
+    Raises:
+        HTTPException: 422 on an invalid name, 400 on an empty/malformed or
+            traversal-laden tarball, 409 if the vault exists and ``overwrite``
+            is not set.
+    """
+    try:
+        vm.validate_vault_name(name)
+    except InvalidVaultNameError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    if vm.vault_exists(name) and not overwrite:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Vault '{name}' already exists. Pass ?overwrite=true to replace it.",
+        )
+
+    payload = await request.body()
+    if not payload:
+        raise HTTPException(status_code=400, detail="Empty request body; expected a tarball")
+    dest = vm.vault_path(name)
+    vaults_dir = vm._settings.vaults_dir
+    try:
+        await asyncio.to_thread(_restore_tarball, payload, dest, vaults_dir)
+    except VaultPathError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    except tarfile.TarError as e:
+        raise HTTPException(status_code=400, detail=f"Invalid tarball: {e}") from e
+
+    return VaultResponse(
+        name=name,
+        path=str(dest),
+        is_active=vm.get_active_vault() == name,
+    )
+
+
 @router.patch("/{name}", response_model=VaultResponse)
+@limiter.limit(WRITE_LIMIT)
 async def rename_vault(
+    request: Request,  # noqa: ARG001 — required by slowapi
     name: str,
     body: RenameVaultRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
@@ -344,7 +426,7 @@ async def rename_vault(
         _release_active_handles()
 
     dst = vm.vault_path(body.new_name)
-    shutil.move(str(source), str(dst))
+    await asyncio.to_thread(shutil.move, str(source), str(dst))
 
     if old_active == name:
         vm.set_active_vault(body.new_name)
@@ -354,6 +436,57 @@ async def rename_vault(
         is_active = False
 
     return VaultResponse(name=body.new_name, path=str(dst), is_active=is_active)
+
+
+def _restore_tarball(payload: bytes, dest: Path, vaults_dir: Path) -> None:
+    """Extract an export tarball into ``dest`` safely (path-traversal proof).
+
+    Extraction happens in a temporary staging directory using the ``data``
+    filter (Python 3.12+), which rejects absolute paths, ``..`` traversal,
+    symlinks/hardlinks escaping the tree, and device nodes. Every extracted
+    member is then re-validated to live under the staging dir before the
+    restored tree is moved into ``dest`` (always inside ``vaults_dir``).
+
+    Args:
+        payload: Raw bytes of the uploaded ``.tar.gz`` archive.
+        dest: Target vault directory to populate.
+        vaults_dir: Root vaults directory the destination must stay within.
+
+    Raises:
+        VaultPathError: If a member escapes the staging dir or the tar has no
+            usable top-level vault directory, or ``dest`` escapes ``vaults_dir``.
+        tarfile.TarError: If the archive is malformed.
+    """
+    dest = dest.resolve()
+    vaults_root = vaults_dir.resolve()
+    if vaults_root not in dest.parents and dest != vaults_root:
+        raise VaultPathError("Destination escapes the vaults directory")
+
+    vaults_root.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=vaults_root, prefix=".import-") as tmp:
+        staging = Path(tmp)
+        with tarfile.open(fileobj=io.BytesIO(payload), mode="r:gz") as tar:
+            tar.extractall(path=staging, filter="data")
+        _assert_within(staging)
+
+        roots = [c for c in staging.iterdir() if c.is_dir()]
+        if not roots:
+            raise VaultPathError("Tarball contains no vault directory")
+        restored = roots[0]
+
+        if dest.exists():
+            shutil.rmtree(dest)
+        shutil.move(str(restored), str(dest))
+
+
+def _assert_within(root: Path) -> None:
+    """Raise ``VaultPathError`` if any path under ``root`` escapes ``root``."""
+    root = root.resolve()
+    for path in root.rglob("*"):
+        try:
+            path.resolve().relative_to(root)
+        except ValueError as exc:
+            raise VaultPathError("Tarball member escapes extraction directory") from exc
 
 
 def _should_release_handles(

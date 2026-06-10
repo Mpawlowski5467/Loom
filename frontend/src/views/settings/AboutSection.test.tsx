@@ -115,24 +115,37 @@ describe("AboutSection", () => {
     vi.unstubAllGlobals();
   });
 
-  it("re-runs onboarding after confirmation", async () => {
+  it("re-runs onboarding after confirming in the modal", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     const { refreshConfig } = renderSection();
     await screen.findByText("1.2.3");
 
+    // The trigger opens an accessible confirm dialog (no window.confirm).
     await user.click(screen.getByRole("button", { name: /Re-run onboarding/ }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    expect(resetOnboarding).not.toHaveBeenCalled();
+
+    // The dialog's confirm button shares the "Re-run onboarding" label.
+    const confirmBtn = screen.getAllByRole("button", {
+      name: /Re-run onboarding/,
+    });
+    await user.click(confirmBtn[confirmBtn.length - 1]);
+
     await waitFor(() => expect(resetOnboarding).toHaveBeenCalled());
     expect(refreshConfig).toHaveBeenCalled();
   });
 
-  it("does not re-run onboarding when the confirm is declined", async () => {
+  it("does not re-run onboarding when the confirm is cancelled", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     renderSection();
     await screen.findByText("1.2.3");
+
     await user.click(screen.getByRole("button", { name: /Re-run onboarding/ }));
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+
     expect(resetOnboarding).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
   it("surfaces a diagnostics load failure", async () => {

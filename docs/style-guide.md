@@ -26,7 +26,7 @@
 ### Project Patterns
 - FastAPI routes go in `backend/api/` with one router per resource
 - Agent logic goes in `backend/agents/loom/` or `backend/agents/shuttle/`
-- All vault file operations go through `backend/core/vault.py` — never read/write vault files directly from routes or agents
+- Vault lifecycle (create/switch/list vaults) goes through `backend/core/vault.py`; all vault note **writes** go through the `backend/core/vault_io.py` chokepoint (`write_note`/`write_text`, which validate the path stays under `threads/`, isn't `.archive/`, and isn't `rules/prime.md`) — never `open()`/`write_text` vault files directly from routes or agents
 - Config loaded via pydantic models from `backend/core/config.py`
 - Use dependency injection for FastAPI (providers, vault instance, index)
 

@@ -232,17 +232,32 @@ class TestProcessAllCaptures:
         assert data["results"] == []
 
     def test_process_all_success(self, client: TestClient, seeded_captures: Path) -> None:
-        """POST /api/captures/process-all processes all captures."""
+        """POST /api/captures/process-all drives the full pipeline per capture."""
         mock_note = MagicMock()
         mock_note.id = "thr_batch01"
         mock_note.title = "Batch Note"
         mock_note.type = "topic"
         mock_note.file_path = "/tmp/threads/topics/batch.md"
 
-        mock_weaver = MagicMock()
-        mock_weaver.process_capture = AsyncMock(return_value=mock_note)
+        mock_result = MagicMock()
+        mock_result.note = mock_note
+        mock_result.errors = []
+        mock_result.validation = None
+        mock_result.links_added = []
+        mock_result.suggested = []
+        mock_result.capture_archived = True
+        mock_result.review_required = False
+        mock_result.flagged = False
 
-        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+        mock_runner = MagicMock()
+        mock_runner.run_pipeline = AsyncMock(return_value=mock_result)
+
+        # /process-all now runs the full capture pipeline (Weaver → Spider →
+        # Scribe → Sentinel → enforce), so mock the runner, not Weaver alone.
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=MagicMock()),
+            patch("agents.runner.AgentRunner", return_value=mock_runner),
+        ):
             resp = client.post("/api/captures/process-all")
 
         assert resp.status_code == 200
@@ -251,6 +266,7 @@ class TestProcessAllCaptures:
         assert data["processed"] == 2
         assert len(data["results"]) == 2
         assert all(r["processed"] for r in data["results"])
+        assert mock_runner.run_pipeline.await_count == 2
 
 
 # ---------------------------------------------------------------------------

@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import os
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -14,6 +17,7 @@ from core.traces import (
     get_caller,
     get_run,
     get_step,
+    prune_old_traces,
     set_caller,
     set_run,
     set_step,
@@ -218,3 +222,83 @@ class TestTraceStoreRuns:
     def test_write_run_summary_noop_without_disk(self) -> None:
         # No disk dir configured → silently skipped, never raises.
         TraceStore().write_run_summary({"run_id": "x", "started": "2026-06-06T00:00:00+00:00"})
+
+    def test_list_run_summaries_keeps_newest_by_mtime_over_limit(self, tmp_path) -> None:
+        """With more run files than ``limit``, the most recently *modified* survive.
+
+        Run files are named ``run-<random-hex>.json``, so filenames carry no
+        order. Truncation must key on modification time, not filename, or the
+        Runs view can silently drop the newest runs.
+        """
+        date_dir = tmp_path / "2026-06-09"
+        date_dir.mkdir()
+        # Write 5 run files. Filenames are deliberately *anti*-correlated with
+        # recency (older runs get filenames that sort later) to prove the cut
+        # ignores filenames.
+        base = datetime(2026, 6, 9, 10, 0, 0, tzinfo=UTC)
+        files = []
+        for age in range(5):  # age 0 = newest run
+            name_rank = 4 - age  # newest run gets the lowest filename rank
+            path = date_dir / f"run-{name_rank:02d}{'f' * 6}.json"
+            started = (base + timedelta(minutes=age)).isoformat()
+            path.write_text(json.dumps({"run_id": f"run_{age}", "started": started}))
+            files.append((path, age))
+
+        # Stamp mtimes so newer runs are more recently modified.
+        now = base.timestamp()
+        for path, age in files:
+            ts = now + (5 - age)  # age 0 (newest) → largest mtime
+            os.utime(path, (ts, ts))
+
+        store = TraceStore()
+        store.set_disk_dir(tmp_path)
+        listed = store.list_run_summaries(limit=3)
+
+        # The three newest-by-mtime runs (ages 0,1,2) survive the truncation —
+        # filenames (anti-correlated with recency) are ignored. The surviving
+        # set is the property under test.
+        assert {s["run_id"] for s in listed} == {"run_0", "run_1", "run_2"}
+        # And they're presented most-recent-first by ``started``: run_2 has the
+        # latest start among survivors (age 0's started is earliest by design).
+        assert [s["run_id"] for s in listed] == ["run_2", "run_1", "run_0"]
+
+
+class TestPruneOldTraces:
+    """Retention sweep over the on-disk trace store."""
+
+    def _date_dir(self, root, days_ago: int):
+        day = (datetime.now(UTC).date() - timedelta(days=days_ago)).isoformat()
+        d = root / day
+        d.mkdir()
+        (d / "trc_x.json").write_text("{}")
+        return d
+
+    def test_removes_old_keeps_recent(self, tmp_path) -> None:
+        old = self._date_dir(tmp_path, days_ago=40)
+        recent = self._date_dir(tmp_path, days_ago=5)
+
+        removed = prune_old_traces(tmp_path, keep_days=30)
+
+        assert removed == 1
+        assert not old.exists()
+        assert recent.exists()
+
+    def test_ignores_non_date_dirs_and_files(self, tmp_path) -> None:
+        # A non-date directory and a stray file must never be touched, even
+        # though they may be "old".
+        junk_dir = tmp_path / "not-a-date"
+        junk_dir.mkdir()
+        (junk_dir / "keep.json").write_text("{}")
+        stray = tmp_path / "README.md"
+        stray.write_text("hi")
+        old = self._date_dir(tmp_path, days_ago=99)
+
+        removed = prune_old_traces(tmp_path, keep_days=30)
+
+        assert removed == 1
+        assert not old.exists()
+        assert junk_dir.exists()
+        assert stray.exists()
+
+    def test_missing_dir_returns_zero(self, tmp_path) -> None:
+        assert prune_old_traces(tmp_path / "nope", keep_days=30) == 0

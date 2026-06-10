@@ -20,14 +20,74 @@ add API authentication, so the backend port must still not be exposed.
 
 from __future__ import annotations
 
+import logging
+import os
+import re
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Self
+from typing import Any, Self
 
 import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
+
+logger = logging.getLogger(__name__)
+
+# Matches a bare ``${VAR}`` or ``${VAR:-default}`` placeholder occupying the
+# whole string. VAR is a conventional env-var name (uppercase + underscores).
+_ENV_VAR_PATTERN = re.compile(r"^\$\{([A-Z_][A-Z0-9_]*)(?::-([^}]*))?\}$")
+
+
+def _expand_env_str(value: str) -> str:
+    """Expand a single ``${VAR}`` / ``${VAR:-default}`` placeholder.
+
+    Only fully-placeholder strings are expanded; any other string (including the
+    ``enc:v1:`` encrypted markers) is returned unchanged so this never touches
+    ciphertext. Unset vars resolve to their ``:-default`` or to an empty string.
+    """
+    match = _ENV_VAR_PATTERN.match(value)
+    if match is None:
+        return value
+    var_name, default = match.group(1), match.group(2)
+    return os.environ.get(var_name, default if default is not None else "")
+
+
+def _expand_env_vars(data: Any) -> Any:
+    """Recursively expand ``${VAR}`` placeholders in a loaded config dict.
+
+    Walks nested dicts and lists (covering top-level keys and provider
+    sub-dicts), replacing any string that is exactly a ``${VAR}`` or
+    ``${VAR:-default}`` placeholder with the environment value. Must run on
+    plaintext YAML *before* decryption so it never rewrites ``enc:v1:`` values.
+    """
+    if isinstance(data, dict):
+        return {key: _expand_env_vars(val) for key, val in data.items()}
+    if isinstance(data, list):
+        return [_expand_env_vars(item) for item in data]
+    if isinstance(data, str):
+        return _expand_env_str(data)
+    return data
+
+
+def _safe_load_yaml(path: Path) -> dict | None:
+    """Parse a YAML file into a dict, tolerating corruption.
+
+    Returns the parsed mapping, an empty dict for an empty file, or ``None`` if
+    the file is malformed (``yaml.YAMLError``) or does not parse to a mapping.
+    Callers fall back to defaults on ``None`` rather than crashing at import.
+    """
+    try:
+        data = yaml.safe_load(path.read_text())
+    except yaml.YAMLError:
+        logger.warning("Malformed YAML at %s; falling back to defaults.", path)
+        return None
+    if data is None:
+        return {}
+    if not isinstance(data, dict):
+        logger.warning("Config at %s is not a mapping; falling back to defaults.", path)
+        return None
+    return data
 
 
 class LoomSettings(BaseSettings):
@@ -154,6 +214,10 @@ class OnboardingState(BaseModel):
 class GlobalConfig(BaseModel):
     """Maps to ~/.loom/config.yaml."""
 
+    schema_version: int = Field(
+        default=1,
+        description="Config schema version; future migrations dispatch on this.",
+    )
     active_vault: str = "default"
     default_provider: str = "openai"
     providers: dict[str, ProviderConfig] = {}
@@ -165,16 +229,28 @@ class GlobalConfig(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> Self:
-        """Load from a YAML file, decrypting provider keys in the process.
+        """Load from a YAML file, expanding env vars and decrypting keys.
 
-        Provider ``api_key`` values written with the ``enc:v1:`` prefix are
-        decrypted to plain text in memory; legacy plaintext keys pass through
-        unchanged (and get re-encrypted on the next :meth:`save`). Returns
-        defaults if the file is missing.
+        Steps, in order:
+
+        1. Missing file → return defaults.
+        2. Malformed YAML (or a non-mapping document) → log and return defaults
+           rather than crashing import-time consumers (registry, rate limiter).
+        3. Expand any ``${VAR}`` / ``${VAR:-default}`` placeholder string from
+           the environment (top-level keys and provider sub-dicts). This runs on
+           plaintext before decryption, so it never touches ``enc:v1:`` values.
+        4. Provider ``api_key`` values written with the ``enc:v1:`` prefix are
+           decrypted to plain text in memory; legacy plaintext keys pass through
+           unchanged (and get re-encrypted on the next :meth:`save`).
+
+        ``schema_version`` defaults to 1 when absent from the YAML.
         """
         if not path.exists():
             return cls()
-        data = yaml.safe_load(path.read_text()) or {}
+        data = _safe_load_yaml(path)
+        if data is None:
+            return cls()
+        data = _expand_env_vars(data)
         cfg = cls.model_validate(data)
         cfg._decrypt_keys()
         return cfg
@@ -239,6 +315,10 @@ class GlobalConfigPublic(BaseModel):
 class VaultConfig(BaseModel):
     """Maps to a vault's vault.yaml."""
 
+    schema_version: int = Field(
+        default=1,
+        description="Config schema version; future migrations dispatch on this.",
+    )
     name: str
     custom_folders: list[str] = []
     auto_git: bool = False
@@ -249,10 +329,17 @@ class VaultConfig(BaseModel):
 
     @classmethod
     def load(cls, path: Path) -> Self:
-        """Load from a YAML file, returning defaults if the file is missing."""
+        """Load from a YAML file, tolerating a missing or malformed file.
+
+        Returns defaults (``name="default"``) when the file is missing, or when
+        the YAML is malformed / not a mapping (logged, never raised).
+        ``schema_version`` defaults to 1 when absent from the YAML.
+        """
         if not path.exists():
             return cls(name="default")
-        data = yaml.safe_load(path.read_text()) or {}
+        data = _safe_load_yaml(path)
+        if data is None:
+            return cls(name="default")
         return cls.model_validate(data)
 
     def save(self, path: Path) -> None:

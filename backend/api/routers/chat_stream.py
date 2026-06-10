@@ -107,22 +107,35 @@ async def council_stream(
     messages = [*history, {"role": "user", "content": aggregator_input}]
 
     assistant_chunks: list[str] = []
+    # Hold an explicit reference to the upstream async generator so we can
+    # close it on client disconnect. Without this, a client hanging up
+    # mid-stream cancels our `async for` but leaves the provider's stream
+    # (and its underlying HTTP connection) dangling.
+    upstream = provider.chat_stream(messages=messages, system=aggregator_system)
     try:
         set_caller("council")
-        async for chunk in provider.chat_stream(messages=messages, system=aggregator_system):
+        async for chunk in upstream:
             assistant_chunks.append(chunk)
             yield sse("token", chunk)
     except (ProviderError, ProviderConfigError) as exc:
         yield sse("error", {"message": f"Aggregator failed: {exc}"})
         return
+    except asyncio.CancelledError:
+        # Client disconnected (or the request was cancelled): propagate after
+        # the finally block has closed the upstream stream.
+        raise
     finally:
+        aclose = getattr(upstream, "aclose", None)
+        if aclose is not None:
+            await aclose()
         clear_caller()
 
     assistant_text = "".join(assistant_chunks)
     chat.save_message("_council", "council", assistant_text)
-    # The aggregator's trace is whichever was recorded last (TracedProvider
-    # writes it at stream close).
-    recent_traces = get_trace_store().list(limit=1)
+    # The aggregator call is tagged ``council`` (TracedProvider writes it at
+    # stream close). Filter by that caller so a concurrent council turn's
+    # trace can't be mis-attributed to this stream.
+    recent_traces = get_trace_store().list(limit=1, caller="council")
     trace_id = recent_traces[0].id if recent_traces else ""
 
     yield sse(

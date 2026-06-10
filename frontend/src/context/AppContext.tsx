@@ -22,6 +22,7 @@ import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
 import { subscribeVaultEvents } from "../api/events";
+import { ORBIT_SCENES } from "../graph/orbitScenes";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
@@ -130,6 +131,19 @@ function loadGraphDisplay(): GraphDisplay {
         typeof parsed.breathingEnabled === "boolean"
           ? parsed.breathingEnabled
           : GRAPH_DISPLAY_DEFAULTS.breathingEnabled,
+      depthEnabled:
+        typeof parsed.depthEnabled === "boolean"
+          ? parsed.depthEnabled
+          : GRAPH_DISPLAY_DEFAULTS.depthEnabled,
+      orbitScene: (ORBIT_SCENES as readonly string[]).includes(
+        parsed.orbitScene as string,
+      )
+        ? (parsed.orbitScene as GraphDisplay["orbitScene"])
+        : GRAPH_DISPLAY_DEFAULTS.orbitScene,
+      orbitAutoCycle:
+        typeof parsed.orbitAutoCycle === "boolean"
+          ? parsed.orbitAutoCycle
+          : GRAPH_DISPLAY_DEFAULTS.orbitAutoCycle,
     };
   } catch {
     return GRAPH_DISPLAY_DEFAULTS;
@@ -271,6 +285,13 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
         ),
         travelersEnabled: patch.travelersEnabled ?? prev.travelersEnabled,
         breathingEnabled: patch.breathingEnabled ?? prev.breathingEnabled,
+        depthEnabled: patch.depthEnabled ?? prev.depthEnabled,
+        orbitScene:
+          patch.orbitScene !== undefined &&
+          (ORBIT_SCENES as readonly string[]).includes(patch.orbitScene)
+            ? patch.orbitScene
+            : prev.orbitScene,
+        orbitAutoCycle: patch.orbitAutoCycle ?? prev.orbitAutoCycle,
       };
       return merged;
     });

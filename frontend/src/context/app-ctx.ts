@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
 import type { AgentActivity } from "../api/activity";
 import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
+import type { OrbitScene } from "../graph/orbitScenes";
 import type { ThemeName } from "../theme/themes";
 import type {
   Agent,
@@ -27,6 +28,9 @@ export interface GraphDisplay {
   edgeThickness: number;
   travelersEnabled: boolean;
   breathingEnabled: boolean;
+  depthEnabled: boolean;
+  orbitScene: OrbitScene;
+  orbitAutoCycle: boolean;
 }
 
 export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
@@ -40,6 +44,9 @@ export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
   edgeThickness: 1.0,
   travelersEnabled: true,
   breathingEnabled: true,
+  depthEnabled: true,
+  orbitScene: "rings",
+  orbitAutoCycle: false,
 };
 
 export const GRAPH_DISPLAY_RANGES = {

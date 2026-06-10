@@ -3,6 +3,7 @@ import Sigma from "sigma";
 import type { Settings } from "sigma/settings";
 import { readCssVar } from "../theme/readCssVar";
 import type { Note, NodeType } from "../data/types";
+import { depthColorFor, zForNode } from "./depth";
 
 /**
  * Look up node colors from the active theme. Re-read on every call so the
@@ -55,10 +56,12 @@ export function buildGraph(notes: Note[]): BuiltGraph {
     for (const l of n.links) conn.set(l, (conn.get(l) ?? 0) + 1);
   }
 
+  const bg = readCssVar("--bg-base", "#f5f1e8");
   for (const n of notes) {
     const c = conn.get(n.id) ?? 0;
     const size = 4 + Math.min(c, 12) * 0.8;
     baseSizes.set(n.id, size);
+    const z = zForNode(n.id, c);
     graph.addNode(n.id, {
       x: Math.random() * 100 - 50,
       y: Math.random() * 100 - 50,
@@ -66,6 +69,12 @@ export function buildGraph(notes: Note[]): BuiltGraph {
       label: n.title,
       color: palette[n.type],
       noteType: n.type,
+      // Faux-3D depth: static per node; the reducers/overlays read these.
+      // zIndex draws nearer nodes over deeper ones (Sigma sorts when the
+      // zIndex setting is on).
+      z,
+      depthColor: depthColorFor(palette[n.type], bg, z),
+      zIndex: 1 - z,
     });
   }
   for (const n of notes) {
@@ -94,6 +103,8 @@ export function defaultSettings(): Partial<Settings> {
     labelDensity: 10_000,
     labelGridCellSize: 1,
     labelRenderedSizeThreshold: 0,
+    // Depth cue: draw nearer (lower-z) nodes over deeper ones.
+    zIndex: true,
     enableEdgeEvents: false,
     minCameraRatio: 0.2,
     maxCameraRatio: 8,
@@ -121,15 +132,27 @@ export function createSigma(graph: Graph, container: HTMLElement): Sigma {
 export function applyPaletteToGraph(
   sigma: Sigma,
   graph: Graph,
+  /** When given, ``tuning.palette`` is swapped BEFORE any reducer re-run —
+   * ``setSetting``/``refresh`` below re-run the reducers synchronously, and
+   * the edge depth fade reads the live palette. */
+  tuning?: { palette: EdgePalette },
 ): EdgePalette {
   const nodePalette = readNodePalette();
   const edgePalette = readEdgePalette();
+  if (tuning) tuning.palette = edgePalette;
+  const bg = readCssVar("--bg-base", "#f5f1e8");
   graph.forEachNode((id) => {
     const noteType = graph.getNodeAttribute(id, "noteType") as
       | NodeType
       | undefined;
     if (!noteType) return;
     graph.setNodeAttribute(id, "color", nodePalette[noteType]);
+    const z = (graph.getNodeAttribute(id, "z") as number | undefined) ?? 0;
+    graph.setNodeAttribute(
+      id,
+      "depthColor",
+      depthColorFor(nodePalette[noteType], bg, z),
+    );
   });
   sigma.setSetting("labelColor", { color: edgePalette.label });
   sigma.setSetting("defaultEdgeColor", edgePalette.edge);

@@ -59,6 +59,7 @@ export function GraphView(): ReactNode {
     labelThreshold: graphDisplay.labelThreshold,
     travelersEnabled: graphDisplay.travelersEnabled,
     edgeThickness: graphDisplay.edgeThickness,
+    depthEnabled: graphDisplay.depthEnabled,
     cameraRatio: 1,
     labelTier: -1,
     lensLabelHideFor: null,
@@ -108,7 +109,7 @@ export function GraphView(): ReactNode {
     theme,
   });
 
-  // Orbit auto-cycle (returns the current scene for the caption).
+  // Orbit scene staging (returns the scene on stage for the caption).
   const orbitScene = useGraphScene({
     sigmaRef,
     graphRef,
@@ -121,6 +122,8 @@ export function GraphView(): ReactNode {
     graphFocusId,
     notes,
     sigmaReady,
+    orbitScene: graphDisplay.orbitScene,
+    orbitAutoCycle: graphDisplay.orbitAutoCycle,
   });
 
   // Breathing lifecycle — register/unregister the tick, honoring the user
@@ -189,7 +192,8 @@ export function GraphView(): ReactNode {
       if (!sigma || !graph) return;
       try {
         if (format === "png") void exportGraphPng(sigma);
-        else if (format === "svg") exportGraphSvg(sigma, graph);
+        else if (format === "svg")
+          exportGraphSvg(sigma, graph, { depth: tuning.depthEnabled });
         else exportGraphJson(graph);
       } catch (err) {
         pushToast({

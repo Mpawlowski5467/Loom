@@ -8,6 +8,8 @@ import {
   createSigma,
   readNodePalette,
 } from "./sigma-setup";
+import { readCssVar } from "../theme/readCssVar";
+import { collectNodeZ, depthColorFor } from "./depth";
 import { applyConstellationLayout, easeInOutCubic, type XY } from "./layouts";
 import { structuralKey, contentKey } from "./graphKeys";
 import { attachDrag } from "./dragHandlers";
@@ -140,6 +142,7 @@ export function useGraphInstance(args: {
       graph.forEachNode((id) => degreeMap.set(id, graph.degree(id)));
       tuningRef.current.degree = degreeMap;
       const edgeExtremities = computeEdgeExtremities(graph);
+      const nodeZ = collectNodeZ(graph);
 
       const sigma = createSigma(graph, host);
       sigmaRef.current = sigma;
@@ -162,7 +165,7 @@ export function useGraphInstance(args: {
       sigma.setSetting("nodeReducer", makeNodeReducer(graph, tuningRef.current));
       sigma.setSetting(
         "edgeReducer",
-        makeEdgeReducer(graph, tuningRef.current, edgeExtremities),
+        makeEdgeReducer(graph, tuningRef.current, edgeExtremities, nodeZ),
       );
 
       // Camera ratio drives the label tier — refresh only when the tier flips,
@@ -258,15 +261,24 @@ export function useGraphInstance(args: {
       }, 200);
 
       teardownRef.current = () => {
-        // Snapshot live positions so the next structural rebuild can re-seed
-        // existing nodes (preserving layout + any dragged placement).
+        // Snapshot positions so the next structural rebuild can re-seed
+        // existing nodes (preserving layout + any dragged placement). In
+        // orbit mode the live attrs hold scene-ring geometry — seed from the
+        // constellation base instead, so a rebuild (whose fresh-build skip
+        // bypasses relayout) never paints rings into constellation mode.
         const snapshot = new Map<string, XY>();
-        graph.forEachNode((id, attrs) => {
-          snapshot.set(id, {
-            x: attrs["x"] as number,
-            y: attrs["y"] as number,
+        if (tuningRef.current.graphMode === "orbit") {
+          for (const [id, p] of basePositionsRef.current) {
+            snapshot.set(id, { x: p.x, y: p.y });
+          }
+        } else {
+          graph.forEachNode((id, attrs) => {
+            snapshot.set(id, {
+              x: attrs["x"] as number,
+              y: attrs["y"] as number,
+            });
           });
-        });
+        }
         positionCacheRef.current = snapshot;
 
         window.clearTimeout(resetTimer);
@@ -317,6 +329,7 @@ export function useGraphInstance(args: {
     const graph = graphRef.current;
     if (!sigma || !graph) return;
     const palette = readNodePalette();
+    const bg = readCssVar("--bg-base", "#f5f1e8");
     let changed = false;
     for (const n of notesRef.current) {
       if (!graph.hasNode(n.id)) continue;
@@ -327,6 +340,9 @@ export function useGraphInstance(args: {
       if (graph.getNodeAttribute(n.id, "noteType") !== n.type) {
         graph.setNodeAttribute(n.id, "noteType", n.type);
         graph.setNodeAttribute(n.id, "color", palette[n.type]);
+        const z =
+          (graph.getNodeAttribute(n.id, "z") as number | undefined) ?? 0;
+        graph.setNodeAttribute(n.id, "depthColor", depthColorFor(palette[n.type], bg, z));
         changed = true;
       }
     }

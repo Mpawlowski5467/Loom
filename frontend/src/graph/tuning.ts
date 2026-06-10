@@ -24,6 +24,7 @@ export interface GraphTuning {
   labelThreshold: number;
   travelersEnabled: boolean;
   edgeThickness: number;
+  depthEnabled: boolean;
 
   // Derived/animated state owned by the render path.
   cameraRatio: number;

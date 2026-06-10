@@ -10,7 +10,7 @@ trigger a fresh ForceAtlas2 pass (applyConstellationLayout with no seed) or a
 camera recenter, which would reshuffle the graph and lose the user's pan/zoom
 and dragged node positions.
 */
-import { renderHook } from "@testing-library/react";
+import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Graph from "graphology";
 import type Sigma from "sigma";
@@ -19,6 +19,8 @@ import { useGraphScene } from "./useGraphScene";
 import {
   applyConstellationLayout,
   computeOrbitScene,
+  ORBIT_SCENES,
+  type OrbitScene,
   type XY,
 } from "./layouts";
 import { startLayoutTween } from "./layoutTransition";
@@ -97,6 +99,8 @@ interface Harness {
   graphFocusId: NoteId | null;
   notes: Note[];
   sigmaReady: number;
+  orbitScene?: OrbitScene;
+  orbitAutoCycle?: boolean;
 }
 
 function setup(initial: Harness, graph: Graph) {
@@ -110,10 +114,17 @@ function setup(initial: Harness, graph: Graph) {
     basePositionsRef: ref(new Map<string, XY>()),
     spacingScaleRef: ref(1),
   };
-  const view = renderHook((props: Harness) => useGraphScene({ ...args, ...props }), {
-    initialProps: initial,
-  });
-  return { ...view, animate };
+  const view = renderHook(
+    (props: Harness) =>
+      useGraphScene({
+        ...args,
+        orbitScene: "rings",
+        orbitAutoCycle: false,
+        ...props,
+      }),
+    { initialProps: initial },
+  );
+  return { ...view, animate, sigmaRef: args.sigmaRef };
 }
 
 describe("useGraphScene — relayout stability on notes identity change", () => {
@@ -222,6 +233,194 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
 
     // Effect did not re-run → no extra scene tween kicked off, interval not
     // re-armed.
+    expect(tweenMock.mock.calls.length).toBe(tweensAfterFirst);
+  });
+});
+
+describe("useGraphScene — manual scene selection & auto-cycle", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("plays the selected scene and returns it for the caption", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { result } = setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        orbitScene: "galaxy",
+      },
+      graph,
+    );
+
+    expect(orbitMock).toHaveBeenCalledWith(graph, "a", "galaxy");
+    expect(result.current).toBe("galaxy");
+  });
+
+  it("tweens to the newly picked scene when the selection changes", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { rerender, result } = setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        orbitScene: "rings",
+      },
+      graph,
+    );
+    const tweensBefore = tweenMock.mock.calls.length;
+
+    rerender({
+      graphMode: "orbit",
+      graphFocusId: "a" as NoteId,
+      notes,
+      sigmaReady: 1,
+      orbitScene: "wave",
+    });
+
+    expect(orbitMock).toHaveBeenCalledWith(graph, "a", "wave");
+    expect(tweenMock.mock.calls.length).toBeGreaterThan(tweensBefore);
+    expect(result.current).toBe("wave");
+  });
+
+  it("stays on the selected scene when auto-cycle is off", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { result } = setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        orbitScene: "spiral",
+        orbitAutoCycle: false,
+      },
+      graph,
+    );
+    const tweensAfterFirst = tweenMock.mock.calls.length;
+
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    expect(tweenMock.mock.calls.length).toBe(tweensAfterFirst);
+    expect(result.current).toBe("spiral");
+  });
+
+  it("walks to the next scene from the selection when auto-cycle is on", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { result } = setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        orbitScene: "spiral",
+        orbitAutoCycle: true,
+      },
+      graph,
+    );
+    expect(result.current).toBe("spiral");
+
+    act(() => {
+      vi.advanceTimersByTime(9_000);
+    });
+
+    const after = ORBIT_SCENES[(ORBIT_SCENES.indexOf("spiral") + 1) % ORBIT_SCENES.length];
+    expect(result.current).toBe(after);
+    expect(orbitMock).toHaveBeenCalledWith(graph, "a", after);
+  });
+
+  it("does NOT kick a constellation relayout when a scene is picked in constellation mode", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { rerender, animate } = setup(
+      {
+        graphMode: "constellation",
+        graphFocusId: null,
+        notes,
+        sigmaReady: 1,
+        orbitScene: "rings",
+      },
+      graph,
+    );
+    const applyBefore = applyMock.mock.calls.length;
+    const animateBefore = animate.mock.calls.length;
+
+    rerender({
+      graphMode: "constellation",
+      graphFocusId: null,
+      notes,
+      sigmaReady: 1,
+      orbitScene: "galaxy",
+    });
+
+    // The constellation effect is blind to orbitScene — no relayout, no
+    // recenter, and no orbit tween either (mode isn't orbit).
+    expect(applyMock.mock.calls.length).toBe(applyBefore);
+    expect(animate.mock.calls.length).toBe(animateBefore);
+    expect(tweenMock).not.toHaveBeenCalled();
+  });
+
+  it("falls back to the first present note when the focused node left the graph", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    // Focus a node that was removed by a rebuild (not in the graph anymore).
+    setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "ghost" as NoteId,
+        notes,
+        sigmaReady: 1,
+      },
+      graph,
+    );
+
+    // No graphology throw; the scene stages around the first present note.
+    expect(orbitMock).toHaveBeenCalled();
+    expect(orbitMock.mock.calls[0]?.[1]).toBe("a");
+  });
+
+  it("stops the auto-cycle from driving a torn-down instance", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { sigmaRef } = setup(
+      {
+        graphMode: "orbit",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        orbitAutoCycle: true,
+      },
+      graph,
+    );
+    const tweensAfterFirst = tweenMock.mock.calls.length;
+
+    // Simulate the build effect killing the instance (e.g. the vault emptied)
+    // without a sigmaReady bump — the interval is still armed.
+    sigmaRef.current = null;
+    act(() => {
+      vi.advanceTimersByTime(30_000);
+    });
+
+    // The stale-instance guard must keep late ticks from staging new tweens.
     expect(tweenMock.mock.calls.length).toBe(tweensAfterFirst);
   });
 });

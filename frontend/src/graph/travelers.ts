@@ -1,5 +1,6 @@
 import type Graph from "graphology";
 import type Sigma from "sigma";
+import { depthSizeFactorFor } from "./depth";
 import type { FrameTick } from "./frameLoop";
 import type { GraphTuning } from "./tuning";
 
@@ -153,6 +154,16 @@ export function createTravelers(opts: {
         continue;
       }
 
+      // Depths only affect the disk-trim radii below; the hovered node pops
+      // to z = 0 (full size) to mirror the node reducer's exemption.
+      const sz =
+        s === hovered
+          ? 0
+          : ((graph.getNodeAttribute(s, "z") as number | undefined) ?? 0);
+      const tz =
+        t === hovered
+          ? 0
+          : ((graph.getNodeAttribute(t, "z") as number | undefined) ?? 0);
       const sx = graph.getNodeAttribute(s, "x") as number;
       const sy = graph.getNodeAttribute(s, "y") as number;
       const tx = graph.getNodeAttribute(t, "x") as number;
@@ -168,11 +179,17 @@ export function createTravelers(opts: {
       }
 
       // Trim the travel range to the gap between the two node disks so the
-      // segment never overlaps a node's pixel radius.
+      // segment never overlaps a node's pixel radius (depth-shrunk when on).
       const sRadius =
-        scaleSize(graph.getNodeAttribute(s, "size") as number) + NODE_MARGIN;
+        scaleSize(
+          (graph.getNodeAttribute(s, "size") as number) *
+            depthSizeFactorFor(tuning, sz),
+        ) + NODE_MARGIN;
       const tRadius =
-        scaleSize(graph.getNodeAttribute(t, "size") as number) + NODE_MARGIN;
+        scaleSize(
+          (graph.getNodeAttribute(t, "size") as number) *
+            depthSizeFactorFor(tuning, tz),
+        ) + NODE_MARGIN;
       const travStart = Math.min(len, sRadius);
       const travEnd = Math.max(travStart, len - tRadius);
       const travLen = travEnd - travStart;
@@ -235,11 +252,15 @@ export function createTravelers(opts: {
         }
         return;
       }
+      const z =
+        id === hovered ? 0 : ((attr["z"] as number | undefined) ?? 0);
       const p = sigma.graphToViewport({
         x: attr["x"] as number,
         y: attr["y"] as number,
       });
-      const r = scaleSize(attr["size"] as number) + NODE_MARGIN;
+      const r =
+        scaleSize((attr["size"] as number) * depthSizeFactorFor(tuning, z)) +
+        NODE_MARGIN;
       const cx = String(p.x);
       const cy = String(p.y);
       const rs = String(r);

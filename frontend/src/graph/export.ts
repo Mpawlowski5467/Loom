@@ -1,5 +1,6 @@
 import type Graph from "graphology";
 import type Sigma from "sigma";
+import { DEPTH_EDGE_FADE, depthSizeFactor, fadeAlpha } from "./depth";
 
 type FilePart = Blob | string;
 
@@ -59,9 +60,18 @@ export async function exportGraphPng(sigma: Sigma): Promise<void> {
   });
 }
 
-export function exportGraphSvg(sigma: Sigma, graph: Graph): void {
+export function exportGraphSvg(
+  sigma: Sigma,
+  graph: Graph,
+  opts?: { depth?: boolean },
+): void {
   // Sigma renders via WebGL, not SVG. Build a faithful SVG from graph
-  // attributes + the live camera so the export matches the on-screen view.
+  // attributes + the live camera so the export matches the on-screen view —
+  // including the depth styling (size shrink / ink wash / edge fade), which
+  // lives in the reducers, not the attributes.
+  const depth = opts?.depth ?? false;
+  const zOf = (id: string): number =>
+    depth ? ((graph.getNodeAttribute(id, "z") as number | undefined) ?? 0) : 0;
   const container = sigma.getContainer();
   const w = container.clientWidth;
   const h = container.clientHeight;
@@ -84,7 +94,9 @@ export function exportGraphSvg(sigma: Sigma, graph: Graph): void {
     const ty = graph.getNodeAttribute(target, "y") as number;
     const p1 = sigma.graphToViewport({ x: sx, y: sy });
     const p2 = sigma.graphToViewport({ x: tx, y: ty });
-    const color = (attr["color"] as string) ?? "#5c5851";
+    let color = (attr["color"] as string) ?? "#5c5851";
+    const zAvg = (zOf(source) + zOf(target)) / 2;
+    if (zAvg > 0) color = fadeAlpha(color, 1 - DEPTH_EDGE_FADE * zAvg);
     const size = (attr["size"] as number) ?? 1;
     parts.push(
       `<line x1="${p1.x.toFixed(2)}" y1="${p1.y.toFixed(2)}" ` +
@@ -101,8 +113,13 @@ export function exportGraphSvg(sigma: Sigma, graph: Graph): void {
   graph.forEachNode((id, attr) => {
     const gx = attr["x"] as number;
     const gy = attr["y"] as number;
-    const size = (attr["size"] as number) ?? 4;
-    const color = (attr["color"] as string) ?? "#1a1815";
+    let size = (attr["size"] as number) ?? 4;
+    let color = (attr["color"] as string) ?? "#1a1815";
+    const z = zOf(id);
+    if (z > 0) {
+      size *= depthSizeFactor(z);
+      color = (attr["depthColor"] as string | undefined) ?? color;
+    }
     const label = (attr["label"] as string) ?? id;
     const p = sigma.graphToViewport({ x: gx, y: gy });
     const scaled = size / Math.sqrt(sigma.getCamera().ratio);

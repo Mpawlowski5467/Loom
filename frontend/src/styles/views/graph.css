@@ -216,6 +216,34 @@
   transform: translateX(12px);
 }
 
+.graph-scene-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.graph-scene-chip {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.02em;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  cursor: pointer;
+  transition: all 180ms var(--ease);
+}
+.graph-scene-chip:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
+}
+.graph-scene-chip[data-active="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--bg-elevated);
+}
+
 .graph-display-reset {
   align-self: flex-end;
   font-family: var(--mono);

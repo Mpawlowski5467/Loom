@@ -1,6 +1,7 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
 import { GRAPH_DISPLAY_RANGES } from "../../context/app-ctx";
+import { ORBIT_SCENES, ORBIT_SCENE_LABELS } from "../../graph/orbitScenes";
 
 interface RowProps {
   label: string;
@@ -172,6 +173,38 @@ export function DisplayControls(): ReactNode {
           label="Breathing"
           checked={graphDisplay.breathingEnabled}
           onChange={(v) => setGraphDisplay({ breathingEnabled: v })}
+        />
+        <ToggleRow
+          label="Depth"
+          checked={graphDisplay.depthEnabled}
+          onChange={(v) => setGraphDisplay({ depthEnabled: v })}
+        />
+      </Section>
+
+      <Section title="Orbit scene">
+        <div
+          className="graph-scene-picker"
+          role="radiogroup"
+          aria-label="Orbit scene"
+        >
+          {ORBIT_SCENES.map((scene) => (
+            <button
+              key={scene}
+              type="button"
+              role="radio"
+              aria-checked={graphDisplay.orbitScene === scene}
+              className="graph-scene-chip"
+              data-active={graphDisplay.orbitScene === scene ? "true" : undefined}
+              onClick={() => setGraphDisplay({ orbitScene: scene })}
+            >
+              {ORBIT_SCENE_LABELS[scene]}
+            </button>
+          ))}
+        </div>
+        <ToggleRow
+          label="Auto-cycle"
+          checked={graphDisplay.orbitAutoCycle}
+          onChange={(v) => setGraphDisplay({ orbitAutoCycle: v })}
         />
       </Section>
 

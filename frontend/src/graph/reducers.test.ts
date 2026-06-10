@@ -33,6 +33,7 @@ function mkTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
     labelThreshold: 1,
     travelersEnabled: true,
     edgeThickness: 1,
+    depthEnabled: false,
     cameraRatio: 1,
     labelTier: 1,
     lensLabelHideFor: null,
@@ -188,6 +189,59 @@ describe("makeNodeReducer", () => {
     const reducer = makeNodeReducer(g, tuning);
     expect(reducer("a", { noteType: "project", label: "A" }).label).toBe("A");
   });
+
+  describe("depth", () => {
+    const deepNode = {
+      noteType: "topic",
+      label: "B",
+      x: 100,
+      y: 0,
+      size: 8,
+      z: 1,
+      depthColor: "washed",
+    };
+
+    it("shrinks size and washes color on deep nodes (positions untouched)", () => {
+      const g = mkGraph();
+      const tuning = mkTuning({ depthEnabled: true });
+      const reducer = makeNodeReducer(g, tuning);
+      const out = reducer("b", { ...deepNode });
+      expect(out.size).toBeLessThan(8);
+      expect(out.color).toBe("washed");
+      expect(out.x).toBe(100); // Sigma owns positions; the reducer must not.
+      expect(out.label).toBe("B");
+    });
+
+    it("leaves nodes untouched when depth is disabled", () => {
+      const g = mkGraph();
+      const tuning = mkTuning({ depthEnabled: false });
+      const reducer = makeNodeReducer(g, tuning);
+      const out = reducer("b", { ...deepNode });
+      expect(out.size).toBe(8);
+      expect(out.color).toBeUndefined();
+      expect(out.x).toBe(100);
+    });
+
+    it("pops the hovered node onto the focus plane (no shrink or wash)", () => {
+      const g = mkGraph();
+      const tuning = mkTuning({ depthEnabled: true, hovered: "b" });
+      const reducer = makeNodeReducer(g, tuning);
+      const out = reducer("b", { ...deepNode });
+      expect(out.size).toBe(8);
+      expect(out.color).toBeUndefined();
+      expect(out.label).toBe("B");
+    });
+
+    it("still dims hovered non-neighbors over their depth wash", () => {
+      const g = mkGraph();
+      const tuning = mkTuning({ depthEnabled: true, hovered: "a" });
+      const reducer = makeNodeReducer(g, tuning);
+      // c is not a neighbor of a → the hover dim wins over depthColor.
+      const out = reducer("c", { ...deepNode });
+      expect(out.color).toBe(PALETTE.nodeDimmed);
+      expect(out.label).toBe("");
+    });
+  });
 });
 
 describe("makeEdgeReducer", () => {
@@ -240,5 +294,55 @@ describe("makeEdgeReducer", () => {
     const reducer = makeEdgeReducer(g, tuning, new Map());
     const e = g.edges("a", "b")[0]!;
     expect(reducer(e, { size: 1 }).color).toBe(PALETTE.edgeHover);
+  });
+
+  describe("depth fade", () => {
+    it("fades edges by the average depth of their endpoints", () => {
+      const { g, hit, ext } = setup();
+      const tuning = mkTuning({
+        depthEnabled: true,
+        palette: { ...PALETTE, edge: "rgba(26,24,21,0.18)" },
+      });
+      const nodeZ = new Map([
+        ["a", 1],
+        ["b", 1],
+      ]);
+      const reducer = makeEdgeReducer(g, tuning, ext, nodeZ);
+      const out = reducer(hit, { size: 1 });
+      // avg z = 1 → alpha scaled by (1 - DEPTH_EDGE_FADE) = 0.45.
+      expect(out.color).toBe("rgba(26,24,21,0.081)");
+      expect(out.size).toBe(1);
+    });
+
+    it("does not fade focus-plane edges or when depth is off", () => {
+      const { g, hit, ext } = setup();
+      const zZero = new Map([
+        ["a", 0],
+        ["b", 0],
+      ]);
+      const on = makeEdgeReducer(g, mkTuning({ depthEnabled: true }), ext, zZero);
+      expect(on(hit, { size: 1 }).color).toBeUndefined();
+      const off = makeEdgeReducer(
+        g,
+        mkTuning({ depthEnabled: false }),
+        ext,
+        new Map([
+          ["a", 1],
+          ["b", 1],
+        ]),
+      );
+      expect(off(hit, { size: 1 }).color).toBeUndefined();
+    });
+
+    it("hover styling wins over the depth fade", () => {
+      const { g, hit, ext } = setup();
+      const tuning = mkTuning({ depthEnabled: true, hovered: "a" });
+      const nodeZ = new Map([
+        ["a", 1],
+        ["b", 1],
+      ]);
+      const reducer = makeEdgeReducer(g, tuning, ext, nodeZ);
+      expect(reducer(hit, { size: 1 }).color).toBe(PALETTE.edgeHover);
+    });
   });
 });

@@ -87,6 +87,13 @@ export function useGraphDisplaySync(args: {
     sigmaRef.current?.refresh({ skipIndexation: true });
   }, [graphDisplay.edgeThickness, tuningRef, sigmaRef]);
 
+  // Depth toggles re-index (no skipIndexation): it changes rendered node
+  // sizes, which feed the label grid and hit-testing.
+  useEffect(() => {
+    tuningRef.current.depthEnabled = graphDisplay.depthEnabled;
+    sigmaRef.current?.refresh();
+  }, [graphDisplay.depthEnabled, tuningRef, sigmaRef]);
+
   useEffect(() => {
     sigmaRef.current?.setSetting("labelSize", graphDisplay.labelSize);
     sigmaRef.current?.refresh({ skipIndexation: true });
@@ -114,11 +121,12 @@ export function useGraphDisplaySync(args: {
   }, [graphFilters, tuningRef, sigmaRef]);
 
   // Theme swap: Sigma re-reads node colors on refresh, so update attributes +
-  // settings in place rather than recreating the renderer.
+  // settings in place rather than recreating the renderer. The tuning object
+  // is passed in so its palette swaps before the reducers re-run inside.
   useEffect(() => {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
-    tuningRef.current.palette = applyPaletteToGraph(sigma, graph);
+    applyPaletteToGraph(sigma, graph, tuningRef.current);
   }, [theme, tuningRef, sigmaRef, graphRef]);
 }

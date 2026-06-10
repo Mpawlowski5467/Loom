@@ -191,7 +191,8 @@ Every provider is wrapped in a `TracedProvider` that records each call (provider
 
 ## Graph Layout & Motion
 
-- Modes: **constellation** (ForceAtlas2 force-directed) and **orbit** (focus-first concentric rings; rings/spiral/arms scenes)
+- Modes: **constellation** (ForceAtlas2 force-directed + a deterministic overlap-relaxation pass so disks never stack — `graph/overlap.ts`) and **orbit** (focus-first scenes: rings/spiral/arms/galaxy/wave — `graph/orbitScenes.ts`; scene picked in the display panel, auto-cycle is opt-in)
+- Depth: faux-3D layering (`graph/depth.ts`) — each node gets a deterministic z (hubs forward, leaves back); deeper nodes render smaller, washed toward the paper, drawn behind nearer ones (Sigma zIndex), and edges fade with endpoint depth. Hover pops a node onto the focus plane. Toggle in the display panel. (Positions are never offset: Sigma 3 re-reads x/y from graph attrs and discards reducer overrides.)
 - Edge travelers: dashes animate along edges on an SVG overlay; pace adjustable or off
 - Breathing: gentle node-size oscillation
 - All display knobs live in the graph display panel (persisted to localStorage, with a reset button)

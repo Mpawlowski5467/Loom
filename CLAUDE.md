@@ -85,7 +85,7 @@ Task prompts: @docs/tasks/
 - Both Shuttle Layer agents (Researcher, Standup)
 - LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Spider→Scribe→Sentinel→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
-- 4 views: GraphView (Sigma.js — constellation + orbit, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
+- 4 views: GraphView (Sigma.js — constellation + orbit with 5 selectable scenes, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
 - Settings UI: Appearance, Providers (with key validation), Vault, About (diagnostics + re-run onboarding), Danger Zone
 - Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
@@ -116,7 +116,7 @@ Task prompts: @docs/tasks/
 - Agents have `memory.md` summarized every 20 actions.
 - Chat history saved as markdown: `agents/_council/chat/` for Loom Council, `agents/<name>/chat/` for Shuttle agents.
 - Global search bar in top nav + file tree filter bar (separate).
-- Graph: Sigma.js 3.x, force-directed by default with an orbit (focus-first concentric) mode. Nodes = dots with labels, edges thicken on hover.
+- Graph: Sigma.js 3.x, force-directed by default (with an overlap-relaxation pass) plus an orbit mode with 5 focus-first scenes (rings/spiral/arms/galaxy/wave — picker in the display panel, auto-cycle opt-in). Faux-3D depth: deterministic per-node z drives size/ink fade/draw order (toggleable). Nodes = dots with labels, edges thicken on hover.
 - **Color split**: brick red (`#a83a2c`, `--you`) = user actions, ink blue (`#2d4a7c`, `--agent`) = agent actions. No third accent color.
 - **Paper surfaces**: `--bg-base #f5f1e8`, `--bg-surface #ede8da`, `--bg-elevated #e3dcca`.
 - **Ink**: `--ink #1a1815`, `--ink-2 #5c5851`, `--ink-3 #8c877d`. Hairlines `rgba(26,24,21,0.08 / 0.18)`.

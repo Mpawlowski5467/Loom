@@ -59,3 +59,6 @@ htmlcov/
 
 # Local working docs (not committed)
 docs/v1-roadmap.md
+
+# Understand Anything knowledge graph (local analysis artifacts)
+.understand-anything/

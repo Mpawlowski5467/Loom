@@ -92,18 +92,19 @@ Style guide: @docs/style-guide.md
 - Provider system: OpenAI, Anthropic, xAI, OpenRouter, Ollama — chat + embed independently configurable
 - Streaming Loom Council chat (SSE fan-out, ≤3 concurrent) + LLM trace system (in-mem ring + disk mirror, "raw call" inspector via `/api/traces`). Traces carry a `run`/`step` tag so multi-step graph runs surface as connected runs in the Board "Runs" view (`/api/traces/runs`, `/api/traces/runs/{id}`; frontend `RunFeed`).
 - Multi-vault management via `/api/vaults`
-- Scribe daily-log generation; Sentinel AI-assisted validation (LLM path with a deterministic fallback, deterministic rules otherwise)
 - Cmd+K palette, file tree with filter bar, toasts
-- Optional `LOOM_API_TOKEN` shared-token gate on `/api/*` (`Authorization: Bearer` or `X-Loom-Token`, constant-time; off by default, so health/ready and the localhost posture are unchanged)
-- Strict `mypy` gates CI (type backlog at zero, Python 3.12 target); router-level end-to-end API test (capture → process → graph → search) with stubbed providers
 - CI in `.github/workflows/`, LICENSE present
 
-**Known gaps (deliberate v1 boundaries)**
+**In flight**
+- Scribe daily-log generation works; summary phrasing is still being tuned
+- Sentinel AI-assisted validation works (LLM path with deterministic fallback); broadening rule coverage
+- Standup `generate()` works; no external calendar link yet
+
+**Known gaps**
 - Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
-- No auth layer on the API by design (safe on localhost; do not expose the port as-is). The optional `LOOM_API_TOKEN` gate is a speed bump, not real auth. `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
-- Deferred by design (planned, not built — see `docs/VISION.md`): the Bridge (GitHub/Email/Calendar integrations, including a Standup calendar link), the Prompt Compiler, and multi-file attachments
+- No auth layer on the API (safe on localhost; do not expose the port as-is). `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
 - AppContext still hosts most global state; `useLoomConfig`, `useAgentPolling`, and `useHealthPolling` are split out so far
-- Frontend test coverage is broad (views, graph logic, API clients, settings, board cards/pulse all covered); the `useGraph*` graph hooks remain the main untested area
+- Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested
 
 ## Conventions
 

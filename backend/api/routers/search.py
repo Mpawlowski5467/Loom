@@ -1,6 +1,7 @@
 """Search API route: semantic search with keyword fallback."""
 
 import logging
+from typing import Any
 
 import yaml
 from fastapi import APIRouter, Depends, Query, Request
@@ -148,7 +149,7 @@ async def search_notes(
     searcher = get_searcher()
     if searcher is not None:
         try:
-            filters: dict = {}
+            filters: dict[str, Any] = {}
             if note_type:
                 filters["type"] = note_type
             if tag_list:

@@ -22,9 +22,43 @@ access control. Do not do this on an untrusted network.
 To expose Loom intentionally, put it behind something like nginx/Caddy/Traefik
 with auth + TLS, and only then change the compose port binding.
 
+## Optional API token
+
+For users who do expose the port, an optional shared-token gate adds a single
+speed bump. Set the `LOOM_API_TOKEN` environment variable (e.g. in
+`docker-compose.yml` or your shell before `uvicorn`):
+
+```bash
+export LOOM_API_TOKEN="$(openssl rand -hex 32)"
+```
+
+When it is **unset or empty** (the default), behaviour is unchanged — the API
+stays open, which is the supported localhost posture. When it is **set**, every
+`/api` request other than the `/api/health` and `/api/ready` probes must present
+the token, as either header:
+
+```
+Authorization: Bearer <token>
+X-Loom-Token: <token>
+```
+
+A missing or mismatched token gets a `401`; the comparison is constant-time. The
+health and readiness probes stay open so container/orchestration checks keep
+working.
+
+**This is a speed bump, not access control for untrusted networks.** It is a
+single static secret with no rotation, no per-user identity, and no TLS of its
+own — anyone who learns the token (or sniffs it off a plaintext connection) has
+full access. There is also no login UI: the bundled frontend does not send the
+token, so with a token set the SPA only works behind a proxy that injects the
+header. Treat it as defense-in-depth *behind* a real reverse proxy with auth +
+TLS, never as a replacement for one.
+
 ## Known limitations (intentional for v1, documented)
 
 - **No API authentication.** Safe on localhost; unsafe when exposed (see above).
+  An optional `LOOM_API_TOKEN` shared-token gate (above) is a speed bump for
+  exposed ports, not a real auth layer.
 - **Provider API keys are encrypted at rest, but this is defense-in-depth, not
   auth.** Keys in `~/.loom/config.yaml` are encrypted with Fernet (AES-128-CBC +
   HMAC) under a machine-local master key, written with the `enc:v1:` prefix;

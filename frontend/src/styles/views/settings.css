@@ -404,6 +404,12 @@
   margin-top: 18px;
 }
 
+.settings-import {
+  margin-top: 32px;
+  padding-top: 24px;
+  border-top: 1px solid var(--rule);
+}
+
 .settings-vault-card {
   display: flex;
   align-items: center;

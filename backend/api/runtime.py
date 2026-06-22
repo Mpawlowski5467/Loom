@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import asyncio
 
     from core.note_index import NoteIndex
+    from core.providers.base import BaseProvider
     from core.vault import VaultManager
 
 logger = logging.getLogger(__name__)
@@ -164,7 +165,7 @@ def reload_active_vault_runtime(
     initialize_vault_runtime(vm.active_vault_dir(), loop=loop, note_index=note_index)
 
 
-def _get_chat_provider():
+def _get_chat_provider() -> BaseProvider | None:
     """Try to get the chat provider, returning None if unavailable."""
     try:
         from core.providers import get_registry

@@ -16,6 +16,7 @@ export type SettingsSection =
   | "appearance"
   | "providers"
   | "vault"
+  | "archived"
   | "about"
   | "danger";
 

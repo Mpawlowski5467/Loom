@@ -15,6 +15,7 @@ from __future__ import annotations
 import logging
 import secrets
 from pathlib import Path
+from typing import Any
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -29,7 +30,7 @@ router = APIRouter(prefix="/api/agents/registry", tags=["agents-registry"])
 
 AGENTS_FILE = "agents.yaml"
 
-SYSTEM_AGENTS: list[dict] = [
+SYSTEM_AGENTS: list[dict[str, Any]] = [
     {
         "id": "weaver",
         "name": "weaver",
@@ -141,7 +142,7 @@ def _agents_path(vm: VaultManager) -> Path:
     return vm.active_vault_dir() / AGENTS_FILE
 
 
-def _load_custom(vm: VaultManager) -> list[dict]:
+def _load_custom(vm: VaultManager) -> list[dict[str, Any]]:
     path = _agents_path(vm)
     if not path.exists():
         return []
@@ -156,13 +157,13 @@ def _load_custom(vm: VaultManager) -> list[dict]:
     return [a for a in items if isinstance(a, dict) and "id" in a]
 
 
-def _save_custom(vm: VaultManager, agents: list[dict]) -> None:
+def _save_custom(vm: VaultManager, agents: list[dict[str, Any]]) -> None:
     path = _agents_path(vm)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump({"agents": agents}, sort_keys=False))
 
 
-def _to_record(raw: dict, *, system: bool) -> AgentRecord:
+def _to_record(raw: dict[str, Any], *, system: bool) -> AgentRecord:
     return AgentRecord(
         id=raw["id"],
         name=raw.get("name", raw["id"]),

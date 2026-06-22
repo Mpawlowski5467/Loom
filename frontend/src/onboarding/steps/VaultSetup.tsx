@@ -1,12 +1,18 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
+import { Sparkles } from "lucide-react";
 import { vaultExists } from "../../api/vault";
 import type { VaultExistsResponse } from "../../api/types";
 
 interface Props {
   vaultName: string;
   overwriteExisting: boolean;
-  onChange: (patch: { vaultName?: string; overwriteExisting?: boolean }) => void;
+  seedDemo: boolean;
+  onChange: (patch: {
+    vaultName?: string;
+    overwriteExisting?: boolean;
+    seedDemo?: boolean;
+  }) => void;
   onNext: () => void;
   onBack: () => void;
 }
@@ -16,6 +22,7 @@ type VaultMode = "create" | "adopt" | "reset";
 export function VaultSetup({
   vaultName,
   overwriteExisting,
+  seedDemo,
   onChange,
   onNext,
   onBack,
@@ -74,6 +81,18 @@ export function VaultSetup({
     if (next === "reset") onChange({ overwriteExisting: true });
     else if (next === "adopt") onChange({ overwriteExisting: false });
     else onChange({ overwriteExisting: false });
+  };
+
+  const toggleDemo = () => {
+    if (seedDemo) {
+      onChange({ seedDemo: false });
+      return;
+    }
+    // Suggest the "demo" name when the user hasn't picked a meaningful one.
+    const trimmed = vaultName.trim();
+    const patch: { seedDemo: boolean; vaultName?: string } = { seedDemo: true };
+    if (!trimmed || trimmed === "default") patch.vaultName = "demo";
+    onChange(patch);
   };
 
   return (
@@ -162,6 +181,24 @@ export function VaultSetup({
           )}
         </div>
       )}
+
+      <button
+        type="button"
+        className={`onb-demo ${seedDemo ? "active" : ""}`}
+        onClick={toggleDemo}
+        aria-pressed={seedDemo}
+      >
+        <Sparkles size={18} aria-hidden="true" />
+        <span className="onb-demo-text">
+          <span className="onb-demo-label">Try the demo vault</span>
+          <span className="onb-demo-help">
+            Seed this vault with example notes so you start on a populated graph
+            instead of an empty one — explore it, then delete what you don't
+            need.
+          </span>
+        </span>
+        <span className="onb-demo-check mono">{seedDemo ? "On" : "Off"}</span>
+      </button>
 
       <div className="onb-actions">
         <button className="btn btn-md" onClick={onBack}>

@@ -112,6 +112,8 @@ export interface OnboardingCompleteRequest {
   theme: ThemeName;
   vault_name: string;
   overwrite_existing_vault?: boolean;
+  /** Seed a brand-new vault from the bundled demo template. */
+  seed_demo?: boolean;
   /** Legacy single-provider shape — keep null when sending ``providers``. */
   provider?: OnboardingProviderPayload | null;
   providers?: OnboardingProviderPayload[];

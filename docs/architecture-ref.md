@@ -1,6 +1,6 @@
 # Loom — Architecture Reference
 
-Condensed reference for Claude Code. Full doc: see `ARCHITECTURE.md` in project root.
+Condensed reference for Claude Code. Full shipped design: see `ARCHITECTURE.md`. Planned/north-star work (the Bridge, Prompt Compiler, multi-file attachments, v2+ roadmap): see `VISION.md`.
 
 ## Vault Structure
 
@@ -132,7 +132,7 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 
 ## Color System
 
-Default = **paper** theme. `tokens.css` also ships navy, forest, and sepia variants — same token names, different palettes.
+Default = **paper** theme. `tokens.css` also ships slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants — same token names, different palettes.
 
 | Token (paper) | Hex |
 |---------------|-----|
@@ -146,7 +146,7 @@ Default = **paper** theme. `tokens.css` also ships navy, forest, and sepia varia
 | `--agent` | `#2d4a7c` (ink blue) |
 | `--node-project` | `#2d4a7c` (ink blue) |
 | `--node-topic` | `#4a6b3a` (moss) |
-| `--node-person` | `#6b3a6b` (aubergine) |
+| `--node-people` | `#6b3a6b` (aubergine) |
 | `--node-daily` | `#8c877d` (graphite) |
 | `--node-capture` | `#a8722a` (ochre) |
 | `--node-custom` | `#2d6b6b` (teal ink) |

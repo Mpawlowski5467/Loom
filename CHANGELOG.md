@@ -5,7 +5,18 @@ All notable changes to Loom are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-06-21
+
+Loom 1.0 — the resilience-and-honesty milestone. The 0.x line proved the product
+end-to-end; 1.0 makes it dependable and makes its docs tell the truth. The agent
+work runs as observable LangGraph graphs with run/step tracing, provider keys are
+encrypted at rest, and an optional shared-token gate guards a deliberately-exposed
+port. Type-checking now gates CI with the backlog cleared to zero, and an
+end-to-end test drives the capture pipeline through the real HTTP routers. The
+architecture docs were split so the reference describes only what ships — planned
+work (the Bridge, Prompt Compiler, attachments) now lives in `docs/VISION.md`.
+Loom stays deliberately local-first and unauthenticated by default; the README
+"Known gaps" lists those v1 boundaries.
 
 ### Added
 - **LangGraph agent orchestration** — the capture pipeline and the Shuttle
@@ -31,6 +42,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `POST /api/captures/process` now drives the capture pipeline through
   `AgentRunner.run_pipeline` (the LangGraph pipeline) instead of an inline
   Weaver + finalize chain. Response shape is unchanged.
+- **Type-checking gates CI, and v1 test coverage expanded** — the strict-`mypy`
+  backlog was cleared to zero (targeting Python 3.12, the Docker/CI runtime) and
+  CI no longer runs it `continue-on-error`. Added a router-level end-to-end smoke
+  test (drop a capture → `POST /api/captures/process` → assert the note surfaces
+  in `/api/graph` and `/api/search`, with a stub chat + embedder) and component
+  tests for the New Note modal, the Cmd+K palette, and the Board pulse view.
+- **Architecture docs describe only what ships** — the planned Bridge, Prompt
+  Compiler, and file-attachments designs (and the v2+ roadmap) moved out of
+  `docs/ARCHITECTURE.md` into a new `docs/VISION.md`; `README.md` and
+  `docs/architecture-ref.md` point at both.
+
+### Security
+- **Provider API keys encrypted at rest** — keys in `config.yaml` are now
+  encrypted with Fernet (AES-128-CBC + HMAC) under a machine-local master key
+  (`~/.loom/.secret.key`, or the `LOOM_SECRET_KEY` env var), written with an
+  `enc:v1:` prefix; legacy plaintext keys are transparently re-encrypted on the
+  next save. This is defense-in-depth against casual disclosure of the config
+  file (backups, screen-shares) — **not** a substitute for the still-absent API
+  auth, and there is no OS-keychain integration yet. See `SECURITY.md`.
+- **Optional API token gate** — setting `LOOM_API_TOKEN` requires a matching
+  token on every `/api/*` request except the health/readiness probes, accepted as
+  `Authorization: Bearer <token>` or `X-Loom-Token` and compared in constant time.
+  Unset by default, so the localhost posture is unchanged. It is a speed bump for
+  a deliberately-exposed port, **not** real auth — keep the reverse proxy. See
+  `SECURITY.md`.
 
 ## [0.5.0] - 2026-06-01
 
@@ -145,5 +181,6 @@ layer — safe on localhost, do not expose the port as-is).
   in-app and in the README; OS-keychain support is not yet implemented.
 - No authentication on the API. Intended for local use only.
 
+[1.0.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.4.0

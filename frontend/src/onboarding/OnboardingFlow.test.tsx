@@ -80,11 +80,33 @@ describe("OnboardingFlow", () => {
         theme: "paper",
         vault_name: "default",
         overwrite_existing_vault: false,
+        seed_demo: false,
         providers: [],
         chat_provider: null,
         embed_provider: null,
         steps_done: ["welcome", "vault", "theme", "provider"],
       }),
+    );
+  });
+
+  it("'Try the demo vault' seeds the demo and names the vault demo", async () => {
+    const user = userEvent.setup();
+    render(<OnboardingFlow />);
+
+    await user.click(screen.getByRole("button", { name: "Begin →" }));
+    await user.click(
+      screen.getByRole("button", { name: /Try the demo vault/ }),
+    );
+    await user.click(screen.getByRole("button", { name: "Next →" }));
+    await user.click(screen.getByRole("button", { name: "Next →" }));
+    await user.click(screen.getByRole("button", { name: "Skip for now" }));
+    const skipButtons = screen.getAllByRole("button", { name: "Skip for now" });
+    await user.click(skipButtons[skipButtons.length - 1]);
+
+    await waitFor(() =>
+      expect(completeOnboardingMock).toHaveBeenCalledWith(
+        expect.objectContaining({ seed_demo: true, vault_name: "demo" }),
+      ),
     );
   });
 });

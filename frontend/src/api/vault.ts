@@ -92,3 +92,24 @@ export function vaultExportUrl(name: string): string {
   // Browser-driven download; the apiClient is JSON-only.
   return `${API_BASE}/api/vaults/${encodeURIComponent(name)}/export`;
 }
+
+/**
+ * Restore a vault from an exported ``.tar.gz`` backup. The archive is sent as
+ * the raw request body (the backend reads it directly, no multipart). Pass
+ * ``overwrite`` to replace an existing vault of the same name — without it the
+ * backend rejects a name collision with a 409 ``ApiError``.
+ */
+export function importVault(
+  name: string,
+  archive: Blob,
+  overwrite = false,
+  signal?: AbortSignal,
+): Promise<VaultInfo> {
+  const qs = overwrite ? "?overwrite=true" : "";
+  return apiClient.upload<VaultInfo>(
+    `/api/vaults/${encodeURIComponent(name)}/import${qs}`,
+    archive,
+    "application/gzip",
+    signal,
+  );
+}

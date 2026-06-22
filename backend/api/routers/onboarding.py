@@ -17,7 +17,7 @@ from core.config import (
     settings,
 )
 from core.exceptions import InvalidVaultNameError, VaultExistsError
-from core.vault import get_vault_manager
+from core.vault import VaultPathError, get_vault_manager
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,10 @@ class OnboardingCompleteRequest(BaseModel):
     theme: ThemeName = ThemeName.paper
     vault_name: str = "default"
     overwrite_existing_vault: bool = False
+    # Seed a brand-new vault from the bundled demo template (examples/demo-vault)
+    # so a first-run user lands on a populated graph. Ignored if the vault
+    # already exists.
+    seed_demo: bool = False
     provider: OnboardingProviderPayload | None = None
     providers: list[OnboardingProviderPayload] = []
     chat_provider: str | None = None
@@ -86,7 +90,10 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
     vm = get_vault_manager()
     if not vm.vault_exists(payload.vault_name):
         try:
-            vm.init_vault(payload.vault_name)
+            if payload.seed_demo:
+                vm.init_demo_vault(payload.vault_name)
+            else:
+                vm.init_vault(payload.vault_name)
         except VaultExistsError as exc:
             raise HTTPException(
                 status.HTTP_409_CONFLICT,
@@ -95,6 +102,13 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
         except InvalidVaultNameError as exc:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=str(exc),
+            ) from exc
+        except VaultPathError as exc:
+            # Demo template missing/misconfigured — surface clearly rather than
+            # 500ing the wizard.
+            raise HTTPException(
+                status.HTTP_400_BAD_REQUEST,
                 detail=str(exc),
             ) from exc
     elif payload.overwrite_existing_vault:
@@ -156,11 +170,17 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
     # wizard's completion.
     try:
         from api.runtime import reinit_providers_dependent_services
+        from core.note_index import get_note_index
         from core.providers import reset_registry
 
         await reset_registry()
         vm.set_active_vault(payload.vault_name)
         reinit_providers_dependent_services(vm.active_vault_dir())
+        # Rebuild the in-memory note index for the now-active vault so its notes
+        # (notably demo seed content) are immediately visible to /api/notes and
+        # /api/graph — without it the user would land on an empty graph until a
+        # restart or manual vault switch.
+        get_note_index().build(vm.active_threads_dir())
     except Exception:
         logger.warning("Post-onboarding service reinitialization failed", exc_info=True)
 

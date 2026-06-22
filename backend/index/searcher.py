@@ -79,7 +79,8 @@ class VectorSearcher:
             # LanceDB open/search/to_list are blocking — keep them off the loop.
             db = self._indexer.get_db()
             table = db.open_table("chunks")
-            return table.search(query_vec).limit(fetch_k).to_list()
+            rows: list[dict[str, Any]] = table.search(query_vec).limit(fetch_k).to_list()
+            return rows
 
         raw_results = await asyncio.to_thread(_vector_query)
 

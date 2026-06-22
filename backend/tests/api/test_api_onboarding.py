@@ -69,6 +69,41 @@ class TestOnboardingComplete:
         # HTTPException uses FastAPI's default {"detail": ...} envelope.
         assert "Unknown provider" in resp.json()["detail"]
 
+    def test_complete_with_seed_demo_populates_vault(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``seed_demo`` overlays the demo template's notes onto a new vault."""
+        import core.config as config_mod
+
+        # Point the seeder at a hermetic synthetic template.
+        demo = tmp_path / "demo-template"
+        (demo / "threads" / "topics").mkdir(parents=True)
+        (demo / "threads" / "topics" / "seed.md").write_text(
+            "---\nid: thr_seed01\ntitle: Seed\ntype: topic\n---\n\nHi.\n"
+        )
+        monkeypatch.setattr(config_mod.settings, "demo_vault_dir", demo)
+
+        payload = {
+            "theme": "paper",
+            "vault_name": "demo",
+            "seed_demo": True,
+            "steps_done": ["welcome", "vault", "theme", "provider"],
+        }
+        resp = client.post("/api/onboarding/complete", json=payload)
+        assert resp.status_code == 200
+        assert resp.json()["active_vault"] == "demo"
+
+        vault_root = config_mod.settings.vaults_dir / "demo"
+        # Demo note seeded + full scaffold created.
+        assert (vault_root / "threads" / "topics" / "seed.md").is_file()
+        assert (vault_root / "agents" / "weaver" / "config.yaml").is_file()
+
+        # The in-memory note index was rebuilt for the active vault, so the
+        # seeded note is immediately visible (not an empty graph until restart).
+        from core.note_index import get_note_index
+
+        assert get_note_index().get_by_id("thr_seed01") is not None
+
     def test_complete_legacy_single_provider_shape(self, client: TestClient) -> None:
         """The legacy single ``provider`` field is accepted as a one-element list."""
         payload = {

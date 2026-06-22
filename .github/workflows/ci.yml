@@ -38,11 +38,10 @@ jobs:
       - name: Check formatting with ruff
         run: ruff format --check backend/
 
-      # mypy is configured strict but the codebase has a pre-existing type-error
-      # backlog, so this runs for visibility without gating the build yet.
-      # Remove continue-on-error once the backlog is cleared to make it a gate.
-      - name: Type-check with mypy (non-blocking)
-        continue-on-error: true
+      # mypy runs strict and is a gate: the type-error backlog has been cleared
+      # to zero. mypy's python_version is pinned to 3.12 in pyproject.toml to
+      # match this job's interpreter and the runtime Docker image.
+      - name: Type-check with mypy
         run: cd backend && mypy .
 
       - name: Run tests

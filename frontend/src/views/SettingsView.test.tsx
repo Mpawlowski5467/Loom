@@ -17,6 +17,9 @@ vi.mock("./settings/ProvidersSection", () => ({
 vi.mock("./settings/VaultSection", () => ({
   VaultSection: () => <div data-testid="sec-vault" />,
 }));
+vi.mock("./settings/ArchivedSection", () => ({
+  ArchivedSection: () => <div data-testid="sec-archived" />,
+}));
 vi.mock("./settings/AboutSection", () => ({
   AboutSection: () => <div data-testid="sec-about" />,
 }));
@@ -44,7 +47,14 @@ function renderSettings(section: SettingsSection = "appearance") {
 describe("SettingsView", () => {
   it("renders a nav item for every section", () => {
     renderSettings();
-    for (const label of ["Appearance", "Providers", "Vault", "About", "Danger"]) {
+    for (const label of [
+      "Appearance",
+      "Providers",
+      "Vault",
+      "Archived",
+      "About",
+      "Danger",
+    ]) {
       expect(screen.getByRole("button", { name: label })).toBeInTheDocument();
     }
   });
@@ -77,6 +87,7 @@ describe("SettingsView", () => {
     ["appearance", "sec-appearance"],
     ["providers", "sec-providers"],
     ["vault", "sec-vault"],
+    ["archived", "sec-archived"],
     ["about", "sec-about"],
     ["danger", "sec-danger"],
   ] as const)("routes %s to the right section", (section, testid) => {

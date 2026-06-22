@@ -64,7 +64,9 @@ class PipelineState(TypedDict, total=False):
     flagged: bool
 
 
-def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStateGraph:
+def build_pipeline_graph(
+    runner: Any, refresh_index: Any = None
+) -> CompiledStateGraph[PipelineState]:
     """Compile the capture pipeline bound to a concrete :class:`AgentRunner`.
 
     ``refresh_index`` is an optional ``Callable[[Path], None]`` used by the live
@@ -178,6 +180,8 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
                         chain = await asyncio.to_thread(
                             rc.execute, "sentinel", _resolve(state["note_path"])
                         )
+                    # Narrow for validate_action: chain is freshly resolved above.
+                    assert chain is not None
                     validation = await sentinel.validate_action(
                         "weaver", "created", _resolve(state["note_path"]), chain
                     )
@@ -221,9 +225,14 @@ def build_pipeline_graph(runner: Any, refresh_index: Any = None) -> CompiledStat
                 state.get("validation"),
                 errors,
             )
-        return {"errors": errors, **flags}
+        return {
+            "errors": errors,
+            "capture_archived": flags["capture_archived"],
+            "review_required": flags["review_required"],
+            "flagged": flags["flagged"],
+        }
 
-    graph: StateGraph = StateGraph(PipelineState)
+    graph: StateGraph[PipelineState] = StateGraph(PipelineState)
     graph.add_node("weaver", weaver_node)
     graph.add_node("spider", spider_node)
     graph.add_node("scribe", scribe_node)

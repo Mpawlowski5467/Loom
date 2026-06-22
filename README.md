@@ -261,7 +261,7 @@ flowchart LR
 
 ### Knowledge graph
 - Force-directed Sigma.js 3 + graphology layout with drag, zoom, pan
-- Orbit mode: focus-first concentric rings around a selected node (rings / spiral / arms scenes)
+- Orbit mode: focus-first concentric scenes around a selected node (rings / spiral / arms / galaxy / wave)
 - Edge travelers: little dashes animate along edges so the graph reads as alive, not static
 - Display panel: tune label size & density, node size, spacing, edge thickness, breathing, and travelers — persisted to `localStorage` with one-click reset
 - Hover highlights neighbors; edge thickness scales with link density
@@ -301,7 +301,7 @@ flowchart LR
 
 ### Onboarding wizard
 - First-run multi-step flow: Welcome → Vault Setup → Theme Picker → Provider Config
-- Live theme previews (Paper, Navy, Forest, Sepia) before commit
+- Live theme previews (Paper, Slate, Foundry, Dune, Carbon, Lagoon, Obsidian, Ember, Mulberry) before commit
 - Inline "Test connection" against the picked provider — failures don't block save
 - Skip-friendly: provider step is optional, defaults pick safe models
 - Onboarding state lives in `~/.loom/config.yaml` under `onboarding.completed`
@@ -342,12 +342,17 @@ Your notes persist in the `loom-data` Docker volume across restarts and
 rebuilds. To keep them as plain Markdown files on your machine instead, swap the
 volume for a bind mount (see the commented line in `docker-compose.yml`).
 
-> **Note:** Provider API keys are stored in plain text (in `.env` and in the
-> vault's `config.yaml`). Keep `.env` private — it is git-ignored by default.
+> **Note:** Provider API keys are encrypted at rest in `config.yaml` (Fernet, under
+> a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth against
+> casual disclosure of the config file, not a substitute for auth, and with no
+> OS-keychain integration yet. If you pass a key via `.env`, keep it private — it is
+> git-ignored by default.
 >
 > **Security:** the published port binds to `127.0.0.1` (this machine only) and the
 > API ships **no auth**. Do not expose it to a LAN/internet without a reverse proxy
-> + auth — see [SECURITY.md](SECURITY.md).
+> + auth — see [SECURITY.md](SECURITY.md). An optional `LOOM_API_TOKEN` adds a
+> shared-token speed bump for exposed ports, but it is **not** a substitute for that
+> proxy — see [SECURITY.md](SECURITY.md#optional-api-token).
 
 ### Run from source (for development)
 
@@ -433,7 +438,7 @@ Loom/
 │   │   ├── editor/       # markdown render + plain editing
 │   │   └── styles/       # tokens.css, base.css, views/*
 │   └── public/
-├── docs/                 # ARCHITECTURE.md, architecture-ref.md, getting-started.md, style-guide.md, wireframes/
+├── docs/                 # ARCHITECTURE.md, VISION.md, architecture-ref.md, getting-started.md, style-guide.md, wireframes/
 ├── examples/
 │   └── demo-vault/       # ready-to-use sample vault
 ├── scripts/              # seed and utility scripts
@@ -454,7 +459,7 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` | `/api/agents` | Agent status + action counts |
 | `GET` | `/api/agents/activity` | Live per-agent activity (polled by the Pulse view) |
 | `GET` `POST` `PATCH` `DELETE` | `/api/agents/registry` | List / create / edit / remove custom agents |
-| `GET` | `/api/agents/{name}/changelog` | Agent changelog |
+| `GET` | `/api/changelog?agent=&date=` | Agent changelog (per agent/date; `/api/changelog/feed` for the unified activity feed) |
 | `POST` | `/api/chat/send` | Talk to a Shuttle agent or the Council |
 | `POST` | `/api/chat/send/stream` | Streamed Council reply (Server-Sent Events) |
 | `GET` `POST` `PUT` | `/api/vaults` | Multi-vault management |
@@ -485,11 +490,16 @@ CI runs on push via `.github/workflows/ci.yml`.
 
 ## Status
 
-**Open beta (0.5.0).** Loom runs end-to-end and is stable for daily local use; it
-is not yet a hardened, internet-exposable 1.0 (see *Known gaps*). What works today:
+**1.0.0.** Loom runs end-to-end and is stable for daily local use. 1.0 is the
+resilience-and-honesty milestone: the agent pipeline is observable, failures are
+handled instead of swallowed, and the docs describe only what ships. It stays
+deliberately local-first and unauthenticated by default — not an
+internet-exposable service without your own reverse proxy (see *Known gaps*).
+What works today:
 
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with the read-before-write chain
 - Both Shuttle Layer agents (Researcher, Standup) plus user-defined custom agents
+- Scribe daily-log generation and Sentinel AI-assisted validation (LLM path with a deterministic fallback)
 - Graph, Board, Inbox, and Thread views
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
@@ -505,20 +515,16 @@ is not yet a hardened, internet-exposable 1.0 (see *Known gaps*). What works tod
 - Index-drift detection: notes that land in the metadata index but miss the vector store are reconciled on startup, surfaced via `/api/health`, and shown as a "rebuilding" banner
 - Idempotent capture pipeline — a crash between note-write and archive can't create a duplicate on retry
 - Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
-- A true end-to-end pipeline test (capture → Weaver → index → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes
+- End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
 - Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
 
-**In flight:**
-- Scribe's daily-log generation works; the summary phrasing is still being tuned
-- Sentinel's AI-assisted validation works (LLM path with a deterministic fallback); rule coverage is being broadened
-- Standup `generate()` works; no external calendar link yet
+**Known gaps (deliberate v1 boundaries):**
+- **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
+- **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
+- **Deferred by design** — the Bridge (GitHub/Email/Calendar integrations, including a Standup calendar link), the Prompt Compiler, and multi-file attachments are planned, not built; see [`docs/VISION.md`](docs/VISION.md)
+- `AppContext` still hosts most global frontend state; the `useGraph*` graph hooks remain the main untested area (backend and the rest of the frontend are well covered)
 
-**Known gaps (the road to 1.0):**
-- **No auth layer.** Safe on localhost; do not expose the port to a LAN/internet without your own reverse proxy + auth — see [SECURITY.md](SECURITY.md)
-- **Provider API keys are stored in plain text** in `config.yaml` — no encryption or OS-keychain support yet
-- `AppContext` still hosts most global frontend state (one large provider); a few Board child components and the `useGraph*` hooks remain untested (backend and the rest of the frontend are well covered)
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/VISION.md`](docs/VISION.md) for the north-star/planned work (the Bridge, Prompt Compiler, attachments, and the v2+ roadmap), and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 
 ## Wireframes
 

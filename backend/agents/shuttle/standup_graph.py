@@ -35,7 +35,7 @@ class StandupState(TypedDict, total=False):
     skipped: bool
 
 
-def build_standup_graph(agent: Standup, target_date: date) -> CompiledStateGraph:
+def build_standup_graph(agent: Standup, target_date: date) -> CompiledStateGraph[StandupState]:
     """Compile the Standup graph bound to a concrete agent and target date."""
 
     async def collect(state: StandupState) -> StandupState:
@@ -76,7 +76,7 @@ def build_standup_graph(agent: Standup, target_date: date) -> CompiledStateGraph
             )
         return {"capture_id": capture_id, "capture_path": str(capture_path)}
 
-    graph: StateGraph = StateGraph(StandupState)
+    graph: StateGraph[StandupState] = StateGraph(StandupState)
     graph.add_node("collect", collect)
     graph.add_node("skip", skip)
     graph.add_node("generate", generate)

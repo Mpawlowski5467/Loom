@@ -1,6 +1,7 @@
 """Vault management: initialization, listing, and active-vault switching."""
 
 import re
+import shutil
 from pathlib import Path
 
 from core.config import GlobalConfig, LoomSettings, VaultConfig, settings
@@ -77,6 +78,54 @@ class VaultManager:
             config.save(self._settings.config_path)
 
         return root
+
+    def init_demo_vault(self, name: str, source: Path | None = None) -> Path:
+        """Create a vault scaffold then seed it with the demo vault's notes.
+
+        The full default scaffold (agents, rules, prompts, ``.loom`` metadata)
+        comes from :meth:`init_vault`; the demo template's ``threads/`` notes are
+        then overlaid so a new user lands on a populated graph instead of an
+        empty one. Only notes are seeded — ``prime.md``, agent state, and the
+        scaffold's ``vault.yaml`` stay the freshly-created ones.
+
+        Args:
+            name: Name for the new vault.
+            source: Demo template directory. Defaults to ``settings.demo_vault_dir``.
+
+        Returns:
+            The path to the created vault.
+
+        Raises:
+            VaultPathError: If the demo template directory does not exist.
+            VaultExistsError: If a vault with this name already exists.
+            InvalidVaultNameError: If the name is invalid.
+        """
+        src = source or self._settings.demo_vault_dir
+        if not src.exists():
+            raise VaultPathError(f"Demo vault template not found: {src}")
+        root = self.init_vault(name)
+        self._seed_threads(src, root)
+        return root
+
+    def _seed_threads(self, src: Path, root: Path) -> None:
+        """Copy a template vault's ``threads/`` notes into a scaffolded vault.
+
+        Existing (empty) core folders are merged into, not replaced. The
+        ``.archive/`` subtree is skipped so seeded vaults don't start with
+        pre-archived notes.
+        """
+        src_threads = src / "threads"
+        if not src_threads.exists():
+            return
+        dest_threads = root / "threads"
+        for item in sorted(src_threads.iterdir()):
+            if item.name == ".archive":
+                continue
+            dest = dest_threads / item.name
+            if item.is_dir():
+                shutil.copytree(item, dest, dirs_exist_ok=True)
+            elif item.is_file():
+                shutil.copy2(item, dest)
 
     def list_vaults(self) -> list[str]:
         """Return names of all initialized vaults."""

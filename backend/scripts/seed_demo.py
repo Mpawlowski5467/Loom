@@ -3,6 +3,7 @@
 
 import sys
 from pathlib import Path
+from typing import Any
 
 # Allow running from repo root
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -12,7 +13,7 @@ from core.vault import VaultManager
 
 DEMO_VAULT = "demo"
 
-NOTES: list[dict] = [
+NOTES: list[dict[str, Any]] = [
     # -- Projects --
     {
         "folder": "projects",

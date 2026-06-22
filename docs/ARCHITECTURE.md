@@ -1,16 +1,16 @@
-# Loom — Complete Architecture Document
+# Loom — Architecture Document
 
 > A self-organizing AI memory system with a multi-agent backbone and a visual knowledge graph.
 
 Loom is a local-first, privacy-respecting AI knowledge base that lives on your machine. You point it at your notes, documents, and data — and it indexes, organizes, links, and maintains everything through a system of specialized AI agents. Your knowledge is stored as plain markdown files, visualized as an interactive graph, and searchable through natural language.
 
-> **Status legend.** This document is both a description of what ships today *and* the north-star design. Sections carry one of three tags — ✅ shipped · 🟡 partial · 🔭 planned (not yet built). Quick map:
+> **Status legend.** This document describes what Loom ships **today**. Sections carry one of two tags — ✅ shipped · 🟡 partial (ships and works, still being refined). The north-star design — work that is planned but not yet built — lives in [docs/VISION.md](VISION.md). Quick map:
 >
 > - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle chat), custom agents (registry + Board UI + execution — running one writes a capture for triage), the Rules Engine, the Graph UI (Paper theme, orbit mode, display controls).
-> - 🟡 **Partial**: Scribe daily logs, Sentinel AI validation.
-> - 🔭 **Planned**: the Bridge (integrations), the Prompt Compiler, multi-file attachments.
+> - 🟡 **Partial (ships and works, still being refined)**: Scribe daily logs — generation works, summary phrasing is still being tuned; Sentinel AI validation — the LLM-assisted path (with a deterministic fallback) works, rule coverage is being broadened.
+> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: the Bridge (integrations), the Prompt Compiler, and multi-file attachments — described there as future direction, not built today.
 >
-> Where a section describes something not yet built, it opens with a 🔭 callout.
+> Sections 7–9 below are brief stubs that summarize each planned subsystem and link to its full design in VISION.md.
 
 ---
 
@@ -159,7 +159,7 @@ Every folder can have an `_index.md` — a living, auto-generated summary of wha
 
 Raw information lands here through three paths:
 1. **Manually**: user drops a note or text file in
-2. **Via integrations**: Bridge layer dumps external data (emails, GitHub events, calendar)
+2. **Via integrations** (planned — see [VISION.md](VISION.md#layer-6-the-bridge)): the Bridge layer would drop external data (emails, GitHub events, calendar) into the inbox
 3. **From Shuttle agents**: task agents output their work here
 
 Loom Layer agents process captures, break them apart, and file them into the right places according to the rules engine. The raw capture stays in `.archive/` as a reference.
@@ -597,7 +597,7 @@ The Graph UI is the visual interface where users see and interact with their kno
 - **Web-based (localhost)**: runs a local FastAPI server, opens in browser. Cross-platform for free — no packaging headaches on macOS, Linux, or Windows.
 - **Sigma.js**: WebGL-powered graph rendering. Handles thousands of nodes performantly without frame drops.
 - **Custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`): a hand-rolled renderer with `[[wikilink]]` support and inline marks — not a third-party WYSIWYG framework.
-- **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Navy, forest, and sepia variants ship alongside it in `tokens.css`.
+- **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants ship alongside it in `tokens.css`.
 
 ### 6.2 Layout
 
@@ -720,7 +720,7 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 | **Pin nodes** | Pin a node in place so it doesn't move with physics. Useful for anchoring key hubs. |
 | **Live filtering** | Filter chips at top of graph: by type (project, topic, person, daily), tag, date, agent author. Filters apply instantly. |
 
-**Layout**: two modes. **Constellation** is force-directed (ForceAtlas2) — nodes push and pull organically, and natural clustering emerges from link density. **Orbit** is focus-first: a selected note sits at the center with the rest in concentric rings (rings / spiral / arms scenes).
+**Layout**: two modes. **Constellation** is force-directed (ForceAtlas2) — nodes push and pull organically, and natural clustering emerges from link density. **Orbit** is focus-first: a selected note sits at the center with the rest in concentric scenes (rings / spiral / arms / galaxy / wave).
 
 **Display controls**: a panel exposes ~9 knobs — label size & density, node size, spacing, edge thickness, breathing, and edge travelers — persisted to `localStorage` with a one-click reset.
 
@@ -742,11 +742,11 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 ### 6.10 Notifications & Real-Time
 
 - **Toast notifications**: small popups in the bottom-right corner that fade away. Ink-blue border (`--agent`) for agent actions. Shown for note creation, linking, issue flagging.
-- **Auto-refresh**: graph updates on a short interval (every 5-10 seconds) as agents work. No manual reload required.
+- **Live refresh**: the UI holds an SSE stream (`GET /api/events/stream`); when the file watcher emits a `vault-changed` event the UI re-fetches notes and captures (one debounced reload per burst), so agent and external edits reach an open UI without a manual reload. The Board additionally polls agent activity on a short, tab/visibility-gated interval.
 
 ### 6.11 Color System
 
-Loom's default is the **Paper** theme — warm cream paper surfaces with a single duotone accent split: **brick red** for user actions and **ink blue** for agent actions. This split gives instant "I did this" vs "an agent did this" distinction. Navy, forest, and sepia variants ship alongside Paper in `tokens.css` (same token names, different palettes).
+Loom's default is the **Paper** theme — warm cream paper surfaces with a single duotone accent split: **brick red** for user actions and **ink blue** for agent actions. This split gives instant "I did this" vs "an agent did this" distinction. Slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants ship alongside Paper in `tokens.css` (same token names, different palettes).
 
 #### Surfaces & Ink (Paper)
 
@@ -774,7 +774,7 @@ Hairlines are `rgba(26,24,21,0.08)` / `rgba(26,24,21,0.18)`.
 |-----------|-------|-----|
 | Project | `--node-project` | `#2d4a7c` (ink blue) |
 | Topic | `--node-topic` | `#4a6b3a` (moss) |
-| Person | `--node-person` | `#6b3a6b` (aubergine) |
+| Person | `--node-people` | `#6b3a6b` (aubergine) |
 | Daily | `--node-daily` | `#8c877d` (graphite) |
 | Capture | `--node-capture` | `#a8722a` (ochre) |
 | Custom | `--node-custom` | `#2d6b6b` (teal ink) |
@@ -795,257 +795,19 @@ Default ease for any transition longer than 100ms: `cubic-bezier(.2, .7, .3, 1)`
 
 ## 7. Layer 6: The Bridge
 
-> 🔭 **Planned — not yet built.** There is no `backend/bridge/` today; the integrations below are a design target, not shipped code. The capture-processing pipeline they would feed (Weaver → Spider → Scribe → Sentinel) *is* real, so dropping files into `captures/` manually already works.
-
-The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
-
-### 7.1 Key Decisions
-
-- **v1 integrations** (hardcoded into core): GitHub, Email, Calendar
-- **v2**: refactor into a plugin system with a standard interface for community-built integrations (Slack, Notion, web clipper, etc.)
-
-### 7.2 v1 Integrations
-
-**GitHub**: polls repos or uses webhooks. Pulls commits, issues, and PRs as capture notes with metadata (repo, author, labels, timestamp). Weaver files them under the right project.
-
-**Email**: local IMAP listener or forwarding address. Receives emails, parses them into markdown captures with sender, subject, date, and body.
-
-**Calendar**: connects to Google Calendar or iCal. Pulls today's events, auto-seeds the daily log with meeting blocks (time, title, attendees). Scribe enriches after user adds notes.
-
-### 7.3 Integration Data Flow
-
-```
-External Source (GitHub / Email / Calendar)
-    ↓
-Bridge adapter parses data → markdown
-    ↓
-Drops into captures/ as .md file
-    ↓
-Loom agents detect new capture (event-driven)
-    ↓
-Weaver runs read chain → creates proper note
-    ↓
-Spider links it → Scribe updates indexes → Sentinel validates
-```
+The Bridge is the planned integration layer that lands external data (GitHub, Email, Calendar, and later community plugins) in `captures/` for Loom's agents to process. It is not yet built — the capture-processing pipeline it would feed is real, so dropping files into `captures/` manually already works today. **Full design: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
 
 ---
 
 ## 8. Layer 7: The Prompt Compiler
 
-> 🔭 **Planned — not yet built.** There is no `backend/compiler/` today. Agents currently assemble prompts directly and call the provider registry (which traces every call — see 3.3). The optimization pipeline below is the intended evolution, not current behavior.
-
-The Prompt Compiler is the system that sits between agents and the LLM. Every prompt passes through it before being sent. Its job is to produce token-efficient, well-structured, high-quality prompts every time.
-
-### 8.1 Architecture
-
-Two-part system: a centralized compiler with shared optimization logic, plus per-agent templates for role-specific prompts.
-
-```
-Agent wants to act
-    ↓
-Reads context via read chain (vault.yaml, prime.md, role rules, memory.md, _index.md, related notes)
-    ↓
-Passes raw context + intent to Prompt Compiler
-    ↓
-Compiler: selects template → prunes context → compresses → ranks priority → counts tokens → assembles final prompt
-    ↓
-Sends to LLM provider
-    ↓
-Response returns to agent
-```
-
-### 8.2 Optimizations
-
-The compiler applies six optimization steps in order:
-
-| Step | What it does |
-|------|-------------|
-| **1. Prompt templates** | Selects the right reusable, well-tested template for this action (create note, link, summarize, etc.). Templates define the prompt skeleton with `{{variable}}` slots. |
-| **2. Context pruning** | Trims irrelevant context from the read chain. If the agent is linking two notes about API design, it doesn't need the full contents of the daily log or unrelated people notes. |
-| **3. Priority ranking** | Ranks remaining context items by relevance to the current task. The most relevant items get included first within the token budget. Lower-priority items get dropped. |
-| **4. Context compression** | For context items that are important but long, summarizes them before inclusion rather than sending full text. A 2000-word note becomes a 200-word summary if that's sufficient for the task. |
-| **5. Token counting** | Measures the assembled prompt's token count before sending. If over budget, triggers further pruning or compression. Warns in the agent log if a prompt is consistently near the limit. |
-| **6. Prompt versioning** | Tags every outgoing prompt with a version number from its template. Logs which version was used for each action so you can track which prompt changes improved results over time. |
-
-### 8.3 Prompt Templates
-
-Templates are markdown files with YAML frontmatter, stored in a dedicated `prompts/` directory. Consistent with the vault philosophy — human-readable, git-trackable, editable by the user.
-
-```
-prompts/
-├── _compiler.yaml             # global compiler config (token budgets, compression thresholds)
-├── shared/
-│   ├── system-preamble.md     # shared system prompt all agents use
-│   └── output-format.md       # shared output formatting instructions
-├── weaver/
-│   ├── create-note.md         # template for creating a new note from a capture
-│   ├── classify-capture.md    # template for classifying an incoming capture
-│   └── apply-schema.md        # template for applying a schema to raw content
-├── spider/
-│   ├── find-connections.md    # template for discovering links between notes
-│   └── validate-link.md       # template for checking if a proposed link is meaningful
-├── archivist/
-│   ├── audit-note.md          # template for auditing a note for issues
-│   └── detect-duplicates.md   # template for finding duplicate content
-├── scribe/
-│   ├── summarize-folder.md    # template for generating _index.md
-│   └── daily-log.md           # template for generating daily logs
-├── sentinel/
-│   └── validate-action.md     # template for validating an agent's proposed action
-├── researcher/
-│   ├── search-vault.md        # template for querying the vault
-│   └── synthesize-answer.md   # template for synthesizing findings into a response
-└── standup/
-    └── generate-recap.md      # template for generating the daily standup
-```
-
-### 8.4 Template Format
-
-Each template is a markdown file with YAML frontmatter defining metadata and variables:
-
-```markdown
----
-id: weaver/create-note
-version: 3
-token_budget: 4000
-required_context:
-  - prime.md
-  - schema (matching type)
-  - _index.md (target folder)
-optional_context:
-  - related notes (max 3)
-  - memory.md
-variables:
-  - capture_content
-  - target_type
-  - target_folder
----
-
-# System
-
-You are Weaver, a note creation agent in the Loom knowledge system.
-
-{{system-preamble}}
-
-# Rules
-
-{{prime.md}}
-{{schema}}
-
-# Context
-
-Current folder index:
-{{_index.md}}
-
-Related notes (if any):
-{{related_notes}}
-
-# Task
-
-Create a new {{target_type}} note from the following capture.
-File it in {{target_folder}}.
-Follow the schema exactly. Add appropriate [[wikilinks]] to related existing notes.
-
-# Capture Content
-
-{{capture_content}}
-
-# Output
-
-Respond with the complete markdown file including YAML frontmatter.
-{{output-format}}
-```
-
-The compiler reads the template, fills in the variables, applies the optimization pipeline (prune, rank, compress, count), and sends the final assembled prompt to the LLM.
-
-### 8.5 Compiler Configuration
-
-```yaml
-# prompts/_compiler.yaml
-defaults:
-  token_budget: 4000          # default max tokens per prompt
-  compression_threshold: 500   # compress context items longer than this (in tokens)
-  max_context_items: 10        # max number of context items to include
-  priority_decay: 0.8          # how much less important each additional context item is
-
-per_agent:
-  weaver:
-    token_budget: 6000         # Weaver needs more context for note creation
-  spider:
-    token_budget: 3000         # Spider's prompts are simpler
-  researcher:
-    token_budget: 8000         # Researcher may need extensive vault context
-```
-
-### 8.6 Versioning & Improvement
-
-Every prompt sent to the LLM is logged with:
-- Template ID and version number
-- Token count (before and after optimization)
-- Context items included (and which were pruned)
-- Agent action result (success/failure, Sentinel validation)
-
-This creates a feedback loop. Over time you can see which template versions produce better results, which context items are most useful, and where token budgets need adjusting.
+The Prompt Compiler is a planned layer between agents and the LLM: it would select per-agent templates and apply a token-efficiency pipeline (prune, rank, compress, count, version) to every prompt. It is not yet built — agents today assemble prompts directly and call the provider registry, which traces every call (see [3.3](#33-provider-tracing)). **Full design: [docs/VISION.md → Layer 7: The Prompt Compiler](VISION.md#layer-7-the-prompt-compiler).**
 
 ---
 
 ## 9. File Support (Future)
 
-> 🔭 **Planned — not yet built.** Loom is markdown-only today. The attachments model below is a future direction.
-
-Loom's vault is markdown-first, but will support additional file types in a future version.
-
-### 9.1 Supported File Types
-
-| Category | Extensions |
-|----------|-----------|
-| Images | `.png`, `.jpg`, `.gif`, `.svg` |
-| Documents | `.pdf`, `.docx` |
-| Spreadsheets | `.xlsx`, `.csv` |
-| Code | `.py`, `.js`, `.ts`, `.go`, `.rs`, etc. |
-| Plain text | `.txt`, `.log` |
-
-### 9.2 Attachments Model
-
-Non-markdown files are **attachments** — they attach to a parent `.md` note. The note is always the primary entity, and files are linked assets.
-
-```
-threads/projects/atlas-dashboard/
-├── atlas-dashboard.md          # the primary note
-└── _attachments/
-    ├── architecture-diagram.png
-    ├── requirements.pdf
-    └── data-export.csv
-```
-
-Files are referenced from the parent note using a standard syntax:
-
-```markdown
-## Architecture
-See the diagram: ![[architecture-diagram.png]]
-
-## Requirements
-Full spec: ![[requirements.pdf]]
-```
-
-### 9.3 Smart Extraction for Indexing
-
-When indexing attachments, the system uses smart extraction:
-
-| File type | Extraction method |
-|-----------|------------------|
-| PDF | Extract text via parser, embed alongside parent note |
-| Word (.docx) | Extract text, embed alongside parent note |
-| Spreadsheet (.xlsx, .csv) | Extract headers + sample rows, embed as structured summary |
-| Code files | Extract full text, embed with language metadata |
-| Plain text | Extract full text, embed directly |
-| Images | Metadata only (filename, tags, user description). No content extraction unless vision model is configured. |
-
-Extracted text gets chunked and embedded in LanceDB just like markdown sections, with a reference back to both the attachment file and its parent note.
-
-### 9.4 Graph Representation
-
-Attachments appear as smaller secondary nodes connected to their parent note, visually distinct from regular notes (different shape or icon). They don't clutter the graph but are visible when you zoom into a specific note's neighborhood.
+Loom is markdown-only today. A planned attachments model would let non-markdown files (images, PDFs, docx, spreadsheets, code) attach to a parent `.md` note, with smart text extraction for indexing and secondary nodes in the graph. **Full design: [docs/VISION.md → File Support](VISION.md#file-support).**
 
 ---
 
@@ -1062,8 +824,7 @@ Attachments appear as smaller secondary nodes connected to their parent note, vi
 | Agent orchestration | LangGraph `StateGraph` (capture pipeline + Shuttle agents); nodes call Loom's own providers — no LangChain models |
 | Tracing | In-memory ring + on-disk mirror (`/api/traces`); run/step-grouped runs (`/api/traces/runs`) |
 | Streaming | Server-Sent Events (Council chat) |
-| Prompt Compiler | 🔭 Planned — Markdown templates + Python optimization pipeline |
-| Theme | Paper by default; navy / forest / sepia variants |
+| Theme | Paper by default; slate / foundry / dune / carbon / lagoon / obsidian / ember / mulberry variants |
 | Delivery | Localhost web app (browser-based) |
 | Repo | Monorepo |
 
@@ -1084,7 +845,8 @@ loom/
 │   │   └── providers/      # openai, anthropic, xai, openrouter, ollama + registry (TracedProvider)
 │   ├── index/              # LanceDB indexer, searcher, chunker
 │   ├── scripts/            # maintenance scripts
-│   └── tests/              # pytest
+│   ├── tests/              # pytest
+│   └── pyproject.toml      # Python package + tooling config
 ├── frontend/               # React + TypeScript — Graph UI
 │   └── src/
 │       ├── views/          # Graph, Board, Inbox, Thread, Settings, Palette + onboarding
@@ -1095,12 +857,9 @@ loom/
 │       ├── editor/         # custom Markdown renderer
 │       ├── theme/          # theme tokens + runtime swap
 │       └── styles/         # tokens.css + view stylesheets
-├── docs/                   # ARCHITECTURE.md, architecture-ref.md, style-guide.md
+├── docs/                   # ARCHITECTURE.md, VISION.md, architecture-ref.md, style-guide.md
 ├── examples/               # demo vault, rules, schemas
-├── scripts/                # repo-level scripts
-└── pyproject.toml
-
-# 🔭 Planned (not present today): backend/compiler/ (Prompt Compiler), backend/bridge/ (integrations).
+└── scripts/                # repo-level scripts
 ```
 
 ---
@@ -1124,7 +883,7 @@ loom/
 - Create note modal (sends request to Weaver pipeline, works manually before agents exist)
 - Rich editor (custom Markdown renderer) in right sidebar with meta fields
 - Toast notifications placeholder
-- Auto-refresh graph on short interval
+- Live refresh: graph re-fetches on a `vault-changed` SSE push from the file watcher (not a polling interval)
 - **Goal**: manually write notes, open the UI, see your knowledge graph, browse and edit from the file explorer
 
 ### v1 — "Think and Weave"
@@ -1154,29 +913,6 @@ loom/
 - `prime.md` immutability enforced (suggestions via chat only)
 - **Goal**: Loom is alive — agents process captures, link knowledge, maintain the vault, and you interact with them through the UI
 
-### v2 — "Connect and Grow"
+### Beyond v1
 
-- GitHub integration (commits, issues, PRs → captures)
-- Calendar integration (events → daily notes)
-- Email integration (IMAP/forwarding → captures)
-- Plugin architecture for community integrations
-- Custom Shuttle agents (user-defined via config folders)
-- Example vaults with demo data
-- Full documentation (README, getting started, architecture, contributing guide)
-- Cross-platform testing (macOS, Linux, Windows)
-- CI/CD with GitHub Actions
-- License decision (MIT or Apache 2.0)
-- Open source launch
-- **Goal**: Loom connects to your real workflow and is ready for the world
-
-### Future
-
-- Multi-file support (images, PDFs, docx, xlsx, csv, code files) via attachments model
-- Smart extraction for indexing attachments (text from PDFs/docs, metadata for images)
-- Attachment nodes in the graph (secondary nodes linked to parent notes)
-- Light theme option
-- Team vaults with sync
-- Web clipper browser extension
-- Mobile companion app
-- Obsidian vault import tool
-- Additional Shuttle agents (Reviewer, Planner, Digest)
+v2 ("Connect and Grow" — integrations, plugins, and the open-source launch) and the longer-range Future milestones (multi-file attachments, light theme, team vaults, web clipper, mobile, and more) live in **[docs/VISION.md → Roadmap: Beyond v1](VISION.md#roadmap-beyond-v1)**.

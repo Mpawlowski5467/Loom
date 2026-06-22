@@ -42,11 +42,15 @@ class AnthropicProvider(BaseProvider):
     async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
         """Generate a chat completion via the Anthropic messages API."""
         try:
+            # Pass ``system`` only when it's a real string; omitting the kwarg
+            # entirely lets the SDK apply its own default, so the value the SDK
+            # ever sees is always ``str`` (never the NOT_GIVEN sentinel).
+            extra: dict[str, Any] = {"system": system} if system else {}
             resp = await self._client.messages.create(
                 model=self._chat_model,
                 max_tokens=4096,
-                system=system if system else anthropic.NOT_GIVEN,
                 messages=cast(list[MessageParam], messages),
+                **extra,
             )
             block = resp.content[0]
             if not isinstance(block, TextBlock):

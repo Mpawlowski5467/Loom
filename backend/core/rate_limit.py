@@ -16,7 +16,6 @@ from core.config import GlobalConfig, settings
 
 if TYPE_CHECKING:
     from fastapi import Request
-    from slowapi.errors import RateLimitExceeded
 
 # ---------------------------------------------------------------------------
 # Load limits from config (with defaults)
@@ -49,10 +48,17 @@ limiter = Limiter(key_func=get_remote_address)
 # ---------------------------------------------------------------------------
 
 
-def rate_limit_exceeded_handler(_request: Request, exc: RateLimitExceeded) -> JSONResponse:
-    """Return a 429 JSON response with rate-limit details."""
+def rate_limit_exceeded_handler(_request: Request, exc: Exception) -> JSONResponse:
+    """Return a 429 JSON response with rate-limit details.
+
+    Typed with the broad ``Exception`` that Starlette's ``add_exception_handler``
+    expects; in practice it only ever receives a ``RateLimitExceeded`` (the
+    exception it is registered for), whose ``detail``/``retry_after`` are read
+    defensively via ``getattr``.
+    """
+    detail = getattr(exc, "detail", "")
     return JSONResponse(
         status_code=429,
-        content={"error": f"Rate limit exceeded: {exc.detail}", "type": "RateLimitExceeded"},
+        content={"error": f"Rate limit exceeded: {detail}", "type": "RateLimitExceeded"},
         headers={"Retry-After": str(getattr(exc, "retry_after", 60))},
     )

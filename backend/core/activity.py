@@ -5,7 +5,7 @@ from __future__ import annotations
 import threading
 import time
 from collections import defaultdict, deque
-from typing import Literal
+from typing import Any, Literal
 
 State = Literal["running", "idle"]
 
@@ -48,13 +48,13 @@ class AgentActivity:
         with self._lock:
             return "running" if self._inflight.get(agent, 0) > 0 else "idle"
 
-    def snapshot(self) -> dict[str, dict]:
+    def snapshot(self) -> dict[str, dict[str, Any]]:
         """Return the public view of every agent's activity."""
         self._sample_pulses_if_due()
         now = time.time()
         with self._lock:
             agents = set(self._inflight) | set(self._last_finished) | set(self._last_started)
-            out: dict[str, dict] = {}
+            out: dict[str, dict[str, Any]] = {}
             for a in agents:
                 inflight = self._inflight.get(a, 0)
                 last_started = self._last_started.get(a)

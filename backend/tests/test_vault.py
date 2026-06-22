@@ -1,6 +1,7 @@
 """Unit tests for VaultManager."""
 
 import json
+from pathlib import Path
 
 import pytest
 
@@ -9,7 +10,7 @@ from core.exceptions import (
     VaultExistsError,
     VaultNotFoundError,
 )
-from core.vault import CORE_FOLDERS, VaultManager
+from core.vault import CORE_FOLDERS, VaultManager, VaultPathError
 
 
 class TestInitVault:
@@ -95,6 +96,52 @@ class TestInitVault:
     def test_valid_names_accepted(self, vault_manager: VaultManager, name: str) -> None:
         root = vault_manager.init_vault(name)
         assert root.is_dir()
+
+
+class TestInitDemoVault:
+    """Tests for seeding a new vault from the demo template."""
+
+    @staticmethod
+    def _make_template(tmp_path: Path) -> Path:
+        """Build a tiny synthetic demo template so tests stay hermetic."""
+        src = tmp_path / "demo-template"
+        (src / "threads" / "topics").mkdir(parents=True)
+        (src / "threads" / ".archive").mkdir(parents=True)
+        (src / "threads" / "topics" / "graphs.md").write_text(
+            "---\nid: thr_demo01\ntitle: Graphs\ntype: topic\n---\n\nBody.\n"
+        )
+        (src / "threads" / ".archive" / "old.md").write_text("archived note")
+        return src
+
+    def test_seeds_threads_notes_over_full_scaffold(
+        self, vault_manager: VaultManager, tmp_path: Path
+    ) -> None:
+        src = self._make_template(tmp_path)
+        root = vault_manager.init_demo_vault("demo", source=src)
+
+        # Full scaffold is present (agents, rules) — not just the demo content.
+        assert (root / "agents" / "weaver" / "config.yaml").is_file()
+        assert (root / "rules" / "prime.md").is_file()
+        # The demo note was seeded into its folder.
+        assert (root / "threads" / "topics" / "graphs.md").is_file()
+        # The new vault is active (first vault).
+        assert vault_manager.get_active_vault() == "demo"
+
+    def test_does_not_resurrect_archived_demo_notes(
+        self, vault_manager: VaultManager, tmp_path: Path
+    ) -> None:
+        src = self._make_template(tmp_path)
+        root = vault_manager.init_demo_vault("demo", source=src)
+        assert not (root / "threads" / ".archive" / "old.md").exists()
+
+    def test_missing_template_raises(self, vault_manager: VaultManager, tmp_path: Path) -> None:
+        with pytest.raises(VaultPathError):
+            vault_manager.init_demo_vault("demo", source=tmp_path / "nope")
+
+    def test_default_template_points_at_bundled_demo_vault(
+        self, vault_manager: VaultManager
+    ) -> None:
+        assert vault_manager._settings.demo_vault_dir.name == "demo-vault"
 
 
 class TestListVaults:

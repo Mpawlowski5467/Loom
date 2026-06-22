@@ -63,6 +63,16 @@ describe("apiClient", () => {
     expect(init.body).toBeUndefined();
   });
 
+  it("sends a raw body verbatim with the given content type on upload", async () => {
+    const fetchFn = stubFetch(async () => mockResponse({ body: "{}" }));
+    const blob = new Blob(["bytes"], { type: "application/gzip" });
+    await apiClient.upload("/vaults/x/import", blob, "application/gzip");
+    const init = fetchFn.mock.calls[0]![1]!;
+    expect(init.method).toBe("POST");
+    expect(init.body).toBe(blob); // not JSON-stringified
+    expect(init.headers).toEqual({ "Content-Type": "application/gzip" });
+  });
+
   it("returns undefined for a 204 No Content response", async () => {
     stubFetch(async () => mockResponse({ status: 204, body: "" }));
     const result = await apiClient.delete("/notes/abc");

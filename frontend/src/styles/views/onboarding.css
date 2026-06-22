@@ -269,6 +269,55 @@
   border-radius: var(--r-sm);
 }
 
+/* ── Demo vault option ─────────────────────────────────────────── */
+.onb-demo {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  width: 100%;
+  text-align: left;
+  padding: 14px 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  background: var(--bg-base);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 200ms var(--ease);
+}
+.onb-demo:hover {
+  border-color: var(--ink-3);
+  transform: translateY(-1px);
+}
+.onb-demo.active {
+  border-color: var(--agent);
+  box-shadow: 0 0 0 2px var(--agent);
+}
+.onb-demo svg {
+  color: var(--agent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+.onb-demo-text {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+}
+.onb-demo-label {
+  font-size: 14px;
+  font-weight: 600;
+}
+.onb-demo-help {
+  font-size: 12px;
+  color: var(--ink-3);
+  line-height: 1.45;
+}
+.onb-demo-check {
+  font-size: 11px;
+  color: var(--ink-3);
+  flex-shrink: 0;
+}
+
 /* ── Theme picker ──────────────────────────────────────────────── */
 .onb-theme-grid {
   display: grid;

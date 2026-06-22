@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from agents.base import BaseAgent
 from core.exceptions import ProviderConfigError, ProviderError
@@ -106,7 +106,7 @@ class CustomAgent(BaseAgent):
             }
 
         result = await self.execute_with_chain(captures_dir, _action)
-        return result.get("result", CustomRunResult(output="Run failed."))
+        return cast(CustomRunResult, result.get("result", CustomRunResult(output="Run failed.")))
 
     def _gather_context(self) -> str:
         """A compact digest of recent vault notes for the model to work from."""

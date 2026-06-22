@@ -1,9 +1,10 @@
 import type { ReactNode } from "react";
-import { Info, Palette, Server, ShieldAlert, Vault } from "lucide-react";
+import { Archive, Info, Palette, Server, ShieldAlert, Vault } from "lucide-react";
 import { useApp } from "../context/app-ctx";
 import type { SettingsSection } from "../data/types";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { AboutSection } from "./settings/AboutSection";
+import { ArchivedSection } from "./settings/ArchivedSection";
 import { DangerZoneSection } from "./settings/DangerZoneSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { VaultSection } from "./settings/VaultSection";
@@ -16,6 +17,7 @@ const SECTIONS: {
   { id: "appearance", label: "Appearance", icon: <Palette size={15} /> },
   { id: "providers", label: "Providers", icon: <Server size={15} /> },
   { id: "vault", label: "Vault", icon: <Vault size={15} /> },
+  { id: "archived", label: "Archived", icon: <Archive size={15} /> },
   { id: "about", label: "About", icon: <Info size={15} /> },
   { id: "danger", label: "Danger", icon: <ShieldAlert size={15} /> },
 ];
@@ -57,6 +59,8 @@ function renderSection(section: SettingsSection): ReactNode {
       return <ProvidersSection />;
     case "vault":
       return <VaultSection />;
+    case "archived":
+      return <ArchivedSection />;
     case "about":
       return <AboutSection />;
     case "danger":

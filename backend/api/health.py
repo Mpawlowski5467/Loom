@@ -1,6 +1,7 @@
 """Component readiness checks for /api/health and /api/ready."""
 
 import logging
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -26,7 +27,7 @@ def _unindexed_count() -> int:
         return 0
 
 
-def check_indexer() -> dict:
+def check_indexer() -> dict[str, Any]:
     """Report indexer readiness.
 
     ``unindexed`` is a *separate* drift signal — notes present in NoteIndex but
@@ -49,7 +50,7 @@ def check_indexer() -> dict:
         return {"ready": False, "details": f"error: {exc}", "unindexed": 0}
 
 
-def check_agents() -> dict:
+def check_agents() -> dict[str, Any]:
     """Report agent runner readiness and agent count."""
     try:
         from agents.runner import get_runner
@@ -64,7 +65,7 @@ def check_agents() -> dict:
         return {"ready": False, "count": 0}
 
 
-def check_watcher() -> dict:
+def check_watcher() -> dict[str, Any]:
     """Report file watcher readiness."""
     try:
         from core import watcher
@@ -77,7 +78,7 @@ def check_watcher() -> dict:
         return {"ready": False}
 
 
-def check_chat() -> dict:
+def check_chat() -> dict[str, Any]:
     """Report chat history readiness."""
     try:
         from agents.chat import get_chat_history
@@ -88,7 +89,7 @@ def check_chat() -> dict:
         return {"ready": False}
 
 
-def build_health_report() -> dict:
+def build_health_report() -> dict[str, Any]:
     """Compose the structured component health report."""
     components = {
         "indexer": check_indexer(),

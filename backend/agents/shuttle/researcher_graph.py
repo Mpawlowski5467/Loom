@@ -31,7 +31,7 @@ class ResearcherState(TypedDict, total=False):
     capture_path: str
 
 
-def build_researcher_graph(agent: Researcher) -> CompiledStateGraph:
+def build_researcher_graph(agent: Researcher) -> CompiledStateGraph[ResearcherState]:
     """Compile the Researcher graph bound to a concrete agent instance."""
 
     async def search(state: ResearcherState) -> ResearcherState:
@@ -40,9 +40,14 @@ def build_researcher_graph(agent: Researcher) -> CompiledStateGraph:
         return {"vault_context": vault_context, "refs": refs}
 
     async def synthesize(state: ResearcherState) -> ResearcherState:
+        # ``research()`` sets ``_last_chain`` before building/invoking this
+        # graph, so it is always populated here; assert to narrow it to the
+        # non-optional ``ReadChainResult`` that ``_synthesize`` requires.
+        chain = agent._last_chain
+        assert chain is not None
         async with step("synthesize"):
             answer = await agent._synthesize(
-                state["question"], state.get("vault_context", ""), agent._last_chain
+                state["question"], state.get("vault_context", ""), chain
             )
         return {"answer": answer}
 
@@ -53,7 +58,7 @@ def build_researcher_graph(agent: Researcher) -> CompiledStateGraph:
             )
         return {"capture_id": capture_id, "capture_path": str(capture_path)}
 
-    graph: StateGraph = StateGraph(ResearcherState)
+    graph: StateGraph[ResearcherState] = StateGraph(ResearcherState)
     graph.add_node("search", search)
     graph.add_node("synthesize", synthesize)
     graph.add_node("save", save)

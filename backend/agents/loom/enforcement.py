@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -68,7 +68,7 @@ def enforce_verdict(
     return outcome
 
 
-def annotate_frontmatter(vault_dir: Path, path: Path, fields: dict) -> None:
+def annotate_frontmatter(vault_dir: Path, path: Path, fields: dict[str, Any]) -> None:
     """Read a note, merge ``fields`` into frontmatter, write through ``vault_io``.
 
     Unknown user frontmatter keys are preserved (carried in ``Note.extra`` and

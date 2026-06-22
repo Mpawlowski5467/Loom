@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loom-backend"
-version = "0.5.0"
+version = "1.0.0"
 description = "Loom — local-first AI memory system"
 requires-python = ">=3.11"
 dependencies = [
@@ -43,7 +43,10 @@ packages = ["api", "agents", "index", "core"]
 
 [tool.mypy]
 strict = true
-python_version = "3.11"
+# Matches the deployment floor: the Docker image is python:3.12-slim and CI runs
+# 3.12. (Pinning 3.11 here makes mypy reject the installed numpy stubs, which use
+# the 3.12 `type` statement, before it ever checks our code.)
+python_version = "3.12"
 ignore_missing_imports = true
 explicit_package_bases = true
 exclude = ["tests/"]

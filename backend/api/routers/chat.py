@@ -10,6 +10,8 @@ Supports two chat modes:
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING, Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
@@ -19,6 +21,10 @@ from core.exceptions import ProviderConfigError, ProviderError
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.traces import clear_caller, set_caller
 from core.vault import VaultManager, VaultPathError, get_vault_manager
+
+if TYPE_CHECKING:
+    from agents.chat import ChatHistory
+    from core.providers.base import BaseProvider
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -274,7 +280,7 @@ _AGGREGATOR_SYSTEM = (
 async def _generate_reply(
     agent: str,
     message: str,
-    chat,
+    chat: ChatHistory,
     vm: VaultManager,  # noqa: ARG001 — reserved for future vault-aware routing
 ) -> _Reply:
     """Generate an agent response to a user message.
@@ -355,7 +361,7 @@ async def send_message_stream(
     )
 
 
-async def _council_reply(message: str, chat) -> _Reply:
+async def _council_reply(message: str, chat: ChatHistory) -> _Reply:
     """Loom Council reply: parallel fan-out across all 5 Loom agents, then aggregate.
 
     Each agent answers from its own perspective. A final aggregator call
@@ -392,10 +398,10 @@ async def _council_reply(message: str, chat) -> _Reply:
 
 
 async def _ask_agent(
-    provider,
+    provider: BaseProvider,
     agent: str,
     persona: str,
-    history: list[dict],
+    history: list[dict[str, Any]],
     message: str,
 ) -> AgentContribution:
     """Call the chat provider in one agent's voice. Errors are captured, not raised."""
@@ -419,10 +425,10 @@ async def _ask_agent(
 
 
 async def _aggregate(
-    provider,
+    provider: BaseProvider,
     user_message: str,
     contributions: list[AgentContribution],
-    history: list[dict],
+    history: list[dict[str, Any]],
 ) -> str:
     """Synthesise the five agent contributions into a single council voice."""
     # Format contributions for the aggregator's user turn.

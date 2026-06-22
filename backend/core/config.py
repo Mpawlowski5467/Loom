@@ -70,7 +70,7 @@ def _expand_env_vars(data: Any) -> Any:
     return data
 
 
-def _safe_load_yaml(path: Path) -> dict | None:
+def _safe_load_yaml(path: Path) -> dict[str, Any] | None:
     """Parse a YAML file into a dict, tolerating corruption.
 
     Returns the parsed mapping, an empty dict for an empty file, or ``None`` if
@@ -110,6 +110,28 @@ class LoomSettings(BaseSettings):
         description=(
             "Allowed CORS origins for the API. Override via LOOM_CORS_ORIGINS "
             '(JSON list, e.g. \'["http://localhost:5173","http://localhost:4173"]\').'
+        ),
+    )
+    api_token: str = Field(
+        default="",
+        description=(
+            "Optional shared secret for the API. Empty (the default) disables the "
+            "gate and the API stays open — the supported localhost posture. When "
+            "set via LOOM_API_TOKEN, every /api request except the health/readiness "
+            "probes must present the token as 'Authorization: Bearer <token>' or "
+            "'X-Loom-Token: <token>'. A speed bump for exposed ports, not auth for "
+            "untrusted networks."
+        ),
+    )
+    demo_vault_dir: Path = Field(
+        # Source checkout: <repo>/examples/demo-vault, three levels up from this
+        # module (backend/core/config.py). The Docker image pip-installs the
+        # package — so that relative path won't resolve there — and sets
+        # LOOM_DEMO_VAULT_DIR to the copied template instead (env wins over this).
+        default_factory=lambda: Path(__file__).resolve().parents[2] / "examples" / "demo-vault",
+        description=(
+            "Template vault seeded by the onboarding 'Try the demo vault' option. "
+            "Override with LOOM_DEMO_VAULT_DIR."
         ),
     )
 

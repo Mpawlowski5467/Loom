@@ -11,10 +11,13 @@ import asyncio
 import json
 import logging
 from collections.abc import AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.traces import clear_caller, get_trace_store, set_caller
+
+if TYPE_CHECKING:
+    from agents.chat import ChatHistory
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +27,7 @@ logger = logging.getLogger(__name__)
 _COUNCIL_CONCURRENCY = 3
 
 
-def sse(event: str, data: dict | str) -> str:
+def sse(event: str, data: dict[str, Any] | str) -> str:
     """Format a single Server-Sent Event frame."""
     payload = data if isinstance(data, str) else json.dumps(data)
     return f"event: {event}\ndata: {payload}\n\n"
@@ -34,7 +37,7 @@ async def fan_out_agents(
     ask_agent: Callable[..., Awaitable[Any]],
     provider: Any,
     personas: dict[str, str],
-    history: list[dict],
+    history: list[dict[str, Any]],
     message: str,
 ) -> list[Any]:
     """Run every council persona concurrently, capped at ``_COUNCIL_CONCURRENCY``.
@@ -53,11 +56,11 @@ async def fan_out_agents(
 
 async def council_stream(
     message: str,
-    chat,
+    chat: ChatHistory,
     *,
     personas: dict[str, str],
     aggregator_system: str,
-    ask_agent,
+    ask_agent: Callable[..., Awaitable[Any]],
 ) -> AsyncIterator[str]:
     """Yield SSE frames for a council turn.
 

@@ -18,6 +18,13 @@ logger = logging.getLogger(__name__)
 
 _MAX_TRACES = 500
 
+# ``TraceStore`` defines a method named ``list`` (mirrors the API verb), which
+# shadows the builtin ``list`` in the annotations of methods defined after it.
+# These aliases capture the builtin generic here, before the shadowing, so those
+# later signatures can spell their list types without tripping mypy [valid-type].
+_TraceRecordList = list["TraceRecord"]
+_RunSummaryList = list[dict[str, Any]]
+
 # Disk traces live under ``<traces_dir>/YYYY-MM-DD/``; retention deletes only
 # directories whose name matches this exact pattern, never anything else.
 _DATE_DIR_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -117,7 +124,7 @@ class TraceStore:
                     return r
         return None
 
-    def by_run(self, run_id: str) -> list[TraceRecord]:
+    def by_run(self, run_id: str) -> _TraceRecordList:
         """Return all in-memory traces for a run, oldest first."""
         with self._lock:
             return [r for r in self._items if r.run_id == run_id]
@@ -142,7 +149,7 @@ class TraceStore:
         except OSError:
             logger.warning("Failed to persist run summary %s", run_id, exc_info=True)
 
-    def list_run_summaries(self, limit: int = 50) -> list[dict[str, Any]]:
+    def list_run_summaries(self, limit: int = 50) -> _RunSummaryList:
         """Return recent run summaries from disk, newest first.
 
         Run files are named ``run-<random-hex>.json``, so their filenames carry
@@ -183,7 +190,8 @@ class TraceStore:
             path = date_dir / f"run-{run_id}.json"
             if path.exists():
                 try:
-                    return json.loads(path.read_text(encoding="utf-8"))
+                    data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+                    return data
                 except (OSError, json.JSONDecodeError):
                     return None
         return None

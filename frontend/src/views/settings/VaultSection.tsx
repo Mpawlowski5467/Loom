@@ -12,6 +12,7 @@ import {
 } from "../../api/vault";
 import type { VaultInfo } from "../../api/types";
 import { useApp } from "../../context/app-ctx";
+import { VaultImport } from "./VaultImport";
 
 // Mirrors backend/core/vault.py _NAME_RE: must start alphanumeric, then
 // letters/digits/dash/underscore, max 64 chars total.
@@ -293,6 +294,7 @@ export function VaultSection(): ReactNode {
         })}
       </div>
       {message && <div className="settings-inline-status">{message}</div>}
+      <VaultImport onImported={load} />
     </div>
   );
 }

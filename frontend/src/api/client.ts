@@ -55,6 +55,13 @@ interface RequestOptions {
   signal?: AbortSignal;
   /** Override the default timeout (ms). Pass 0 to disable (e.g. streaming). */
   timeoutMs?: number;
+  /**
+   * Raw request body (Blob/File/ArrayBuffer) sent verbatim with ``rawContentType``
+   * instead of JSON-encoding ``body``. Used for binary uploads (e.g. vault
+   * import tarballs). When set, ``body`` is ignored.
+   */
+  rawBody?: BodyInit;
+  rawContentType?: string;
 }
 
 async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
@@ -80,12 +87,23 @@ async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
     else opts.signal.addEventListener("abort", onCallerAbort, { once: true });
   }
 
+  const hasRaw = opts.rawBody !== undefined;
+  const headers: Record<string, string> = hasRaw
+    ? { "Content-Type": opts.rawContentType ?? "application/octet-stream" }
+    : opts.body != null
+      ? { "Content-Type": "application/json" }
+      : {};
+
   let response: Response;
   try {
     response = await fetch(url, {
       method: opts.method ?? "GET",
-      headers: opts.body != null ? { "Content-Type": "application/json" } : {},
-      body: opts.body != null ? JSON.stringify(opts.body) : undefined,
+      headers,
+      body: hasRaw
+        ? opts.rawBody
+        : opts.body != null
+          ? JSON.stringify(opts.body)
+          : undefined,
       signal: timeoutCtrl.signal,
     });
   } catch (err) {
@@ -161,4 +179,21 @@ export const apiClient = {
     request<T>(path, { method: "PUT", body, signal }),
   delete: <T>(path: string, signal?: AbortSignal) =>
     request<T>(path, { method: "DELETE", signal }),
+  /**
+   * POST a raw binary body (e.g. a tarball upload). Uses a longer deadline than
+   * JSON calls since payloads can be large.
+   */
+  upload: <T>(
+    path: string,
+    rawBody: BodyInit,
+    rawContentType?: string,
+    signal?: AbortSignal,
+  ) =>
+    request<T>(path, {
+      method: "POST",
+      rawBody,
+      rawContentType,
+      signal,
+      timeoutMs: 60_000,
+    }),
 };

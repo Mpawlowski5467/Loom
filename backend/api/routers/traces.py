@@ -7,6 +7,7 @@ import logging
 import re
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
@@ -41,7 +42,7 @@ class TraceDetail(BaseModel):
     model: str
     caller: str
     system: str
-    messages: list[dict]
+    messages: list[dict[str, Any]]
     response: str
     duration_ms: int
     error: str
@@ -107,9 +108,10 @@ def _traces_disk_dir(vm: VaultManager) -> Path:
     return vm.active_loom_dir() / "traces"
 
 
-def _read_trace_file(path: Path) -> dict | None:
+def _read_trace_file(path: Path) -> dict[str, Any] | None:
     try:
-        return json.loads(path.read_text(encoding="utf-8"))
+        data: dict[str, Any] = json.loads(path.read_text(encoding="utf-8"))
+        return data
     except (OSError, json.JSONDecodeError):
         logger.debug("Failed to read trace file %s", path, exc_info=True)
         return None
@@ -145,7 +147,7 @@ def list_traces_disk(
     if not day_dir.exists():
         return []
 
-    records: list[dict] = []
+    records: list[dict[str, Any]] = []
     for f in day_dir.glob("*.json"):
         rec = _read_trace_file(f)
         if rec is None:
@@ -185,7 +187,7 @@ def list_trace_dates(
     return DiskDateList(dates=_list_dates_with_traces(_traces_disk_dir(vm)))
 
 
-def _run_summary_model(data: dict) -> RunSummary:
+def _run_summary_model(data: dict[str, Any]) -> RunSummary:
     """Coerce a persisted run-summary dict into the response model."""
     return RunSummary(
         run_id=str(data.get("run_id", "")),
@@ -239,7 +241,7 @@ def get_run_detail(run_id: str) -> RunDetail:
     return RunDetail(**summary.model_dump(), traces=traces)
 
 
-def _find_on_disk(traces_dir: Path, trace_id: str) -> dict | None:
+def _find_on_disk(traces_dir: Path, trace_id: str) -> dict[str, Any] | None:
     """Look for a single trace_id by scanning recent date folders (newest first)."""
     if not traces_dir.exists():
         return None

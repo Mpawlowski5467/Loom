@@ -18,6 +18,7 @@ interface OnboardingDraft {
   theme: ThemeName;
   vaultName: string;
   overwriteExistingVault: boolean;
+  seedDemo: boolean;
   providers: OnboardingProviderPayload[];
   chatProvider: string | null;
   embedProvider: string | null;
@@ -30,6 +31,7 @@ export function OnboardingFlow(): ReactNode {
     theme,
     vaultName: "default",
     overwriteExistingVault: false,
+    seedDemo: false,
     providers: [],
     chatProvider: null,
     embedProvider: null,
@@ -61,6 +63,7 @@ export function OnboardingFlow(): ReactNode {
         theme: draft.theme,
         vault_name: draft.vaultName.trim() || "default",
         overwrite_existing_vault: draft.overwriteExistingVault,
+        seed_demo: draft.seedDemo,
         providers: draft.providers,
         chat_provider: draft.chatProvider,
         embed_provider: draft.embedProvider,
@@ -98,6 +101,7 @@ export function OnboardingFlow(): ReactNode {
           <VaultSetup
             vaultName={draft.vaultName}
             overwriteExisting={draft.overwriteExistingVault}
+            seedDemo={draft.seedDemo}
             onChange={(patch) =>
               updateDraft({
                 vaultName:
@@ -106,6 +110,8 @@ export function OnboardingFlow(): ReactNode {
                   patch.overwriteExisting !== undefined
                     ? patch.overwriteExisting
                     : draft.overwriteExistingVault,
+                seedDemo:
+                  patch.seedDemo !== undefined ? patch.seedDemo : draft.seedDemo,
               })
             }
             onNext={next}

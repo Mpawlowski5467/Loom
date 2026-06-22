@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import date
 from pathlib import Path
+from typing import Any
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -35,7 +36,7 @@ class RunResult(BaseModel):
     """Result of triggering an agent run."""
 
     agent: str
-    result: dict
+    result: dict[str, Any]
 
 
 class ChangelogEntry(BaseModel):
@@ -56,7 +57,7 @@ class ResearchResponse(BaseModel):
     """Response from Researcher query."""
 
     answer: str
-    referenced_notes: list[dict]
+    referenced_notes: list[dict[str, Any]]
     capture_id: str
     capture_path: str
 
@@ -313,9 +314,9 @@ class ChangelogFeedEvent(BaseModel):
     sentinel: str  # "ok" | "warn" | "fail" — Sentinel verdict when known
 
 
-def _parse_changelog_entries(text: str, agent: str) -> list[dict]:
+def _parse_changelog_entries(text: str, agent: str) -> list[dict[str, str]]:
     """Parse a per-agent changelog markdown file into structured events."""
-    events: list[dict] = []
+    events: list[dict[str, str]] = []
     blocks = text.split("\n## ")
     for raw in blocks[1:]:  # first chunk is "# Changelog — date"
         block = "## " + raw
@@ -388,7 +389,7 @@ def get_changelog_feed(
         return []
 
     vault_root = vm.active_vault_dir()
-    merged: list[dict] = []
+    merged: list[dict[str, str]] = []
     for agent_dir in changelog_dir.iterdir():
         if not agent_dir.is_dir():
             continue

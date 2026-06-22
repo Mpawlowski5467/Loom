@@ -51,9 +51,10 @@ On first launch a four-step wizard appears. You can re-run it any time from
    below). You can **Skip for now** and add a provider later — but agents,
    search, and graph linking stay offline until you do.
 
-> **Heads up:** provider API keys are stored *unencrypted* in `config.yaml` on
-> this machine. This is intentional for the current release; keep the file
-> private.
+> **Heads up:** provider API keys are encrypted at rest in `config.yaml` (Fernet,
+> under a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth
+> against casual disclosure of the config file, not a substitute for auth, and with
+> no OS-keychain integration yet, so still keep the file private.
 
 ### Choosing a provider
 
@@ -195,7 +196,7 @@ Everything is plain files under `~/.loom/`:
 
 ```
 ~/.loom/
-├── config.yaml                  # global config + provider keys (plaintext)
+├── config.yaml                  # global config + provider keys (encrypted at rest)
 └── vaults/<name>/
     └── threads/
         ├── topics/  projects/  people/  daily/   # your notes, by type

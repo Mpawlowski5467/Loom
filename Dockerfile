@@ -38,7 +38,11 @@ WORKDIR /app/backend
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     # Vault data lives here; docker-compose mounts a named volume at /data.
-    LOOM_HOME=/data
+    LOOM_HOME=/data \
+    # The package is pip-installed (not run from the source tree), so the
+    # default examples/ path won't resolve — point the demo seeder at the copy
+    # baked in below.
+    LOOM_DEMO_VAULT_DIR=/app/examples/demo-vault
 
 # Install the backend. Copy the package config first for layer caching.
 COPY backend/pyproject.toml ./
@@ -47,6 +51,10 @@ RUN pip install --upgrade pip && pip install .
 
 # Drop the built SPA where the backend looks for it (api/main.py → ../static).
 COPY --from=frontend /app/frontend/dist ./static
+
+# Ship the demo vault template (examples/ isn't part of the installed package).
+# LOOM_DEMO_VAULT_DIR (set above) points the onboarding seeder here.
+COPY examples/ /app/examples/
 
 # Run as a non-root user; ensure it owns the data dir.
 RUN useradd --create-home --uid 1000 loom \

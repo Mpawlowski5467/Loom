@@ -11,7 +11,7 @@ tag-overlap heuristics. Each candidate link gets a confidence score:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import yaml
 from pydantic import ValidationError
@@ -104,7 +104,7 @@ class Spider(BaseAgent):
             }
 
         result = await self.execute_with_chain(note_path, _action)
-        return result.get("_report", ScanReport(source_id="", source_title=""))
+        return cast(ScanReport, result.get("_report", ScanReport(source_id="", source_title="")))
 
     async def propose_candidates(self, note: Note, existing_links: set[str]) -> list[LinkCandidate]:
         """Score link candidates for an in-memory note WITHOUT writing.

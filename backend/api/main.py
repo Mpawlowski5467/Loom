@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import hmac
 import logging
 import os
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +24,7 @@ from api.exception_handlers import register_exception_handlers
 from api.health import build_health_report
 from api.routers.agents import router as agents_router
 from api.routers.agents_registry import router as agents_registry_router
+from api.routers.archive import router as archive_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
@@ -57,6 +60,25 @@ _SECURITY_HEADERS = {
     "X-Frame-Options": "DENY",
     "Referrer-Policy": "no-referrer",
 }
+
+# /api paths the optional token gate never challenges, so liveness/readiness
+# probes (and the Docker smoke test) keep working with no credentials.
+_TOKEN_GATE_OPEN_PATHS = frozenset({"/api/health", "/api/ready"})
+
+
+def _extract_bearer_token(request: Request) -> str | None:
+    """Pull the caller's token from the Authorization or X-Loom-Token header.
+
+    Accepts ``Authorization: Bearer <token>`` (case-insensitive scheme) or the
+    ``X-Loom-Token: <token>`` shorthand. Returns ``None`` when neither carries a
+    non-empty value.
+    """
+    authorization = request.headers.get("Authorization", "")
+    scheme, _, credential = authorization.partition(" ")
+    if scheme.lower() == "bearer" and credential.strip():
+        return credential.strip()
+    shorthand = request.headers.get("X-Loom-Token", "").strip()
+    return shorthand or None
 
 
 def _allowed_hosts() -> list[str]:
@@ -97,7 +119,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Provider registry close failed", exc_info=True)
 
 
-app = FastAPI(title="Loom", version="0.5.0", lifespan=lifespan)
+app = FastAPI(title="Loom", version="1.0.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
@@ -125,10 +147,42 @@ async def security_headers(request: Request, call_next: RequestResponseEndpoint)
     return response
 
 
+@app.middleware("http")
+async def api_token_gate(request: Request, call_next: RequestResponseEndpoint) -> Response:
+    """Optional shared-token gate for the API (defense-in-depth, not auth).
+
+    Inert by default: when ``LOOM_API_TOKEN`` is unset/empty the request passes
+    straight through, preserving the unauthenticated localhost posture. When a
+    token is configured, every ``/api`` request other than the health/readiness
+    probes must present a matching token (``Authorization: Bearer <token>`` or
+    ``X-Loom-Token: <token>``); a miss returns a 401 in the standard error shape.
+
+    This is a speed bump for users who expose the port, not access control for
+    untrusted networks — pair it with a reverse proxy that adds real auth + TLS.
+    """
+    required = settings.api_token
+    path = request.url.path
+    if required and path.startswith("/api/") and path not in _TOKEN_GATE_OPEN_PATHS:
+        provided = _extract_bearer_token(request)
+        # hmac.compare_digest is constant-time so a wrong token can't leak the
+        # secret's content via timing. Bytes (not str) so non-ASCII tokens never
+        # raise. A wholly absent token short-circuits — nothing secret to leak.
+        if provided is None or not hmac.compare_digest(
+            provided.encode("utf-8"), required.encode("utf-8")
+        ):
+            return JSONResponse(
+                status_code=401,
+                content={"error": "Missing or invalid API token", "type": "Unauthorized"},
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    return await call_next(request)
+
+
 register_exception_handlers(app)
 
 app.include_router(vaults_router)
 app.include_router(notes_router)
+app.include_router(archive_router)
 app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)
@@ -147,7 +201,7 @@ app.include_router(events_router)
 
 
 @app.get("/api/health")
-async def health_check() -> dict:
+async def health_check() -> dict[str, Any]:
     """Structured component health check."""
     return build_health_report()
 

@@ -16,12 +16,20 @@ services:
     ports:
       # Bound to loopback only — Loom ships no auth, so the API is reachable
       # at http://localhost:8000 on THIS machine but not from the LAN/internet.
-      # To deliberately expose it (only behind a reverse proxy + auth — see
-      # SECURITY.md), change this to "8000:8000" or "0.0.0.0:8000:8000".
-      - "127.0.0.1:8000:8000"
+      # Set LOOM_PORT in .env to use a different host port (e.g. when a dev
+      # server already holds 8000). To deliberately expose it (only behind a
+      # reverse proxy + auth — see SECURITY.md), change this to "8000:8000"
+      # or "0.0.0.0:8000:8000".
+      - "127.0.0.1:${LOOM_PORT:-8000}:8000"
     environment:
       # Vault data root (matches the volume mount below).
       LOOM_HOME: /data
+      # Optional backends wired to the sibling services below. Redis caches
+      # LLM/embed responses; Postgres keeps a durable trace/run mirror. Loom
+      # runs fine without either — remove these lines (and the services) to
+      # go back to the single-container setup.
+      LOOM_REDIS_URL: redis://redis:6379/0
+      LOOM_DATABASE_URL: postgresql://loom:${LOOM_PG_PASSWORD:-loom}@postgres:5432/loom
     # Provider API keys (and any other overrides) come from .env if present.
     # Missing file is fine — keys can also be added in the onboarding wizard.
     env_file:
@@ -32,7 +40,54 @@ services:
       # To keep notes as plain files on your machine instead, comment the line
       # above and uncomment this (creates ./loom-data/ next to the compose file):
       # - ./loom-data:/data
+    # Wait for the optional backends when they come up cleanly, but don't let
+    # them block the app: `required: false` (Compose v2.20+) starts loom with
+    # a warning if either never turns healthy — Loom degrades gracefully
+    # (cache misses / no trace mirror) instead of refusing to boot.
+    depends_on:
+      redis:
+        condition: service_healthy
+        required: false
+      postgres:
+        condition: service_healthy
+        required: false
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: loom-redis
+    # Append-only file so cached responses survive restarts. No host port —
+    # only the loom container can reach it, on the compose network.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - loom-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: loom-postgres
+    # Durable store for LLM traces + run summaries. No host port — reachable
+    # only from the loom container. Override the password via LOOM_PG_PASSWORD
+    # in .env; the default is fine for a network-isolated local setup.
+    environment:
+      POSTGRES_DB: loom
+      POSTGRES_USER: loom
+      POSTGRES_PASSWORD: ${LOOM_PG_PASSWORD:-loom}
+    volumes:
+      - loom-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U loom -d loom"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
 volumes:
   loom-data:
+  loom-redis:
+  loom-pg:

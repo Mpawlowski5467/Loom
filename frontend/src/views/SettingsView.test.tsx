@@ -14,6 +14,9 @@ vi.mock("./settings/AppearanceSection", () => ({
 vi.mock("./settings/ProvidersSection", () => ({
   ProvidersSection: () => <div data-testid="sec-providers" />,
 }));
+vi.mock("./settings/HardwareSection", () => ({
+  HardwareSection: () => <div data-testid="sec-hardware" />,
+}));
 vi.mock("./settings/VaultSection", () => ({
   VaultSection: () => <div data-testid="sec-vault" />,
 }));
@@ -50,6 +53,7 @@ describe("SettingsView", () => {
     for (const label of [
       "Appearance",
       "Providers",
+      "Hardware & Models",
       "Vault",
       "Archived",
       "About",
@@ -86,6 +90,7 @@ describe("SettingsView", () => {
   it.each([
     ["appearance", "sec-appearance"],
     ["providers", "sec-providers"],
+    ["hardware", "sec-hardware"],
     ["vault", "sec-vault"],
     ["archived", "sec-archived"],
     ["about", "sec-about"],

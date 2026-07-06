@@ -171,8 +171,8 @@ function extractErrorCode(payload: unknown): string | undefined {
 export const apiClient = {
   get: <T>(path: string, signal?: AbortSignal) =>
     request<T>(path, { method: "GET", signal }),
-  post: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
-    request<T>(path, { method: "POST", body, signal }),
+  post: <T>(path: string, body?: unknown, signal?: AbortSignal, timeoutMs?: number) =>
+    request<T>(path, { method: "POST", body, signal, timeoutMs }),
   patch: <T>(path: string, body?: unknown, signal?: AbortSignal) =>
     request<T>(path, { method: "PATCH", body, signal }),
   put: <T>(path: string, body?: unknown, signal?: AbortSignal) =>

@@ -5,7 +5,8 @@ import { useApp } from "../../context/app-ctx";
 import { ConfirmModal } from "../../components/ConfirmModal";
 import { AddAgentModal } from "./AddAgentModal";
 import { AgentCard } from "./AgentCard";
-import { formatRelativeTime, renderTarget } from "./boardHelpers";
+import { AgentDetailModal } from "./AgentDetailModal";
+import { RecentActivity } from "./RecentActivity";
 import {
   deleteCustomAgent,
   getAgentRegistry,
@@ -38,16 +39,23 @@ export function CardsMode(): ReactNode {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
+  const [detailId, setDetailId] = useState<string | null>(null);
   // Accessible confirm dialog (replaces window.confirm) for deleting an agent.
   const [confirmDelete, setConfirmDelete] = useState<Agent | null>(null);
 
+  // All run/activity lookups key on the registry id, never the display name:
+  // a custom agent named "My Agent" has id "my-agent", and the backend (run
+  // endpoint, activity map, changelog) knows it only by that id.
   const handleRun = async (a: Agent) => {
-    const key = a.name.toLowerCase();
-    if (runningAgents.has(key)) return;
-    setRunningAgents((prev) => new Set(prev).add(key));
+    if (runningAgents.has(a.id)) return;
+    setRunningAgents((prev) => new Set(prev).add(a.id));
     try {
-      const res = await runAgent(key);
-      pushToast({ icon: "▶", agent: key, body: formatRunResult(key, res.result) });
+      const res = await runAgent(a.id);
+      pushToast({
+        icon: "▶",
+        agent: a.id,
+        body: formatRunResult(a.id, res.result),
+      });
     } catch (err) {
       pushToast({
         icon: "⚠",
@@ -57,7 +65,7 @@ export function CardsMode(): ReactNode {
     } finally {
       setRunningAgents((prev) => {
         const next = new Set(prev);
-        next.delete(key);
+        next.delete(a.id);
         return next;
       });
     }
@@ -93,23 +101,28 @@ export function CardsMode(): ReactNode {
     return map;
   }, [changelog]);
 
-  const card = (a: Agent) => {
-    const key = a.name.toLowerCase();
-    return (
-      <AgentCard
-        key={a.id}
-        agent={a}
-        live={agentActivity[key]}
-        lastEvent={lastEventByAgent.get(key)}
-        isCustom={customIds.has(a.id)}
-        runnable={RUNNABLE_LOOM_AGENTS.has(key)}
-        running={runningAgents.has(key)}
-        onRun={() => void handleRun(a)}
-        onEdit={() => void handleEdit(a)}
-        onDelete={() => setConfirmDelete(a)}
-      />
-    );
-  };
+  const isRunnable = (a: Agent) =>
+    RUNNABLE_LOOM_AGENTS.has(a.id) || customIds.has(a.id);
+
+  const card = (a: Agent) => (
+    <AgentCard
+      key={a.id}
+      agent={a}
+      live={agentActivity[a.id]}
+      lastEvent={lastEventByAgent.get(a.id)}
+      isCustom={customIds.has(a.id)}
+      runnable={isRunnable(a)}
+      running={runningAgents.has(a.id)}
+      onRun={() => void handleRun(a)}
+      onEdit={() => void handleEdit(a)}
+      onDelete={() => setConfirmDelete(a)}
+      onOpen={() => setDetailId(a.id)}
+    />
+  );
+
+  const detailAgent = detailId
+    ? (merged.find((a) => a.id === detailId) ?? null)
+    : null;
 
   return (
     <div>
@@ -130,26 +143,27 @@ export function CardsMode(): ReactNode {
       </div>
 
       <div className="section-divider">Recent activity</div>
-      <div className="changelog">
-        {changelog.length === 0 && (
-          <div className="changelog-empty">
-            No agent activity yet. Process a capture or send a council message.
-          </div>
-        )}
-        {changelog.slice(0, 15).map((ev) => (
-          <div key={ev.id} className="changelog-row" title={ev.ts}>
-            <span className="changelog-ts">{formatRelativeTime(ev.ts)}</span>
-            <span className="changelog-agent">{ev.agent}</span>
-            <span>
-              {ev.action} {renderTarget(ev.target)}
-            </span>
-            <span className={`changelog-verdict ${ev.sentinel}`}>
-              {ev.sentinel === "ok" ? "✓" : ev.sentinel === "warn" ? "⚠" : "✕"}
-            </span>
-          </div>
-        ))}
-      </div>
+      <RecentActivity changelog={changelog} />
 
+      {detailAgent && (
+        <AgentDetailModal
+          agent={detailAgent}
+          live={agentActivity[detailAgent.id]}
+          isCustom={customIds.has(detailAgent.id)}
+          runnable={isRunnable(detailAgent)}
+          running={runningAgents.has(detailAgent.id)}
+          onRun={() => void handleRun(detailAgent)}
+          onEdit={() => {
+            setDetailId(null);
+            void handleEdit(detailAgent);
+          }}
+          onDelete={() => {
+            setDetailId(null);
+            setConfirmDelete(detailAgent);
+          }}
+          onClose={() => setDetailId(null)}
+        />
+      )}
       {adding && (
         <AddAgentModal
           onClose={() => setAdding(false)}

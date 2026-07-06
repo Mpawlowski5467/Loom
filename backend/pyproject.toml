@@ -26,6 +26,11 @@ dependencies = [
     "slowapi>=0.1.9",
     "cryptography>=42.0",
     "langgraph>=0.2,<2",
+    # Optional-at-runtime backends (Redis response cache, Postgres trace
+    # mirror). The clients are always installed; the services activate only
+    # when LOOM_REDIS_URL / LOOM_DATABASE_URL are set.
+    "redis>=5.0",
+    "asyncpg>=0.30",
 ]
 
 [project.optional-dependencies]

@@ -4,7 +4,6 @@ import type { BoardMode } from "../data/types";
 import { ModeToggle } from "../components/primitives/ModeToggle";
 import { StatusBadge } from "../components/primitives/StatusBadge";
 import { Council } from "../components/Council";
-import { TraceFeed } from "../components/TraceFeed";
 import { CardsMode } from "./board/CardsMode";
 import { PulseMode } from "./board/PulseMode";
 
@@ -34,9 +33,6 @@ export function BoardView(): ReactNode {
         <div key={viz} className="board-mode-content">
           {viz === "cards" ? <CardsMode /> : <PulseMode />}
         </div>
-      </div>
-      <div className="board-sidebar">
-        <TraceFeed />
       </div>
       <Council />
     </div>

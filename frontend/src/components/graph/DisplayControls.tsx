@@ -1,7 +1,10 @@
 import type { ChangeEvent, ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
-import { GRAPH_DISPLAY_RANGES } from "../../context/app-ctx";
-import { ORBIT_SCENES, ORBIT_SCENE_LABELS } from "../../graph/orbitScenes";
+import {
+  GRAPH_DISPLAY_RANGES,
+  GRAPH_LAYOUTS,
+  GRAPH_LAYOUT_LABELS,
+} from "../../context/app-ctx";
 
 interface RowProps {
   label: string;
@@ -55,11 +58,20 @@ interface ToggleRowProps {
   label: string;
   checked: boolean;
   onChange: (checked: boolean) => void;
+  disabled?: boolean;
 }
 
-function ToggleRow({ label, checked, onChange }: ToggleRowProps): ReactNode {
+function ToggleRow({
+  label,
+  checked,
+  onChange,
+  disabled,
+}: ToggleRowProps): ReactNode {
   return (
-    <div className="graph-display-row">
+    <div
+      className="graph-display-row"
+      data-disabled={disabled ? "true" : undefined}
+    >
       <div className="graph-display-row-head">
         <label>{label}</label>
         <button
@@ -69,6 +81,7 @@ function ToggleRow({ label, checked, onChange }: ToggleRowProps): ReactNode {
           aria-label={label}
           className="graph-display-toggle"
           data-on={checked ? "true" : "false"}
+          disabled={disabled}
           onClick={() => onChange(!checked)}
         >
           <span className="graph-display-toggle-thumb" />
@@ -106,6 +119,34 @@ export function DisplayControls(): ReactNode {
 
   return (
     <div className="graph-display-panel">
+      <Section title="Layout">
+        <div
+          className="graph-scene-picker"
+          role="radiogroup"
+          aria-label="Layout"
+        >
+          {GRAPH_LAYOUTS.map((layout) => (
+            <button
+              key={layout}
+              type="button"
+              role="radio"
+              aria-checked={graphDisplay.layout === layout}
+              className="graph-scene-chip"
+              data-active={graphDisplay.layout === layout ? "true" : undefined}
+              onClick={() => setGraphDisplay({ layout })}
+            >
+              {GRAPH_LAYOUT_LABELS[layout]}
+            </button>
+          ))}
+        </div>
+        <ToggleRow
+          label="Cycle layouts"
+          checked={graphDisplay.layoutAutoCycle}
+          onChange={(v) => setGraphDisplay({ layoutAutoCycle: v })}
+          disabled={graphDisplay.layout === "force"}
+        />
+      </Section>
+
       <Section title="Labels">
         <ToggleRow
           label="Show labels"
@@ -178,33 +219,6 @@ export function DisplayControls(): ReactNode {
           label="Depth"
           checked={graphDisplay.depthEnabled}
           onChange={(v) => setGraphDisplay({ depthEnabled: v })}
-        />
-      </Section>
-
-      <Section title="Orbit scene">
-        <div
-          className="graph-scene-picker"
-          role="radiogroup"
-          aria-label="Orbit scene"
-        >
-          {ORBIT_SCENES.map((scene) => (
-            <button
-              key={scene}
-              type="button"
-              role="radio"
-              aria-checked={graphDisplay.orbitScene === scene}
-              className="graph-scene-chip"
-              data-active={graphDisplay.orbitScene === scene ? "true" : undefined}
-              onClick={() => setGraphDisplay({ orbitScene: scene })}
-            >
-              {ORBIT_SCENE_LABELS[scene]}
-            </button>
-          ))}
-        </div>
-        <ToggleRow
-          label="Auto-cycle"
-          checked={graphDisplay.orbitAutoCycle}
-          onChange={(v) => setGraphDisplay({ orbitAutoCycle: v })}
         />
       </Section>
 

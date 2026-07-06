@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { NotebookPen, Settings } from "lucide-react";
+import { NotebookPen, PanelLeft, Settings } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import type { Tab } from "../../data/types";
 import { LoomMark } from "../primitives/LoomMark";
@@ -12,7 +12,9 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 
 export function Nav(): ReactNode {
-  const { tab, setTab, setPaletteOpen, setNewNoteOpen } = useApp();
+  const { tab, setTab, setPaletteOpen, setNewNoteOpen, treeVisible, setTreeVisible } =
+    useApp();
+  const treeAvailable = tab === "graph" || tab === "board";
 
   return (
     <header className="nav">
@@ -41,6 +43,18 @@ export function Nav(): ReactNode {
         <span>search vault…</span>
         <kbd>⌘K</kbd>
       </button>
+      {treeAvailable && (
+        <button
+          className="icon-btn nav-tree-toggle"
+          type="button"
+          aria-label="Toggle file tree"
+          aria-pressed={treeVisible}
+          title="Toggle file tree (⌘B)"
+          onClick={() => setTreeVisible(!treeVisible)}
+        >
+          <PanelLeft size={15} strokeWidth={1.7} aria-hidden="true" />
+        </button>
+      )}
       <button
         className="icon-btn nav-settings"
         type="button"

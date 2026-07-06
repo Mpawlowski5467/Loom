@@ -21,17 +21,21 @@ export function GraphView(): ReactNode {
     notes,
     notesLoaded,
     openNote,
-    graphMode,
-    setGraphMode,
     graphFocusId,
     setGraphFocusId,
     graphFlyTo,
     graphFilters,
     toggleGraphFilter,
+    clearGraphFilters,
     graphDisplay,
     theme,
     pushToast,
   } = useApp();
+
+  // Internal render-path mode derived from the selected layout: "force" is the
+  // constellation branch; every other layout renders as an orbit scene.
+  const layout = graphDisplay.layout;
+  const graphMode = layout === "force" ? "constellation" : "orbit";
 
   const hostRef = useRef<HTMLDivElement | null>(null);
   const overlayRef = useRef<SVGSVGElement | null>(null);
@@ -84,6 +88,7 @@ export function GraphView(): ReactNode {
     orbitTargetsRef,
     activeTweenRef,
     breathingRemoveRef,
+    stopDragSimRef,
     sigmaReady,
     building,
   } = useGraphInstance({
@@ -109,8 +114,8 @@ export function GraphView(): ReactNode {
     theme,
   });
 
-  // Orbit scene staging (returns the scene on stage for the caption).
-  const orbitScene = useGraphScene({
+  // Layout staging (returns the scene on stage for the caption).
+  const stagedScene = useGraphScene({
     sigmaRef,
     graphRef,
     frameLoopRef,
@@ -118,12 +123,12 @@ export function GraphView(): ReactNode {
     orbitTargetsRef,
     basePositionsRef,
     spacingScaleRef,
-    graphMode,
+    stopDragSimRef,
+    layout,
     graphFocusId,
     notes,
     sigmaReady,
-    orbitScene: graphDisplay.orbitScene,
-    orbitAutoCycle: graphDisplay.orbitAutoCycle,
+    layoutAutoCycle: graphDisplay.layoutAutoCycle,
   });
 
   // Breathing lifecycle — register/unregister the tick, honoring the user
@@ -215,10 +220,9 @@ export function GraphView(): ReactNode {
   return (
     <div className="graph-view">
       <GraphToolbar
-        graphMode={graphMode}
-        setGraphMode={setGraphMode}
         graphFilters={graphFilters}
         toggleGraphFilter={toggleGraphFilter}
+        clearGraphFilters={clearGraphFilters}
         onExport={handleExport}
       />
       <div className="graph-canvas">
@@ -252,11 +256,11 @@ export function GraphView(): ReactNode {
             arranging {stats.nodes} nodes…
           </div>
         )}
-        {!empty && graphMode === "orbit" && (
-          <div className="graph-scene-caption" key={orbitScene}>
-            <span className="graph-scene-kicker">Scene</span>
+        {!empty && layout !== "force" && (
+          <div className="graph-scene-caption" key={stagedScene}>
+            <span className="graph-scene-kicker">Layout</span>
             <span className="graph-scene-name">
-              {ORBIT_SCENE_LABELS[orbitScene]}
+              {ORBIT_SCENE_LABELS[stagedScene]}
             </span>
           </div>
         )}

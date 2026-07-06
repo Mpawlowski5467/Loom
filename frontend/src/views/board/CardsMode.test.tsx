@@ -6,9 +6,10 @@ import { AppCtx, type AppContextValue } from "../../context/app-ctx";
 import { CardsMode } from "./CardsMode";
 import type { Agent } from "../../data/types";
 
-const { deleteCustomAgent, getAgentRegistry } = vi.hoisted(() => ({
+const { deleteCustomAgent, getAgentRegistry, runAgent } = vi.hoisted(() => ({
   deleteCustomAgent: vi.fn(),
   getAgentRegistry: vi.fn(),
+  runAgent: vi.fn(),
 }));
 
 vi.mock("../../api/agentsRegistry", () => ({
@@ -17,15 +18,23 @@ vi.mock("../../api/agentsRegistry", () => ({
 }));
 
 vi.mock("../../api/agents", () => ({
-  RUNNABLE_LOOM_AGENTS: new Set<string>(),
+  RUNNABLE_LOOM_AGENTS: new Set<string>(["scribe"]),
   formatRunResult: () => "ran",
-  runAgent: vi.fn(),
+  runAgent,
+}));
+
+// The detail modal is its own unit (fetches + polls); stub it and assert
+// CardsMode opens it with the right agent.
+vi.mock("./AgentDetailModal", () => ({
+  AgentDetailModal: ({ agent }: { agent: Agent }) => (
+    <div data-testid="agent-detail">{agent.name}</div>
+  ),
 }));
 
 function mkAgent(over: Partial<Agent> = {}): Agent {
   return {
-    id: "agt_custom1",
-    name: "Scout",
+    id: "my-agent",
+    name: "My Agent",
     layer: "shuttle",
     role: "Finds things",
     icon: "🔭",
@@ -36,11 +45,11 @@ function mkAgent(over: Partial<Agent> = {}): Agent {
   };
 }
 
-function renderCards(custom: Agent[]) {
+function renderCards(custom: Agent[], builtIn: Agent[] = []) {
   const refreshCustomAgents = vi.fn().mockResolvedValue(undefined);
   const pushToast = vi.fn();
   const value = {
-    agents: [],
+    agents: builtIn,
     agentActivity: {},
     changelog: [],
     customAgents: custom,
@@ -61,6 +70,7 @@ function renderCards(custom: Agent[]) {
 beforeEach(() => {
   deleteCustomAgent.mockReset().mockResolvedValue(undefined);
   getAgentRegistry.mockReset();
+  runAgent.mockReset().mockResolvedValue({ agent: "my-agent", result: {} });
 });
 
 describe("CardsMode delete confirmation", () => {
@@ -68,30 +78,32 @@ describe("CardsMode delete confirmation", () => {
     const user = userEvent.setup();
     renderCards([mkAgent()]);
 
-    await user.click(screen.getByRole("button", { name: "Delete Scout" }));
+    await user.click(screen.getByRole("button", { name: "Delete My Agent" }));
 
     const dialog = screen.getByRole("dialog");
     expect(dialog).toHaveAttribute("aria-modal", "true");
     expect(
-      screen.getByText('Delete custom agent "Scout"?'),
+      screen.getByText('Delete custom agent "My Agent"?'),
     ).toBeInTheDocument();
-    // Nothing deleted until the user confirms.
+    // Nothing deleted until the user confirms; the card click didn't bubble
+    // into opening the detail modal either.
     expect(deleteCustomAgent).not.toHaveBeenCalled();
+    expect(screen.queryByTestId("agent-detail")).not.toBeInTheDocument();
   });
 
   it("deletes the agent and refreshes after confirming", async () => {
     const user = userEvent.setup();
     const { refreshCustomAgents, pushToast } = renderCards([mkAgent()]);
 
-    await user.click(screen.getByRole("button", { name: "Delete Scout" }));
+    await user.click(screen.getByRole("button", { name: "Delete My Agent" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
 
     await waitFor(() =>
-      expect(deleteCustomAgent).toHaveBeenCalledWith("agt_custom1"),
+      expect(deleteCustomAgent).toHaveBeenCalledWith("my-agent"),
     );
     expect(refreshCustomAgents).toHaveBeenCalled();
     expect(pushToast).toHaveBeenCalledWith(
-      expect.objectContaining({ body: "Deleted agent Scout" }),
+      expect.objectContaining({ body: "Deleted agent My Agent" }),
     );
   });
 
@@ -99,10 +111,63 @@ describe("CardsMode delete confirmation", () => {
     const user = userEvent.setup();
     renderCards([mkAgent()]);
 
-    await user.click(screen.getByRole("button", { name: "Delete Scout" }));
+    await user.click(screen.getByRole("button", { name: "Delete My Agent" }));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(deleteCustomAgent).not.toHaveBeenCalled();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("CardsMode agent detail", () => {
+  it("opens the detail modal when the card body is clicked", async () => {
+    const user = userEvent.setup();
+    renderCards([mkAgent()]);
+
+    await user.click(screen.getByRole("button", { name: "My Agent details" }));
+
+    expect(screen.getByTestId("agent-detail")).toHaveTextContent("My Agent");
+  });
+
+  it("opens the detail modal with the keyboard", async () => {
+    const user = userEvent.setup();
+    renderCards([mkAgent()]);
+
+    screen.getByRole("button", { name: "My Agent details" }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(screen.getByTestId("agent-detail")).toBeInTheDocument();
+  });
+});
+
+describe("CardsMode running agents", () => {
+  it("runs a custom agent by its registry id, not its display name", async () => {
+    const user = userEvent.setup();
+    renderCards([mkAgent()]);
+
+    await user.click(screen.getByRole("button", { name: "Run My Agent" }));
+
+    // 'My Agent'.toLowerCase() would be "my agent" — the backend only knows
+    // the slug id "my-agent".
+    await waitFor(() => expect(runAgent).toHaveBeenCalledWith("my-agent"));
+    // Running from the action button doesn't open the detail modal.
+    expect(screen.queryByTestId("agent-detail")).not.toBeInTheDocument();
+  });
+
+  it("runs a runnable built-in by id and shows no run button for others", async () => {
+    const user = userEvent.setup();
+    renderCards(
+      [],
+      [
+        mkAgent({ id: "scribe", name: "scribe", layer: "loom" }),
+        mkAgent({ id: "weaver", name: "weaver", layer: "loom" }),
+      ],
+    );
+
+    expect(
+      screen.queryByRole("button", { name: "Run weaver" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Run scribe" }));
+    await waitFor(() => expect(runAgent).toHaveBeenCalledWith("scribe"));
   });
 });

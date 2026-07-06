@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel
 
+from core.config import ProviderConfig
 from core.exceptions import ProviderConfigError
 from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
@@ -122,3 +123,29 @@ def build_provider_from_input(p: ProviderInput) -> BaseProvider:
             )
         )
     raise ProviderConfigError(f"Unknown provider '{p.name}'.")
+
+
+def provider_input_from_saved(
+    name: str,
+    existing: ProviderConfig | None,
+    *,
+    chat_model: str | None = None,
+) -> ProviderInput:
+    """Build a ProviderInput seeded from the saved config for ``name``.
+
+    Single construction point for the "probe a provider from its stored
+    settings" endpoints (model listing, benchmarking). ``chat_model``
+    overrides the saved model so arbitrary models can be probed without
+    touching settings.
+    """
+    return ProviderInput(
+        name=name,
+        type=provider_type(name),
+        api_key=(existing.api_key if existing else "") or "",
+        host=(existing.host if existing else "") or "",
+        base_url=(existing.base_url if existing else "") or "",
+        chat_model=chat_model
+        if chat_model is not None
+        else (existing.chat_model if existing else ""),
+        embed_model=(existing.embed_model if existing else "") or "",
+    )

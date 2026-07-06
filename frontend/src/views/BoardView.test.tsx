@@ -15,9 +15,6 @@ vi.mock("./board/PulseMode", () => ({
 vi.mock("../components/Council", () => ({
   Council: () => <div data-testid="council" />,
 }));
-vi.mock("../components/TraceFeed", () => ({
-  TraceFeed: () => <div data-testid="trace-feed" />,
-}));
 
 describe("BoardView", () => {
   it("renders the cards view by default", () => {
@@ -54,13 +51,14 @@ describe("BoardView", () => {
     expect(screen.queryByTestId("pulse-mode")).not.toBeInTheDocument();
   });
 
-  it("renders the status legend and the side panels", () => {
-    render(<BoardView />);
+  it("renders the status legend and the council panel without a trace sidebar", () => {
+    const { container } = render(<BoardView />);
     expect(screen.getByLabelText("Status key")).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByText("settling")).toBeInTheDocument();
     expect(screen.getByText("idle")).toBeInTheDocument();
-    expect(screen.getByTestId("trace-feed")).toBeInTheDocument();
     expect(screen.getByTestId("council")).toBeInTheDocument();
+    // The page-level LLM-call sidebar is gone; .board-main takes the width.
+    expect(container.querySelector(".board-sidebar")).toBeNull();
   });
 });

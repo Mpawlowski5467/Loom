@@ -1,3 +1,5 @@
+@import "./board-modals.css";
+
 .board-view {
   flex: 1;
   display: flex;
@@ -72,6 +74,14 @@
   transform: translateY(-2px);
   border-color: var(--rule-2);
   box-shadow: 0 6px 16px rgba(var(--ink-rgb), 0.06);
+}
+.agent-card--clickable {
+  cursor: pointer;
+  text-align: left;
+}
+.agent-card--clickable:focus-visible {
+  outline: 2px solid var(--agent);
+  outline-offset: 2px;
 }
 .agent-card-h {
   display: flex;
@@ -367,19 +377,11 @@
   color: var(--ink);
 }
 
-/* ── Board chrome: legend + sidebar ────────────────────────────── */
+/* ── Board chrome ──────────────────────────────────────────────── */
 .board-status-legend {
   display: flex;
   align-items: center;
   gap: 10px;
-}
-.board-sidebar {
-  width: 280px;
-  flex-shrink: 0;
-  padding: 12px 12px 12px 0;
-  display: flex;
-  flex-direction: column;
-  min-height: 0;
 }
 .changelog-empty {
   padding: 12px 4px;

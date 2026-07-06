@@ -4,6 +4,8 @@ import { fetchRun, listRuns, type RunDetail, type RunSummary } from "../api/runs
 import { TraceModal } from "./TraceModal";
 
 interface Props {
+  /** Only show runs made by this agent (matches RunSummary.agent). */
+  agent?: string;
   limit?: number;
   pollMs?: number;
 }
@@ -13,7 +15,7 @@ interface Props {
  * timeline; each step that made LLM calls can be drilled into the existing
  * raw-call inspector (TraceModal).
  */
-export function RunFeed({ limit = 20, pollMs = 3000 }: Props): ReactNode {
+export function RunFeed({ agent, limit = 20, pollMs = 3000 }: Props): ReactNode {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -27,7 +29,10 @@ export function RunFeed({ limit = 20, pollMs = 3000 }: Props): ReactNode {
       // useHealthPolling / useAgentPolling) so a hidden window does no work.
       if (!document.hidden) {
         try {
-          const next = await listRuns(limit);
+          // Agent filtering is client-side (below), so fetch the deepest
+          // window the API allows — otherwise a quiet agent whose runs are
+          // older than the newest `limit` would wrongly show "no runs yet".
+          const next = await listRuns(agent ? 200 : limit);
           if (!cancelled) setRuns(next);
         } catch {
           // best-effort
@@ -40,7 +45,7 @@ export function RunFeed({ limit = 20, pollMs = 3000 }: Props): ReactNode {
       cancelled = true;
       if (timer !== null) window.clearTimeout(timer);
     };
-  }, [limit, pollMs]);
+  }, [agent, limit, pollMs]);
 
   const toggle = async (runId: string) => {
     if (expanded === runId) {
@@ -62,14 +67,21 @@ export function RunFeed({ limit = 20, pollMs = 3000 }: Props): ReactNode {
       ? detail.steps
       : (runs.find((r) => r.run_id === runId)?.steps ?? []);
 
+  // /api/traces/runs has no agent query param, so filtering is client-side.
+  const visible = agent
+    ? runs.filter((r) => r.agent === agent).slice(0, limit)
+    : runs;
+
   return (
     <div className="trace-feed-body">
-      {runs.length === 0 && (
+      {visible.length === 0 && (
         <div className="trace-feed-empty">
-          No runs yet. Run the Researcher or Standup agent.
+          {agent
+            ? "No runs yet for this agent."
+            : "No runs yet. Run the Researcher or Standup agent."}
         </div>
       )}
-      {runs.map((run) => (
+      {visible.map((run) => (
         <div key={run.run_id}>
           <button
             type="button"

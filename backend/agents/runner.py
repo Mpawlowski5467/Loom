@@ -262,7 +262,7 @@ class AgentRunner:
         if record is not None:
             from agents.shuttle.custom import CustomAgent
 
-            agent = CustomAgent(self._vault_root, record, _get_chat_provider())
+            agent = CustomAgent(self._vault_root, record, _get_chat_provider(agent_name, record))
             run_result = await agent.run()
             return run_result.to_dict()
 
@@ -315,12 +315,22 @@ class AgentRunner:
         return None
 
 
-def _get_chat_provider() -> Any:
-    """Best-effort chat provider for custom-agent runs; None if unavailable."""
+def _get_chat_provider(agent_id: str = "", record: dict[str, Any] | None = None) -> Any:
+    """Best-effort chat provider for custom-agent runs; None if unavailable.
+
+    Resolution order: ``GlobalConfig.agent_models[agent_id]`` override, then
+    ``provider``/``chat_model`` fields on the agent's ``agents.yaml`` record,
+    then the global default chat provider.
+    """
     try:
         from core.providers import get_registry
 
-        return get_registry().get_chat_provider()
+        rec = record or {}
+        return get_registry().get_chat_provider_for(
+            agent_id,
+            provider=str(rec.get("provider") or "") or None,
+            chat_model=str(rec.get("chat_model") or "") or None,
+        )
     except Exception:
         return None
 

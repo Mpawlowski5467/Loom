@@ -15,12 +15,19 @@ export type Tab = "graph" | "thread" | "inbox" | "board" | "settings";
 export type SettingsSection =
   | "appearance"
   | "providers"
+  | "hardware"
   | "vault"
   | "archived"
   | "about"
   | "danger";
 
-export type GraphMode = "constellation" | "orbit";
+export type GraphLayout =
+  | "force"
+  | "rings"
+  | "spiral"
+  | "arms"
+  | "galaxy"
+  | "wave";
 
 // Cards is the agent dashboard; pulse is an alternate viz of the same agents.
 export type BoardMode = "cards" | "pulse";

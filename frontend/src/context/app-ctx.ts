@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react";
 import type { AgentActivity } from "../api/activity";
 import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
-import type { OrbitScene } from "../graph/orbitScenes";
 import type { ThemeName } from "../theme/themes";
 import type {
   Agent,
@@ -9,13 +8,31 @@ import type {
   Capture,
   CaptureStatus,
   CouncilMessage,
-  GraphMode,
+  GraphLayout,
   Note,
   NoteId,
   SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
+
+export const GRAPH_LAYOUTS: readonly GraphLayout[] = [
+  "force",
+  "rings",
+  "spiral",
+  "arms",
+  "galaxy",
+  "wave",
+] as const;
+
+export const GRAPH_LAYOUT_LABELS: Record<GraphLayout, string> = {
+  force: "Force",
+  rings: "Rings",
+  spiral: "Spiral",
+  arms: "Arms",
+  galaxy: "Galaxy",
+  wave: "Wave",
+};
 
 export interface GraphDisplay {
   nodeSizeScale: number;
@@ -29,8 +46,8 @@ export interface GraphDisplay {
   travelersEnabled: boolean;
   breathingEnabled: boolean;
   depthEnabled: boolean;
-  orbitScene: OrbitScene;
-  orbitAutoCycle: boolean;
+  layout: GraphLayout;
+  layoutAutoCycle: boolean;
 }
 
 export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
@@ -45,8 +62,8 @@ export const GRAPH_DISPLAY_DEFAULTS: GraphDisplay = {
   travelersEnabled: true,
   breathingEnabled: true,
   depthEnabled: true,
-  orbitScene: "rings",
-  orbitAutoCycle: false,
+  layout: "force",
+  layoutAutoCycle: false,
 };
 
 export const GRAPH_DISPLAY_RANGES = {
@@ -75,8 +92,6 @@ export interface AppContextValue {
   currentNoteId: NoteId | null;
   openNote: (id: NoteId) => void;
 
-  graphMode: GraphMode;
-  setGraphMode: (m: GraphMode) => void;
   graphFocusId: NoteId | null;
   setGraphFocusId: (id: NoteId | null) => void;
   /** Bumped to ask the graph to fly its camera to a node (e.g. from search). */
@@ -84,6 +99,7 @@ export interface AppContextValue {
   flyToNode: (id: NoteId) => void;
   graphFilters: Set<string>;
   toggleGraphFilter: (t: string) => void;
+  clearGraphFilters: () => void;
 
   graphDisplay: GraphDisplay;
   setGraphDisplay: (patch: Partial<GraphDisplay>) => void;
@@ -95,6 +111,10 @@ export interface AppContextValue {
   setPrimaryOpen: (b: boolean) => void;
   setSecondaryOpen: (b: boolean) => void;
   setEditing: (b: boolean) => void;
+
+  /** Left file-tree visibility (graph/board tabs only), persisted. */
+  treeVisible: boolean;
+  setTreeVisible: (b: boolean) => void;
 
   paletteOpen: boolean;
   setPaletteOpen: (b: boolean) => void;

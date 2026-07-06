@@ -32,6 +32,8 @@ import yaml
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings
 
+from core.hardware import HardwareProfile
+
 logger = logging.getLogger(__name__)
 
 # Matches a bare ``${VAR}`` or ``${VAR:-default}`` placeholder occupying the
@@ -121,6 +123,32 @@ class LoomSettings(BaseSettings):
             "probes must present the token as 'Authorization: Bearer <token>' or "
             "'X-Loom-Token: <token>'. A speed bump for exposed ports, not auth for "
             "untrusted networks."
+        ),
+    )
+    redis_url: str = Field(
+        default="",
+        description=(
+            "Optional Redis URL (e.g. redis://localhost:6379/0) for the LLM "
+            "response cache. Empty (the default) disables caching entirely — "
+            "set via LOOM_REDIS_URL. Redis being down degrades to cache misses."
+        ),
+    )
+    database_url: str = Field(
+        default="",
+        description=(
+            "Optional Postgres URL (e.g. postgresql://loom:loom@localhost/loom) "
+            "for the durable trace/run mirror. Empty (the default) disables it — "
+            "set via LOOM_DATABASE_URL. The in-memory ring and disk mirror are "
+            "unaffected either way."
+        ),
+    )
+    trace_retention_days: int = Field(
+        default=30,
+        description=(
+            "Days of persisted traces and run summaries to keep (today counts "
+            "as day 0). A daily background sweep prunes the on-disk mirror and, "
+            "when configured, the Postgres mirror. Set via "
+            "LOOM_TRACE_RETENTION_DAYS; a negative value disables pruning."
         ),
     )
     demo_vault_dir: Path = Field(
@@ -222,6 +250,17 @@ class UIState(BaseModel):
     theme: ThemeName = ThemeName.paper
 
 
+class AgentModelOverride(BaseModel):
+    """Per-agent chat provider/model override.
+
+    Both fields are optional: a bare ``chat_model`` rides the default chat
+    provider; a bare ``provider`` uses that provider's configured model.
+    """
+
+    provider: str | None = None
+    chat_model: str | None = None
+
+
 class OnboardingState(BaseModel):
     """Server-side onboarding gate.
 
@@ -248,6 +287,8 @@ class GlobalConfig(BaseModel):
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     ui: UIState = Field(default_factory=UIState)
     onboarding: OnboardingState = Field(default_factory=OnboardingState)
+    agent_models: dict[str, AgentModelOverride] = Field(default_factory=dict)
+    hardware: HardwareProfile | None = None
 
     @classmethod
     def load(cls, path: Path) -> Self:

@@ -8,6 +8,9 @@ export interface AgentRegistryRecord {
   icon: string;
   system_prompt: string;
   system: boolean;
+  /** Per-agent chat binding — empty string means "use the vault default". */
+  provider: string;
+  chat_model: string;
 }
 
 export interface CustomAgentPayload {
@@ -15,6 +18,8 @@ export interface CustomAgentPayload {
   role?: string;
   icon?: string;
   system_prompt?: string;
+  provider?: string;
+  chat_model?: string;
 }
 
 export function listAgentRegistry(): Promise<AgentRegistryRecord[]> {

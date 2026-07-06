@@ -80,7 +80,7 @@ describe("PulseMode", () => {
   it("prefers the live action_count over static stats for the run count", () => {
     renderPulse(
       [mkAgent({ name: "Scout", stats: { runs: 3, lastRun: "never" } })],
-      { scout: mkActivity({ action_count: 42 }) },
+      { agt_scout: mkActivity({ action_count: 42 }) },
     );
 
     expect(screen.getByText("42 runs")).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("PulseMode", () => {
 
   it("shows the running label for an agent whose live state is running", () => {
     renderPulse([mkAgent({ name: "Scout" })], {
-      scout: mkActivity({ state: "running" }),
+      agt_scout: mkActivity({ state: "running" }),
     });
 
     expect(screen.getByText("running")).toBeInTheDocument();
@@ -98,7 +98,7 @@ describe("PulseMode", () => {
 
   it("shows the idle label for an agent whose live state is idle", () => {
     renderPulse([mkAgent({ name: "Scout" })], {
-      scout: mkActivity({ state: "idle" }),
+      agt_scout: mkActivity({ state: "idle" }),
     });
 
     expect(screen.getByText("idle")).toBeInTheDocument();

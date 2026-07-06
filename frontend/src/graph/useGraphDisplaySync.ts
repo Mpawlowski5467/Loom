@@ -3,11 +3,10 @@ import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { ThemeName } from "../theme/themes";
 import type { GraphDisplay } from "../context/app-ctx";
-import type { GraphMode } from "../data/types";
 import { applyPaletteToGraph } from "./sigma-setup";
 import { easeInOutCubic } from "./layouts";
 import { spacingToCameraRatio } from "./reducers";
-import type { GraphTuning } from "./tuning";
+import type { GraphMode, GraphTuning } from "./tuning";
 
 interface Ref<T> {
   current: T;

@@ -1,15 +1,16 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Graph from "graphology";
 import type Sigma from "sigma";
-import type { DragSim } from "./physics";
+import type { DragSim } from "./fluidSim";
+import type { FrameLoop } from "./frameLoop";
 
-// Mock the physics layer so each drag yields a controllable sim whose stop /
-// release we can assert on. The real spring/rAF loop is covered by
-// physics.test.ts — here we only care that the handler's lifecycle calls the
-// sim's stop() at the right moments.
-const startDragSim = vi.fn();
-vi.mock("./physics", () => ({
-  startDragSim: (...args: unknown[]) => startDragSim(...args),
+// Mock the simulation layer so each drag yields a controllable sim whose
+// lifecycle calls we can assert on. The real force/settle math is covered by
+// fluidSim.test.ts — here we only care that the handler starts, feeds,
+// releases, and stops the sim at the right moments.
+const startFluidSim = vi.fn();
+vi.mock("./fluidSim", () => ({
+  startFluidSim: (...args: unknown[]) => startFluidSim(...args),
 }));
 
 // Import after the mock is registered.
@@ -60,44 +61,67 @@ function makeGraph(): Graph {
   const g = new Graph();
   g.addNode("a", { x: 0, y: 0 });
   g.addNode("b", { x: 50, y: 0 });
+  g.addNode("hidden", { x: 90, y: 0, hidden: true });
   g.addEdge("a", "b");
   return g;
+}
+
+function stubFrameLoop(): FrameLoop {
+  return {
+    add: vi.fn(() => vi.fn()),
+    stop: vi.fn(),
+    size: 0,
+  } as unknown as FrameLoop;
 }
 
 interface Harness {
   sim: ReturnType<typeof makeSim>;
   emit: (evt: string, payload: unknown) => void;
   detach: () => void;
+  camera: { disable: ReturnType<typeof vi.fn>; enable: ReturnType<typeof vi.fn> };
+  frameLoop: FrameLoop;
+  cancelTween: ReturnType<typeof vi.fn>;
+  onSettled: ReturnType<typeof vi.fn>;
+  justDragged: { current: boolean };
 }
 
-/** Wire up attachDrag with mocked physics + sigma and return drivers. */
+/** Wire up attachDrag with mocked sim + sigma and return drivers. */
 function setup(): Harness {
   const sim = makeSim();
-  startDragSim.mockReturnValue(sim);
-  const { sigma, emit } = makeSigma();
+  startFluidSim.mockReturnValue(sim);
+  const { sigma, emit, camera } = makeSigma();
   const graph = makeGraph();
+  const frameLoop = stubFrameLoop();
+  const cancelTween = vi.fn();
+  const onSettled = vi.fn();
+  const justDragged = { current: false };
   const detach = attachDrag({
     sigma,
     graph,
+    frameLoop,
     getSnapTarget: (id) => ({
       x: graph.getNodeAttribute(id, "x") as number,
       y: graph.getNodeAttribute(id, "y") as number,
     }),
+    getReleaseMode: () => "sticky",
+    onSettled,
     clearHover: vi.fn(),
-    cancelTween: vi.fn(),
+    cancelTween,
     isDragging: { current: false },
-    justDragged: { current: false },
+    justDragged,
   });
-  return { sim, emit, detach };
+  return { sim, emit, detach, camera, frameLoop, cancelTween, onSettled, justDragged };
 }
 
-/** Press a node, move it (so it counts as a real drag), then release. */
-function dragAndRelease(h: Harness) {
-  h.emit("downNode", { node: "a", event: { preventSigmaDefault: vi.fn() } });
+function press(h: Pick<Harness, "emit">, node = "a") {
+  h.emit("downNode", { node, event: { preventSigmaDefault: vi.fn() } });
+}
+
+function move(h: Pick<Harness, "emit">, x = 30, y = 40) {
   h.emit("moveBody", {
     event: {
-      x: 30,
-      y: 40,
+      x,
+      y,
       preventSigmaDefault: vi.fn(),
       original: {
         preventDefault: vi.fn(),
@@ -105,12 +129,18 @@ function dragAndRelease(h: Harness) {
       } as unknown as Event,
     },
   });
+}
+
+/** Press a node, move it (so it counts as a real drag), then release. */
+function dragAndRelease(h: Pick<Harness, "emit">) {
+  press(h);
+  move(h);
   h.emit("upStage", {});
 }
 
-describe("attachDrag — settling-sim teardown", () => {
+describe("attachDrag — fluid sim lifecycle", () => {
   beforeEach(() => {
-    startDragSim.mockReset();
+    startFluidSim.mockReset();
     vi.useFakeTimers();
   });
 
@@ -118,90 +148,109 @@ describe("attachDrag — settling-sim teardown", () => {
     vi.useRealTimers();
   });
 
-  it("stops the still-settling sim when detached within the settle window", () => {
+  it("starts a sim on grab, wiring the dragged node and the shared frame loop", () => {
+    const h = setup();
+    press(h);
+    expect(startFluidSim).toHaveBeenCalledTimes(1);
+    const args = startFluidSim.mock.calls[0]![0] as {
+      draggedId: string;
+      frameLoop: FrameLoop;
+      getReleaseMode: () => string;
+      onSettled: unknown;
+    };
+    expect(args.draggedId).toBe("a");
+    expect(args.frameLoop).toBe(h.frameLoop);
+    expect(args.getReleaseMode()).toBe("sticky");
+    expect(args.onSettled).toBe(h.onSettled);
+    expect(h.camera.disable).toHaveBeenCalled();
+    expect(h.cancelTween).toHaveBeenCalled();
+  });
+
+  it("feeds cursor moves to the sim as graph coordinates", () => {
+    const h = setup();
+    press(h);
+    move(h, 30, 40);
+    expect(h.sim.setDraggedPos).toHaveBeenCalledWith(30, 40);
+  });
+
+  it("releases with the drag velocity and re-enables the camera", () => {
+    const h = setup();
+    press(h);
+    move(h, 10, 0);
+    move(h, 25, 5);
+    h.emit("upNode", {});
+    // Velocity = last move minus the previous one.
+    expect(h.sim.release).toHaveBeenCalledWith(15, 5);
+    expect(h.camera.enable).toHaveBeenCalled();
+    // Released sims are left settling — not stopped here.
+    expect(h.sim.stop).not.toHaveBeenCalled();
+  });
+
+  it("sets justDragged for one tick so the click handler is suppressed", () => {
     const h = setup();
     dragAndRelease(h);
+    expect(h.justDragged.current).toBe(true);
+    vi.runAllTimers();
+    expect(h.justDragged.current).toBe(false);
+  });
 
-    // The release handed the sim off to physics' settle loop, which keeps its
-    // own rAF chain alive — the handler must NOT have stopped it yet.
+  it("stops the sim without releasing when the press never moved", () => {
+    const h = setup();
+    press(h);
+    h.emit("upNode", {});
+    expect(h.sim.stop).toHaveBeenCalledTimes(1);
+    expect(h.sim.release).not.toHaveBeenCalled();
+  });
+
+  it("ignores grabs on hidden nodes", () => {
+    const h = setup();
+    press(h, "hidden");
+    expect(startFluidSim).not.toHaveBeenCalled();
+    expect(h.camera.disable).not.toHaveBeenCalled();
+  });
+});
+
+describe("attachDrag — settling teardown", () => {
+  beforeEach(() => {
+    startFluidSim.mockReset();
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("stops a still-settling sim when detached mid-settle (structural rebuild)", () => {
+    const h = setup();
+    dragAndRelease(h);
     expect(h.sim.release).toHaveBeenCalledTimes(1);
     expect(h.sim.stop).not.toHaveBeenCalled();
 
-    // GraphView unmounts / graph rebuilds mid-settle → detach runs.
-    h.detach();
-
-    // Teardown must halt the post-release animation so its rAF loop never runs
-    // against a destroyed Sigma instance.
-    expect(h.sim.stop).toHaveBeenCalledTimes(1);
-  });
-
-  it("drops the settling-sim reference after a natural settle (no detach)", () => {
-    const h = setup();
-    dragAndRelease(h);
-    expect(h.sim.stop).not.toHaveBeenCalled();
-
-    // Let the settle window elapse; the safety timer clears the reference and
-    // stops the (already-finished) sim exactly once.
-    vi.runAllTimers();
-    expect(h.sim.stop).toHaveBeenCalledTimes(1);
-
-    // A later detach must not double-stop the dropped sim.
+    // GraphView unmounts / graph rebuilds mid-settle → detach must halt the
+    // sim so its frame-loop tick never drives a destroyed Sigma instance.
     h.detach();
     expect(h.sim.stop).toHaveBeenCalledTimes(1);
   });
 
-  it("supersedes a prior settling sim when a new drag is released", () => {
+  it("supersedes a prior settling sim when a new node is grabbed", () => {
     const sim1 = makeSim();
     const sim2 = makeSim();
-    startDragSim.mockReturnValueOnce(sim1).mockReturnValueOnce(sim2);
-    const { sigma, emit } = makeSigma();
-    const graph = makeGraph();
-    const detach = attachDrag({
-      sigma,
-      graph,
-      getSnapTarget: (id) => ({
-        x: graph.getNodeAttribute(id, "x") as number,
-        y: graph.getNodeAttribute(id, "y") as number,
-      }),
-      clearHover: vi.fn(),
-      cancelTween: vi.fn(),
-      isDragging: { current: false },
-      justDragged: { current: false },
-    });
-
-    const drag = (e: typeof emit) => {
-      e("downNode", { node: "a", event: { preventSigmaDefault: vi.fn() } });
-      e("moveBody", {
-        event: {
-          x: 30,
-          y: 40,
-          preventSigmaDefault: vi.fn(),
-          original: {
-            preventDefault: vi.fn(),
-            stopPropagation: vi.fn(),
-          } as unknown as Event,
-        },
-      });
-      e("upStage", {});
-    };
-
-    drag(emit); // releases sim1 → settling
-    // Starting + releasing a second drag must stop sim1 (down stops it, then
-    // the new release tracks sim2).
-    drag(emit);
-    expect(sim1.stop).toHaveBeenCalled();
+    startFluidSim.mockReturnValueOnce(sim1).mockReturnValueOnce(sim2);
+    const h = setup();
+    // setup() armed mockReturnValue; the two mockReturnValueOnce above win first.
+    dragAndRelease(h); // releases sim1 → settling
+    press(h, "b"); // grabbing again must stop sim1 before starting sim2
+    expect(sim1.stop).toHaveBeenCalledTimes(1);
     expect(sim2.stop).not.toHaveBeenCalled();
 
-    // Detach now stops the current settling sim (sim2).
-    detach();
-    expect(sim2.stop).toHaveBeenCalledTimes(1);
+    h.emit("upNode", {}); // un-moved press → sim2 stopped, not released
+    h.detach();
+    expect(sim2.stop).toHaveBeenCalled();
   });
 
   it("stops an in-progress (un-released) drag sim on detach", () => {
     const h = setup();
-    // Press but never move → not a real drag; sim should be stopped via the
-    // non-drag path / detach, not handed to a settle loop.
-    h.emit("downNode", { node: "a", event: { preventSigmaDefault: vi.fn() } });
+    press(h);
     h.detach();
     expect(h.sim.stop).toHaveBeenCalledTimes(1);
     expect(h.sim.release).not.toHaveBeenCalled();

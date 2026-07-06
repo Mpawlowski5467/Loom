@@ -89,6 +89,49 @@ def check_chat() -> dict[str, Any]:
         return {"ready": False}
 
 
+def check_cache() -> dict[str, Any]:
+    """Report the optional Redis response cache.
+
+    ``ready`` is ALWAYS True — like the indexer's ``unindexed`` drift signal,
+    an optional service must never flip ``ok`` and 503 ``/api/ready``, whether
+    it is absent or configured-but-down. Status lives in the separate
+    ``configured``/``connected`` fields.
+    """
+    try:
+        from core.cache import get_response_cache
+
+        cache = get_response_cache()
+        return {
+            "ready": True,
+            "configured": cache is not None,
+            "connected": bool(cache is not None and cache.connected),
+        }
+    except Exception:
+        logger.warning("Cache health check failed", exc_info=True)
+        return {"ready": True, "configured": False, "connected": False}
+
+
+def check_database() -> dict[str, Any]:
+    """Report the optional Postgres trace mirror.
+
+    Same contract as :func:`check_cache`: ``ready`` is ALWAYS True; only
+    ``configured``/``connected`` carry the actual state.
+    """
+    try:
+        from core.config import settings
+        from core.traces import get_trace_store
+
+        mirror = get_trace_store().pg_mirror
+        return {
+            "ready": True,
+            "configured": bool(settings.database_url),
+            "connected": bool(mirror is not None and mirror.connected),
+        }
+    except Exception:
+        logger.warning("Database health check failed", exc_info=True)
+        return {"ready": True, "configured": False, "connected": False}
+
+
 def build_health_report() -> dict[str, Any]:
     """Compose the structured component health report."""
     components = {
@@ -96,6 +139,8 @@ def build_health_report() -> dict[str, Any]:
         "agents": check_agents(),
         "watcher": check_watcher(),
         "chat": check_chat(),
+        "cache": check_cache(),
+        "database": check_database(),
     }
     ok = all(c["ready"] for c in components.values())
     return {"ok": ok, "components": components}

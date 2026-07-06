@@ -40,6 +40,21 @@ export function renderTarget(target: string): ReactNode {
   });
 }
 
+/**
+ * True when a trace's caller label attributes the call to the given agent id.
+ * Caller conventions across the backend: the bare id ("weaver"), board runs
+ * ("manual:<id>"), council/chat fan-out ("council:<id>", "chat:<id>"), and
+ * dotted sub-callers ("<id>.classify").
+ */
+export function callerMatchesAgent(caller: string, agentId: string): boolean {
+  return (
+    caller === agentId ||
+    caller === `manual:${agentId}` ||
+    caller.startsWith(`${agentId}.`) ||
+    caller.endsWith(`:${agentId}`)
+  );
+}
+
 /** The agent's effective state: live "running" beats the static state. */
 export function liveAgentState(
   agent: Agent,

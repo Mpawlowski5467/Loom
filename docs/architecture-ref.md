@@ -68,7 +68,9 @@ history:
 
 **Boundary**: Shuttle agents write to `captures/` only. Loom agents process from there.
 
-**Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`); the 7 built-ins stay read-only. Running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's system prompt, and writes a capture for triage.
+**Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`, optionally with per-agent `provider`/`chat_model` fields); the 7 built-ins stay read-only. Customs are runnable and editable from their Board card (all board keying uses the registry id, never the display name). Running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's system prompt, and writes a capture for triage.
+
+**Per-agent models**: `GlobalConfig.agent_models` maps agent id → `{provider, chat_model}`; `/api/settings/agent-models` (GET/PUT) edits it and rebinds agents immediately. `ProviderRegistry.get(name, chat_model)` caches one instance per `(provider, model)` pair; `get_chat_provider_for(agent_id)` resolves override → agents.yaml record → global default.
 
 ## Orchestration
 
@@ -109,26 +111,26 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 ├────────┬──────────────────┬─────────────────────┤
 │ FILE   │ MAIN AREA        │ RIGHT SIDEBAR       │
 │ TREE   │ (graph/board/    │ (slides in:         │
-│ always │  inbox)          │  thread view or     │
-│ visible│                  │  rich editor)       │
+│ graph+ │  inbox)          │  thread view or     │
+│ board  │                  │  rich editor)       │
 ├────────┴──────────────────┴─────────────────────┤
 │ Status bar                                      │
 └─────────────────────────────────────────────────┘
 ```
 
 - Fixed width panels, not resizable
-- File tree: VS Code style, filter bar, drag-to-move, colored dots per type
-- Graph: Sigma.js, force-directed, drag/zoom/pan/hover-highlight/pin/filter
+- File tree: VS Code style, filter bar, drag-to-move, colored dots per type. Renders only on Graph and Board; hideable via a nav toggle or ⌘B, persisted at `loom.treeVisible`. Thread/Inbox/Settings are full-width
+- Graph: Sigma.js, six layout options, fluid drag physics, zoom/pan/hover-highlight/filter
 - Nodes: dots + labels, size by connections, color by type, glow on hover
 - Edges: thickness by density, muted ink
 - Editor: custom markdown renderer ([`frontend/src/editor/renderMarkdown.tsx`](../frontend/src/editor/renderMarkdown.tsx)) with `[[wikilink]]` support and inline marks
-- Create note: modal → Weaver processes via read chain
+- Create note: modal (segmented type chips with node-color dots, nested-folder picker, tag chip editor) → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
 - Live refresh: the UI holds an SSE stream (`GET /api/events/stream`) and re-fetches notes/captures (one debounced reload per burst) when the file watcher emits a `vault-changed` event, so agent/external edits reach an open UI without a manual reload. The Board additionally polls agent activity on a short, tab/visibility-gated interval.
 - Bidirectional sync: graph ↔ file tree
 - Graph display panel: labels/size/spacing/edge-thickness/breathing/travelers, persisted to localStorage
-- Board: two modes — cards (agent grid) and pulse (live activity)
-- Settings: appearance, providers (key validation), vault, about/diagnostics, danger zone
+- Board: two modes — cards (agent grid) and pulse (live activity). Clicking a card opens an agent-detail modal: instructions (registry system prompt), model override, the agent's recent runs + LLM calls (drill into the raw-call inspector), and Run/Edit/Delete actions. There is no page-level trace feed
+- Settings: appearance, providers (key validation), hardware & models (scan → local-model ratings, opt-in Ollama benchmark, per-agent model pickers), vault, about/diagnostics, danger zone
 
 ## Color System
 
@@ -183,7 +185,9 @@ Embed and chat models are independent. Mix and match.
 
 Every provider is wrapped in a `TracedProvider` that records each call (provider, model, messages, response, duration, caller). Stored in a 500-entry in-memory ring + mirrored to disk at `.loom/traces/<date>/`. Read via `/api/traces` (recent) and `/api/traces/disk` (by date). The UI's "raw call" link opens the exact exchange.
 
-**Run/step grouping**: each trace also carries the `run` and `step` it was made under (set by the LangGraph run scope via `contextvars`, the same mechanism as `caller`). A graph run also writes a run summary to `.loom/traces/<date>/run-<id>.json` capturing its ordered steps — including steps that made no LLM call (e.g. Spider's deterministic linking, `enforce`). This reifies a multi-step run's *shape* instead of a flat call list. Read via `/api/traces/runs` (recent runs) and `/api/traces/runs/{id}` (one run's step timeline + each step's traces); the Board "Runs" view (`RunFeed`) renders it.
+**Optional infra** (off by default; behavior identical without them): with `LOOM_REDIS_URL`, the registry wraps providers as `TracedProvider(CachedProvider(instance))` — chat/embed responses cache keyed on (provider, model, system, messages) with 7d/30d TTLs, `chat_stream` bypasses, Redis failures degrade to misses. With `LOOM_DATABASE_URL`, `TraceStore` additionally enqueues traces/run summaries (bounded queue, drop-oldest) into Postgres `loom_traces`/`loom_runs`; the traces router prefers pg for history paging, the runs list, run-summary lookup, and run-detail backfill, falling back to disk. A daily retention sweep (`core/trace_retention.py`, started in the app lifespan) prunes both the disk trace mirror and the Postgres tables past `LOOM_TRACE_RETENTION_DAYS` (default 30; negative disables). Health reports `cache`/`database` as always-ready informational components. `docker compose up` starts both services (network-internal, named volumes).
+
+**Run/step grouping**: each trace also carries the `run` and `step` it was made under (set by the LangGraph run scope via `contextvars`, the same mechanism as `caller`). A graph run also writes a run summary to `.loom/traces/<date>/run-<id>.json` capturing its ordered steps — including steps that made no LLM call (e.g. Spider's deterministic linking, `enforce`). This reifies a multi-step run's *shape* instead of a flat call list. Read via `/api/traces/runs` (recent runs) and `/api/traces/runs/{id}` (one run's step timeline + each step's traces); `RunFeed` renders it inside the Board's agent-detail modal, filtered to that agent.
 
 ## Council Streaming
 
@@ -191,7 +195,8 @@ Every provider is wrapped in a `TracedProvider` that records each call (provider
 
 ## Graph Layout & Motion
 
-- Modes: **constellation** (ForceAtlas2 force-directed + a deterministic overlap-relaxation pass so disks never stack — `graph/overlap.ts`) and **orbit** (focus-first scenes: rings/spiral/arms/galaxy/wave — `graph/orbitScenes.ts`; scene picked in the display panel, auto-cycle is opt-in)
+- One `layout` option, persisted in `loom.graphDisplay`: **force** (ForceAtlas2 + a deterministic overlap-relaxation pass so disks never stack — `graph/overlap.ts`) or five focus-first scene layouts (rings/spiral/arms/galaxy/wave — `graph/orbitScenes.ts`; picked in the display panel, auto-cycle opt-in for the scene layouts)
+- Fluid drag (`graph/fluidSim.ts` + `fluidForces.ts`): grabbing a node runs a live multi-hop simulation on the shared frame loop — edge springs (rest length from home distances), hop-weighted home anchors, short-range grid repulsion; the dragged node pins to the cursor. Release is **sticky** in force layout (settled positions become the new homes, survive rebuilds) and **elastic** in scene layouts (spring-back to scene targets). Above the 500-node perf budget the sim is capped to a ≤3-hop neighborhood
 - Depth: faux-3D layering (`graph/depth.ts`) — each node gets a deterministic z (hubs forward, leaves back); deeper nodes render smaller, washed toward the paper, drawn behind nearer ones (Sigma zIndex), and edges fade with endpoint depth. Hover pops a node onto the focus plane. Toggle in the display panel. (Positions are never offset: Sigma 3 re-reads x/y from graph attrs and discards reducer overrides.)
 - Edge travelers: dashes animate along edges on an SVG overlay; pace adjustable or off
 - Breathing: gentle node-size oscillation

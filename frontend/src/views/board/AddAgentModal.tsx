@@ -6,6 +6,9 @@ import {
   updateCustomAgent,
   type AgentRegistryRecord,
 } from "../../api/agentsRegistry";
+import { IconPicker } from "./IconPicker";
+import { PromptField } from "./PromptField";
+import { ModelOverrideField } from "./ModelOverrideField";
 
 interface Props {
   existing?: AgentRegistryRecord;
@@ -24,6 +27,8 @@ export function AddAgentModal({
   const [systemPrompt, setSystemPrompt] = useState(
     existing?.system_prompt ?? "",
   );
+  const [provider, setProvider] = useState(existing?.provider ?? "");
+  const [chatModel, setChatModel] = useState(existing?.chat_model ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Name input carries autoFocus; route Escape through the window-level trap.
@@ -44,6 +49,9 @@ export function AddAgentModal({
         role: role.trim(),
         icon: icon.trim() || "✦",
         system_prompt: systemPrompt,
+        // Empty strings mean "use the vault default" on the backend.
+        provider: provider.trim(),
+        chat_model: chatModel.trim(),
       };
       if (existing) {
         await updateCustomAgent(existing.id, payload);
@@ -71,7 +79,7 @@ export function AddAgentModal({
     >
       <div
         ref={dialogRef}
-        className="settings-modal"
+        className="settings-modal add-agent-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="add-agent-title"
@@ -83,54 +91,58 @@ export function AddAgentModal({
         </h2>
         <p className="settings-copy">
           Custom agents persist with your vault. Run one from its Board card and
-          it gathers vault context, calls your chat provider with the system
-          prompt below, and writes a capture to your Inbox for triage.
+          it gathers vault context, calls your chat provider with the
+          instructions below, and writes a capture to your Inbox for triage.
         </p>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Name</span>
-          <input
-            className="input"
-            value={name}
-            autoFocus
-            onChange={(e) => setName(e.target.value)}
-            onKeyDown={onKey}
-          />
-        </label>
-
-        <div className="settings-field-row">
+        <div className="settings-field-row add-agent-identity">
           <label className="settings-field">
-            <span className="settings-field-label">Role</span>
+            <span className="settings-field-label">Name</span>
             <input
               className="input"
-              placeholder="what does this agent do?"
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
+              value={name}
+              autoFocus
+              onChange={(e) => setName(e.target.value)}
               onKeyDown={onKey}
             />
           </label>
-          <label className="settings-field" style={{ maxWidth: 100 }}>
+          <div className="settings-field">
             <span className="settings-field-label">Icon</span>
-            <input
-              className="input mono"
-              value={icon}
-              onChange={(e) => setIcon(e.target.value)}
-              onKeyDown={onKey}
-              maxLength={4}
-            />
-          </label>
+            <IconPicker value={icon} onChange={setIcon} />
+          </div>
         </div>
 
         <label className="settings-field">
-          <span className="settings-field-label">System prompt</span>
-          <textarea
+          <span className="settings-field-label">Role</span>
+          <input
             className="input"
-            value={systemPrompt}
-            rows={6}
-            placeholder="You are…"
-            onChange={(e) => setSystemPrompt(e.target.value)}
+            placeholder="what does this agent do?"
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            onKeyDown={onKey}
           />
+          <span className="settings-field-hint">
+            One line shown on the agent's card — e.g. "digests my reading
+            captures".
+          </span>
         </label>
+
+        <PromptField
+          value={systemPrompt}
+          onChange={setSystemPrompt}
+          onKeyDown={onKey}
+        />
+
+        <ModelOverrideField
+          provider={provider}
+          chatModel={chatModel}
+          onProviderChange={(next) => {
+            setProvider(next);
+            // A different provider invalidates the previous model choice.
+            setChatModel("");
+          }}
+          onModelChange={setChatModel}
+        />
 
         {error && (
           <div className="settings-test-result fail" role="status">

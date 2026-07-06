@@ -6,7 +6,6 @@ import type {
   CaptureStatus,
   CouncilMessage,
   CouncilWho,
-  GraphMode,
   Note,
   NoteId,
   SettingsSection,
@@ -22,16 +21,32 @@ import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
 import { subscribeVaultEvents } from "../api/events";
-import { ORBIT_SCENES } from "../graph/orbitScenes";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
-import { GRAPH_DISPLAY_DEFAULTS, GRAPH_DISPLAY_RANGES } from "./app-ctx";
+import {
+  GRAPH_DISPLAY_DEFAULTS,
+  GRAPH_DISPLAY_RANGES,
+  GRAPH_LAYOUTS,
+} from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 import { useAgentPolling } from "./useAgentPolling";
 import { useHealthPolling } from "./useHealthPolling";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
+const TREE_VISIBLE_KEY = "loom.treeVisible";
+
+function loadTreeVisible(): boolean {
+  if (typeof window === "undefined") return true;
+  try {
+    const raw = window.localStorage.getItem(TREE_VISIBLE_KEY);
+    if (raw === null) return true;
+    const parsed = JSON.parse(raw);
+    return typeof parsed === "boolean" ? parsed : true;
+  } catch {
+    return true;
+  }
+}
 
 function loadGraphFilters(): Set<string> {
   if (typeof window === "undefined") return new Set();
@@ -77,12 +92,20 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+/** Older builds persisted the auto-cycle flag as ``orbitAutoCycle``.
+ * (Their ``orbitScene`` is deliberately NOT migrated into ``layout``: the old
+ * graph mode wasn't persisted and every session started in constellation, so
+ * "force" — not the last-picked scene — is the faithful default.) */
+type PersistedGraphDisplay = Partial<GraphDisplay> & {
+  orbitAutoCycle?: unknown;
+};
+
 function loadGraphDisplay(): GraphDisplay {
   if (typeof window === "undefined") return GRAPH_DISPLAY_DEFAULTS;
   try {
     const raw = window.localStorage.getItem(GRAPH_DISPLAY_KEY);
     if (!raw) return GRAPH_DISPLAY_DEFAULTS;
-    const parsed = JSON.parse(raw) as Partial<GraphDisplay>;
+    const parsed = JSON.parse(raw) as PersistedGraphDisplay;
     return {
       nodeSizeScale: clamp(
         Number(parsed.nodeSizeScale ?? GRAPH_DISPLAY_DEFAULTS.nodeSizeScale),
@@ -135,15 +158,17 @@ function loadGraphDisplay(): GraphDisplay {
         typeof parsed.depthEnabled === "boolean"
           ? parsed.depthEnabled
           : GRAPH_DISPLAY_DEFAULTS.depthEnabled,
-      orbitScene: (ORBIT_SCENES as readonly string[]).includes(
-        parsed.orbitScene as string,
+      layout: (GRAPH_LAYOUTS as readonly string[]).includes(
+        parsed.layout as string,
       )
-        ? (parsed.orbitScene as GraphDisplay["orbitScene"])
-        : GRAPH_DISPLAY_DEFAULTS.orbitScene,
-      orbitAutoCycle:
-        typeof parsed.orbitAutoCycle === "boolean"
-          ? parsed.orbitAutoCycle
-          : GRAPH_DISPLAY_DEFAULTS.orbitAutoCycle,
+        ? (parsed.layout as GraphDisplay["layout"])
+        : GRAPH_DISPLAY_DEFAULTS.layout,
+      layoutAutoCycle:
+        typeof parsed.layoutAutoCycle === "boolean"
+          ? parsed.layoutAutoCycle
+          : typeof parsed.orbitAutoCycle === "boolean"
+            ? parsed.orbitAutoCycle
+            : GRAPH_DISPLAY_DEFAULTS.layoutAutoCycle,
     };
   } catch {
     return GRAPH_DISPLAY_DEFAULTS;
@@ -211,7 +236,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setTab("thread");
   }, []);
 
-  const [graphMode, setGraphMode] = useState<GraphMode>("constellation");
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
   const [graphFlyTo, setGraphFlyTo] = useState<{
     id: NoteId;
@@ -229,6 +253,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       else next.add(t);
       return next;
     });
+  }, []);
+  const clearGraphFilters = useCallback(() => {
+    setGraphFilters(new Set());
   }, []);
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -286,12 +313,12 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
         travelersEnabled: patch.travelersEnabled ?? prev.travelersEnabled,
         breathingEnabled: patch.breathingEnabled ?? prev.breathingEnabled,
         depthEnabled: patch.depthEnabled ?? prev.depthEnabled,
-        orbitScene:
-          patch.orbitScene !== undefined &&
-          (ORBIT_SCENES as readonly string[]).includes(patch.orbitScene)
-            ? patch.orbitScene
-            : prev.orbitScene,
-        orbitAutoCycle: patch.orbitAutoCycle ?? prev.orbitAutoCycle,
+        layout:
+          patch.layout !== undefined &&
+          (GRAPH_LAYOUTS as readonly string[]).includes(patch.layout)
+            ? patch.layout
+            : prev.layout,
+        layoutAutoCycle: patch.layoutAutoCycle ?? prev.layoutAutoCycle,
       };
       return merged;
     });
@@ -314,6 +341,16 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [primaryOpen, setPrimaryOpen] = useState(true);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [editing, setEditingRaw] = useState(false);
+
+  const [treeVisible, setTreeVisible] = useState<boolean>(loadTreeVisible);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      window.localStorage.setItem(TREE_VISIBLE_KEY, JSON.stringify(treeVisible));
+    } catch {
+      // ignore quota / serialization failures
+    }
+  }, [treeVisible]);
 
   const setEditing = useCallback((b: boolean) => {
     setEditingRaw(b);
@@ -682,14 +719,13 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       currentNoteId,
       openNote,
 
-      graphMode,
-      setGraphMode,
       graphFocusId,
       setGraphFocusId,
       graphFlyTo,
       flyToNode,
       graphFilters,
       toggleGraphFilter,
+      clearGraphFilters,
 
       graphDisplay,
       setGraphDisplay,
@@ -701,6 +737,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setPrimaryOpen,
       setSecondaryOpen,
       setEditing,
+
+      treeVisible,
+      setTreeVisible,
 
       paletteOpen,
       setPaletteOpen,
@@ -758,7 +797,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       tab,
       settingsSection,
       currentNoteId,
-      graphMode,
       graphFocusId,
       graphFlyTo,
       graphFilters,
@@ -766,6 +804,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       primaryOpen,
       secondaryOpen,
       editing,
+      treeVisible,
       paletteOpen,
       toasts,
       agentActivity,
@@ -787,15 +826,16 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setTab,
       setSettingsSection,
       openNote,
-      setGraphMode,
       setGraphFocusId,
       flyToNode,
       toggleGraphFilter,
+      clearGraphFilters,
       setGraphDisplay,
       resetGraphDisplay,
       setPrimaryOpen,
       setSecondaryOpen,
       setEditing,
+      setTreeVisible,
       setPaletteOpen,
       pushToast,
       dismissToast,

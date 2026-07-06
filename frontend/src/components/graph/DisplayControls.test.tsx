@@ -31,32 +31,44 @@ function renderControls(display: Partial<GraphDisplay> = {}) {
   return { setGraphDisplay, resetGraphDisplay };
 }
 
-describe("DisplayControls — orbit scene picker", () => {
-  it("renders all five scenes with the selection checked", () => {
-    renderControls({ orbitScene: "galaxy" });
-    const group = screen.getByRole("radiogroup", { name: "Orbit scene" });
+describe("DisplayControls — layout picker", () => {
+  it("renders all six layouts with the selection checked", () => {
+    renderControls({ layout: "galaxy" });
+    const group = screen.getByRole("radiogroup", { name: "Layout" });
     expect(group).toBeInTheDocument();
-    for (const label of ["Rings", "Spiral", "Arms", "Galaxy", "Wave"]) {
+    for (const label of ["Force", "Rings", "Spiral", "Arms", "Galaxy", "Wave"]) {
       expect(screen.getByRole("radio", { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole("radio", { name: "Galaxy" })).toBeChecked();
-    expect(screen.getByRole("radio", { name: "Rings" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "Force" })).not.toBeChecked();
   });
 
-  it("picking a scene updates the display settings", async () => {
+  it("picking a layout updates the display settings", async () => {
     const user = userEvent.setup();
     const { setGraphDisplay } = renderControls();
     await user.click(screen.getByRole("radio", { name: "Wave" }));
-    expect(setGraphDisplay).toHaveBeenCalledWith({ orbitScene: "wave" });
+    expect(setGraphDisplay).toHaveBeenCalledWith({ layout: "wave" });
   });
 
-  it("auto-cycle is a switch that toggles orbitAutoCycle", async () => {
+  it("cycle layouts is a switch that toggles layoutAutoCycle", async () => {
     const user = userEvent.setup();
-    const { setGraphDisplay } = renderControls({ orbitAutoCycle: false });
-    const toggle = screen.getByRole("switch", { name: "Auto-cycle" });
+    const { setGraphDisplay } = renderControls({
+      layout: "rings",
+      layoutAutoCycle: false,
+    });
+    const toggle = screen.getByRole("switch", { name: "Cycle layouts" });
     expect(toggle).toHaveAttribute("aria-checked", "false");
     await user.click(toggle);
-    expect(setGraphDisplay).toHaveBeenCalledWith({ orbitAutoCycle: true });
+    expect(setGraphDisplay).toHaveBeenCalledWith({ layoutAutoCycle: true });
+  });
+
+  it("cycle layouts is disabled while the force layout is selected", async () => {
+    const user = userEvent.setup();
+    const { setGraphDisplay } = renderControls({ layout: "force" });
+    const toggle = screen.getByRole("switch", { name: "Cycle layouts" });
+    expect(toggle).toBeDisabled();
+    await user.click(toggle);
+    expect(setGraphDisplay).not.toHaveBeenCalled();
   });
 });
 

@@ -263,31 +263,64 @@
 
 .graph-filters {
   display: flex;
+  align-items: center;
   gap: 6px;
   flex-wrap: wrap;
 }
+/* Compact type toggle: just the colored dot inside a round button. Inactive
+   dots are washed toward the paper; active ones read at full ink with a ring. */
 .graph-filter {
-  font-family: var(--mono);
-  font-size: 10px;
-  padding: 4px 10px;
-  border-radius: 999px;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
   background: transparent;
   border: 1px solid var(--rule-2);
-  color: var(--ink-2);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  justify-content: center;
   transition: all 180ms var(--ease);
+}
+.graph-filter .dot {
+  width: 8px;
+  height: 8px;
+  opacity: 0.45;
+  transition: opacity 180ms var(--ease);
 }
 .graph-filter:hover {
   border-color: var(--ink-3);
   transform: translateY(-1px);
 }
+.graph-filter:hover .dot {
+  opacity: 0.8;
+}
 .graph-filter[aria-pressed="true"] {
-  background: var(--ink);
   border-color: var(--ink);
-  color: var(--bg-base);
+  box-shadow: 0 0 0 1px var(--ink);
+}
+.graph-filter[aria-pressed="true"] .dot {
+  opacity: 1;
+}
+.graph-filters-clear {
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 50%;
+  background: transparent;
+  border: 1px solid var(--rule-2);
+  color: var(--ink-2);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 180ms var(--ease);
+}
+.graph-filters-clear:hover {
+  border-color: var(--ink-3);
+  color: var(--ink);
 }
 
 .graph-canvas {

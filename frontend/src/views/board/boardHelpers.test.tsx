@@ -6,6 +6,7 @@ import {
   renderTarget,
   liveAgentState,
   boardStatus,
+  callerMatchesAgent,
 } from "./boardHelpers";
 import type { Agent, AgentState } from "../../data/types";
 import type { AgentActivity } from "../../api/activity";
@@ -159,5 +160,23 @@ describe("boardStatus", () => {
       state: "idle",
       label: "idle",
     });
+  });
+});
+
+describe("callerMatchesAgent", () => {
+  it("matches the bare id, manual runs, dotted sub-callers, and fan-out labels", () => {
+    expect(callerMatchesAgent("weaver", "weaver")).toBe(true);
+    expect(callerMatchesAgent("manual:my-agent", "my-agent")).toBe(true);
+    expect(callerMatchesAgent("weaver.classify", "weaver")).toBe(true);
+    expect(callerMatchesAgent("council:weaver", "weaver")).toBe(true);
+    expect(callerMatchesAgent("chat:researcher", "researcher")).toBe(true);
+  });
+
+  it("rejects other agents' labels and name-vs-id mismatches", () => {
+    expect(callerMatchesAgent("manual:spider", "weaver")).toBe(false);
+    expect(callerMatchesAgent("council:spider", "weaver")).toBe(false);
+    expect(callerMatchesAgent("weaverish", "weaver")).toBe(false);
+    // 'My Agent'.toLowerCase() is not the registry id.
+    expect(callerMatchesAgent("manual:my-agent", "my agent")).toBe(false);
   });
 });

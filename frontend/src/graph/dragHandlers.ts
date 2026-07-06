@@ -1,16 +1,25 @@
 import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { XY } from "./layouts";
-import { startDragSim, type DragSim } from "./physics";
+import type { FrameLoop } from "./frameLoop";
+import { startFluidSim, type DragSim, type ReleaseMode } from "./fluidSim";
 
 interface AttachDragArgs {
   sigma: Sigma;
   graph: Graph;
+  frameLoop: FrameLoop;
   getSnapTarget: (id: string) => XY | undefined;
+  /** Sticky (force layout) vs elastic (orbit scenes) release, read at release. */
+  getReleaseMode: () => ReleaseMode;
+  /** Sticky settles report final positions here (new homes for later drags). */
+  onSettled?: (positions: Map<string, XY>) => void;
   /** Clear hover state when a drag begins. */
   clearHover: () => void;
   /** Abort any in-flight scene tween — grabbing a node interrupts it. */
   cancelTween: () => void;
+  /** Receives a handle that halts the active sim; scene staging calls it so
+   * a layout switch never leaves a settling sim fighting the tween. */
+  stopSimRef?: { current: (() => void) | null };
   isDragging: { current: boolean };
   justDragged: { current: boolean };
 }
@@ -19,52 +28,33 @@ export function attachDrag(args: AttachDragArgs): () => void {
   const {
     sigma,
     graph,
+    frameLoop,
     getSnapTarget,
+    getReleaseMode,
+    onSettled,
     clearHover,
     cancelTween,
+    stopSimRef,
     isDragging,
     justDragged,
   } = args;
 
   let draggedNode: string | null = null;
   let movedDuringPress = false;
+  // The active sim. A released sim keeps settling on the shared frame loop;
+  // we hold the handle (stop() is idempotent — a finished sim already
+  // unsubscribed its tick) so the next grab or a detach can halt it mid-settle.
   let sim: DragSim | null = null;
-  // A released sim keeps its own rAF chain alive until kinetic energy settles
-  // (~0.5–1s). We hold onto it here so teardown can halt that post-release
-  // animation — otherwise the loop would keep mutating the graph / refreshing a
-  // destroyed Sigma instance after detach. Cleared when the settle completes.
-  let settlingSim: DragSim | null = null;
-  // Bounds how long we hold the settling-sim reference: physics settles well
-  // within this window, so this timer drops the ref after a natural settle even
-  // if the user never interacts again (no lingering dead-object reference).
-  let settleClearTimer: ReturnType<typeof setTimeout> | null = null;
   let lastGraphX = 0;
   let lastGraphY = 0;
   let prevGraphX = 0;
   let prevGraphY = 0;
 
-  // Max settle window in ms; physics converges before this. Generous so a
-  // released sim is never dropped mid-animation, only after it has stopped.
-  const SETTLE_CLEAR_MS = 2000;
-
-  const clearSettling = () => {
-    if (settleClearTimer !== null) {
-      clearTimeout(settleClearTimer);
-      settleClearTimer = null;
-    }
-    if (settlingSim) {
-      settlingSim.stop();
-      settlingSim = null;
-    }
-  };
-
   const stopSim = () => {
-    if (sim) {
-      sim.stop();
-      sim = null;
-    }
-    clearSettling();
+    sim?.stop();
+    sim = null;
   };
+  if (stopSimRef) stopSimRef.current = stopSim;
 
   const onDownNode = (payload: {
     node: string;
@@ -80,26 +70,19 @@ export function attachDrag(args: AttachDragArgs): () => void {
     clearHover();
     sigma.getCamera().disable();
 
-    const neighborIds: string[] = [];
-    const seen = new Set<string>();
-    graph.forEachNeighbor(node, (n) => {
-      if (seen.has(n)) return;
-      if (graph.getNodeAttribute(n, "hidden")) return;
-      seen.add(n);
-      neighborIds.push(n);
-    });
-
     lastGraphX = graph.getNodeAttribute(node, "x") as number;
     lastGraphY = graph.getNodeAttribute(node, "y") as number;
     prevGraphX = lastGraphX;
     prevGraphY = lastGraphY;
 
-    sim = startDragSim({
+    sim = startFluidSim({
       sigma,
       graph,
+      frameLoop,
       draggedId: node,
-      neighborIds,
       getHome: getSnapTarget,
+      getReleaseMode,
+      onSettled,
     });
 
     event.preventSigmaDefault?.();
@@ -139,17 +122,9 @@ export function attachDrag(args: AttachDragArgs): () => void {
       setTimeout(() => {
         justDragged.current = false;
       }, 0);
-      const vx = lastGraphX - prevGraphX;
-      const vy = lastGraphY - prevGraphY;
-      // A prior settling sim has either already finished or been superseded;
-      // halt it before tracking the new one so we never hold more than one.
-      clearSettling();
-      // The released sim keeps animating until it settles. Track it so detach
-      // can stop it, and arm a timer to drop the ref after a natural settle.
-      settlingSim = sim;
-      sim = null;
-      settlingSim.release(vx, vy);
-      settleClearTimer = setTimeout(clearSettling, SETTLE_CLEAR_MS);
+      // The released sim keeps settling on the frame loop; `sim` stays held
+      // so detach (or the next grab) can stop it mid-settle.
+      sim.release(lastGraphX - prevGraphX, lastGraphY - prevGraphY);
     } else {
       stopSim();
     }
@@ -166,6 +141,7 @@ export function attachDrag(args: AttachDragArgs): () => void {
 
   return () => {
     stopSim();
+    if (stopSimRef) stopSimRef.current = null;
     sigma.off("downNode", onDownNode);
     sigma.off("moveBody", onMoveBody);
     sigma.off("upNode", endDrag);

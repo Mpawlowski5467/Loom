@@ -29,10 +29,17 @@ def _hermetic_globals():
     when run in isolation.
     """
     import core.note_index as note_index_mod
+    from core.cache import reset_response_cache
     from core.rate_limit import limiter
+    from core.traces import get_trace_store
 
     limiter.reset()
     note_index_mod._note_index = None
+    # Optional-service globals: the response-cache singleton latches
+    # settings.redis_url on first access, and a test-installed Postgres
+    # mirror on the trace store would leak into every later test.
+    reset_response_cache()
+    get_trace_store().set_pg_mirror(None)
     yield
 
 

@@ -28,7 +28,7 @@ export function PulseMode(): ReactNode {
       for (const a of agents) {
         const el = polylineRefs.current[a.id];
         if (!el) continue;
-        const live = agentActivity[a.name.toLowerCase()];
+        const live = agentActivity[a.id];
         const state = liveAgentState(a, live);
         const pulse = live?.pulse ?? [];
         const recentActivity = pulse.some((v) => v > 0.05);
@@ -82,7 +82,7 @@ export function PulseMode(): ReactNode {
   return (
     <div className="pulse-mode">
       {agents.map((a) => {
-        const live = agentActivity[a.name.toLowerCase()];
+        const live = agentActivity[a.id];
         const status = boardStatus(a, live);
         const recentActivity = (live?.pulse ?? []).some((v) => v > 0.05);
         const runs = live?.action_count ?? a.stats.runs;

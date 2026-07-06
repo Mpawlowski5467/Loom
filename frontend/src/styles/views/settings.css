@@ -628,3 +628,112 @@
   background: var(--bg-elevated);
   color: var(--ink);
 }
+
+/* Hardware & Models — model advisor rows */
+.settings-model-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+
+.settings-model-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.settings-model-ident {
+  display: grid;
+  gap: 2px;
+  min-width: 160px;
+}
+
+.settings-model-name {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--ink);
+}
+
+.settings-model-meta {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+
+.settings-rating-chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--rule-2);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+.settings-rating-chip.good {
+  color: var(--node-topic);
+}
+.settings-rating-chip.okay {
+  color: var(--node-capture);
+}
+.settings-rating-chip.heavy {
+  color: var(--you);
+}
+
+.settings-model-badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
+  letter-spacing: 0.5px;
+}
+.settings-model-badge.is-recommended {
+  color: var(--agent);
+}
+
+.settings-model-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Hardware & Models — per-agent binding rows */
+.settings-agent-list {
+  list-style: none;
+  margin: 14px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.settings-agent-row {
+  display: grid;
+  grid-template-columns: minmax(140px, 180px) minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 12px;
+  align-items: start;
+  padding: 12px 14px;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+}
+
+.settings-agent-ident {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  /* Aligns the name with the inputs below their field labels. */
+  padding-top: 20px;
+  color: var(--ink-3);
+}
+
+.settings-agent-ident strong {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}

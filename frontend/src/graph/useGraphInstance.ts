@@ -43,6 +43,8 @@ export interface GraphInstance {
   orbitTargetsRef: Ref<Map<string, XY>>;
   activeTweenRef: Ref<TweenHandle | null>;
   breathingRemoveRef: Ref<(() => void) | null>;
+  /** Halts the active drag sim (scene staging calls it before a tween). */
+  stopDragSimRef: Ref<(() => void) | null>;
   sigmaReady: number;
   building: boolean;
 }
@@ -92,6 +94,7 @@ export function useGraphInstance(args: {
   const breathingRemoveRef = useRef<(() => void) | null>(null);
   const isDraggingRef = useRef<boolean>(false);
   const justDraggedRef = useRef<boolean>(false);
+  const stopDragSimRef = useRef<(() => void) | null>(null);
 
   const [sigmaReady, setSigmaReady] = useState(0);
   const [building, setBuilding] = useState(false);
@@ -204,25 +207,35 @@ export function useGraphInstance(args: {
         openNote(node);
       });
 
-      const detachDrag = attachDrag({
-        sigma,
-        graph,
-        getSnapTarget: (id) =>
-          tuningRef.current.graphMode === "orbit"
-            ? orbitTargetsRef.current.get(id)
-            : basePositionsRef.current.get(id),
-        clearHover: () => {
-          tuningRef.current.hovered = null;
-        },
-        cancelTween: () => activeTweenRef.current?.cancel(),
-        isDragging: isDraggingRef,
-        justDragged: justDraggedRef,
-      });
-
       const frameLoop = createFrameLoop(() =>
         sigma.refresh({ skipIndexation: true }),
       );
       frameLoopRef.current = frameLoop;
+
+      const detachDrag = attachDrag({
+        sigma,
+        graph,
+        frameLoop,
+        getSnapTarget: (id) =>
+          tuningRef.current.graphMode === "orbit"
+            ? orbitTargetsRef.current.get(id)
+            : basePositionsRef.current.get(id),
+        getReleaseMode: () =>
+          tuningRef.current.graphMode === "orbit" ? "elastic" : "sticky",
+        // A sticky settle re-homes the graph: the settled positions become the
+        // new layout base (homes for later drags) and seed the next rebuild.
+        onSettled: (positions) => {
+          basePositionsRef.current = positions;
+          positionCacheRef.current = new Map(positions);
+        },
+        clearHover: () => {
+          tuningRef.current.hovered = null;
+        },
+        cancelTween: () => activeTweenRef.current?.cancel(),
+        stopSimRef: stopDragSimRef,
+        isDragging: isDraggingRef,
+        justDragged: justDraggedRef,
+      });
 
       // Overlay: travelers + lens, only below the perf budget.
       const overlay = overlayRef.current;
@@ -360,6 +373,7 @@ export function useGraphInstance(args: {
     orbitTargetsRef,
     activeTweenRef,
     breathingRemoveRef,
+    stopDragSimRef,
     sigmaReady,
     building,
   };

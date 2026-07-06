@@ -129,6 +129,9 @@ class AgentRecord(BaseModel):
     icon: str
     system_prompt: str = ""
     system: bool
+    # Optional per-agent chat binding for custom agents ("" = global default).
+    provider: str = ""
+    chat_model: str = ""
 
 
 class CustomAgentPayload(BaseModel):
@@ -136,6 +139,8 @@ class CustomAgentPayload(BaseModel):
     role: str = ""
     icon: str = "✦"
     system_prompt: str = ""
+    provider: str = ""
+    chat_model: str = ""
 
 
 def _agents_path(vm: VaultManager) -> Path:
@@ -172,6 +177,8 @@ def _to_record(raw: dict[str, Any], *, system: bool) -> AgentRecord:
         icon=raw.get("icon", "✦"),
         system_prompt=raw.get("system_prompt", ""),
         system=system,
+        provider=str(raw.get("provider") or ""),
+        chat_model=str(raw.get("chat_model") or ""),
     )
 
 
@@ -211,6 +218,8 @@ def create_custom(
         "role": body.role,
         "icon": body.icon or "✦",
         "system_prompt": body.system_prompt,
+        "provider": body.provider,
+        "chat_model": body.chat_model,
     }
     existing.append(raw)
     _save_custom(vm, existing)
@@ -234,6 +243,8 @@ def update_custom(
             raw["role"] = body.role
             raw["icon"] = body.icon or raw.get("icon", "✦")
             raw["system_prompt"] = body.system_prompt
+            raw["provider"] = body.provider
+            raw["chat_model"] = body.chat_model
             _save_custom(vm, existing)
             return _to_record(raw, system=False)
     raise HTTPException(status_code=404, detail=f"Agent '{agent_id}' not found")

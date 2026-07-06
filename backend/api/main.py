@@ -22,6 +22,8 @@ from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
 from api.exception_handlers import register_exception_handlers
 from api.health import build_health_report
+from api.optional_services import init_optional_services, shutdown_optional_services
+from api.routers.agent_models import router as agent_models_router
 from api.routers.agents import router as agents_router
 from api.routers.agents_registry import router as agents_registry_router
 from api.routers.archive import router as archive_router
@@ -31,6 +33,7 @@ from api.routers.config import router as config_router
 from api.routers.diagnostics import router as diagnostics_router
 from api.routers.events import router as events_router
 from api.routers.graph import router as graph_router
+from api.routers.hardware import router as hardware_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
 from api.routers.onboarding import router as onboarding_router
@@ -100,6 +103,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
     import asyncio
 
+    from core.trace_retention import TraceRetention
     from core.traces import get_trace_store
 
     app.state.started_at = datetime.now(UTC)
@@ -107,10 +111,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     vault_dir = vm.active_vault_dir()
     initialize_vault_runtime(vault_dir, loop=asyncio.get_running_loop())
     # Mirror traces to disk so they survive restarts and we can page back
-    # beyond the 500-item in-memory ring buffer.
+    # beyond the 500-item in-memory ring buffer. The vault label tags rows in
+    # the (install-wide) Postgres mirror so its reads scope per vault too.
     get_trace_store().set_disk_dir(vm.active_loom_dir() / "traces")
+    get_trace_store().set_vault_label(vm.get_active_vault())
+    # Optional Redis cache + Postgres trace mirror — no-ops unless configured,
+    # and a failed init only logs (startup must not depend on either service).
+    await init_optional_services()
+    # Daily retention sweep so persisted traces (disk + Postgres) don't grow
+    # unboundedly. Started after the optional services so the first sweep can
+    # already see a connected Postgres mirror.
+    retention = TraceRetention(keep_days=settings.trace_retention_days)
+    retention.start()
     yield
     stop_watcher()
+    await retention.aclose()
+    await shutdown_optional_services()
     try:
         from core.providers import get_registry
 
@@ -190,7 +206,9 @@ app.include_router(captures_router)
 app.include_router(index_router)
 app.include_router(agents_router)
 app.include_router(agents_registry_router)
+app.include_router(agent_models_router)
 app.include_router(chat_router)
+app.include_router(hardware_router)
 app.include_router(settings_router)
 app.include_router(config_router)
 app.include_router(onboarding_router)

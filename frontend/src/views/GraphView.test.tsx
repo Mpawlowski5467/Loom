@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { AppCtx, type AppContextValue, GRAPH_DISPLAY_DEFAULTS } from "../context/app-ctx";
 import { GraphView } from "./GraphView";
-import type { Note } from "../data/types";
+import type { GraphLayout, Note } from "../data/types";
 
 // The graph is driven by Sigma through three hooks; GraphView's own job is the
 // overlay chrome (empty / loading / stats / scene caption). Mock the hooks so
@@ -82,21 +82,20 @@ function mkNote(id: string, links: string[] = []): Note {
 
 function renderGraph(
   notes: Note[],
-  graphMode: "constellation" | "orbit" = "constellation",
+  layout: GraphLayout = "force",
   notesLoaded = true,
 ) {
   const value = {
     notes,
     notesLoaded,
     openNote: vi.fn(),
-    graphMode,
-    setGraphMode: vi.fn(),
     graphFocusId: null,
     setGraphFocusId: vi.fn(),
     graphFlyTo: null,
     graphFilters: new Set<string>(),
     toggleGraphFilter: vi.fn(),
-    graphDisplay: GRAPH_DISPLAY_DEFAULTS,
+    clearGraphFilters: vi.fn(),
+    graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS, layout },
     theme: "paper",
     pushToast: vi.fn(),
   } as unknown as AppContextValue;
@@ -126,7 +125,7 @@ describe("GraphView", () => {
   });
 
   it("shows a loading state instead of the empty prompt during the initial fetch", () => {
-    renderGraph([], "constellation", false);
+    renderGraph([], "force", false);
     expect(screen.getByText(/loading your vault/)).toBeInTheDocument();
     // Must NOT flash "empty" before the load settles.
     expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
@@ -151,16 +150,16 @@ describe("GraphView", () => {
     expect(screen.queryByText(/arranging/)).not.toBeInTheDocument();
   });
 
-  it("shows the orbit scene caption in orbit mode", () => {
+  it("shows the layout caption for a scene layout", () => {
     mockInstance.scene = "spiral";
-    renderGraph([mkNote("a"), mkNote("b")], "orbit");
-    expect(screen.getByText("Scene")).toBeInTheDocument();
+    renderGraph([mkNote("a"), mkNote("b")], "spiral");
+    expect(screen.getByText("Layout")).toBeInTheDocument();
     expect(screen.getByText("Spiral")).toBeInTheDocument();
   });
 
-  it("hides the scene caption in constellation mode", () => {
-    renderGraph([mkNote("a")], "constellation");
-    expect(screen.queryByText("Scene")).not.toBeInTheDocument();
+  it("hides the layout caption for the force layout", () => {
+    renderGraph([mkNote("a")], "force");
+    expect(screen.queryByText("Layout")).not.toBeInTheDocument();
   });
 
   it("flags paused animations for a graph past the perf budget", () => {

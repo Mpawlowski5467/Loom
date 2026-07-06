@@ -1,57 +1,4 @@
-/* ── Trace feed (LLM call log aside) ───────────────────────────── */
-.trace-feed {
-  display: flex;
-  flex-direction: column;
-  background: var(--bg-surface);
-  border: 1px solid var(--rule);
-  border-radius: var(--r-md);
-  overflow: hidden;
-  min-height: 0;
-}
-
-.trace-feed-header {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--rule);
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-}
-
-.trace-feed-tab {
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 11px;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
-  color: var(--ink-3);
-  padding: 2px 0;
-  border-bottom: 2px solid transparent;
-  transition: color 140ms var(--ease);
-}
-.trace-feed-tab.active {
-  color: var(--ink);
-  border-bottom-color: var(--agent);
-}
-
-.trace-feed-filter {
-  margin-left: auto;
-  background: var(--bg-base);
-  color: var(--ink-2);
-  border: 1px solid var(--rule-2);
-  border-radius: var(--r-sm);
-  font-family: var(--mono);
-  font-size: 10.5px;
-  padding: 2px 6px;
-  text-transform: none;
-}
-
+/* ── Trace lists (run feed + agent detail LLM calls) ───────────── */
 .trace-feed-body {
   overflow: auto;
   flex: 1;
@@ -105,24 +52,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.trace-feed-more {
-  display: block;
-  width: 100%;
-  padding: 8px 12px;
-  background: transparent;
-  border: none;
-  border-top: 1px solid var(--rule);
-  cursor: pointer;
-  font-family: var(--mono);
-  font-size: 10.5px;
-  color: var(--ink-3);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-.trace-feed-more:disabled {
-  cursor: default;
 }
 
 /* ── Run steps (multi-step run timeline) ───────────────────────── */

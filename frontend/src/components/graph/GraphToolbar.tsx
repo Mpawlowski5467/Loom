@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Download } from "lucide-react";
-import type { GraphMode, NodeType } from "../../data/types";
-import { ModeToggle } from "../primitives/ModeToggle";
+import type { NodeType } from "../../data/types";
 import { Popover } from "../primitives/Popover";
 import { GearIcon } from "../primitives/icons";
 import { DisplayControls } from "./DisplayControls";
@@ -19,18 +18,16 @@ const TYPE_FILTERS: { type: NodeType; label: string }[] = [
 export type ExportFormat = "png" | "svg" | "json";
 
 interface Props {
-  graphMode: GraphMode;
-  setGraphMode: (m: GraphMode) => void;
   graphFilters: Set<string>;
   toggleGraphFilter: (t: string) => void;
+  clearGraphFilters: () => void;
   onExport?: (format: ExportFormat) => void;
 }
 
 export function GraphToolbar({
-  graphMode,
-  setGraphMode,
   graphFilters,
   toggleGraphFilter,
+  clearGraphFilters,
   onExport,
 }: Props): ReactNode {
   const [displayOpen, setDisplayOpen] = useState(false);
@@ -62,23 +59,25 @@ export function GraphToolbar({
             key={f.type}
             className="graph-filter"
             aria-pressed={graphFilters.has(f.type)}
+            aria-label={f.label}
+            title={f.label}
             onClick={() => toggleGraphFilter(f.type)}
           >
             <span className={`dot dot-${f.type}`} />
-            {f.label}
           </button>
         ))}
+        {graphFilters.size > 0 && (
+          <button
+            className="graph-filters-clear"
+            aria-label="Clear filters"
+            title="Clear filters"
+            onClick={clearGraphFilters}
+          >
+            ×
+          </button>
+        )}
       </div>
       <div className="graph-toolbar-right">
-        <ModeToggle
-          value={graphMode}
-          onChange={setGraphMode}
-          ariaLabel="Graph layout"
-          options={[
-            { value: "constellation", icon: "✦", label: "constellation" },
-            { value: "orbit", icon: "◎", label: "orbit" },
-          ]}
-        />
         <div ref={exportRef} className="graph-export">
           <button
             type="button"

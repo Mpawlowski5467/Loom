@@ -3,24 +3,22 @@ Frontend testing conventions:
 - Test behavior, not implementation: render, rerender, assert observable output.
 - Mock the heavy layout module so we can observe whether the relayout path runs.
 
-This suite guards the MEDIUM bug fix in useGraphScene: a ``notes`` array
-identity change that does NOT change graph structure (same sigmaReady,
-graphMode, graphFocusId) must NOT re-run the relayout effect — so it can't
-trigger a fresh ForceAtlas2 pass (applyConstellationLayout with no seed) or a
-camera recenter, which would reshuffle the graph and lose the user's pan/zoom
-and dragged node positions.
+This suite guards the layout-staging hook: a ``notes`` array identity change
+that does NOT change graph structure (same sigmaReady, layout, graphFocusId)
+must NOT re-run the layout effects — so it can't trigger a fresh ForceAtlas2
+pass (applyConstellationLayout with no seed) or a camera recenter, which would
+reshuffle the graph and lose the user's pan/zoom and dragged node positions.
 */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Graph from "graphology";
 import type Sigma from "sigma";
-import type { GraphMode, Note, NoteId } from "../data/types";
+import type { GraphLayout, Note, NoteId } from "../data/types";
 import { useGraphScene } from "./useGraphScene";
 import {
   applyConstellationLayout,
   computeOrbitScene,
   ORBIT_SCENES,
-  type OrbitScene,
   type XY,
 } from "./layouts";
 import { startLayoutTween } from "./layoutTransition";
@@ -28,8 +26,8 @@ import type { FrameLoop } from "./frameLoop";
 import type { TweenHandle } from "./layoutTransition";
 
 // Stub the layout module: applyConstellationLayout is the fresh-FA2 path we
-// must NOT hit on an irrelevant notes change; computeOrbitScene feeds orbit
-// mode. easeInOutCubic is re-exported through (real) for the camera animate.
+// must NOT hit on an irrelevant notes change; computeOrbitScene feeds the
+// scene layouts. easeInOutCubic passes through (real) for the camera animate.
 vi.mock("./layouts", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./layouts")>();
   return {
@@ -39,7 +37,7 @@ vi.mock("./layouts", async (importOriginal) => {
   };
 });
 
-// Stub the tween so orbit mode does not touch a real frame loop / sigma camera.
+// Stub the tween so scene layouts do not touch a real frame loop / camera.
 vi.mock("./layoutTransition", () => ({
   startLayoutTween: vi.fn(
     (): TweenHandle => ({ cancel: vi.fn() }) as unknown as TweenHandle,
@@ -63,7 +61,7 @@ function note(id: string, links: string[] = []): Note {
   } as unknown as Note;
 }
 
-/** A real graphology graph mirroring the notes, so orbit/constellation reads
+/** A real graphology graph mirroring the notes, so scene/constellation reads
  * work against actual node data. */
 function buildGraph(notes: Note[]): Graph {
   const g = new Graph();
@@ -95,12 +93,11 @@ function stubFrameLoop(): FrameLoop {
 }
 
 interface Harness {
-  graphMode: GraphMode;
+  layout: GraphLayout;
   graphFocusId: NoteId | null;
   notes: Note[];
   sigmaReady: number;
-  orbitScene?: OrbitScene;
-  orbitAutoCycle?: boolean;
+  layoutAutoCycle?: boolean;
 }
 
 function setup(initial: Harness, graph: Graph) {
@@ -118,8 +115,7 @@ function setup(initial: Harness, graph: Graph) {
     (props: Harness) =>
       useGraphScene({
         ...args,
-        orbitScene: "rings",
-        orbitAutoCycle: false,
+        layoutAutoCycle: false,
         ...props,
       }),
     { initialProps: initial },
@@ -136,27 +132,27 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     vi.useRealTimers();
   });
 
-  it("does NOT re-run the fresh constellation layout when notes changes identity but structure is unchanged", () => {
+  it("does NOT re-run the fresh force layout when notes changes identity but structure is unchanged", () => {
     const notesA = [note("a", ["b"]), note("b"), note("c")];
     const graph = buildGraph(notesA);
 
     const { rerender, animate } = setup(
-      { graphMode: "constellation", graphFocusId: null, notes: notesA, sigmaReady: 1 },
+      { layout: "force", graphFocusId: null, notes: notesA, sigmaReady: 1 },
       graph,
     );
 
     // First render is a fresh build (sigmaReady bumped from -1 → 1): the
-    // constellation branch short-circuits on isFreshBuild and does NOT call
+    // force branch short-circuits on isFreshBuild and does NOT call
     // applyConstellationLayout; it only recenters once.
     const callsAfterBuild = applyMock.mock.calls.length;
     const recenterAfterBuild = animate.mock.calls.length;
 
     // Now: rename / drag-move yields a brand-new notes array with identical
-    // structure. sigmaReady, graphMode, graphFocusId all unchanged.
+    // structure. sigmaReady, layout, graphFocusId all unchanged.
     const notesB = [note("a", ["b"]), note("b"), note("c")];
     expect(notesB).not.toBe(notesA); // genuinely new identity
     rerender({
-      graphMode: "constellation",
+      layout: "force",
       graphFocusId: null,
       notes: notesB,
       sigmaReady: 1,
@@ -167,42 +163,33 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     expect(animate.mock.calls.length).toBe(recenterAfterBuild);
   });
 
-  it("DOES re-run the constellation relayout on a genuine structural rebuild (sigmaReady bump → not fresh)", () => {
+  it("DOES re-run the force relayout when switching back from a scene layout", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { rerender, animate } = setup(
-      { graphMode: "constellation", graphFocusId: null, notes, sigmaReady: 1 },
+      { layout: "force", graphFocusId: null, notes, sigmaReady: 1 },
       graph,
     );
 
-    // Drive sigmaReady forward twice so the effect sees a *stable* prevReady and
-    // a non-fresh run takes the applyConstellationLayout branch. First bump is
-    // "fresh" (skips apply); a same-value rerender that re-runs the effect for
-    // another reason would be non-fresh. We simulate the non-fresh constellation
-    // path by toggling graphMode out and back so the effect re-runs with the
-    // already-recorded sigmaReady.
     const applyBefore = applyMock.mock.calls.length;
     const animateBefore = animate.mock.calls.length;
 
-    rerender({ graphMode: "orbit", graphFocusId: "a" as NoteId, notes, sigmaReady: 1 });
-    rerender({ graphMode: "constellation", graphFocusId: null, notes, sigmaReady: 1 });
+    rerender({ layout: "rings", graphFocusId: "a" as NoteId, notes, sigmaReady: 1 });
+    rerender({ layout: "force", graphFocusId: null, notes, sigmaReady: 1 });
 
-    // Returning to constellation with prevReady === sigmaReady is NOT a fresh
-    // build, so the effect runs applyConstellationLayout (fresh-FA2 path) +
-    // recenter — exactly the behavior a real structural change relies on.
+    // Returning to force with prevReady === sigmaReady is NOT a fresh build,
+    // so the effect runs applyConstellationLayout (fresh-FA2 path) + recenter
+    // — exactly the behavior a real layout switch relies on.
     expect(applyMock.mock.calls.length).toBeGreaterThan(applyBefore);
     expect(animate.mock.calls.length).toBeGreaterThan(animateBefore);
   });
 
-  it("uses notes[0] as the orbit focus fallback via a ref (no notes dependency needed)", () => {
+  it("uses notes[0] as the scene focus fallback via a ref (no notes dependency needed)", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
-    setup(
-      { graphMode: "orbit", graphFocusId: null, notes, sigmaReady: 1 },
-      graph,
-    );
+    setup({ layout: "rings", graphFocusId: null, notes, sigmaReady: 1 }, graph);
 
     // graphFocusId is null → focus falls back to notes[0].id === "a".
     expect(orbitMock).toHaveBeenCalled();
@@ -211,21 +198,21 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     expect(tweenMock).toHaveBeenCalled();
   });
 
-  it("does NOT restart the orbit cycle when notes changes identity but focus/mode/ready are unchanged", () => {
+  it("does NOT restart the layout cycle when notes changes identity but focus/layout/ready are unchanged", () => {
     const notesA = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notesA);
 
     const { rerender } = setup(
-      { graphMode: "orbit", graphFocusId: "a" as NoteId, notes: notesA, sigmaReady: 1 },
+      { layout: "rings", graphFocusId: "a" as NoteId, notes: notesA, sigmaReady: 1 },
       graph,
     );
 
     const tweensAfterFirst = tweenMock.mock.calls.length;
 
-    // New notes identity, same structure/focus/mode/ready.
+    // New notes identity, same structure/focus/layout/ready.
     const notesB = [note("a", ["b"]), note("b")];
     rerender({
-      graphMode: "orbit",
+      layout: "rings",
       graphFocusId: "a" as NoteId,
       notes: notesB,
       sigmaReady: 1,
@@ -237,7 +224,7 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
   });
 });
 
-describe("useGraphScene — manual scene selection & auto-cycle", () => {
+describe("useGraphScene — layout selection & auto-cycle", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
@@ -246,18 +233,12 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
     vi.useRealTimers();
   });
 
-  it("plays the selected scene and returns it for the caption", () => {
+  it("plays the selected scene layout and returns it for the caption", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { result } = setup(
-      {
-        graphMode: "orbit",
-        graphFocusId: "a" as NoteId,
-        notes,
-        sigmaReady: 1,
-        orbitScene: "galaxy",
-      },
+      { layout: "galaxy", graphFocusId: "a" as NoteId, notes, sigmaReady: 1 },
       graph,
     );
 
@@ -265,28 +246,21 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
     expect(result.current).toBe("galaxy");
   });
 
-  it("tweens to the newly picked scene when the selection changes", () => {
+  it("tweens to the newly picked layout when the selection changes", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { rerender, result } = setup(
-      {
-        graphMode: "orbit",
-        graphFocusId: "a" as NoteId,
-        notes,
-        sigmaReady: 1,
-        orbitScene: "rings",
-      },
+      { layout: "rings", graphFocusId: "a" as NoteId, notes, sigmaReady: 1 },
       graph,
     );
     const tweensBefore = tweenMock.mock.calls.length;
 
     rerender({
-      graphMode: "orbit",
+      layout: "wave",
       graphFocusId: "a" as NoteId,
       notes,
       sigmaReady: 1,
-      orbitScene: "wave",
     });
 
     expect(orbitMock).toHaveBeenCalledWith(graph, "a", "wave");
@@ -294,18 +268,17 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
     expect(result.current).toBe("wave");
   });
 
-  it("stays on the selected scene when auto-cycle is off", () => {
+  it("stays on the selected layout when auto-cycle is off", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { result } = setup(
       {
-        graphMode: "orbit",
+        layout: "spiral",
         graphFocusId: "a" as NoteId,
         notes,
         sigmaReady: 1,
-        orbitScene: "spiral",
-        orbitAutoCycle: false,
+        layoutAutoCycle: false,
       },
       graph,
     );
@@ -319,18 +292,17 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
     expect(result.current).toBe("spiral");
   });
 
-  it("walks to the next scene from the selection when auto-cycle is on", () => {
+  it("walks to the next scene from the selected layout when auto-cycle is on", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { result } = setup(
       {
-        graphMode: "orbit",
+        layout: "spiral",
         graphFocusId: "a" as NoteId,
         notes,
         sigmaReady: 1,
-        orbitScene: "spiral",
-        orbitAutoCycle: true,
+        layoutAutoCycle: true,
       },
       graph,
     );
@@ -345,33 +317,27 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
     expect(orbitMock).toHaveBeenCalledWith(graph, "a", after);
   });
 
-  it("does NOT kick a constellation relayout when a scene is picked in constellation mode", () => {
+  it("does NOT kick a force relayout when focus or cycle toggles change in force layout", () => {
     const notes = [note("a", ["b"]), note("b")];
     const graph = buildGraph(notes);
 
     const { rerender, animate } = setup(
-      {
-        graphMode: "constellation",
-        graphFocusId: null,
-        notes,
-        sigmaReady: 1,
-        orbitScene: "rings",
-      },
+      { layout: "force", graphFocusId: null, notes, sigmaReady: 1 },
       graph,
     );
     const applyBefore = applyMock.mock.calls.length;
     const animateBefore = animate.mock.calls.length;
 
     rerender({
-      graphMode: "constellation",
-      graphFocusId: null,
+      layout: "force",
+      graphFocusId: "a" as NoteId,
       notes,
       sigmaReady: 1,
-      orbitScene: "galaxy",
+      layoutAutoCycle: true,
     });
 
-    // The constellation effect is blind to orbitScene — no relayout, no
-    // recenter, and no orbit tween either (mode isn't orbit).
+    // The force effect is blind to focus/auto-cycle — no relayout, no
+    // recenter, and no scene tween either (layout isn't a scene).
     expect(applyMock.mock.calls.length).toBe(applyBefore);
     expect(animate.mock.calls.length).toBe(animateBefore);
     expect(tweenMock).not.toHaveBeenCalled();
@@ -383,12 +349,7 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
 
     // Focus a node that was removed by a rebuild (not in the graph anymore).
     setup(
-      {
-        graphMode: "orbit",
-        graphFocusId: "ghost" as NoteId,
-        notes,
-        sigmaReady: 1,
-      },
+      { layout: "rings", graphFocusId: "ghost" as NoteId, notes, sigmaReady: 1 },
       graph,
     );
 
@@ -403,11 +364,11 @@ describe("useGraphScene — manual scene selection & auto-cycle", () => {
 
     const { sigmaRef } = setup(
       {
-        graphMode: "orbit",
+        layout: "rings",
         graphFocusId: "a" as NoteId,
         notes,
         sigmaReady: 1,
-        orbitAutoCycle: true,
+        layoutAutoCycle: true,
       },
       graph,
     );

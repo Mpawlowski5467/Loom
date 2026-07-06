@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Annotated, Any
 from fastapi import Depends
 
 from core.activity import get_activity
+from core.cache import get_response_cache
 from core.config import GlobalConfig, settings
 from core.exceptions import ProviderConfigError
 from core.providers._retry import with_retry
@@ -24,6 +25,7 @@ from core.providers.base import (
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
+from core.providers.cached import CachedProvider
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openai_compatible import (
@@ -87,9 +89,11 @@ class ProviderRegistry:
 
     def __init__(self, global_config: GlobalConfig) -> None:
         self._global_config = global_config
-        self._providers: dict[str, BaseProvider] = {}
+        # Keyed on (provider name, chat_model override or "") so per-agent
+        # model overrides get their own instances alongside the default one.
+        self._providers: dict[tuple[str, str], BaseProvider] = {}
 
-    def _resolve_config(self, name: str) -> BaseModel:
+    def _resolve_config(self, name: str, chat_model: str | None = None) -> BaseModel:
         """Parse the raw ProviderConfig into a typed config model."""
         raw = self._global_config.providers.get(name)
         if raw is None:
@@ -99,18 +103,32 @@ class ProviderRegistry:
             raise ProviderConfigError(
                 f"Unknown provider '{name}'. Supported: {', '.join(_CONFIG_MODEL_MAP)}."
             )
-        return config_cls.model_validate(raw.model_dump(exclude_none=True))
+        typed = config_cls.model_validate(raw.model_dump(exclude_none=True))
+        if chat_model:
+            typed = typed.model_copy(update={"chat_model": chat_model})
+        return typed
 
-    def get(self, name: str) -> BaseProvider:
-        """Return a cached provider instance by name, wrapped with tracing."""
-        if name not in self._providers:
-            cfg = self._resolve_config(name)
+    def get(self, name: str, chat_model: str | None = None) -> BaseProvider:
+        """Return a cached provider instance by name, wrapped with tracing.
+
+        ``chat_model`` overrides the configured chat model; each (name, model)
+        pair caches its own instance, so agents pinned to different models of
+        the same provider coexist.
+        """
+        key = (name, chat_model or "")
+        if key not in self._providers:
+            cfg = self._resolve_config(name, chat_model)
             provider_cls = _PROVIDER_CLASS_MAP[name]
             # Each provider class takes its specific *ProviderConfig in __init__;
             # BaseProvider itself takes none, so mypy can't see the call signature.
-            instance = provider_cls(cfg)  # type: ignore[call-arg]
-            self._providers[name] = TracedProvider(instance, provider_name=name)
-        return self._providers[name]
+            instance: BaseProvider = provider_cls(cfg)  # type: ignore[call-arg]
+            # Cache sits INSIDE tracing so cache hits still appear in traces.
+            # Without a configured cache the layer is skipped entirely, keeping
+            # the uncached wrap shape (and unwrap depth) identical to before.
+            if get_response_cache() is not None:
+                instance = CachedProvider(instance, provider_name=name)
+            self._providers[key] = TracedProvider(instance, provider_name=name)
+        return self._providers[key]
 
     def get_embed_provider(self) -> BaseProvider:
         """Return the provider configured for embeddings.
@@ -127,6 +145,39 @@ class ProviderRegistry:
         falls back to the default provider.
         """
         return self.get(self._chat_provider_name())
+
+    def get_chat_provider_for(
+        self,
+        agent_id: str,
+        *,
+        provider: str | None = None,
+        chat_model: str | None = None,
+    ) -> BaseProvider:
+        """Return the chat provider for *agent_id*, honoring per-agent overrides.
+
+        Overrides come from ``GlobalConfig.agent_models`` — re-read fresh from
+        disk here, because the registry caches its config at creation and a
+        settings save must be honored on the next agent re-init. ``provider``/
+        ``chat_model`` act as lower-priority fallbacks (custom agents pass
+        their ``agents.yaml`` record fields). Without any override, or when the
+        override cannot be built, this falls back to the default chat provider.
+        """
+        override = GlobalConfig.load(settings.config_path).agent_models.get(agent_id)
+        name = (override.provider if override else None) or provider
+        model = (override.chat_model if override else None) or chat_model
+        if not name and not model:
+            return self.get_chat_provider()
+        try:
+            return self.get(name or self._chat_provider_name(), model or None)
+        except ProviderConfigError:
+            logger.warning(
+                "Agent '%s' model override (%s/%s) is not usable; "
+                "falling back to the default chat provider",
+                agent_id,
+                name,
+                model,
+            )
+            return self.get_chat_provider()
 
     def _embed_provider_name(self) -> str:
         raw = self._global_config.model_dump()
@@ -191,15 +242,22 @@ ChatProvider = Annotated[BaseProvider, Depends(get_chat_provider)]
 
 
 def unwrap_provider(provider: BaseProvider) -> BaseProvider:
-    """Return the underlying provider, peeling off any TracedProvider wrapping.
+    """Return the underlying provider, peeling off any wrapper layers.
 
-    Production code should not need this — call ``provider.chat()`` /
-    ``provider.embed()`` directly and the wrapper handles tracing. Tests
-    that need to assert on the concrete provider class use it to skip the
-    wrapper.
+    Loops so both the ``TracedProvider`` and (when caching is configured) the
+    ``CachedProvider`` layer are removed. Production code should not need
+    this — call ``provider.chat()`` / ``provider.embed()`` directly and the
+    wrappers handle tracing/caching. Tests that need to assert on the concrete
+    provider class use it to skip the wrapping.
     """
-    inner = getattr(provider, "_inner", None)
-    return inner if isinstance(inner, BaseProvider) else provider
+    current = provider
+    while True:
+        # vars() (not getattr) so a wrapper's __getattr__ forwarding can never
+        # surface an inner layer's _inner and skip a level.
+        inner = vars(current).get("_inner")
+        if not isinstance(inner, BaseProvider):
+            return current
+        current = inner
 
 
 class TracedProvider(BaseProvider):

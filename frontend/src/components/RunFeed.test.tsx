@@ -90,4 +90,25 @@ describe("RunFeed", () => {
       expect(screen.getByText(/No runs yet/)).toBeInTheDocument(),
     );
   });
+
+  it("filters to a single agent's runs when the agent prop is set", async () => {
+    vi.spyOn(runsApi, "listRuns").mockResolvedValue([
+      RUN,
+      { ...RUN, run_id: "run_2", agent: "standup" },
+    ]);
+    render(<RunFeed agent="standup" pollMs={100000} />);
+
+    expect(await screen.findByText("standup")).toBeInTheDocument();
+    expect(screen.queryByText("researcher")).not.toBeInTheDocument();
+  });
+
+  it("shows the per-agent empty state when nothing matches the filter", async () => {
+    vi.spyOn(runsApi, "listRuns").mockResolvedValue([RUN]);
+    render(<RunFeed agent="my-agent" pollMs={100000} />);
+    await waitFor(() =>
+      expect(
+        screen.getByText("No runs yet for this agent."),
+      ).toBeInTheDocument(),
+    );
+  });
 });

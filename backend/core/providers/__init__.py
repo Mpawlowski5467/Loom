@@ -9,6 +9,7 @@ existing callers. Implementation is split across:
 - ``core.providers.ollama``    — OllamaProvider
 - ``core.providers.xai``       — XAIProvider
 - ``core.providers.openrouter`` — OpenRouterProvider
+- ``core.providers.cached``    — CachedProvider (optional Redis response cache)
 - ``core.providers.registry``  — ProviderRegistry, get/reset, FastAPI deps
 """
 
@@ -23,6 +24,7 @@ from core.providers.base import (
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
+from core.providers.cached import CachedProvider
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openrouter import OpenRouterProvider
@@ -43,6 +45,7 @@ __all__ = [
     "AnthropicProvider",
     "AnthropicProviderConfig",
     "BaseProvider",
+    "CachedProvider",
     "ChatProvider",
     "EmbedProvider",
     "OllamaProvider",

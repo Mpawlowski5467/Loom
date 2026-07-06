@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import type { GraphMode, Note, NoteId } from "../data/types";
+import type { GraphLayout, Note, NoteId } from "../data/types";
 import {
   applyConstellationLayout,
   computeOrbitScene,
@@ -22,11 +22,12 @@ const SCENE_HOLD_MS = 9000;
 const SCENE_TWEEN_MS = 1200;
 
 /**
- * Orbit mode plays the user-selected layout "scene" (Rings / Spiral / Arms /
- * Galaxy / Wave), tweening transitions via the shared frame loop; with
- * auto-cycle on it walks the whole set from the selected scene every
- * ``SCENE_HOLD_MS``. Constellation mode short-circuits to the force-directed
- * layout. Returns the scene currently on stage for the on-canvas caption.
+ * Stages the selected layout. "force" short-circuits to the force-directed
+ * constellation layout (FA2 relayout on a switch back, never on a fresh
+ * build). Any other layout is an orbit scene (Rings / Spiral / Arms / Galaxy /
+ * Wave) tweened via the shared frame loop; with auto-cycle on the five scene
+ * layouts are walked from the selected one every ``SCENE_HOLD_MS``. Returns
+ * the scene currently on stage for the on-canvas caption.
  */
 export function useGraphScene(args: {
   sigmaRef: Ref<Sigma | null>;
@@ -36,12 +37,13 @@ export function useGraphScene(args: {
   orbitTargetsRef: Ref<Map<string, XY>>;
   basePositionsRef: Ref<Map<string, XY>>;
   spacingScaleRef: Ref<number>;
-  graphMode: GraphMode;
+  /** Halts any settling drag sim before staging a layout (see below). */
+  stopDragSimRef?: Ref<(() => void) | null>;
+  layout: GraphLayout;
   graphFocusId: NoteId | null;
   notes: Note[];
   sigmaReady: number;
-  orbitScene: OrbitScene;
-  orbitAutoCycle: boolean;
+  layoutAutoCycle: boolean;
 }): OrbitScene {
   const {
     sigmaRef,
@@ -51,23 +53,25 @@ export function useGraphScene(args: {
     orbitTargetsRef,
     basePositionsRef,
     spacingScaleRef,
-    graphMode,
+    stopDragSimRef,
+    layout,
     graphFocusId,
     notes,
     sigmaReady,
-    orbitScene,
-    orbitAutoCycle,
+    layoutAutoCycle,
   } = args;
 
-  const [stagedScene, setStagedScene] = useState<OrbitScene>(orbitScene);
+  const [stagedScene, setStagedScene] = useState<OrbitScene>(
+    layout === "force" ? "rings" : layout,
+  );
   const prevReadyRef = useRef(-1);
   // Latest notes, readable from the effect without making ``notes`` a
-  // dependency. The effect only needs notes for the orbit-mode focus fallback
-  // (notes[0]?.id); keeping the array out of the deps means a notes-array
+  // dependency. The effect only needs notes for the scene-layout focus
+  // fallback (notes[0]?.id); keeping the array out of the deps means a notes
   // identity change that leaves graph structure intact (e.g. a rename or
   // drag-move producing a new array with the same structural key) does NOT
   // re-run this effect — so it can't trigger a fresh ForceAtlas2 relayout or a
-  // camera recenter on the constellation branch.
+  // camera recenter on the force branch.
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
 
@@ -78,23 +82,27 @@ export function useGraphScene(args: {
     );
   };
 
-  // Constellation branch. Deliberately blind to the orbit-only deps
-  // (graphFocusId, orbitScene, orbitAutoCycle) so picking a scene or focus
-  // while in constellation mode can't kick a ForceAtlas2 relayout.
+  // Force branch. Deliberately blind to the scene-only deps (graphFocusId,
+  // layoutAutoCycle) so focusing a node or toggling the cycle while in the
+  // force layout can't kick a ForceAtlas2 relayout.
   useEffect(() => {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
 
     // A bumped sigmaReady means the graph was just (re)built and is already
-    // laid out — don't re-run ForceAtlas2 on the constellation branch. The
-    // ref updates on every run (either mode) so a later mode switch isn't
+    // laid out — don't re-run ForceAtlas2 on the force branch. The ref
+    // updates on every run (any layout) so a later layout switch isn't
     // mistaken for a fresh build.
     const isFreshBuild = sigmaReady !== prevReadyRef.current;
     prevReadyRef.current = sigmaReady;
 
-    if (graphMode === "orbit") return;
+    if (layout !== "force") return;
 
+    // A drag sim still settling from the previous layout would fight the
+    // relayout below and then persist mixed positions as new homes — halt it
+    // first (stop() completes the settle instantly, keeping homes coherent).
+    stopDragSimRef?.current?.();
     activeTweenRef.current?.cancel();
     activeTweenRef.current = null;
 
@@ -106,11 +114,11 @@ export function useGraphScene(args: {
     recenter(sigma);
     // ``notes`` is intentionally NOT a dependency — see notesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphMode, sigmaReady]);
+  }, [layout, sigmaReady]);
 
-  // Orbit branch: stage the selected scene, optionally auto-cycling onward.
+  // Scene branch: stage the selected scene layout, optionally cycling onward.
   useEffect(() => {
-    if (graphMode !== "orbit") return;
+    if (layout === "force") return;
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     const frameLoop = frameLoopRef.current;
@@ -131,6 +139,10 @@ export function useGraphScene(args: {
       // alive — a late tick must not drive a killed renderer.
       if (sigmaRef.current !== sigma) return;
       setStagedScene(scene);
+      // Same as the force branch: a still-settling drag sim would write
+      // positions against the tween every frame and then re-home to whatever
+      // mid-tween state it stopped in — halt it before staging.
+      stopDragSimRef?.current?.();
       const targets = computeOrbitScene(graph, focusId, scene);
       orbitTargetsRef.current = targets;
       activeTweenRef.current?.cancel();
@@ -144,11 +156,11 @@ export function useGraphScene(args: {
       });
     };
 
-    let sceneIdx = Math.max(0, ORBIT_SCENES.indexOf(orbitScene));
+    let sceneIdx = Math.max(0, ORBIT_SCENES.indexOf(layout));
     playScene(ORBIT_SCENES[sceneIdx]!);
 
     let interval: number | undefined;
-    if (orbitAutoCycle) {
+    if (layoutAutoCycle) {
       interval = window.setInterval(() => {
         sceneIdx = (sceneIdx + 1) % ORBIT_SCENES.length;
         playScene(ORBIT_SCENES[sceneIdx]!);
@@ -162,7 +174,7 @@ export function useGraphScene(args: {
     };
     // ``notes`` is intentionally NOT a dependency — see notesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [graphMode, graphFocusId, sigmaReady, orbitScene, orbitAutoCycle]);
+  }, [layout, graphFocusId, sigmaReady, layoutAutoCycle]);
 
   return stagedScene;
 }

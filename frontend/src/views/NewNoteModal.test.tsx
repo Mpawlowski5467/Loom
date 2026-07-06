@@ -16,26 +16,21 @@ vi.mock("../api/notes", async (importOriginal) => {
   return { ...actual, createNote, getTree };
 });
 
-/** A tree whose non-dot directory children populate the folder dropdown. */
+/** A tree with a NESTED folder so full paths surface in the dropdown. */
 function mkTree(): TreeNode {
-  const dir = (name: string): TreeNode => ({
+  const dir = (name: string, path: string, children: TreeNode[] = []): TreeNode => ({
     name,
-    path: name,
+    path,
     is_dir: true,
-    children: [],
+    children,
   });
-  return {
-    name: "threads",
-    path: "",
-    is_dir: true,
-    children: [
-      dir("projects"),
-      dir("topics"),
-      // Dot-dirs and files are filtered out of the dropdown.
-      { name: ".archive", path: ".archive", is_dir: true, children: [] },
-      { name: "readme.md", path: "readme.md", is_dir: false, children: [] },
-    ],
-  };
+  return dir("threads", "", [
+    dir("projects", "projects", [dir("clients", "projects/clients")]),
+    dir("topics", "topics"),
+    // Dot-dirs and files are filtered out of the dropdown.
+    dir(".archive", ".archive"),
+    { name: "readme.md", path: "readme.md", is_dir: false, children: [] },
+  ]);
 }
 
 function mkNote(over: Partial<NoteRecord> = {}): NoteRecord {
@@ -71,6 +66,11 @@ function renderModal(initialTitle?: string) {
   return { onClose, onCreated };
 }
 
+/** Wait for the mocked getTree response to land in the folder dropdown. */
+async function foldersLoaded() {
+  await screen.findByRole("option", { name: "projects" });
+}
+
 beforeEach(() => {
   createNote.mockReset();
   getTree.mockReset();
@@ -94,15 +94,51 @@ describe("NewNoteModal", () => {
     expect(createBtn).toBeEnabled();
   });
 
-  it("populates the folder dropdown from getTree (non-dot dirs only)", async () => {
+  it("renders a type chip per option with Topic checked by default, and selecting one updates the folder placeholder", async () => {
+    const user = userEvent.setup();
     renderModal();
 
-    // The mocked tree's directory children surface as options after mount.
+    const group = screen.getByRole("radiogroup", { name: "Type" });
+    expect(group).toBeInTheDocument();
+    const chips = screen.getAllByRole("radio");
+    expect(chips.map((c) => c.textContent)).toEqual([
+      "Topic",
+      "Project",
+      "Person",
+      "Daily",
+      "Capture",
+    ]);
+    expect(screen.getByRole("radio", { name: "Topic" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
     expect(
-      await screen.findByRole("option", { name: "projects" }),
+      screen.getByRole("option", { name: "— default (topics) —" }),
+    ).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Project" }));
+
+    expect(screen.getByRole("radio", { name: "Project" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect(screen.getByRole("radio", { name: "Topic" })).toHaveAttribute(
+      "aria-checked",
+      "false",
+    );
+    expect(
+      screen.getByRole("option", { name: "— default (projects) —" }),
+    ).toBeInTheDocument();
+  });
+
+  it("offers nested folder paths from getTree (dot-dirs and files excluded)", async () => {
+    renderModal();
+    await foldersLoaded();
+
+    expect(
+      screen.getByRole("option", { name: "projects/clients" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "topics" })).toBeInTheDocument();
-    // Dot-dirs and files are excluded.
     expect(
       screen.queryByRole("option", { name: ".archive" }),
     ).not.toBeInTheDocument();
@@ -111,18 +147,41 @@ describe("NewNoteModal", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("creates the note once with a trimmed title, parsed tags, and empty folder for the auto option, then calls onCreated and onClose", async () => {
+  it("commits tag chips on Enter and comma (stripping a leading #), removes via × and Backspace-on-empty", async () => {
+    const user = userEvent.setup();
+    renderModal();
+
+    const tagsInput = screen.getByLabelText("Tags");
+    await user.type(tagsInput, "#infra{Enter}");
+    await user.type(tagsInput, "perf,");
+
+    expect(screen.getByText("#infra")).toBeInTheDocument();
+    expect(screen.getByText("#perf")).toBeInTheDocument();
+    expect(tagsInput).toHaveValue("");
+
+    // Backspace on an empty input pops the LAST chip.
+    await user.type(tagsInput, "{Backspace}");
+    expect(screen.queryByText("#perf")).not.toBeInTheDocument();
+    expect(screen.getByText("#infra")).toBeInTheDocument();
+
+    // × removes a specific chip.
+    await user.click(
+      screen.getByRole("button", { name: "Remove tag infra" }),
+    );
+    expect(screen.queryByText("#infra")).not.toBeInTheDocument();
+  });
+
+  it("creates once with a trimmed title, chip tags, and empty folder for auto, then calls onCreated and onClose", async () => {
     const user = userEvent.setup();
     const note = mkNote();
     createNote.mockResolvedValue(note);
     const { onClose, onCreated } = renderModal();
-
-    // Wait for the folder dropdown to load so the auto option is stable.
-    await screen.findByRole("option", { name: "projects" });
+    await foldersLoaded();
 
     await user.type(screen.getByLabelText("Title"), "  Spaced Title  ");
-    // Tags: comma-split, leading-# stripped, blanks removed.
-    await user.type(screen.getByLabelText("Tags"), "#infra, perf, , #ml");
+    const tagsInput = screen.getByLabelText("Tags");
+    await user.type(tagsInput, "#infra{Enter}");
+    await user.type(tagsInput, "perf,");
 
     await user.click(screen.getByRole("button", { name: "Create note" }));
 
@@ -130,28 +189,52 @@ describe("NewNoteModal", () => {
     expect(createNote).toHaveBeenCalledWith({
       title: "Spaced Title",
       type: "topic",
-      tags: ["infra", "perf", "ml"],
+      tags: ["infra", "perf"],
       folder: "",
     });
     expect(onCreated).toHaveBeenCalledWith(note);
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
-  it("submits on Cmd/Ctrl+Enter from an input", async () => {
+  it("submits the backend value 'person' for the Person chip and the selected nested folder", async () => {
+    const user = userEvent.setup();
+    createNote.mockResolvedValue(mkNote({ type: "person" }));
+    renderModal();
+    await foldersLoaded();
+
+    await user.type(screen.getByLabelText("Title"), "Ada");
+    await user.click(screen.getByRole("radio", { name: "Person" }));
+    await user.selectOptions(
+      screen.getByLabelText("Folder"),
+      "projects/clients",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Create note" }));
+
+    await waitFor(() => expect(createNote).toHaveBeenCalledTimes(1));
+    expect(createNote).toHaveBeenCalledWith({
+      title: "Ada",
+      type: "person",
+      tags: [],
+      folder: "projects/clients",
+    });
+  });
+
+  it("submits on Ctrl+Enter from the tags input, including the uncommitted draft tag", async () => {
     const user = userEvent.setup();
     const note = mkNote();
     createNote.mockResolvedValue(note);
     const { onClose, onCreated } = renderModal();
+    await foldersLoaded();
 
-    await screen.findByRole("option", { name: "projects" });
-
-    const titleInput = screen.getByLabelText("Title");
-    await user.type(titleInput, "Keyboard Note");
-    await user.type(titleInput, "{Control>}{Enter}{/Control}");
+    await user.type(screen.getByLabelText("Title"), "Keyboard Note");
+    const tagsInput = screen.getByLabelText("Tags");
+    await user.type(tagsInput, "ml");
+    await user.type(tagsInput, "{Control>}{Enter}{/Control}");
 
     await waitFor(() => expect(createNote).toHaveBeenCalledTimes(1));
     expect(createNote).toHaveBeenCalledWith(
-      expect.objectContaining({ title: "Keyboard Note" }),
+      expect.objectContaining({ title: "Keyboard Note", tags: ["ml"] }),
     );
     expect(onCreated).toHaveBeenCalledWith(note);
     expect(onClose).toHaveBeenCalledTimes(1);
@@ -161,8 +244,7 @@ describe("NewNoteModal", () => {
     const user = userEvent.setup();
     createNote.mockRejectedValue(new Error("Create failed: boom"));
     const { onClose, onCreated } = renderModal();
-
-    await screen.findByRole("option", { name: "projects" });
+    await foldersLoaded();
 
     await user.type(screen.getByLabelText("Title"), "Doomed Note");
     await user.click(screen.getByRole("button", { name: "Create note" }));

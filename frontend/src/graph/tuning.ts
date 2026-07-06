@@ -1,5 +1,10 @@
-import type { GraphMode } from "../data/types";
 import type { EdgePalette } from "./sigma-setup";
+
+/**
+ * Internal render-path mode derived from the selected layout: "force" renders
+ * as the constellation (FA2) layout; every other layout is an orbit scene.
+ */
+export type GraphMode = "constellation" | "orbit";
 
 /**
  * Live, mutable graph-rendering state shared between the React view and the

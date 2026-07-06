@@ -12,7 +12,10 @@ import threading
 from collections import deque
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from core.trace_pg import PgTraceMirror
 
 logger = logging.getLogger(__name__)
 
@@ -83,14 +86,45 @@ class TraceStore:
         self._items: deque[TraceRecord] = deque(maxlen=max_items)
         self._lock = threading.Lock()
         self._disk_dir: Path | None = None
+        self._pg_mirror: PgTraceMirror | None = None
+        self._vault_label: str = ""
 
     def set_disk_dir(self, path: Path | None) -> None:
         """Mirror new traces to disk under ``path/<date>/<id>.json``. None disables."""
         self._disk_dir = path
 
+    def set_vault_label(self, label: str) -> None:
+        """Tag Postgres-mirrored rows with the active vault.
+
+        The disk mirror is per-vault by construction (its dir lives under the
+        vault); the shared Postgres tables need an explicit tag so reads can
+        scope to the active vault.
+        """
+        self._vault_label = label
+
+    @property
+    def disk_dir(self) -> Path | None:
+        """The configured disk mirror directory, if any (retention sweeps it)."""
+        return self._disk_dir
+
+    def set_pg_mirror(self, mirror: PgTraceMirror | None) -> None:
+        """Also enqueue new traces/run summaries to Postgres. None disables.
+
+        Strictly additive: the in-memory ring and the disk mirror behave
+        exactly the same with or without a Postgres mirror.
+        """
+        self._pg_mirror = mirror
+
+    @property
+    def pg_mirror(self) -> PgTraceMirror | None:
+        """The configured Postgres mirror, if any (routers read through it)."""
+        return self._pg_mirror
+
     def add(self, record: TraceRecord) -> None:
         with self._lock:
             self._items.append(record)
+        if self._pg_mirror is not None:
+            self._pg_mirror.enqueue_trace({**record.to_dict(), "vault": self._vault_label})
         if self._disk_dir is not None:
             try:
                 date_dir = self._disk_dir / record.timestamp[:10]
@@ -132,10 +166,13 @@ class TraceStore:
     def write_run_summary(self, summary: dict[str, Any]) -> None:
         """Persist a multi-step run summary under ``<disk_dir>/<date>/run-<id>.json``.
 
-        Mirrors :meth:`add` — a no-op when no disk dir is configured. The summary
+        Mirrors :meth:`add` — a no-op when no disk dir is configured (though a
+        configured Postgres mirror is still fed for durability). The summary
         reifies the *shape* of a graph run (its ordered steps), including steps
         that emitted no LLM call and so have no :class:`TraceRecord`.
         """
+        if self._pg_mirror is not None:
+            self._pg_mirror.enqueue_run({**summary, "vault": self._vault_label})
         if self._disk_dir is None:
             return
         run_id = summary.get("run_id", "")
@@ -208,8 +245,8 @@ def prune_old_traces(traces_dir: Path, keep_days: int = 30) -> int:
     """Delete trace date-directories older than ``keep_days``.
 
     The on-disk trace store (per-call JSON files + run summaries) grows
-    unboundedly, so this should be called periodically by a scheduler (it has
-    no natural call site here — invoking it on every :meth:`TraceStore.add`
+    unboundedly without this; :class:`core.trace_retention.TraceRetention`
+    calls it on a daily sweep (invoking it on every :meth:`TraceStore.add`
     would be far too hot). It is intentionally conservative: it only removes
     directories whose name is an exact ``YYYY-MM-DD`` date strictly older than
     the cutoff, ignores everything else, and swallows per-directory errors so a

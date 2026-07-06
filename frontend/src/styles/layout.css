@@ -117,6 +117,12 @@
   margin-left: auto;
 }
 
+/* Tree-visibility toggle — pressed while the tree is showing. */
+.nav-tree-toggle[aria-pressed="true"] {
+  background: var(--bg-elevated);
+  color: var(--ink);
+}
+
 /* ── File tree ─────────────────────────────────────────────────── */
 .tree {
   width: 220px;

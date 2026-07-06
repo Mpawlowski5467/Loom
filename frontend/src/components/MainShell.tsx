@@ -59,6 +59,8 @@ export function MainShell(): ReactNode {
     appendNote,
     openNote,
     setEditing,
+    treeVisible,
+    setTreeVisible,
     config,
     offline,
     unindexedCount,
@@ -77,6 +79,8 @@ export function MainShell(): ReactNode {
     setShowSplash(false);
   };
 
+  const treeAvailable = tab === "graph" || tab === "board";
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const isMod = e.metaKey || e.ctrlKey;
@@ -86,6 +90,9 @@ export function MainShell(): ReactNode {
       } else if (isMod && e.key.toLowerCase() === "n") {
         e.preventDefault();
         setNewNoteOpen(true);
+      } else if (isMod && e.key.toLowerCase() === "b" && treeAvailable) {
+        e.preventDefault();
+        setTreeVisible(!treeVisible);
       } else if (isMod && e.key === ";") {
         e.preventDefault();
         setTab("settings");
@@ -95,7 +102,15 @@ export function MainShell(): ReactNode {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [paletteOpen, setPaletteOpen, setNewNoteOpen, setTab]);
+  }, [
+    paletteOpen,
+    setPaletteOpen,
+    setNewNoteOpen,
+    setTab,
+    treeAvailable,
+    treeVisible,
+    setTreeVisible,
+  ]);
 
   useEffect(() => {
     const vault = config?.active_vault?.trim() || "no vault";
@@ -125,9 +140,14 @@ export function MainShell(): ReactNode {
         </div>
       ) : (
         <div className="app-main">
-          <ErrorBoundary label="the file tree">
-            <Tree />
-          </ErrorBoundary>
+          {/* Thread and Inbox are full-width reading/triage surfaces; the tree
+              only accompanies the spatial views (graph/board), and can be
+              hidden there via ⌘B / the nav toggle. */}
+          {treeAvailable && treeVisible && (
+            <ErrorBoundary label="the file tree">
+              <Tree />
+            </ErrorBoundary>
+          )}
           <div className="workspace">
             <div className="workspace-main">
               {/* Keyed by tab so a view that throws is contained and switching

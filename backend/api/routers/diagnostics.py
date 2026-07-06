@@ -10,7 +10,9 @@ from pathlib import Path
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
+from core.cache import get_response_cache
 from core.config import GlobalConfig, settings
+from core.traces import get_trace_store
 
 router = APIRouter(prefix="/api", tags=["diagnostics"])
 
@@ -25,6 +27,12 @@ class DiagnosticsResponse(BaseModel):
     started_at: datetime
     build_date: datetime | None
     log_path: str
+    # Optional services — absent from most installs, so state is split into
+    # "was it configured" vs "is it actually reachable".
+    cache_configured: bool
+    cache_connected: bool
+    database_configured: bool
+    database_connected: bool
 
 
 @router.get("/diagnostics", response_model=DiagnosticsResponse)
@@ -35,6 +43,8 @@ async def get_diagnostics(request: Request) -> DiagnosticsResponse:
     if not isinstance(started_at, datetime):
         started_at = datetime.now(UTC)
 
+    cache = get_response_cache()
+    mirror = get_trace_store().pg_mirror
     return DiagnosticsResponse(
         app_version=_app_version(),
         python_version=sys.version.split()[0],
@@ -45,6 +55,10 @@ async def get_diagnostics(request: Request) -> DiagnosticsResponse:
         started_at=started_at,
         build_date=_build_date(),
         log_path=str(settings.loom_home / "logs"),
+        cache_configured=cache is not None,
+        cache_connected=bool(cache is not None and cache.connected),
+        database_configured=bool(settings.database_url),
+        database_connected=bool(mirror is not None and mirror.connected),
     )
 
 

@@ -46,9 +46,11 @@ def init_vector_index(vault_dir: Path) -> None:
 
 
 def init_agents(vault_dir: Path) -> None:
-    """Initialize all agents and the runner for ``vault_dir``."""
-    chat = _get_chat_provider()
+    """Initialize all agents and the runner for ``vault_dir``.
 
+    Each agent's chat provider is resolved individually so per-agent
+    provider/model overrides (``GlobalConfig.agent_models``) bind at init.
+    """
     agent_inits = [
         ("weaver", "agents.loom.weaver", "init_weaver"),
         ("spider", "agents.loom.spider", "init_spider"),
@@ -65,7 +67,7 @@ def init_agents(vault_dir: Path) -> None:
 
             mod = importlib.import_module(module_path)
             init_fn = getattr(mod, fn_name)
-            init_fn(vault_dir, chat)
+            init_fn(vault_dir, _get_chat_provider_for(name))
             logger.info("Agent '%s' initialized", name)
         except Exception:
             logger.warning("Agent '%s' initialization failed", name, exc_info=True)
@@ -165,11 +167,11 @@ def reload_active_vault_runtime(
     initialize_vault_runtime(vm.active_vault_dir(), loop=loop, note_index=note_index)
 
 
-def _get_chat_provider() -> BaseProvider | None:
-    """Try to get the chat provider, returning None if unavailable."""
+def _get_chat_provider_for(agent_name: str) -> BaseProvider | None:
+    """Per-agent chat provider (override-aware); None when unavailable."""
     try:
         from core.providers import get_registry
 
-        return get_registry().get_chat_provider()
+        return get_registry().get_chat_provider_for(agent_name)
     except (ProviderConfigError, ProviderError):
         return None

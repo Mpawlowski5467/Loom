@@ -71,6 +71,14 @@ describe.each(ORBIT_SCENES)("computeOrbitScene(%s)", (scene: OrbitScene) => {
       expect(Number.isFinite(y)).toBe(true);
     }
   });
+
+  it("excludes hidden nodes from the scene", () => {
+    const graph = mkGraph();
+    graph.setNodeAttribute("n1", "hidden", true);
+    const positions = computeOrbitScene(graph, "focus", scene);
+    expect(positions.has("n1")).toBe(false);
+    expect(positions.size).toBe(graph.order - 1);
+  });
 });
 
 describe("computeOrbitScene — rings", () => {
@@ -88,6 +96,32 @@ describe("computeOrbitScene — rings", () => {
     const n2 = dist(positions.get("n2")!);
     // The unreachable node sits beyond the farthest reachable ring.
     expect(iso).toBeGreaterThan(n2);
+  });
+
+  it("does not traverse through a hidden intermediary", () => {
+    const graph = mkGraph();
+    graph.setNodeAttribute("n1", "hidden", true);
+    const positions = computeOrbitScene(graph, "focus", "rings");
+    // n2 is connected only through hidden n1, so it becomes unreachable and
+    // moves to the outer ring rather than retaining its former two-hop rank.
+    expect(dist(positions.get("n2")!)).toBeGreaterThan(
+      dist(positions.get("n3")!),
+    );
+    expect(dist(positions.get("n2")!)).toBeCloseTo(700);
+  });
+
+  it("falls back to the first visible node when the requested focus is hidden", () => {
+    const graph = mkGraph();
+    graph.setNodeAttribute("focus", "hidden", true);
+    const positions = computeOrbitScene(graph, "focus", "rings");
+    expect(positions.has("focus")).toBe(false);
+    expect(positions.get("n1")).toEqual({ x: 0, y: 0 });
+  });
+
+  it("returns no targets when every node is hidden", () => {
+    const graph = mkGraph();
+    graph.forEachNode((id) => graph.setNodeAttribute(id, "hidden", true));
+    expect(computeOrbitScene(graph, "focus", "rings")).toEqual(new Map());
   });
 });
 

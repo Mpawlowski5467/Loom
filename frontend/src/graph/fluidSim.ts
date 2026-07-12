@@ -6,7 +6,7 @@ import { resolveOverlaps } from "./overlap";
 import {
   applyRepulsion,
   makeBodies,
-  makeSprings,
+  makeSpringNetwork,
   unitsPerPxOf,
 } from "./fluidForces";
 
@@ -42,6 +42,9 @@ interface FluidSimArgs {
   getHome: (id: string) => XY | undefined;
   getReleaseMode: () => ReleaseMode;
   onSettled?: (positions: Map<string, XY>) => void;
+  /** Fires once after a natural settle or an explicit stop has completed the
+   * release/cancellation contract. */
+  onFinished?: () => void;
 }
 
 const K_EDGE = 0.04;
@@ -49,21 +52,35 @@ const ELASTIC_RETURN_K = 0.08;
 const STICKY_SETTLE_K = 0.03;
 const DAMPING = 0.85;
 const MAX_SPEED = 40;
-const RELEASE_KICK = 40;
+// Keep release inertia subtle. A browser can deliver several pointer samples
+// in a few milliseconds (especially automation or a high-Hz mouse); allowing
+// that normalized velocity through at the old cap could fling a small filtered
+// subgraph hundreds of graph units beyond the drop point.
+const RELEASE_KICK = 0.25;
 const STOP_KE_PER_NODE = 0.02;
-// 30fps self-throttle, matching the breathing tick's cadence.
-const FRAME_INTERVAL_MS = 33;
+// Reactions run at the display cadence. Heavy Graphology/Sigma work is batched
+// below, so 60fps no longer means hundreds of graph events per frame.
+const FRAME_INTERVAL_MS = 16;
 
 function clamp(v: number, lo: number, hi: number): number {
   return v < lo ? lo : v > hi ? hi : v;
 }
 
 export function startFluidSim(args: FluidSimArgs): DragSim {
-  const { sigma, graph, frameLoop, draggedId, getHome, getReleaseMode, onSettled } =
-    args;
+  const {
+    sigma,
+    graph,
+    frameLoop,
+    draggedId,
+    getHome,
+    getReleaseMode,
+    onSettled,
+    onFinished,
+  } = args;
 
   const bodies = makeBodies(graph, draggedId, getHome);
-  const springs = makeSprings(graph, bodies);
+  const { springs, affectedEdges } = makeSpringNetwork(graph, bodies);
+  const participantIds = bodies.map((body) => body.id);
   const unitsPerPx = unitsPerPxOf(bodies);
   const n = bodies.length;
   const fx = new Float64Array(n);
@@ -73,29 +90,41 @@ export function startFluidSim(args: FluidSimArgs): DragSim {
   let releaseMode: ReleaseMode = "elastic";
   let remove: (() => void) | null = null;
   let lastFrame = 0;
+  let finished = false;
 
   const detachTick = (): void => {
     remove?.();
     remove = null;
   };
 
+  const notifyFinished = (): void => {
+    if (finished) return;
+    finished = true;
+    onFinished?.();
+  };
+
   const finish = (): void => {
     detachTick();
     if (releaseMode === "elastic") {
       for (const b of bodies) {
-        graph.setNodeAttribute(b.id, "x", b.home.x);
-        graph.setNodeAttribute(b.id, "y", b.home.y);
+        b.attrs["x"] = b.home.x;
+        b.attrs["y"] = b.home.y;
       }
       sigma.refresh();
+      notifyFinished();
       return;
     }
-    resolveOverlaps(graph);
+    resolveOverlaps(graph, {
+      nodeIds: participantIds,
+      ignoreHidden: true,
+    });
     sigma.refresh();
     const positions = new Map<string, XY>();
     graph.forEachNode((id, attrs) => {
       positions.set(id, { x: attrs["x"] as number, y: attrs["y"] as number });
     });
     onSettled?.(positions);
+    notifyFinished();
   };
 
   const accumulateForces = (): void => {
@@ -140,15 +169,28 @@ export function startFluidSim(args: FluidSimArgs): DragSim {
       }
       b.x += b.vx;
       b.y += b.vy;
-      graph.setNodeAttribute(b.id, "x", b.x);
-      graph.setNodeAttribute(b.id, "y", b.y);
+      b.attrs["x"] = b.x;
+      b.attrs["y"] = b.y;
       ke += b.vx * b.vx + b.vy * b.vy;
     }
     if (mode === "settle" && ke < STOP_KE_PER_NODE * n) {
       finish();
       return false; // finish() already did a full refresh
     }
-    return true;
+    // Reprocess just the moving nodes and every incident edge. Direct
+    // attribute mutation above deliberately bypasses Graphology's
+    // per-attribute events; this is the single scheduled renderer update for
+    // the simulation frame. Position changes require Sigma to rebuild its
+    // program indices: `skipIndexation` is intentionally false. Some visible
+    // edges have no reusable program slot in large graphs, and Sigma throws if
+    // asked to repaint those through the skip-indexation fast path.
+    sigma.refresh({
+      partialGraph: { nodes: participantIds, edges: affectedEdges },
+      schedule: true,
+    });
+    // Sigma owns the refresh for this tick; returning false prevents the shared
+    // FrameLoop from issuing its additional whole-graph refresh.
+    return false;
   };
 
   remove = frameLoop.add(tick);
@@ -161,8 +203,8 @@ export function startFluidSim(args: FluidSimArgs): DragSim {
       d.vy = y - d.y;
       d.x = x;
       d.y = y;
-      graph.setNodeAttribute(d.id, "x", x);
-      graph.setNodeAttribute(d.id, "y", y);
+      d.attrs["x"] = x;
+      d.attrs["y"] = y;
     },
     release: (vx, vy) => {
       if (mode !== "drag") return;
@@ -200,7 +242,21 @@ export function startFluidSim(args: FluidSimArgs): DragSim {
         finish();
         return;
       }
+      if (remove !== null && mode === "drag") {
+        // Cancellation (window blur, filter/layout switch, rebuild) follows
+        // the same elastic contract as a normal release. Otherwise a cancelled
+        // pointer gesture could strand the node wherever the cursor vanished.
+        for (const b of bodies) {
+          b.attrs["x"] = b.home.x;
+          b.attrs["y"] = b.home.y;
+        }
+        detachTick();
+        sigma.refresh();
+        notifyFinished();
+        return;
+      }
       detachTick();
+      notifyFinished();
     },
   };
 }

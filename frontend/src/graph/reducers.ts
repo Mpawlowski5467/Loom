@@ -1,6 +1,7 @@
 import type Graph from "graphology";
 import type { Settings } from "sigma/settings";
 import { DEPTH_EDGE_FADE, depthSizeFactor, makeEdgeFader } from "./depth";
+import { isNodeTypeVisible } from "./filtering";
 import type { GraphTuning } from "./tuning";
 
 /** Spacing slider → camera ratio. Sigma auto-fits node bbox, so the perceived
@@ -48,11 +49,19 @@ export function computeEdgeExtremities(graph: Graph): EdgeExtremities {
 type NodeReducer = NonNullable<Settings["nodeReducer"]>;
 type EdgeReducer = NonNullable<Settings["edgeReducer"]>;
 
-export function makeNodeReducer(graph: Graph, tuning: GraphTuning): NodeReducer {
+export function makeNodeReducer(
+  graph: Graph,
+  tuning: GraphTuning,
+): NodeReducer {
   return (id, data) => {
     const hovered = tuning.hovered;
+    const selected = tuning.selected;
+    const focus = hovered ?? selected;
     const filters = tuning.filters;
-    if (filters.size > 0 && !filters.has(data["noteType"] as string)) {
+    if (
+      data.hidden ||
+      !isNodeTypeVisible(String(data["noteType"] ?? "custom"), filters)
+    ) {
       return { ...data, hidden: true };
     }
 
@@ -62,25 +71,34 @@ export function makeNodeReducer(graph: Graph, tuning: GraphTuning): NodeReducer 
     // onto the focus plane at full size and ink.
     const out = { ...data };
     const z = (data["z"] as number | undefined) ?? 0;
-    if (tuning.depthEnabled && z > 0 && id !== hovered) {
+    if (tuning.depthEnabled && z > 0 && id !== focus) {
       out.size = (data.size ?? 4) * depthSizeFactor(z);
       const depthColor = data["depthColor"] as string | undefined;
       if (depthColor) out.color = depthColor;
     }
 
-    // Hover overrides every other label rule: the hovered node always shows
-    // its label; everything else hides its label until hover ends.
-    if (hovered) {
-      if (id === hovered) {
+    // Hover previews a neighborhood; when the pointer leaves, persistent
+    // selection takes over with the same incident-edge context. The selected
+    // node receives a stable size/label treatment so it remains unmistakable.
+    if (focus) {
+      if (id === focus) {
         const lensHide = id === tuning.lensLabelHideFor;
         if (lensHide) out.label = "";
+        out.forceLabel = true;
+        if (!hovered && id === selected) {
+          out.size = (out.size ?? data.size ?? 4) * 1.28;
+          out.highlighted = true;
+        }
         return out;
       }
-      const isNeighbor =
-        graph.hasEdge(hovered, id) || graph.hasEdge(id, hovered);
-      out.label = "";
+      const isNeighbor = graph.hasEdge(focus, id) || graph.hasEdge(id, focus);
       if (!isNeighbor) out.color = tuning.palette.nodeDimmed;
-      return out;
+      if (!isNeighbor || hovered) {
+        out.label = "";
+        return out;
+      }
+      // Direct neighbors of a persistent selection continue through the
+      // normal zoom/degree label rules instead of creating a label hairball.
     }
 
     if (!tuning.labelsEnabled) {
@@ -110,11 +128,12 @@ export function makeEdgeReducer(
   const fade = makeEdgeFader();
   return (id, data) => {
     const hovered = tuning.hovered;
+    const focus = hovered ?? tuning.selected;
     const k = tuning.edgeThickness;
     const baseSize = (data.size ?? 1) * k;
     const ext = extremities.get(id) ?? graph.extremities(id);
-    if (hovered) {
-      if (ext[0] === hovered || ext[1] === hovered) {
+    if (focus) {
+      if (ext[0] === focus || ext[1] === focus) {
         return { ...data, color: tuning.palette.edgeHover, size: 1.4 * k };
       }
       return { ...data, color: tuning.palette.edgeFaint, size: baseSize };

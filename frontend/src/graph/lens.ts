@@ -164,7 +164,14 @@ export function createLens(opts: {
 
   const tick: FrameTick = () => {
     tickIdx++;
-    const filters = tuning.filters;
+    if (tuning.dragging) {
+      const needsRefresh = tuning.lensLabelHideFor !== null;
+      focusId = null;
+      openness = 0;
+      lensG.setAttribute("display", "none");
+      tuning.lensLabelHideFor = null;
+      return needsRefresh;
+    }
     const w = host.clientWidth;
     const h = host.clientHeight;
 
@@ -175,7 +182,7 @@ export function createLens(opts: {
       let bestDist = Infinity;
       let scanned: string | null = null;
       graph.forEachNode((id, attr) => {
-        if (filters.size > 0 && !filters.has(attr["noteType"] as string)) {
+        if (attr["hidden"]) {
           return;
         }
         const nx = attr["x"] as number;

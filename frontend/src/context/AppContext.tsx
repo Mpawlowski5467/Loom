@@ -8,15 +8,22 @@ import type {
   CouncilWho,
   Note,
   NoteId,
+  NodeType,
   SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
+import { sanitizeGraphFilters } from "../graph/filtering";
 import { agents as agentsSeed } from "../data/agents";
 import { captures as capturesSeed } from "../data/captures";
 import { changelogSeed } from "../data/changelog";
 import { councilSeed } from "../data/council";
 import { notes as notesSeed } from "../data/notes";
+import {
+  generateGraphFixture,
+  parseGraphFixture,
+  type GraphFixtureSize,
+} from "../data/graphFixtures";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
@@ -48,14 +55,13 @@ function loadTreeVisible(): boolean {
   }
 }
 
-function loadGraphFilters(): Set<string> {
+function loadGraphFilters(): Set<NodeType> {
   if (typeof window === "undefined") return new Set();
   try {
     const raw = window.localStorage.getItem(GRAPH_FILTERS_KEY);
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return new Set();
-    return new Set(parsed.filter((v): v is string => typeof v === "string"));
+    return sanitizeGraphFilters(parsed);
   } catch {
     return new Set();
   }
@@ -68,6 +74,11 @@ function loadGraphFilters(): Set<string> {
  * survives reloads until the user opts out with ``?demo=0``.
  */
 const DEMO_LS_KEY = "loom.demoMode";
+
+function readGraphFixture(): GraphFixtureSize | null {
+  if (!import.meta.env.DEV || typeof window === "undefined") return null;
+  return parseGraphFixture(window.location.search);
+}
 
 function readDemoMode(): boolean {
   if (typeof window === "undefined") return false;
@@ -180,8 +191,21 @@ interface ProviderProps {
 }
 
 export function AppProvider({ children }: ProviderProps): ReactNode {
-  const demo = useMemo(() => readDemoMode(), []);
-  const [notes, setNotes] = useState<Note[]>(() => (demo ? notesSeed : []));
+  const graphFixture = useMemo(() => readGraphFixture(), []);
+  const demo = useMemo(
+    () => graphFixture !== null || readDemoMode(),
+    [graphFixture],
+  );
+  const initialNotes = useMemo(
+    () =>
+      graphFixture !== null
+        ? generateGraphFixture(graphFixture)
+        : demo
+          ? notesSeed
+          : [],
+    [demo, graphFixture],
+  );
+  const [notes, setNotes] = useState<Note[]>(initialNotes);
   // Demo seeds are present immediately; a live vault is "loaded" only after the
   // initial fetch resolves, so the tree can distinguish loading from empty.
   const [notesLoaded, setNotesLoaded] = useState<boolean>(() => demo);
@@ -237,6 +261,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
+  const [graphSelectedId, setGraphSelectedId] = useState<NoteId | null>(null);
   const [graphFlyTo, setGraphFlyTo] = useState<{
     id: NoteId;
     nonce: number;
@@ -245,8 +270,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setTab("graph");
     setGraphFlyTo((prev) => ({ id, nonce: (prev?.nonce ?? 0) + 1 }));
   }, []);
-  const [graphFilters, setGraphFilters] = useState<Set<string>>(loadGraphFilters);
-  const toggleGraphFilter = useCallback((t: string) => {
+  const [graphFilters, setGraphFilters] = useState<Set<NodeType>>(() =>
+    graphFixture !== null ? new Set() : loadGraphFilters(),
+  );
+  const toggleGraphFilter = useCallback((t: NodeType) => {
     setGraphFilters((prev) => {
       const next = new Set(prev);
       if (next.has(t)) next.delete(t);
@@ -258,7 +285,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setGraphFilters(new Set());
   }, []);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (graphFixture !== null || typeof window === "undefined") return;
     try {
       window.localStorage.setItem(
         GRAPH_FILTERS_KEY,
@@ -267,10 +294,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     } catch {
       // ignore quota / serialization failures
     }
-  }, [graphFilters]);
+  }, [graphFilters, graphFixture]);
 
-  const [graphDisplay, setGraphDisplayState] =
-    useState<GraphDisplay>(loadGraphDisplay);
+  const [graphDisplay, setGraphDisplayState] = useState<GraphDisplay>(() =>
+    graphFixture !== null ? GRAPH_DISPLAY_DEFAULTS : loadGraphDisplay(),
+  );
   const setGraphDisplay = useCallback((patch: Partial<GraphDisplay>) => {
     setGraphDisplayState((prev) => {
       const merged: GraphDisplay = {
@@ -327,7 +355,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setGraphDisplayState(GRAPH_DISPLAY_DEFAULTS);
   }, []);
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    if (graphFixture !== null || typeof window === "undefined") return;
     try {
       window.localStorage.setItem(
         GRAPH_DISPLAY_KEY,
@@ -336,21 +364,29 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     } catch {
       // ignore quota / serialization failures
     }
-  }, [graphDisplay]);
+  }, [graphDisplay, graphFixture]);
 
   const [primaryOpen, setPrimaryOpen] = useState(true);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
   const [editing, setEditingRaw] = useState(false);
 
-  const [treeVisible, setTreeVisible] = useState<boolean>(loadTreeVisible);
+  const [treeVisible, setTreeVisible] = useState<boolean>(() =>
+    graphFixture !== null ? false : loadTreeVisible(),
+  );
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    // The large dev fixture is a disposable benchmark surface. Keep its
+    // tree closed so hundreds of DOM rows do not pollute graph timings, but
+    // do not overwrite the user's real-vault preference while doing so.
+    if (graphFixture !== null || typeof window === "undefined") return;
     try {
-      window.localStorage.setItem(TREE_VISIBLE_KEY, JSON.stringify(treeVisible));
+      window.localStorage.setItem(
+        TREE_VISIBLE_KEY,
+        JSON.stringify(treeVisible),
+      );
     } catch {
       // ignore quota / serialization failures
     }
-  }, [treeVisible]);
+  }, [graphFixture, treeVisible]);
 
   const setEditing = useCallback((b: boolean) => {
     setEditingRaw(b);
@@ -371,7 +407,21 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const loomConfig = useLoomConfig(pushToast);
+  const liveLoomConfig = useLoomConfig(pushToast);
+  // A graph fixture must render immediately even with no backend. The config
+  // hook still owns theme behavior, while these read-only shell fields place
+  // the app in its existing standalone/offline-ready phase.
+  const loomConfig =
+    graphFixture === null
+      ? liveLoomConfig
+      : {
+          ...liveLoomConfig,
+          config: null,
+          configLoading: false,
+          configError: null,
+          offline: true,
+          onboardingComplete: true,
+        };
 
   // Agents are part of the program (Weaver, Spider, …). Identities always
   // show; runtime stats / lastAction are only populated in demo mode.
@@ -425,8 +475,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   useEffect(() => {
+    if (graphFixture !== null) return;
     void refreshCustomAgents();
-  }, [refreshCustomAgents]);
+  }, [graphFixture, refreshCustomAgents]);
 
   const [council, setCouncil] = useState<CouncilMessage[]>(
     demo ? councilSeed : [],
@@ -452,10 +503,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
         setCouncil(
           res.messages.map((m, i) => ({
             id: `cm_hist_${i}_${m.timestamp}`,
-            who:
-              m.role === "user"
-                ? "you"
-                : ("agent:council" as CouncilWho),
+            who: m.role === "user" ? "you" : ("agent:council" as CouncilWho),
             body: m.content,
             at: m.timestamp,
           })),
@@ -522,7 +570,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
                 traceId: c.trace_id || undefined,
                 error: c.error || undefined,
               }));
-            updateReply({ contributions: contribs.length > 0 ? contribs : undefined });
+            updateReply({
+              contributions: contribs.length > 0 ? contribs : undefined,
+            });
           } else if (event.kind === "token") {
             // Append the streamed chunk to the assistant bubble. ``pending``
             // stays true until ``done`` so the spinner-style affordance only
@@ -574,13 +624,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);
 
-  const [captures, setCaptures] = useState<Capture[]>(
-    demo ? capturesSeed : [],
-  );
+  const [captures, setCaptures] = useState<Capture[]>(demo ? capturesSeed : []);
   const [capturesLoaded, setCapturesLoaded] = useState<boolean>(() => demo);
   const [capturesError, setCapturesError] = useState<string | null>(null);
   const [selectedCaptureId, selectCapture] = useState<string | null>(
-    demo ? capturesSeed[0]?.id ?? null : null,
+    demo ? (capturesSeed[0]?.id ?? null) : null,
   );
 
   // Bumped to force a re-fetch of notes + captures — e.g. when the backend
@@ -721,6 +769,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
       graphFocusId,
       setGraphFocusId,
+      graphSelectedId,
+      setGraphSelectedId,
       graphFlyTo,
       flyToNode,
       graphFilters,
@@ -798,6 +848,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       settingsSection,
       currentNoteId,
       graphFocusId,
+      graphSelectedId,
       graphFlyTo,
       graphFilters,
       graphDisplay,
@@ -827,6 +878,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setSettingsSection,
       openNote,
       setGraphFocusId,
+      setGraphSelectedId,
       flyToNode,
       toggleGraphFilter,
       clearGraphFilters,

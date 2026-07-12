@@ -32,8 +32,20 @@ interface Field {
   cell: number;
 }
 
-function snapshotField(graph: Graph, paddingPx: number): Field {
-  const ids = graph.nodes().slice().sort();
+function snapshotField(
+  graph: Graph,
+  paddingPx: number,
+  nodeIds?: Iterable<string>,
+  ignoreHidden = false,
+): Field {
+  const candidates = nodeIds ? [...new Set(nodeIds)] : graph.nodes();
+  const ids = candidates
+    .filter(
+      (id) =>
+        graph.hasNode(id) &&
+        (!ignoreHidden || !graph.getNodeAttribute(id, "hidden")),
+    )
+    .sort();
   const xs = new Map<string, number>();
   const ys = new Map<string, number>();
   const radii = new Map<string, number>();
@@ -128,18 +140,33 @@ function sweepOnce(f: Field, paddingPx: number): boolean {
 
 export function resolveOverlaps(
   graph: Graph,
-  opts?: { passes?: number; paddingPx?: number },
+  opts?: {
+    passes?: number;
+    paddingPx?: number;
+    /** Restrict collision work and writes to this node subset. */
+    nodeIds?: Iterable<string>;
+    /** Exclude hidden nodes even when they appear in nodeIds. */
+    ignoreHidden?: boolean;
+  },
 ): void {
   const passes = opts?.passes ?? MAX_PASSES;
   const paddingPx = opts?.paddingPx ?? PADDING_PX;
-  if (graph.order < 2) return;
 
-  const field = snapshotField(graph, paddingPx);
+  const field = snapshotField(
+    graph,
+    paddingPx,
+    opts?.nodeIds,
+    opts?.ignoreHidden,
+  );
+  if (field.ids.length < 2) return;
   for (let pass = 0; pass < passes; pass++) {
     if (!sweepOnce(field, paddingPx)) break;
   }
   for (const id of field.ids) {
-    graph.setNodeAttribute(id, "x", field.xs.get(id)!);
-    graph.setNodeAttribute(id, "y", field.ys.get(id)!);
+    // Graphology returns its live attribute object. Mutating it directly keeps
+    // this batch silent; callers perform one renderer refresh after the pass.
+    const attrs = graph.getNodeAttributes(id) as Record<string, unknown>;
+    attrs["x"] = field.xs.get(id)!;
+    attrs["y"] = field.ys.get(id)!;
   }
 }

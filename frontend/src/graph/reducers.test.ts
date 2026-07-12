@@ -23,6 +23,10 @@ const PALETTE: EdgePalette = {
 function mkTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
   return {
     hovered: null,
+    selected: null,
+    isolateNeighbors: false,
+    visibilityRestricted: false,
+    dragging: false,
     filters: new Set(),
     palette: PALETTE,
     graphMode: "constellation",
@@ -121,7 +125,47 @@ describe("makeNodeReducer", () => {
     const tuning = mkTuning({ filters: new Set(["project"]) });
     const reducer = makeNodeReducer(g, tuning);
     expect(reducer("b", { noteType: "topic", label: "B" }).hidden).toBe(true);
-    expect(reducer("a", { noteType: "project", label: "A" }).hidden).toBeUndefined();
+    expect(
+      reducer("a", { noteType: "project", label: "A" }).hidden,
+    ).toBeUndefined();
+  });
+
+  it("honors materialized neighborhood visibility", () => {
+    const g = mkGraph();
+    const reducer = makeNodeReducer(g, mkTuning());
+    expect(
+      reducer("c", { noteType: "topic", label: "C", hidden: true }).hidden,
+    ).toBe(true);
+  });
+
+  it("keeps persistent selection emphasized after pointer hover ends", () => {
+    const g = mkGraph();
+    const tuning = mkTuning({ selected: "a", hovered: null });
+    const reducer = makeNodeReducer(g, tuning);
+    const selected = reducer("a", {
+      noteType: "project",
+      label: "A",
+      size: 10,
+    });
+    expect(selected.label).toBe("A");
+    expect(selected.forceLabel).toBe(true);
+    expect(selected.highlighted).toBe(true);
+    expect(selected.size).toBeCloseTo(12.8);
+    expect(reducer("c", { noteType: "topic", label: "C" }).color).toBe(
+      PALETTE.nodeDimmed,
+    );
+  });
+
+  it("lets transient hover preview override persistent selection", () => {
+    const g = mkGraph();
+    const reducer = makeNodeReducer(
+      g,
+      mkTuning({ selected: "a", hovered: "b" }),
+    );
+    expect(
+      reducer("b", { noteType: "topic", label: "B", size: 10 }).highlighted,
+    ).toBeUndefined();
+    expect(reducer("b", { noteType: "topic", label: "B" }).label).toBe("B");
   });
 
   it("keeps the hovered node's label and clears its neighbors' labels", () => {
@@ -279,6 +323,17 @@ describe("makeEdgeReducer", () => {
     expect(out.size).toBe(2.8); // 1.4 * thickness
   });
 
+  it("highlights edges touching the persistently selected node", () => {
+    const { g, hit, miss, ext } = setup();
+    const reducer = makeEdgeReducer(
+      g,
+      mkTuning({ selected: "a", edgeThickness: 1 }),
+      ext,
+    );
+    expect(reducer(hit, { size: 1 }).color).toBe(PALETTE.edgeHover);
+    expect(reducer(miss, { size: 1 }).color).toBe(PALETTE.edgeFaint);
+  });
+
   it("faints edges that do not touch the hovered node", () => {
     const { g, miss, ext } = setup();
     const tuning = mkTuning({ hovered: "a", edgeThickness: 1 });
@@ -320,7 +375,12 @@ describe("makeEdgeReducer", () => {
         ["a", 0],
         ["b", 0],
       ]);
-      const on = makeEdgeReducer(g, mkTuning({ depthEnabled: true }), ext, zZero);
+      const on = makeEdgeReducer(
+        g,
+        mkTuning({ depthEnabled: true }),
+        ext,
+        zZero,
+      );
       expect(on(hit, { size: 1 }).color).toBeUndefined();
       const off = makeEdgeReducer(
         g,

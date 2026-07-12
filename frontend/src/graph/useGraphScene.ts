@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import type { GraphLayout, Note, NoteId } from "../data/types";
+import type { GraphLayout, Note, NoteId, NodeType } from "../data/types";
 import {
   applyConstellationLayout,
   computeOrbitScene,
@@ -13,6 +13,11 @@ import {
 import { startLayoutTween, type TweenHandle } from "./layoutTransition";
 import { spacingToCameraRatio } from "./reducers";
 import type { FrameLoop } from "./frameLoop";
+import {
+  computePositionBBox,
+  computeVisibleGraphBBox,
+  graphVisibilityIsRestricted,
+} from "./filtering";
 
 interface Ref<T> {
   current: T;
@@ -41,9 +46,12 @@ export function useGraphScene(args: {
   stopDragSimRef?: Ref<(() => void) | null>;
   layout: GraphLayout;
   graphFocusId: NoteId | null;
+  selectedNodeId?: NoteId | null;
+  isolateNeighbors?: boolean;
   notes: Note[];
   sigmaReady: number;
   layoutAutoCycle: boolean;
+  graphFilters: Set<NodeType>;
 }): OrbitScene {
   const {
     sigmaRef,
@@ -56,10 +64,18 @@ export function useGraphScene(args: {
     stopDragSimRef,
     layout,
     graphFocusId,
+    selectedNodeId = null,
+    isolateNeighbors = false,
     notes,
     sigmaReady,
     layoutAutoCycle,
+    graphFilters,
   } = args;
+  const filterKey = [...graphFilters].sort().join("|");
+  const requestedFocusId = selectedNodeId ?? graphFocusId;
+  const visibilityKey = `${filterKey}::${
+    isolateNeighbors ? (selectedNodeId ?? "none") : "all"
+  }`;
 
   const [stagedScene, setStagedScene] = useState<OrbitScene>(
     layout === "force" ? "rings" : layout,
@@ -77,7 +93,11 @@ export function useGraphScene(args: {
 
   const recenter = (sigma: Sigma): void => {
     sigma.getCamera().animate(
-      { ratio: spacingToCameraRatio(spacingScaleRef.current), x: 0.5, y: 0.5 },
+      {
+        ratio: spacingToCameraRatio(spacingScaleRef.current),
+        x: 0.5,
+        y: 0.5,
+      },
       { duration: 600, easing: easeInOutCubic },
     );
   };
@@ -109,6 +129,11 @@ export function useGraphScene(args: {
     if (!isFreshBuild) {
       basePositionsRef.current = applyConstellationLayout(graph);
       orbitTargetsRef.current = new Map();
+      sigma.setCustomBBox(
+        graphVisibilityIsRestricted(graph)
+          ? computeVisibleGraphBBox(graph)
+          : null,
+      );
       sigma.refresh();
     }
     recenter(sigma);
@@ -128,9 +153,14 @@ export function useGraphScene(args: {
     // and the SSE refetch rebuilds without it) — staging an unknown node would
     // throw inside graphology's BFS. Fall back to the first present note.
     const focusId =
-      graphFocusId && graph.hasNode(graphFocusId)
-        ? graphFocusId
-        : notesRef.current.find((n) => graph.hasNode(n.id))?.id;
+      requestedFocusId &&
+      graph.hasNode(requestedFocusId) &&
+      !graph.getNodeAttribute(requestedFocusId, "hidden")
+        ? requestedFocusId
+        : notesRef.current.find(
+            (n) =>
+              graph.hasNode(n.id) && !graph.getNodeAttribute(n.id, "hidden"),
+          )?.id;
     if (!focusId) return;
 
     const playScene = (scene: OrbitScene): void => {
@@ -145,6 +175,11 @@ export function useGraphScene(args: {
       stopDragSimRef?.current?.();
       const targets = computeOrbitScene(graph, focusId, scene);
       orbitTargetsRef.current = targets;
+      sigma.setCustomBBox(
+        graphVisibilityIsRestricted(graph)
+          ? computePositionBBox(targets.values())
+          : null,
+      );
       activeTweenRef.current?.cancel();
       activeTweenRef.current = startLayoutTween({
         sigma,
@@ -174,7 +209,7 @@ export function useGraphScene(args: {
     };
     // ``notes`` is intentionally NOT a dependency — see notesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, graphFocusId, sigmaReady, layoutAutoCycle]);
+  }, [layout, requestedFocusId, sigmaReady, layoutAutoCycle, visibilityKey]);
 
   return stagedScene;
 }

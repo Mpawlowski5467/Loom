@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -27,12 +27,46 @@ vi.mock("./useLoomConfig", () => ({
   useLoomConfig: vi.fn(() => mockConfig),
 }));
 
+// AppProvider hydrates the vault on mount (notes, captures, council history,
+// custom agents) and polls agent/health endpoints. Stub those network seams so
+// mounting is deterministic and produces no late, test-confusing state churn.
+// Stable references keep polling results from invalidating the memoized context
+// value on every render.
+const { EMPTY } = vi.hoisted(() => ({ EMPTY: [] as never[] }));
+
+vi.mock("../api/notes", () => ({
+  loadAllNotes: vi.fn(() => Promise.resolve([])),
+  backendNotesToFrontend: vi.fn(() => []),
+}));
+vi.mock("../api/captures", () => ({
+  listCaptures: vi.fn(() => Promise.resolve([])),
+  backendCaptureToFrontend: vi.fn((capture: unknown) => capture),
+}));
+vi.mock("../api/chat", () => ({
+  loadChatHistory: vi.fn(() => Promise.resolve({ messages: [] })),
+  streamCouncilMessage: vi.fn(() => Promise.resolve()),
+}));
+vi.mock("../api/events", () => ({
+  subscribeVaultEvents: vi.fn(() => () => {}),
+}));
+vi.mock("../api/agentsRegistry", () => ({
+  listAgentRegistry: vi.fn(() => Promise.resolve([])),
+}));
+vi.mock("./useAgentPolling", () => ({
+  useAgentPolling: vi.fn(() => ({ changelog: EMPTY, agentActivity: EMPTY })),
+}));
+vi.mock("./useHealthPolling", () => ({
+  useHealthPolling: vi.fn(() => 0),
+}));
+
 function Probe(): ReactNode {
-  const { tab, setTab } = useApp();
+  const { tab, setTab, graphSelectedId, setGraphSelectedId } = useApp();
   return (
     <>
       <div>tab:{tab}</div>
       <button onClick={() => setTab("settings")}>Open settings</button>
+      <div>selected:{graphSelectedId ?? "none"}</div>
+      <button onClick={() => setGraphSelectedId("note-a")}>Select node</button>
     </>
   );
 }
@@ -61,6 +95,18 @@ describe("AppContext", () => {
     expect(screen.getByText("tab:settings")).toBeInTheDocument();
   });
 
+  it("keeps persistent graph selection in context", async () => {
+    const user = userEvent.setup();
+    render(
+      <AppProvider>
+        <Probe />
+      </AppProvider>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Select node" }));
+    expect(screen.getByText("selected:note-a")).toBeInTheDocument();
+  });
+
   it("preserves the context value reference across an irrelevant re-render", async () => {
     const user = userEvent.setup();
     const seen: AppContextValue[] = [];
@@ -84,13 +130,22 @@ describe("AppContext", () => {
     }
 
     render(<Harness />);
+    // Let mount-time vault hydration settle so the captured value has stopped
+    // changing for reasons unrelated to the re-render under test.
+    await act(async () => {
+      await Promise.resolve();
+      await new Promise((resolve) => setTimeout(resolve, 0));
+    });
+
     const before = seen.length;
+    const valueBefore = seen[seen.length - 1];
     await user.click(screen.getByRole("button", { name: "bump" }));
 
     // A re-render happened (a new value snapshot was captured)...
     expect(seen.length).toBeGreaterThan(before);
-    // ...but every captured value is the SAME object reference (memo held).
-    expect(new Set(seen).size).toBe(1);
+    // ...but the memoized value is the SAME object reference: the bump touched
+    // no provider state, so consumers must not be handed a new object.
+    expect(seen[seen.length - 1]).toBe(valueBefore);
   });
 
   it("changes the context value reference when provider state changes", async () => {
@@ -100,9 +155,7 @@ describe("AppContext", () => {
     function Capture(): ReactNode {
       const ctx = useApp();
       seen.push(ctx);
-      return (
-        <button onClick={() => ctx.setTab("settings")}>change tab</button>
-      );
+      return <button onClick={() => ctx.setTab("settings")}>change tab</button>;
     }
 
     render(

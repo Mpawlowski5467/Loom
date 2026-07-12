@@ -3,10 +3,21 @@ import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { ThemeName } from "../theme/themes";
 import type { GraphDisplay } from "../context/app-ctx";
+import type { NodeType } from "../data/types";
 import { applyPaletteToGraph } from "./sigma-setup";
 import { easeInOutCubic } from "./layouts";
 import { spacingToCameraRatio } from "./reducers";
-import type { GraphMode, GraphTuning } from "./tuning";
+import {
+  GRAPH_LABEL_BUDGET_NODES,
+  type GraphMode,
+  type GraphTuning,
+} from "./tuning";
+import {
+  applyGraphVisibility,
+  computeVisibleGraphBBox,
+  computeVisibleDegreeMap,
+  isGraphNodeVisible,
+} from "./filtering";
 
 interface Ref<T> {
   current: T;
@@ -26,8 +37,12 @@ export function useGraphDisplaySync(args: {
   tuningRef: Ref<GraphTuning>;
   graphDisplay: GraphDisplay;
   graphMode: GraphMode;
-  graphFilters: Set<string>;
+  graphFilters: Set<NodeType>;
+  selectedNodeId?: string | null;
+  isolateNeighbors?: boolean;
   theme: ThemeName;
+  sigmaReady: number;
+  stopDragSimRef: Ref<(() => void) | null>;
 }): void {
   const {
     sigmaRef,
@@ -38,7 +53,11 @@ export function useGraphDisplaySync(args: {
     graphDisplay,
     graphMode,
     graphFilters,
+    selectedNodeId = null,
+    isolateNeighbors = false,
     theme,
+    sigmaReady,
+    stopDragSimRef,
   } = args;
 
   // Node size scale — reapply to the graph immediately so the slider is
@@ -105,7 +124,11 @@ export function useGraphDisplaySync(args: {
     const sigma = sigmaRef.current;
     if (!sigma) return;
     sigma.getCamera().animate(
-      { ratio: spacingToCameraRatio(graphDisplay.spacingScale), x: 0.5, y: 0.5 },
+      {
+        ratio: spacingToCameraRatio(graphDisplay.spacingScale),
+        x: 0.5,
+        y: 0.5,
+      },
       { duration: 300, easing: easeInOutCubic },
     );
   }, [graphDisplay.spacingScale, spacingScaleRef, sigmaRef]);
@@ -114,10 +137,74 @@ export function useGraphDisplaySync(args: {
     tuningRef.current.graphMode = graphMode;
   }, [graphMode, tuningRef]);
 
+  // Persistent selection is a render concern even when it does not narrow
+  // visibility: selected size/label and incident-edge emphasis must repaint.
   useEffect(() => {
+    tuningRef.current.selected = selectedNodeId;
+    tuningRef.current.isolateNeighbors = isolateNeighbors;
+    if (!isolateNeighbors) sigmaRef.current?.refresh();
+  }, [selectedNodeId, isolateNeighbors, sigmaReady, tuningRef, sigmaRef]);
+
+  const isolationSelectedId = isolateNeighbors ? selectedNodeId : null;
+
+  useEffect(() => {
+    // Visibility is shared state, not merely a paint effect: physics, orbit
+    // traversal, exports, hit-testing, and reducers must agree on which nodes
+    // exist in the current view. Cancel an active/settling drag before changing
+    // that participant set.
+    stopDragSimRef.current?.();
     tuningRef.current.filters = graphFilters;
-    sigmaRef.current?.refresh({ skipIndexation: true });
-  }, [graphFilters, tuningRef, sigmaRef]);
+    const graph = graphRef.current;
+    const sigma = sigmaRef.current;
+    if (!graph || !sigma) return;
+    const visibility = applyGraphVisibility(graph, {
+      typeFilters: graphFilters,
+      selectedId: isolationSelectedId,
+      isolateNeighbors,
+    });
+    const visibleNodeCount = visibility.visibleCount;
+    tuningRef.current.visibilityRestricted = visibility.restricted;
+    tuningRef.current.degree = computeVisibleDegreeMap(graph);
+    const hovered = tuningRef.current.hovered;
+    if (hovered && !isGraphNodeVisible(graph, hovered)) {
+      tuningRef.current.hovered = null;
+    }
+    // Fit normalization to the visible subset while a filter is active. This
+    // keeps a small result set from remaining compressed inside the full
+    // vault's old bounds. Clearing filters restores Sigma's natural bbox.
+    sigma.setCustomBBox(
+      visibility.restricted ? computeVisibleGraphBBox(graph) : null,
+    );
+    sigma.setSetting(
+      "renderLabels",
+      visibleNodeCount <= GRAPH_LABEL_BUDGET_NODES,
+    );
+    // A visibility/bounds change affects programs, labels, hit-testing, and
+    // edges. It is user-triggered and infrequent, so correctness wins over a
+    // partial repaint here.
+    sigma.refresh();
+    if (graphMode === "constellation") {
+      sigma.getCamera().animate(
+        {
+          ratio: spacingToCameraRatio(spacingScaleRef.current),
+          x: 0.5,
+          y: 0.5,
+        },
+        { duration: 450, easing: easeInOutCubic },
+      );
+    }
+  }, [
+    graphFilters,
+    isolationSelectedId,
+    isolateNeighbors,
+    sigmaReady,
+    graphMode,
+    tuningRef,
+    sigmaRef,
+    graphRef,
+    spacingScaleRef,
+    stopDragSimRef,
+  ]);
 
   // Theme swap: Sigma re-reads node colors on refresh, so update attributes +
   // settings in place rather than recreating the renderer. The tuning object

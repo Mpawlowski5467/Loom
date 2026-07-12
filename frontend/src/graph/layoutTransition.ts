@@ -26,22 +26,24 @@ export interface TweenHandle {
 export function startLayoutTween(opts: TweenOptions): TweenHandle {
   const { sigma, graph, targets, frameLoop, duration = 700, onComplete } = opts;
   const starts = new Map<string, XY>();
-  graph.forEachNode((id, attrs) => {
-    starts.set(id, { x: attrs["x"] as number, y: attrs["y"] as number });
-  });
+  for (const id of targets.keys()) {
+    if (!graph.hasNode(id)) continue;
+    starts.set(id, {
+      x: graph.getNodeAttribute(id, "x") as number,
+      y: graph.getNodeAttribute(id, "y") as number,
+    });
+  }
   const t0 = performance.now();
   let remove: (() => void) | null = null;
 
   const tick = (now: number): boolean => {
     const p = Math.min(1, (now - t0) / duration);
     const eased = easeInOutCubic(p);
-    graph.forEachNode((id) => {
-      const s = starts.get(id);
-      const tgt = targets.get(id);
-      if (!s || !tgt) return;
+    for (const [id, s] of starts) {
+      const tgt = targets.get(id)!;
       graph.setNodeAttribute(id, "x", s.x + (tgt.x - s.x) * eased);
       graph.setNodeAttribute(id, "y", s.y + (tgt.y - s.y) * eased);
-    });
+    }
     if (p >= 1) {
       remove?.();
       remove = null;
@@ -49,7 +51,9 @@ export function startLayoutTween(opts: TweenOptions): TweenHandle {
       onComplete?.();
       return false; // already refreshed; don't double up this frame
     }
-    return true;
+    // Position attribute events already schedule Sigma; do not ask the shared
+    // frame loop for a redundant unqualified full refresh.
+    return false;
   };
 
   remove = frameLoop.add(tick);

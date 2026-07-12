@@ -2,16 +2,27 @@
 Frontend testing conventions:
 - Pure layout math: construct a graph, run the pass, assert positions.
 */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import Graph from "graphology";
 import { resolveOverlaps } from "./overlap";
 
 function makeGraph(
-  nodes: Array<{ id: string; x: number; y: number; size?: number }>,
+  nodes: Array<{
+    id: string;
+    x: number;
+    y: number;
+    size?: number;
+    hidden?: boolean;
+  }>,
 ): Graph {
   const g = new Graph();
   for (const n of nodes) {
-    g.addNode(n.id, { x: n.x, y: n.y, size: n.size ?? 4 });
+    g.addNode(n.id, {
+      x: n.x,
+      y: n.y,
+      size: n.size ?? 4,
+      hidden: n.hidden,
+    });
   }
   return g;
 }
@@ -96,7 +107,11 @@ describe("resolveOverlaps", () => {
       for (let j = i + 1; j < 30; j++) {
         minPair = Math.min(
           minPair,
-          dist(g, `n${String(i).padStart(2, "0")}`, `n${String(j).padStart(2, "0")}`),
+          dist(
+            g,
+            `n${String(i).padStart(2, "0")}`,
+            `n${String(j).padStart(2, "0")}`,
+          ),
         );
       }
     }
@@ -105,5 +120,29 @@ describe("resolveOverlaps", () => {
       expect(Math.abs(pos(g, id).x)).toBeLessThan(5_000);
       expect(Math.abs(pos(g, id).y)).toBeLessThan(5_000);
     });
+  });
+
+  it("can resolve only a visible participant subset without graph event churn", () => {
+    const g = makeGraph([
+      { id: "a", x: 0, y: 0 },
+      { id: "b", x: 0.1, y: 0 },
+      { id: "anchor", x: 900, y: 900 },
+      { id: "outside", x: 0.05, y: 0 },
+      { id: "hidden", x: 0.08, y: 0, hidden: true },
+    ]);
+    const outsideBefore = pos(g, "outside");
+    const hiddenBefore = pos(g, "hidden");
+    const graphEvents = vi.fn();
+    g.on("nodeAttributesUpdated", graphEvents);
+
+    resolveOverlaps(g, {
+      nodeIds: ["a", "b", "anchor", "hidden"],
+      ignoreHidden: true,
+    });
+
+    expect(dist(g, "a", "b")).toBeGreaterThan(0.1);
+    expect(pos(g, "outside")).toEqual(outsideBefore);
+    expect(pos(g, "hidden")).toEqual(hiddenBefore);
+    expect(graphEvents).not.toHaveBeenCalled();
   });
 });

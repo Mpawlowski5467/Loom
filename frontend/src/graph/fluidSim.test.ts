@@ -2,12 +2,18 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Graph from "graphology";
 import type Sigma from "sigma";
 import { startFluidSim, type ReleaseMode } from "./fluidSim";
+import {
+  collectParticipants,
+  makeBodies,
+  makeSpringNetwork,
+  MAX_PARTICIPANTS,
+} from "./fluidForces";
 import type { FrameLoop, FrameTick } from "./frameLoop";
 import type { XY } from "./layouts";
 
 /**
  * Manually driven FrameLoop stand-in: the sim registers its tick here and the
- * test advances frames explicitly (each step jumps past the 33ms throttle).
+ * test advances frames explicitly (each default step clears the frame throttle).
  */
 function stubFrameLoop() {
   const ticks = new Set<FrameTick>();
@@ -38,7 +44,9 @@ function stubFrameLoop() {
 }
 
 function fakeSigma() {
-  return { refresh: vi.fn() } as unknown as Sigma & {
+  return {
+    refresh: vi.fn(),
+  } as unknown as Sigma & {
     refresh: ReturnType<typeof vi.fn>;
   };
 }
@@ -69,6 +77,7 @@ function startSim(opts: {
   releaseMode?: ReleaseMode;
   sigma?: ReturnType<typeof fakeSigma>;
   onSettled?: (positions: Map<string, XY>) => void;
+  onFinished?: () => void;
 }) {
   const loop = stubFrameLoop();
   const sigma = opts.sigma ?? fakeSigma();
@@ -80,6 +89,7 @@ function startSim(opts: {
     getHome: (id) => opts.homes?.[id] ?? pos(opts.graph, id),
     getReleaseMode: () => opts.releaseMode ?? "sticky",
     onSettled: opts.onSettled,
+    onFinished: opts.onFinished,
   });
   return { sim, loop, sigma };
 }
@@ -115,6 +125,33 @@ describe("startFluidSim — drag phase", () => {
     sim.stop();
   });
 
+  it("attenuates the reaction across successive graph hops", () => {
+    const g = mkGraph(
+      {
+        a: { x: 0, y: 0 },
+        b: { x: 60, y: 0 },
+        c: { x: 120, y: 0 },
+        d: { x: 180, y: 0 },
+      },
+      [
+        ["a", "b"],
+        ["b", "c"],
+        ["c", "d"],
+      ],
+    );
+    const { sim, loop } = startSim({ graph: g, draggedId: "a" });
+    sim.setDraggedPos(-300, 0);
+    loop.run(30);
+
+    const firstHop = 60 - pos(g, "b").x;
+    const secondHop = 120 - pos(g, "c").x;
+    const thirdHop = 180 - pos(g, "d").x;
+    expect(firstHop).toBeGreaterThan(secondHop);
+    expect(secondHop).toBeGreaterThan(thirdHop);
+    expect(thirdHop).toBeGreaterThan(0);
+    sim.stop();
+  });
+
   it("registers exactly one tick on the shared frame loop and stop() removes it", () => {
     const g = mkGraph({ a: { x: 0, y: 0 } }, []);
     const { sim, loop } = startSim({ graph: g, draggedId: "a" });
@@ -125,15 +162,62 @@ describe("startFluidSim — drag phase", () => {
     expect(loop.size).toBe(0);
   });
 
+  it("restores the saved geometry when an active drag is cancelled", () => {
+    const homes = { a: { x: 0, y: 0 }, b: { x: 50, y: 0 } };
+    const g = mkGraph({ a: { x: 0, y: 0 }, b: { x: 50, y: 0 } }, [["a", "b"]]);
+    const { sim, loop, sigma } = startSim({
+      graph: g,
+      draggedId: "a",
+      homes,
+    });
+    sim.setDraggedPos(180, 90);
+    loop.run(8);
+
+    sim.stop();
+
+    expect(pos(g, "a")).toEqual(homes.a);
+    expect(pos(g, "b")).toEqual(homes.b);
+    expect(loop.size).toBe(0);
+    expect(sigma.refresh).toHaveBeenCalledWith();
+  });
+
   it("excludes hidden nodes from the simulation", () => {
-    const g = mkGraph(
-      { a: { x: 0, y: 0 }, h: { x: 40, y: 0, hidden: true } },
-      [["a", "h"]],
-    );
+    const g = mkGraph({ a: { x: 0, y: 0 }, h: { x: 40, y: 0, hidden: true } }, [
+      ["a", "h"],
+    ]);
     const { sim, loop } = startSim({ graph: g, draggedId: "a" });
     sim.setDraggedPos(-400, 0);
     loop.run(30);
     expect(pos(g, "h")).toEqual({ x: 40, y: 0 });
+    sim.stop();
+  });
+
+  it("batches silent position writes into one scheduled partial refresh per frame", () => {
+    const g = mkGraph(
+      { a: { x: 0, y: 0 }, b: { x: 50, y: 0 }, c: { x: 100, y: 0 } },
+      [
+        ["a", "b"],
+        ["b", "c"],
+      ],
+    );
+    const graphEvents = vi.fn();
+    g.on("nodeAttributesUpdated", graphEvents);
+    const sigma = fakeSigma();
+    const { sim, loop } = startSim({ graph: g, draggedId: "a", sigma });
+
+    sim.setDraggedPos(25, 10);
+    sigma.refresh.mockClear();
+    loop.step(17);
+
+    expect(graphEvents).not.toHaveBeenCalled();
+    expect(sigma.refresh).toHaveBeenCalledTimes(1);
+    expect(sigma.refresh).toHaveBeenCalledWith({
+      partialGraph: {
+        nodes: expect.arrayContaining(["a", "b", "c"]),
+        edges: expect.arrayContaining(g.edges()),
+      },
+      schedule: true,
+    });
     sim.stop();
   });
 });
@@ -177,6 +261,18 @@ describe("startFluidSim — sticky release (force layout)", () => {
     expect(loop.size).toBe(0);
   });
 
+  it("caps an extreme flick so sticky placement stays near the drop point", () => {
+    const g = mkGraph({ a: { x: 0, y: 0 } }, []);
+    const { sim, loop } = startSim({ graph: g, draggedId: "a" });
+    sim.setDraggedPos(100, 0);
+    sim.release(10_000, 0);
+    loop.run(200);
+
+    expect(pos(g, "a").x).toBeGreaterThan(100);
+    expect(pos(g, "a").x).toBeLessThan(105);
+    expect(loop.size).toBe(0);
+  });
+
   it("ignores setDraggedPos after release", () => {
     const g = mkGraph({ a: { x: 0, y: 0 } }, []);
     const { sim, loop } = startSim({ graph: g, draggedId: "a" });
@@ -196,12 +292,14 @@ describe("startFluidSim — elastic release (orbit scenes)", () => {
     const homes = { a: { x: 0, y: 0 }, b: { x: 50, y: 0 } };
     const g = mkGraph({ a: { x: 0, y: 0 }, b: { x: 50, y: 0 } }, [["a", "b"]]);
     const onSettled = vi.fn();
+    const onFinished = vi.fn();
     const { sim, loop, sigma } = startSim({
       graph: g,
       draggedId: "a",
       homes,
       releaseMode: "elastic",
       onSettled,
+      onFinished,
     });
     sim.setDraggedPos(200, 120);
     loop.run(10);
@@ -213,18 +311,35 @@ describe("startFluidSim — elastic release (orbit scenes)", () => {
     expect(pos(g, "b")).toEqual({ x: 50, y: 0 });
     // Elastic settles never rewrite homes.
     expect(onSettled).not.toHaveBeenCalled();
+    expect(onFinished).toHaveBeenCalledTimes(1);
+    sim.stop();
+    expect(onFinished).toHaveBeenCalledTimes(1);
     expect(sigma.refresh).toHaveBeenCalledWith();
   });
 });
 
 describe("startFluidSim — participation budget", () => {
+  it("uses the same bounded local path at the 500-node UI boundary", () => {
+    const g = new Graph();
+    g.addNode("hub", { x: 0, y: 0, size: 4 });
+    for (let i = 1; i < 500; i++) {
+      const id = `n${i}`;
+      g.addNode(id, { x: i, y: 0, size: 4 });
+      g.addEdge("hub", id);
+    }
+
+    expect(collectParticipants(g, "hub").size).toBe(MAX_PARTICIPANTS);
+  });
+
   it("caps participants to a BFS neighborhood on large graphs", () => {
     const g = new Graph();
     // A chain a-b-c-d-e (e is 4 hops out) plus filler to exceed the budget.
     const chain = ["a", "b", "c", "d", "e"];
     chain.forEach((id, i) => g.addNode(id, { x: i * 50, y: 0, size: 4 }));
-    for (let i = 0; i < chain.length - 1; i++) g.addEdge(chain[i]!, chain[i + 1]!);
-    for (let i = 0; i < 600; i++) g.addNode(`f${i}`, { x: 2000 + i, y: 500, size: 4 });
+    for (let i = 0; i < chain.length - 1; i++)
+      g.addEdge(chain[i]!, chain[i + 1]!);
+    for (let i = 0; i < 600; i++)
+      g.addNode(`f${i}`, { x: 2000 + i, y: 500, size: 4 });
 
     const { sim, loop } = startSim({ graph: g, draggedId: "a" });
     sim.setDraggedPos(-500, 0);
@@ -235,5 +350,57 @@ describe("startFluidSim — participation budget", () => {
     expect(pos(g, "e")).toEqual({ x: 200, y: 0 });
     expect(pos(g, "f0")).toEqual({ x: 2000, y: 500 });
     sim.stop();
+  });
+
+  it("stops a high-degree BFS as soon as the participant budget is full", () => {
+    const g = new Graph();
+    g.addNode("hub", { x: 0, y: 0, size: 4 });
+    for (let i = 0; i < 600; i++) {
+      const id = `leaf${i}`;
+      g.addNode(id, { x: i + 1, y: 0, size: 4 });
+      g.addEdge("hub", id);
+    }
+
+    const original = g.someNeighbor.bind(g);
+    let visited = 0;
+    vi.spyOn(g, "someNeighbor").mockImplementation((node, predicate) =>
+      original(node, (neighbor, attrs) => {
+        visited++;
+        return predicate(neighbor, attrs);
+      }),
+    );
+
+    const participants = collectParticipants(g, "hub");
+    expect(participants.size).toBe(MAX_PARTICIPANTS);
+    // hub occupies one slot, so the early-exiting predicate needs only 399
+    // neighbor visits instead of walking the remaining 201 leaves.
+    expect(visited).toBe(MAX_PARTICIPANTS - 1);
+  });
+
+  it("builds springs and affected edges from participant-local edge walks", () => {
+    const g = new Graph();
+    const chain = ["a", "b", "c", "d", "e"];
+    chain.forEach((id, i) => g.addNode(id, { x: i * 50, y: 0, size: 4 }));
+    for (let i = 0; i < chain.length - 1; i++)
+      g.addEdge(chain[i]!, chain[i + 1]!);
+    for (let i = 0; i < 600; i++) {
+      g.addNode(`f${i}`, { x: 2_000 + i, y: 500, size: 4 });
+    }
+    const unrelated = g.addEdge("f0", "f1");
+    g.addNode("hidden", { x: -50, y: 0, size: 4, hidden: true });
+    const hiddenEdge = g.addEdge("a", "hidden");
+    const bodies = makeBodies(g, "a", (id) => pos(g, id));
+    const edgeWalk = vi.spyOn(g, "forEachEdge");
+
+    const network = makeSpringNetwork(g, bodies);
+
+    expect(network.springs).toHaveLength(3); // a-b, b-c, c-d
+    expect(network.affectedEdges).toContain(g.edge("d", "e"));
+    expect(network.affectedEdges).not.toContain(unrelated);
+    expect(network.affectedEdges).not.toContain(hiddenEdge);
+    expect(edgeWalk.mock.calls).not.toHaveLength(0);
+    expect(
+      edgeWalk.mock.calls.every(([first]) => typeof first === "string"),
+    ).toBe(true);
   });
 });

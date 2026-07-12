@@ -1,39 +1,41 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { Download } from "lucide-react";
-import type { NodeType } from "../../data/types";
+import { Download, Maximize2 } from "lucide-react";
+import type { Note, NodeType } from "../../data/types";
+import { NODE_TYPES } from "../../graph/filtering";
 import { Popover } from "../primitives/Popover";
 import { GearIcon } from "../primitives/icons";
 import { DisplayControls } from "./DisplayControls";
 
-const TYPE_FILTERS: { type: NodeType; label: string }[] = [
-  { type: "project", label: "project" },
-  { type: "topic", label: "topic" },
-  { type: "people", label: "people" },
-  { type: "daily", label: "daily" },
-  { type: "capture", label: "capture" },
-  { type: "custom", label: "custom" },
-];
-
 export type ExportFormat = "png" | "svg" | "json";
 
 interface Props {
-  graphFilters: Set<string>;
-  toggleGraphFilter: (t: string) => void;
+  graphFilters: Set<NodeType>;
+  toggleGraphFilter: (t: NodeType) => void;
   clearGraphFilters: () => void;
+  notes?: Pick<Note, "type">[];
   onExport?: (format: ExportFormat) => void;
+  onFitView?: () => void;
+  fitDisabled?: boolean;
 }
 
 export function GraphToolbar({
   graphFilters,
   toggleGraphFilter,
   clearGraphFilters,
+  notes = [],
   onExport,
+  onFitView,
+  fitDisabled = false,
 }: Props): ReactNode {
   const [displayOpen, setDisplayOpen] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const exportRef = useRef<HTMLDivElement | null>(null);
+  const counts = new Map<NodeType, number>();
+  for (const note of notes) {
+    counts.set(note.type, (counts.get(note.type) ?? 0) + 1);
+  }
 
   useEffect(() => {
     if (!exportOpen) return;
@@ -54,18 +56,29 @@ export function GraphToolbar({
   return (
     <div className="graph-toolbar">
       <div className="graph-filters" role="group" aria-label="Filter by type">
-        {TYPE_FILTERS.map((f) => (
-          <button
-            key={f.type}
-            className="graph-filter"
-            aria-pressed={graphFilters.has(f.type)}
-            aria-label={f.label}
-            title={f.label}
-            onClick={() => toggleGraphFilter(f.type)}
-          >
-            <span className={`dot dot-${f.type}`} />
-          </button>
-        ))}
+        {NODE_TYPES.map((type) => {
+          const active = graphFilters.has(type);
+          const count = counts.get(type) ?? 0;
+          const action = active
+            ? graphFilters.size === 1
+              ? "Show all note types"
+              : `Hide ${type} notes`
+            : graphFilters.size === 0
+              ? `Show only ${type} notes`
+              : `Show ${type} notes`;
+          return (
+            <button
+              key={type}
+              className="graph-filter"
+              aria-pressed={active}
+              aria-label={`${action} (${count})`}
+              title={`${type} · ${count}`}
+              onClick={() => toggleGraphFilter(type)}
+            >
+              <span className={`dot dot-${type}`} />
+            </button>
+          );
+        })}
         {graphFilters.size > 0 && (
           <button
             className="graph-filters-clear"
@@ -78,6 +91,16 @@ export function GraphToolbar({
         )}
       </div>
       <div className="graph-toolbar-right">
+        <button
+          type="button"
+          className="graph-display-trigger"
+          aria-label="Fit visible nodes"
+          title="Fit visible nodes (F)"
+          onClick={onFitView}
+          disabled={fitDisabled || !onFitView}
+        >
+          <Maximize2 size={14} aria-hidden="true" />
+        </button>
         <div ref={exportRef} className="graph-export">
           <button
             type="button"

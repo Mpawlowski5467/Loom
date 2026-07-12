@@ -78,11 +78,18 @@ interface Harness {
   sim: ReturnType<typeof makeSim>;
   emit: (evt: string, payload: unknown) => void;
   detach: () => void;
-  camera: { disable: ReturnType<typeof vi.fn>; enable: ReturnType<typeof vi.fn> };
+  camera: {
+    disable: ReturnType<typeof vi.fn>;
+    enable: ReturnType<typeof vi.fn>;
+  };
   frameLoop: FrameLoop;
   cancelTween: ReturnType<typeof vi.fn>;
   onSettled: ReturnType<typeof vi.fn>;
   justDragged: { current: boolean };
+  isDragging: { current: boolean };
+  stopSimRef: { current: (() => void) | null };
+  onDragStateChange: ReturnType<typeof vi.fn>;
+  onSimulationStateChange: ReturnType<typeof vi.fn>;
 }
 
 /** Wire up attachDrag with mocked sim + sigma and return drivers. */
@@ -95,6 +102,10 @@ function setup(): Harness {
   const cancelTween = vi.fn();
   const onSettled = vi.fn();
   const justDragged = { current: false };
+  const isDragging = { current: false };
+  const stopSimRef = { current: null as (() => void) | null };
+  const onDragStateChange = vi.fn();
+  const onSimulationStateChange = vi.fn();
   const detach = attachDrag({
     sigma,
     graph,
@@ -107,17 +118,51 @@ function setup(): Harness {
     onSettled,
     clearHover: vi.fn(),
     cancelTween,
-    isDragging: { current: false },
+    stopSimRef,
+    isDragging,
     justDragged,
+    onDragStateChange,
+    onSimulationStateChange,
   });
-  return { sim, emit, detach, camera, frameLoop, cancelTween, onSettled, justDragged };
+  return {
+    sim,
+    emit,
+    detach,
+    camera,
+    frameLoop,
+    cancelTween,
+    onSettled,
+    justDragged,
+    isDragging,
+    stopSimRef,
+    onDragStateChange,
+    onSimulationStateChange,
+  };
 }
 
 function press(h: Pick<Harness, "emit">, node = "a") {
   h.emit("downNode", { node, event: { preventSigmaDefault: vi.fn() } });
 }
 
-function move(h: Pick<Harness, "emit">, x = 30, y = 40) {
+function pressAt(
+  h: Pick<Harness, "emit">,
+  x: number,
+  y: number,
+  timeStamp?: number,
+  node = "a",
+) {
+  h.emit("downNode", {
+    node,
+    event: {
+      x,
+      y,
+      preventSigmaDefault: vi.fn(),
+      original: { timeStamp } as Event,
+    },
+  });
+}
+
+function move(h: Pick<Harness, "emit">, x = 30, y = 40, timeStamp?: number) {
   h.emit("moveBody", {
     event: {
       x,
@@ -126,6 +171,7 @@ function move(h: Pick<Harness, "emit">, x = 30, y = 40) {
       original: {
         preventDefault: vi.fn(),
         stopPropagation: vi.fn(),
+        timeStamp,
       } as unknown as Event,
     },
   });
@@ -173,6 +219,18 @@ describe("attachDrag — fluid sim lifecycle", () => {
     expect(h.sim.setDraggedPos).toHaveBeenCalledWith(30, 40);
   });
 
+  it("preserves the grab offset and ignores movement below the drag threshold", () => {
+    const h = setup();
+    pressAt(h, 5, 5, 0); // node a is centered at graph (0, 0)
+    move(h, 6, 6, 16);
+    expect(h.sim.setDraggedPos).not.toHaveBeenCalled();
+
+    move(h, 15, 10, 32);
+    // Pointer moved (+10,+5); the node follows by that delta rather than
+    // snapping its center from (0,0) directly to the pointer at (15,10).
+    expect(h.sim.setDraggedPos).toHaveBeenCalledWith(10, 5);
+  });
+
   it("releases with the drag velocity and re-enables the camera", () => {
     const h = setup();
     press(h);
@@ -184,6 +242,38 @@ describe("attachDrag — fluid sim lifecycle", () => {
     expect(h.camera.enable).toHaveBeenCalled();
     // Released sims are left settling — not stopped here.
     expect(h.sim.stop).not.toHaveBeenCalled();
+    expect(
+      h.onSimulationStateChange.mock.calls.map(([value]) => value),
+    ).toEqual([true]);
+
+    const args = startFluidSim.mock.calls[0]![0] as {
+      onFinished: () => void;
+    };
+    args.onFinished();
+    expect(
+      h.onSimulationStateChange.mock.calls.map(([value]) => value),
+    ).toEqual([true, false]);
+  });
+
+  it("normalizes smoothed release velocity across pointer polling rates", () => {
+    const slow = setup();
+    pressAt(slow, 0, 0, 0);
+    move(slow, 10, 0, 1000 / 60);
+    move(slow, 20, 0, 2000 / 60);
+    slow.emit("upStage", {});
+    const slowVx = slow.sim.release.mock.calls[0]![0] as number;
+
+    const fast = setup();
+    pressAt(fast, 0, 0, 0);
+    move(fast, 5, 0, 1000 / 120);
+    move(fast, 10, 0, 2000 / 120);
+    move(fast, 15, 0, 3000 / 120);
+    move(fast, 20, 0, 4000 / 120);
+    fast.emit("upStage", {});
+    const fastVx = fast.sim.release.mock.calls[0]![0] as number;
+
+    expect(slowVx).toBeCloseTo(10);
+    expect(fastVx).toBeCloseTo(slowVx);
   });
 
   it("sets justDragged for one tick so the click handler is suppressed", () => {
@@ -254,5 +344,31 @@ describe("attachDrag — settling teardown", () => {
     h.detach();
     expect(h.sim.stop).toHaveBeenCalledTimes(1);
     expect(h.sim.release).not.toHaveBeenCalled();
+    expect(h.isDragging.current).toBe(false);
+    expect(h.camera.enable).toHaveBeenCalledTimes(1);
+    expect(h.onDragStateChange.mock.calls.map(([value]) => value)).toEqual([
+      true,
+      false,
+    ]);
+  });
+
+  it("exposes an idempotent cancellation handle that restores interaction state", () => {
+    const h = setup();
+    press(h);
+    const cancel = h.stopSimRef.current;
+    expect(cancel).not.toBeNull();
+
+    cancel?.();
+    cancel?.();
+
+    expect(h.sim.stop).toHaveBeenCalledTimes(1);
+    expect(h.camera.enable).toHaveBeenCalledTimes(1);
+    expect(h.isDragging.current).toBe(false);
+    move(h, 50, 50);
+    expect(h.sim.setDraggedPos).not.toHaveBeenCalled();
+
+    h.detach();
+    expect(h.stopSimRef.current).toBeNull();
+    expect(h.camera.enable).toHaveBeenCalledTimes(1);
   });
 });

@@ -9,10 +9,11 @@ import type { XY } from "./layouts";
  * stays small.
  */
 
-/** Whole-graph participation up to this order; larger graphs use a BFS cut. */
-export const FULL_SIM_BUDGET = 500;
+/** Small graphs can move as one elastic sheet. Larger graphs stay local so
+ * renderer work remains inside a frame even at the 500-node UI boundary. */
+export const FULL_SIM_BUDGET = 120;
 export const MAX_HOPS = 3;
-export const MAX_PARTICIPANTS = 400;
+export const MAX_PARTICIPANTS = 120;
 /** Home-anchor spring strength by hop distance from the dragged node. */
 export const ANCHOR_BY_HOP = [0, 0.01, 0.02, 0.04];
 const REPULSE_PADDING_PX = 4;
@@ -22,6 +23,10 @@ const NOMINAL_VIEWPORT_PX = 900;
 
 export interface Body {
   id: string;
+  /** Live Graphology attribute object. Mutating x/y here avoids emitting one
+   * nodeAttributesUpdated event per coordinate; fluidSim batches the renderer
+   * update once per animation frame instead. */
+  attrs: Record<string, unknown>;
   home: XY;
   x: number;
   y: number;
@@ -37,18 +42,35 @@ export interface EdgeSpring {
   rest: number;
 }
 
-function bfsHops(graph: Graph, start: string): Map<string, number> {
+export interface SpringNetwork {
+  springs: EdgeSpring[];
+  /** Every edge incident to a participant. These all need repainting when a
+   * participant moves, even when the other endpoint is outside the sim. */
+  affectedEdges: string[];
+}
+
+function bfsHops(
+  graph: Graph,
+  start: string,
+  limit: number,
+): Map<string, number> {
   const hops = new Map<string, number>([[start, 0]]);
   const queue: string[] = [start];
-  while (queue.length) {
-    const cur = queue.shift()!;
+  let head = 0;
+  while (head < queue.length && hops.size < limit) {
+    const cur = queue[head++]!;
     const d = hops.get(cur)!;
     if (d >= MAX_HOPS) continue;
-    graph.forEachNeighbor(cur, (n) => {
+
+    // someNeighbor stops iterating as soon as its predicate returns true. This
+    // matters for a high-degree hub: forEachNeighbor would still walk all 50k
+    // neighbors after the participant budget had already been filled.
+    graph.someNeighbor(cur, (n) => {
       if (hops.has(n)) return;
       if (graph.getNodeAttribute(n, "hidden")) return;
       hops.set(n, d + 1);
       queue.push(n);
+      return hops.size >= limit;
     });
   }
   return hops;
@@ -59,9 +81,9 @@ export function collectParticipants(
   graph: Graph,
   draggedId: string,
 ): Map<string, number> {
-  const hops = bfsHops(graph, draggedId);
   const maxHop = ANCHOR_BY_HOP.length - 1;
   if (graph.order <= FULL_SIM_BUDGET) {
+    const hops = bfsHops(graph, draggedId, graph.order);
     const all = new Map<string, number>();
     graph.forEachNode((id) => {
       if (id !== draggedId && graph.getNodeAttribute(id, "hidden")) return;
@@ -69,12 +91,10 @@ export function collectParticipants(
     });
     return all;
   }
-  // Budget cut: Map preserves BFS insertion order, so this keeps the closest.
-  const near = new Map<string, number>();
-  for (const [id, d] of hops) {
-    near.set(id, Math.min(d, maxHop));
-    if (near.size >= MAX_PARTICIPANTS) break;
-  }
+  // The traversal itself is bounded, not merely the returned Map. Map keeps
+  // BFS insertion order, so the retained participants are the closest ones.
+  const near = bfsHops(graph, draggedId, MAX_PARTICIPANTS);
+  for (const [id, d] of near) near.set(id, Math.min(d, maxHop));
   return near;
 }
 
@@ -85,39 +105,65 @@ export function makeBodies(
   getHome: (id: string) => XY | undefined,
 ): Body[] {
   const hopMap = collectParticipants(graph, draggedId);
-  const ids = [draggedId, ...[...hopMap.keys()].filter((id) => id !== draggedId)];
+  const ids = [
+    draggedId,
+    ...[...hopMap.keys()].filter((id) => id !== draggedId),
+  ];
   return ids.map((id) => {
-    const x = (graph.getNodeAttribute(id, "x") as number) || 0;
-    const y = (graph.getNodeAttribute(id, "y") as number) || 0;
+    const attrs = graph.getNodeAttributes(id) as Record<string, unknown>;
+    const x = (attrs["x"] as number) || 0;
+    const y = (attrs["y"] as number) || 0;
     const home = getHome(id) ?? { x, y };
     return {
       id,
+      attrs,
       home: { x: home.x, y: home.y },
       x,
       y,
       vx: 0,
       vy: 0,
       anchorK: ANCHOR_BY_HOP[hopMap.get(id) ?? ANCHOR_BY_HOP.length - 1]!,
-      radius: (graph.getNodeAttribute(id, "size") as number) || 4,
+      radius: (attrs["size"] as number) || 4,
     };
   });
 }
 
-/** Springs between participants; rest = distance between HOME positions. */
-export function makeSprings(graph: Graph, bodies: Body[]): EdgeSpring[] {
+/**
+ * Build participant springs and the renderer's affected-edge list by walking
+ * only edges incident to participant nodes. This avoids an O(all graph edges)
+ * scan on every pointer-down in a large vault.
+ */
+export function makeSpringNetwork(graph: Graph, bodies: Body[]): SpringNetwork {
   const index = new Map(bodies.map((b, i) => [b.id, i]));
   const springs: EdgeSpring[] = [];
-  graph.forEachEdge((_edge, _attrs, source, target) => {
-    const a = index.get(source);
-    const b = index.get(target);
-    if (a === undefined || b === undefined || a === b) return;
-    const rest = Math.hypot(
-      bodies[b]!.home.x - bodies[a]!.home.x,
-      bodies[b]!.home.y - bodies[a]!.home.y,
-    );
-    springs.push({ a, b, rest });
-  });
-  return springs;
+  const affectedEdges = new Set<string>();
+
+  for (const body of bodies) {
+    graph.forEachEdge(body.id, (edge, _attrs, source, target) => {
+      if (affectedEdges.has(edge)) return;
+      // An incident edge with a filtered endpoint is not rendered and its
+      // hidden endpoint cannot participate, so exclude it before building the
+      // renderer's partial-refresh set as well as the spring set.
+      if (
+        graph.getNodeAttribute(source, "hidden") ||
+        graph.getNodeAttribute(target, "hidden")
+      ) {
+        return;
+      }
+      affectedEdges.add(edge);
+
+      const a = index.get(source);
+      const b = index.get(target);
+      if (a === undefined || b === undefined || a === b) return;
+      const rest = Math.hypot(
+        bodies[b]!.home.x - bodies[a]!.home.x,
+        bodies[b]!.home.y - bodies[a]!.home.y,
+      );
+      springs.push({ a, b, rest });
+    });
+  }
+
+  return { springs, affectedEdges: [...affectedEdges] };
 }
 
 /** Graph units per rendered pixel, estimated from the participant bbox. */

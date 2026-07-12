@@ -132,11 +132,22 @@ export function createTravelers(opts: {
         ).scaleSize.bind(sigma)
       : (s: number) => s / Math.sqrt(sigma.getCamera().ratio);
 
+  let pausedForDrag = false;
   const tick: FrameTick = () => {
     const hovered = tuning.hovered;
-    const filters = tuning.filters;
     const pace = tuning.travelerPace;
     const now = performance.now();
+
+    if (tuning.dragging) {
+      if (!pausedForDrag) {
+        for (let i = 0; i < lines.length; i++) {
+          hideLine(lines[i]!.el, cacheFor(lines[i]!.el));
+        }
+        pausedForDrag = true;
+      }
+      return false;
+    }
+    pausedForDrag = false;
 
     if (!tuning.travelersEnabled) {
       for (let i = 0; i < lines.length; i++) {
@@ -150,6 +161,16 @@ export function createTravelers(opts: {
       const cache = cacheFor(el);
 
       if (pace <= 0) {
+        hideLine(el, cache);
+        continue;
+      }
+
+      // Reject invisible edges before coordinate conversion, depth math, and
+      // DOM work. Filters write the same hidden state used by Sigma + physics.
+      if (
+        graph.getNodeAttribute(s, "hidden") ||
+        graph.getNodeAttribute(t, "hidden")
+      ) {
         hideLine(el, cache);
         continue;
       }
@@ -198,15 +219,6 @@ export function createTravelers(opts: {
         continue;
       }
 
-      if (filters.size > 0) {
-        const sType = graph.getNodeAttribute(s, "noteType") as string;
-        const tType = graph.getNodeAttribute(t, "noteType") as string;
-        if (!filters.has(sType) || !filters.has(tType)) {
-          hideLine(el, cache);
-          continue;
-        }
-      }
-
       const ux = dx / len;
       const uy = dy / len;
       const phase = ((now / 1000) * BASE_SPEED * pace + i * 0.1) % 1;
@@ -245,7 +257,7 @@ export function createTravelers(opts: {
         mc = { cx: "", cy: "", r: "" };
         maskCache.set(c, mc);
       }
-      if (filters.size > 0 && !filters.has(attr["noteType"] as string)) {
+      if (attr["hidden"]) {
         if (mc.r !== "0") {
           c.setAttribute("r", "0");
           mc.r = "0";

@@ -1,6 +1,7 @@
 import type Graph from "graphology";
 import type Sigma from "sigma";
 import { DEPTH_EDGE_FADE, depthSizeFactor, fadeAlpha } from "./depth";
+import { isGraphNodeVisible } from "./filtering";
 
 type FilePart = Blob | string;
 
@@ -65,6 +66,16 @@ export function exportGraphSvg(
   graph: Graph,
   opts?: { depth?: boolean },
 ): void {
+  const svg = buildGraphSvg(sigma, graph, opts);
+  triggerDownload(svg, `loom-graph-${timestamp()}.svg`, "image/svg+xml");
+}
+
+/** Build an SVG for the current visible graph without triggering a download. */
+export function buildGraphSvg(
+  sigma: Sigma,
+  graph: Graph,
+  opts?: { depth?: boolean },
+): string {
   // Sigma renders via WebGL, not SVG. Build a faithful SVG from graph
   // attributes + the live camera so the export matches the on-screen view —
   // including the depth styling (size shrink / ink wash / edge fade), which
@@ -88,6 +99,12 @@ export function exportGraphSvg(
   // Edges
   parts.push(`<g stroke-opacity="0.45">`);
   graph.forEachEdge((_id, attr, source, target) => {
+    if (
+      !isGraphNodeVisible(graph, source) ||
+      !isGraphNodeVisible(graph, target)
+    ) {
+      return;
+    }
     const sx = graph.getNodeAttribute(source, "x") as number;
     const sy = graph.getNodeAttribute(source, "y") as number;
     const tx = graph.getNodeAttribute(target, "x") as number;
@@ -111,6 +128,7 @@ export function exportGraphSvg(
     7) as number;
   parts.push(`<g>`);
   graph.forEachNode((id, attr) => {
+    if (!isGraphNodeVisible(graph, id)) return;
     const gx = attr["x"] as number;
     const gy = attr["y"] as number;
     let size = (attr["size"] as number) ?? 4;
@@ -139,11 +157,30 @@ export function exportGraphSvg(
   parts.push(`</g>`);
   parts.push(`</svg>`);
 
-  triggerDownload(parts.join(""), `loom-graph-${timestamp()}.svg`, "image/svg+xml");
+  return parts.join("");
+}
+
+/** Graphology export payload restricted to visible nodes and their edges. */
+export function serializeVisibleGraph(
+  graph: Graph,
+): ReturnType<Graph["export"]> {
+  const data = graph.export();
+  const visible = new Set(
+    data.nodes
+      .filter((node) => isGraphNodeVisible(graph, node.key))
+      .map((node) => node.key),
+  );
+  return {
+    ...data,
+    nodes: data.nodes.filter((node) => visible.has(node.key)),
+    edges: data.edges.filter(
+      (edge) => visible.has(edge.source) && visible.has(edge.target),
+    ),
+  };
 }
 
 export function exportGraphJson(graph: Graph): void {
-  const data = graph.export();
+  const data = serializeVisibleGraph(graph);
   triggerDownload(
     JSON.stringify(data, null, 2),
     `loom-graph-${timestamp()}.json`,

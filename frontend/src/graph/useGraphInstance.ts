@@ -3,11 +3,7 @@ import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { GraphDisplay } from "../context/app-ctx";
 import type { Note, NoteId } from "../data/types";
-import {
-  buildGraph,
-  createSigma,
-  readNodePalette,
-} from "./sigma-setup";
+import { buildGraph, createSigma, readNodePalette } from "./sigma-setup";
 import { readCssVar } from "../theme/readCssVar";
 import { collectNodeZ, depthColorFor } from "./depth";
 import { applyConstellationLayout, easeInOutCubic, type XY } from "./layouts";
@@ -22,8 +18,10 @@ import {
 } from "./reducers";
 import { createTravelers } from "./travelers";
 import { createLens } from "./lens";
-import type { GraphTuning } from "./tuning";
+import { GRAPH_LABEL_BUDGET_NODES, type GraphTuning } from "./tuning";
 import type { TweenHandle } from "./layoutTransition";
+import { applyGraphVisibility, computeVisibleDegreeMap } from "./filtering";
+import { installGraphDebugHook } from "./graphDebug";
 
 interface Ref<T> {
   current: T;
@@ -32,7 +30,7 @@ interface Ref<T> {
 // Above this node count the permanent animation loops (travelers, breathing,
 // lens) are not registered — the graph stays static so large vaults don't
 // stutter. Tunable.
-export const PERF_BUDGET_NODES = 500;
+export const PERF_BUDGET_NODES = GRAPH_LABEL_BUDGET_NODES;
 
 export interface GraphInstance {
   sigmaRef: Ref<Sigma | null>;
@@ -64,6 +62,7 @@ export function useGraphInstance(args: {
   graphDisplayRef: Ref<GraphDisplay>;
   openNote: (id: NoteId) => void;
   setGraphFocusId: (id: NoteId | null) => void;
+  setGraphSelectedId: (id: NoteId | null) => void;
 }): GraphInstance {
   const {
     notes,
@@ -73,6 +72,7 @@ export function useGraphInstance(args: {
     graphDisplayRef,
     openNote,
     setGraphFocusId,
+    setGraphSelectedId,
   } = args;
 
   const sigmaRef = useRef<Sigma | null>(null);
@@ -112,6 +112,7 @@ export function useGraphInstance(args: {
     if (!hostRef.current || notesRef.current.length === 0) return;
 
     let cancelled = false;
+    const buildStartedAt = performance.now();
     setBuilding(true);
 
     const buildRaf = requestAnimationFrame(() => {
@@ -121,6 +122,13 @@ export function useGraphInstance(args: {
       const heavyNow = notes.length > PERF_BUDGET_NODES;
 
       const { graph, baseSizes } = buildGraph(notes);
+      const visibility = applyGraphVisibility(graph, {
+        typeFilters: tuningRef.current.filters,
+        selectedId: tuningRef.current.selected,
+        isolateNeighbors: tuningRef.current.isolateNeighbors,
+      });
+      const visibleNodeCount = visibility.visibleCount;
+      tuningRef.current.visibilityRestricted = visibility.restricted;
       baseSizesRef.current = baseSizes;
       graphRef.current = graph;
       // Seed from the cached layout so existing nodes keep their positions
@@ -141,31 +149,34 @@ export function useGraphInstance(args: {
         );
       });
 
-      const degreeMap = new Map<string, number>();
-      graph.forEachNode((id) => degreeMap.set(id, graph.degree(id)));
-      tuningRef.current.degree = degreeMap;
+      tuningRef.current.degree = computeVisibleDegreeMap(graph);
       const edgeExtremities = computeEdgeExtremities(graph);
       const nodeZ = collectNodeZ(graph);
 
       const sigma = createSigma(graph, host);
       sigmaRef.current = sigma;
       sigma.setSetting("labelSize", graphDisplayRef.current.labelSize);
+      sigma.setSetting(
+        "renderLabels",
+        visibleNodeCount <= GRAPH_LABEL_BUDGET_NODES,
+      );
       tuningRef.current.cameraRatio = sigma.getCamera().ratio;
       tuningRef.current.labelTier = ratioToTier(tuningRef.current.cameraRatio);
 
-      if (import.meta.env.DEV) {
-        (window as unknown as { __loomGraph: unknown }).__loomGraph = {
-          sigma,
-          graph,
-          graphToViewport: (id: string) => {
-            const x = graph.getNodeAttribute(id, "x") as number;
-            const y = graph.getNodeAttribute(id, "y") as number;
-            return sigma.graphToViewport({ x, y });
-          },
-        };
-      }
+      const debugHook = import.meta.env.DEV
+        ? installGraphDebugHook({
+            host: window,
+            sigma,
+            graph,
+            buildStartedAt,
+            isDragging: () => isDraggingRef.current,
+          })
+        : null;
 
-      sigma.setSetting("nodeReducer", makeNodeReducer(graph, tuningRef.current));
+      sigma.setSetting(
+        "nodeReducer",
+        makeNodeReducer(graph, tuningRef.current),
+      );
       sigma.setSetting(
         "edgeReducer",
         makeEdgeReducer(graph, tuningRef.current, edgeExtremities, nodeZ),
@@ -179,7 +190,7 @@ export function useGraphInstance(args: {
         tuningRef.current.cameraRatio = r;
         const tier = ratioToTier(r);
         const showRatio = tuningRef.current.labelShowRatio;
-        const crossedShowRatio = (prevRatio <= showRatio) !== (r <= showRatio);
+        const crossedShowRatio = prevRatio <= showRatio !== r <= showRatio;
         if (tier !== tuningRef.current.labelTier || crossedShowRatio) {
           tuningRef.current.labelTier = tier;
           sigma.refresh({ skipIndexation: true });
@@ -199,8 +210,16 @@ export function useGraphInstance(args: {
       });
       sigma.on("clickNode", ({ node }) => {
         if (isDraggingRef.current || justDraggedRef.current) return;
+        host.focus({ preventScroll: true });
+        setGraphSelectedId(node);
+        // Orbit selection preserves the existing focus-first scene behavior;
+        // selection remains separate so clearing the card does not reshuffle.
         if (tuningRef.current.graphMode === "orbit") setGraphFocusId(node);
-        else openNote(node);
+      });
+      sigma.on("clickStage", () => {
+        if (isDraggingRef.current || justDraggedRef.current) return;
+        host.focus({ preventScroll: true });
+        setGraphSelectedId(null);
       });
       sigma.on("doubleClickNode", ({ node, event }) => {
         event.preventSigmaDefault?.();
@@ -220,14 +239,9 @@ export function useGraphInstance(args: {
           tuningRef.current.graphMode === "orbit"
             ? orbitTargetsRef.current.get(id)
             : basePositionsRef.current.get(id),
-        getReleaseMode: () =>
-          tuningRef.current.graphMode === "orbit" ? "elastic" : "sticky",
-        // A sticky settle re-homes the graph: the settled positions become the
-        // new layout base (homes for later drags) and seed the next rebuild.
-        onSettled: (positions) => {
-          basePositionsRef.current = positions;
-          positionCacheRef.current = new Map(positions);
-        },
+        // Dragging is exploratory: every layout springs back to its saved
+        // geometry when released instead of permanently rearranging the vault.
+        getReleaseMode: () => "elastic",
         clearHover: () => {
           tuningRef.current.hovered = null;
         },
@@ -235,6 +249,12 @@ export function useGraphInstance(args: {
         stopSimRef: stopDragSimRef,
         isDragging: isDraggingRef,
         justDragged: justDraggedRef,
+        onSimulationStateChange: (active) => {
+          // Keep decorative ticks paused through elastic settling. Resuming
+          // breathing at mouse-up would otherwise compete with the spring
+          // renderer by emitting hundreds of size updates per frame.
+          tuningRef.current.dragging = active;
+        },
       });
 
       // Overlay: travelers + lens, only below the perf budget.
@@ -244,7 +264,12 @@ export function useGraphInstance(args: {
       }
       const travelers =
         !heavyNow && overlay
-          ? createTravelers({ overlay, graph, sigma, tuning: tuningRef.current })
+          ? createTravelers({
+              overlay,
+              graph,
+              sigma,
+              tuning: tuningRef.current,
+            })
           : null;
       const lens =
         !heavyNow && overlay
@@ -274,6 +299,10 @@ export function useGraphInstance(args: {
       }, 200);
 
       teardownRef.current = () => {
+        // Complete/cancel any active elastic motion before caching positions.
+        // Otherwise a rebuild during settle could seed the next graph from a
+        // transient halfway point instead of the saved layout geometry.
+        detachDrag();
         // Snapshot positions so the next structural rebuild can re-seed
         // existing nodes (preserving layout + any dragged placement). In
         // orbit mode the live attrs hold scene-ring geometry — seed from the
@@ -303,7 +332,6 @@ export function useGraphInstance(args: {
         activeTweenRef.current = null;
         removeTravelers?.();
         removeLens?.();
-        detachDrag();
         frameLoop.stop();
         travelers?.destroy();
         lens?.destroy();
@@ -312,12 +340,14 @@ export function useGraphInstance(args: {
             overlayRef.current.removeChild(overlayRef.current.firstChild);
           }
         }
+        debugHook?.uninstall();
         sigma.kill();
         sigmaRef.current = null;
         graphRef.current = null;
         frameLoopRef.current = null;
       };
 
+      debugHook?.markReady();
       setBuilding(false);
       setSigmaReady((v) => v + 1);
     });
@@ -344,6 +374,7 @@ export function useGraphInstance(args: {
     const palette = readNodePalette();
     const bg = readCssVar("--bg-base", "#f5f1e8");
     let changed = false;
+    let typeChanged = false;
     for (const n of notesRef.current) {
       if (!graph.hasNode(n.id)) continue;
       if (graph.getNodeAttribute(n.id, "label") !== n.title) {
@@ -355,14 +386,33 @@ export function useGraphInstance(args: {
         graph.setNodeAttribute(n.id, "color", palette[n.type]);
         const z =
           (graph.getNodeAttribute(n.id, "z") as number | undefined) ?? 0;
-        graph.setNodeAttribute(n.id, "depthColor", depthColorFor(palette[n.type], bg, z));
+        graph.setNodeAttribute(
+          n.id,
+          "depthColor",
+          depthColorFor(palette[n.type], bg, z),
+        );
         changed = true;
+        typeChanged = true;
       }
     }
-    if (changed) sigma.refresh({ skipIndexation: true });
+    if (typeChanged) {
+      // A type edit can move the node into or out of the active filter. Keep
+      // materialized visibility and visible-subgraph label degrees coherent
+      // without rebuilding the graph.
+      const visibility = applyGraphVisibility(graph, {
+        typeFilters: tuningRef.current.filters,
+        selectedId: tuningRef.current.selected,
+        isolateNeighbors: tuningRef.current.isolateNeighbors,
+      });
+      tuningRef.current.visibilityRestricted = visibility.restricted;
+      tuningRef.current.degree = computeVisibleDegreeMap(graph);
+      sigma.refresh();
+    } else if (changed) {
+      sigma.refresh({ skipIndexation: true });
+    }
     // sigmaReady gates the first run until the instance exists; contKey drives
     // subsequent content-only updates.
-  }, [contKey, sigmaReady]);
+  }, [contKey, sigmaReady, tuningRef]);
 
   return {
     sigmaRef,

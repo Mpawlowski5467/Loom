@@ -13,7 +13,7 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import Graph from "graphology";
 import type Sigma from "sigma";
-import type { GraphLayout, Note, NoteId } from "../data/types";
+import type { GraphLayout, Note, NoteId, NodeType } from "../data/types";
 import { useGraphScene } from "./useGraphScene";
 import {
   applyConstellationLayout,
@@ -75,14 +75,20 @@ function buildGraph(notes: Note[]): Graph {
 }
 
 /** Minimal Sigma stub: just the camera surface the effect drives. */
-function stubSigma(): { sigma: Sigma; animate: ReturnType<typeof vi.fn> } {
+function stubSigma(): {
+  sigma: Sigma;
+  animate: ReturnType<typeof vi.fn>;
+  setCustomBBox: ReturnType<typeof vi.fn>;
+} {
   const animate = vi.fn();
+  const setCustomBBox = vi.fn();
   const camera = { animate };
   const sigma = {
     getCamera: () => camera,
     refresh: vi.fn(),
+    setCustomBBox,
   } as unknown as Sigma;
-  return { sigma, animate };
+  return { sigma, animate, setCustomBBox };
 }
 
 function stubFrameLoop(): FrameLoop {
@@ -95,13 +101,15 @@ function stubFrameLoop(): FrameLoop {
 interface Harness {
   layout: GraphLayout;
   graphFocusId: NoteId | null;
+  selectedNodeId?: NoteId | null;
   notes: Note[];
   sigmaReady: number;
   layoutAutoCycle?: boolean;
+  graphFilters?: Set<NodeType>;
 }
 
 function setup(initial: Harness, graph: Graph) {
-  const { sigma, animate } = stubSigma();
+  const { sigma, animate, setCustomBBox } = stubSigma();
   const args = {
     sigmaRef: ref<Sigma | null>(sigma),
     graphRef: ref<Graph | null>(graph),
@@ -116,11 +124,12 @@ function setup(initial: Harness, graph: Graph) {
       useGraphScene({
         ...args,
         layoutAutoCycle: false,
+        graphFilters: new Set(),
         ...props,
       }),
     { initialProps: initial },
   );
-  return { ...view, animate, sigmaRef: args.sigmaRef };
+  return { ...view, animate, setCustomBBox, sigmaRef: args.sigmaRef };
 }
 
 describe("useGraphScene — relayout stability on notes identity change", () => {
@@ -175,7 +184,12 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     const applyBefore = applyMock.mock.calls.length;
     const animateBefore = animate.mock.calls.length;
 
-    rerender({ layout: "rings", graphFocusId: "a" as NoteId, notes, sigmaReady: 1 });
+    rerender({
+      layout: "rings",
+      graphFocusId: "a" as NoteId,
+      notes,
+      sigmaReady: 1,
+    });
     rerender({ layout: "force", graphFocusId: null, notes, sigmaReady: 1 });
 
     // Returning to force with prevReady === sigmaReady is NOT a fresh build,
@@ -203,7 +217,12 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     const graph = buildGraph(notesA);
 
     const { rerender } = setup(
-      { layout: "rings", graphFocusId: "a" as NoteId, notes: notesA, sigmaReady: 1 },
+      {
+        layout: "rings",
+        graphFocusId: "a" as NoteId,
+        notes: notesA,
+        sigmaReady: 1,
+      },
       graph,
     );
 
@@ -221,6 +240,33 @@ describe("useGraphScene — relayout stability on notes identity change", () => 
     // Effect did not re-run → no extra scene tween kicked off, interval not
     // re-armed.
     expect(tweenMock.mock.calls.length).toBe(tweensAfterFirst);
+  });
+
+  it("does NOT replay an orbit tween when clearing selection keeps the effective focus", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+
+    const { rerender } = setup(
+      {
+        layout: "rings",
+        graphFocusId: "a" as NoteId,
+        selectedNodeId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+      },
+      graph,
+    );
+    const tweensAfterSelection = tweenMock.mock.calls.length;
+
+    rerender({
+      layout: "rings",
+      graphFocusId: "a" as NoteId,
+      selectedNodeId: null,
+      notes,
+      sigmaReady: 1,
+    });
+
+    expect(tweenMock.mock.calls.length).toBe(tweensAfterSelection);
   });
 });
 
@@ -244,6 +290,32 @@ describe("useGraphScene — layout selection & auto-cycle", () => {
 
     expect(orbitMock).toHaveBeenCalledWith(graph, "a", "galaxy");
     expect(result.current).toBe("galaxy");
+  });
+
+  it("fits a filtered scene to the visible target positions", () => {
+    const notes = [
+      note("a", ["b"]),
+      { ...note("b"), type: "project" as const },
+    ];
+    const graph = buildGraph(notes);
+    graph.setNodeAttribute("b", "hidden", true);
+    orbitMock.mockReturnValueOnce(new Map([["a", { x: 0, y: 0 }]]));
+
+    const { setCustomBBox } = setup(
+      {
+        layout: "rings",
+        graphFocusId: "a" as NoteId,
+        notes,
+        sigmaReady: 1,
+        graphFilters: new Set<NodeType>(["topic"]),
+      },
+      graph,
+    );
+
+    expect(setCustomBBox).toHaveBeenLastCalledWith({
+      x: [-1, 1],
+      y: [-1, 1],
+    });
   });
 
   it("tweens to the newly picked layout when the selection changes", () => {
@@ -312,7 +384,8 @@ describe("useGraphScene — layout selection & auto-cycle", () => {
       vi.advanceTimersByTime(9_000);
     });
 
-    const after = ORBIT_SCENES[(ORBIT_SCENES.indexOf("spiral") + 1) % ORBIT_SCENES.length];
+    const after =
+      ORBIT_SCENES[(ORBIT_SCENES.indexOf("spiral") + 1) % ORBIT_SCENES.length];
     expect(result.current).toBe(after);
     expect(orbitMock).toHaveBeenCalledWith(graph, "a", after);
   });
@@ -349,7 +422,12 @@ describe("useGraphScene — layout selection & auto-cycle", () => {
 
     // Focus a node that was removed by a rebuild (not in the graph anymore).
     setup(
-      { layout: "rings", graphFocusId: "ghost" as NoteId, notes, sigmaReady: 1 },
+      {
+        layout: "rings",
+        graphFocusId: "ghost" as NoteId,
+        notes,
+        sigmaReady: 1,
+      },
       graph,
     );
 

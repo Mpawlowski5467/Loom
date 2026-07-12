@@ -6,6 +6,10 @@ import type { GraphTuning } from "./tuning";
 function mkTuning(sizeScale: number): GraphTuning {
   return {
     hovered: null,
+    selected: null,
+    isolateNeighbors: false,
+    visibilityRestricted: false,
+    dragging: false,
     filters: new Set(),
     palette: {
       edge: "",
@@ -22,6 +26,7 @@ function mkTuning(sizeScale: number): GraphTuning {
     labelThreshold: 1,
     travelersEnabled: true,
     edgeThickness: 1,
+    depthEnabled: false,
     cameraRatio: 1,
     labelTier: 1,
     lensLabelHideFor: null,
@@ -47,9 +52,12 @@ describe("createBreathingTick", () => {
     const tick = createBreathingTick(g, new Map([["a", 4]]), mkTuning(1));
 
     // First call past the 33ms interval mutates; an immediate follow-up skips.
-    expect(tick(40)).toBe(true);
-    expect(tick(50)).toBe(false); // only 10ms later → throttled
-    expect(tick(90)).toBe(true); // 50ms after the last applied frame
+    tick(40);
+    const first = g.getNodeAttribute("a", "size");
+    tick(50); // only 10ms later → throttled
+    expect(g.getNodeAttribute("a", "size")).toBe(first);
+    tick(90); // 50ms after the last applied frame
+    expect(g.getNodeAttribute("a", "size")).not.toBe(first);
   });
 
   it("pulses node size within ±6% of base * scale", () => {
@@ -57,7 +65,11 @@ describe("createBreathingTick", () => {
     const g = mkGraph(["a"]);
     const base = 5;
     const scale = 2;
-    const tick = createBreathingTick(g, new Map([["a", base]]), mkTuning(scale));
+    const tick = createBreathingTick(
+      g,
+      new Map([["a", base]]),
+      mkTuning(scale),
+    );
 
     // Sample across a full ~10s window to catch the sine extremes.
     let min = Infinity;
@@ -116,5 +128,29 @@ describe("createBreathingTick", () => {
     tick(200);
     const large = g.getNodeAttribute("a", "size") as number;
     expect(large).toBeGreaterThan(small * 2);
+  });
+
+  it("pauses decorative work during a drag and skips filtered nodes", () => {
+    vi.stubGlobal("performance", { now: () => 0 });
+    const g = mkGraph(["visible", "filtered"]);
+    g.setNodeAttribute("filtered", "hidden", true);
+    const tuning = mkTuning(1);
+    const tick = createBreathingTick(
+      g,
+      new Map([
+        ["visible", 4],
+        ["filtered", 4],
+      ]),
+      tuning,
+    );
+
+    tuning.dragging = true;
+    tick(40);
+    expect(g.getNodeAttribute("visible", "size")).toBe(0);
+
+    tuning.dragging = false;
+    tick(80);
+    expect(g.getNodeAttribute("visible", "size")).not.toBe(0);
+    expect(g.getNodeAttribute("filtered", "size")).toBe(0);
   });
 });

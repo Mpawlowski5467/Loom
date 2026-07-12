@@ -1,5 +1,6 @@
 import type Graph from "graphology";
 import { hash01 } from "./depth";
+import { computeVisibleDegreeMap, isGraphNodeVisible } from "./filtering";
 
 export interface XY {
   x: number;
@@ -27,17 +28,31 @@ export const ORBIT_SCENE_LABELS: Record<OrbitScene, string> = {
 const RADII = [0, 180, 320, 460, 600];
 const OUTER_R = 700;
 
+function resolveVisibleFocus(graph: Graph, requestedId: string): string | null {
+  if (isGraphNodeVisible(graph, requestedId)) return requestedId;
+  let fallback: string | null = null;
+  graph.forEachNode((id) => {
+    if (fallback === null && isGraphNodeVisible(graph, id)) fallback = id;
+  });
+  return fallback;
+}
+
 function bfsDistances(graph: Graph, focusId: string): Map<string, number> {
   const distances = new Map<string, number>();
   distances.set(focusId, 0);
   const queue: string[] = [focusId];
-  while (queue.length) {
-    const cur = queue.shift()!;
+  let head = 0;
+  while (head < queue.length) {
+    const cur = queue[head++]!;
     const d = distances.get(cur)!;
     if (d >= RADII.length - 1) continue;
     const ns = new Set<string>();
-    graph.forEachOutNeighbor(cur, (n) => ns.add(n));
-    graph.forEachInNeighbor(cur, (n) => ns.add(n));
+    graph.forEachOutNeighbor(cur, (n) => {
+      if (isGraphNodeVisible(graph, n)) ns.add(n);
+    });
+    graph.forEachInNeighbor(cur, (n) => {
+      if (isGraphNodeVisible(graph, n)) ns.add(n);
+    });
     for (const n of ns) {
       if (!distances.has(n)) {
         distances.set(n, d + 1);
@@ -56,14 +71,17 @@ function orderByCloseness(
   distances: Map<string, number>,
 ): string[] {
   const ordered: string[] = [];
-  graph.forEachNode((id) => ordered.push(id));
+  graph.forEachNode((id) => {
+    if (isGraphNodeVisible(graph, id)) ordered.push(id);
+  });
+  const degree = computeVisibleDegreeMap(graph);
   ordered.sort((a, b) => {
     if (a === focusId) return -1;
     if (b === focusId) return 1;
     const da = distances.get(a) ?? RADII.length;
     const db = distances.get(b) ?? RADII.length;
     if (da !== db) return da - db;
-    return graph.degree(b) - graph.degree(a);
+    return (degree.get(b) ?? 0) - (degree.get(a) ?? 0);
   });
   return ordered;
 }
@@ -72,6 +90,7 @@ function ringsScene(graph: Graph, focusId: string): Map<string, XY> {
   const distances = bfsDistances(graph, focusId);
   const byDist = new Map<number, string[]>();
   graph.forEachNode((id) => {
+    if (!isGraphNodeVisible(graph, id)) return;
     const d = distances.get(id);
     const key = d === undefined ? RADII.length : d;
     const arr = byDist.get(key) ?? [];
@@ -135,6 +154,7 @@ function armsScene(graph: Graph, focusId: string): Map<string, XY> {
   const noteType = (id: string): string =>
     (graph.getNodeAttribute(id, "noteType") as string | undefined) ?? "custom";
   graph.forEachNode((id) => {
+    if (!isGraphNodeVisible(graph, id)) return;
     if (id === focusId) return;
     const d = distances.get(id) ?? RADII.length;
     const key = `${noteType(id)}:${d}`;
@@ -211,18 +231,20 @@ export function computeOrbitScene(
   focusId: string,
   scene: OrbitScene,
 ): Map<string, XY> {
+  const visibleFocus = resolveVisibleFocus(graph, focusId);
+  if (!visibleFocus) return new Map();
   switch (scene) {
     case "spiral":
-      return spiralScene(graph, focusId);
+      return spiralScene(graph, visibleFocus);
     case "arms":
-      return armsScene(graph, focusId);
+      return armsScene(graph, visibleFocus);
     case "galaxy":
-      return galaxyScene(graph, focusId);
+      return galaxyScene(graph, visibleFocus);
     case "wave":
-      return waveScene(graph, focusId);
+      return waveScene(graph, visibleFocus);
     case "rings":
     default:
-      return ringsScene(graph, focusId);
+      return ringsScene(graph, visibleFocus);
   }
 }
 
@@ -231,5 +253,5 @@ export function computeOrbitLayout(
   graph: Graph,
   focusId: string,
 ): Map<string, XY> {
-  return ringsScene(graph, focusId);
+  return computeOrbitScene(graph, focusId, "rings");
 }

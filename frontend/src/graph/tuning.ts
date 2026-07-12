@@ -1,10 +1,14 @@
 import type { EdgePalette } from "./sigma-setup";
+import type { NodeType } from "../data/types";
 
 /**
  * Internal render-path mode derived from the selected layout: "force" renders
  * as the constellation (FA2) layout; every other layout is an orbit scene.
  */
 export type GraphMode = "constellation" | "orbit";
+
+/** Above this visible-node count, label canvas work is suspended. */
+export const GRAPH_LABEL_BUDGET_NODES = 500;
 
 /**
  * Live, mutable graph-rendering state shared between the React view and the
@@ -17,7 +21,15 @@ export type GraphMode = "constellation" | "orbit";
  */
 export interface GraphTuning {
   hovered: string | null;
-  filters: Set<string>;
+  /** Persistent node selection; unlike hover it survives pointer leave. */
+  selected: string | null;
+  /** Whether visibility is narrowed to selected + direct neighbors. */
+  isolateNeighbors: boolean;
+  /** Type filters and/or neighborhood isolation currently restrict the graph. */
+  visibilityRestricted: boolean;
+  /** True from pointer-down through spring settling. Decorative work pauses. */
+  dragging: boolean;
+  filters: Set<NodeType>;
   palette: EdgePalette;
   graphMode: GraphMode;
 

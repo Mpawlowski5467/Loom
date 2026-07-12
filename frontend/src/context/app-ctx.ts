@@ -11,6 +11,7 @@ import type {
   GraphLayout,
   Note,
   NoteId,
+  NodeType,
   SettingsSection,
   Tab,
   Toast,
@@ -94,11 +95,14 @@ export interface AppContextValue {
 
   graphFocusId: NoteId | null;
   setGraphFocusId: (id: NoteId | null) => void;
+  /** Persistent graph selection; separate from orbit layout focus. */
+  graphSelectedId: NoteId | null;
+  setGraphSelectedId: (id: NoteId | null) => void;
   /** Bumped to ask the graph to fly its camera to a node (e.g. from search). */
   graphFlyTo: { id: NoteId; nonce: number } | null;
   flyToNode: (id: NoteId) => void;
-  graphFilters: Set<string>;
-  toggleGraphFilter: (t: string) => void;
+  graphFilters: Set<NodeType>;
+  toggleGraphFilter: (t: NodeType) => void;
   clearGraphFilters: () => void;
 
   graphDisplay: GraphDisplay;

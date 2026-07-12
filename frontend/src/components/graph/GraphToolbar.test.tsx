@@ -6,54 +6,80 @@ Frontend testing conventions:
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+import type { NodeType } from "../../data/types";
 import { GraphToolbar } from "./GraphToolbar";
 
-const TYPE_NAMES = ["project", "topic", "people", "daily", "capture", "custom"];
+const TYPE_NAMES: NodeType[] = [
+  "project",
+  "topic",
+  "people",
+  "daily",
+  "capture",
+  "custom",
+];
 
-function renderToolbar(filters: string[] = []) {
+function renderToolbar(filters: NodeType[] = []) {
   const toggleGraphFilter = vi.fn();
   const clearGraphFilters = vi.fn();
   const onExport = vi.fn();
+  const onFitView = vi.fn();
   render(
     <GraphToolbar
       graphFilters={new Set(filters)}
       toggleGraphFilter={toggleGraphFilter}
       clearGraphFilters={clearGraphFilters}
       onExport={onExport}
+      onFitView={onFitView}
     />,
   );
-  return { toggleGraphFilter, clearGraphFilters, onExport };
+  return { toggleGraphFilter, clearGraphFilters, onExport, onFitView };
 }
 
 describe("GraphToolbar — type filters", () => {
+  it("fits the currently visible graph from the right-side control", async () => {
+    const user = userEvent.setup();
+    const { onFitView } = renderToolbar();
+    await user.click(screen.getByRole("button", { name: "Fit visible nodes" }));
+    expect(onFitView).toHaveBeenCalledTimes(1);
+  });
   it("renders one compact toggle per note type with an accessible name", () => {
     renderToolbar();
     for (const name of TYPE_NAMES) {
-      expect(screen.getByRole("button", { name })).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: `Show only ${name} notes (0)`,
+        }),
+      ).toBeInTheDocument();
     }
   });
 
   it("reflects active filters via aria-pressed", () => {
     renderToolbar(["topic", "people"]);
-    expect(screen.getByRole("button", { name: "topic" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "people" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "project" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
+    expect(
+      screen.getByRole("button", { name: "Hide topic notes (0)" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Hide people notes (0)" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(
+      screen.getByRole("button", { name: "Show project notes (0)" }),
+    ).toHaveAttribute("aria-pressed", "false");
   });
 
   it("clicking a toggle flips that type's filter", async () => {
     const user = userEvent.setup();
     const { toggleGraphFilter } = renderToolbar();
-    await user.click(screen.getByRole("button", { name: "daily" }));
+    await user.click(
+      screen.getByRole("button", { name: "Show only daily notes (0)" }),
+    );
     expect(toggleGraphFilter).toHaveBeenCalledWith("daily");
+  });
+
+  it("explains that toggling the sole selection restores every type", () => {
+    renderToolbar(["topic"]);
+    expect(
+      screen.getByRole("button", { name: "Show all note types (0)" }),
+    ).toHaveAttribute("aria-pressed", "true");
   });
 
   it("hides the clear affordance while no filter is active", () => {

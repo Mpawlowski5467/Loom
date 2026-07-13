@@ -25,10 +25,12 @@ from api.routers.settings_helpers import (
 from core.config import GlobalConfig, ProviderConfigPublic, settings
 from core.exceptions import ProviderConfigError
 from core.model_advisor import is_embed_model_name
+from core.providers.codex import codex_connection_status, start_codex_login
 
 router = APIRouter(prefix="/api/providers", tags=["providers"])
 
 _KNOWN: list[str] = [
+    "codex",
     "openai",
     "anthropic",
     "xai",
@@ -48,6 +50,7 @@ _MODELS_LIST_TIMEOUT_S = 5.0
 #: Static fallbacks when a live listing is unavailable (no key, API error).
 #: Anthropic has no OpenAI-compatible /models endpoint, so it is always static.
 _KNOWN_MODELS: dict[str, dict[str, list[str]]] = {
+    "codex": {"chat": ["default"], "embed": []},
     "openai": {
         "chat": ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"],
         "embed": ["text-embedding-3-small", "text-embedding-3-large"],
@@ -88,6 +91,21 @@ class ProviderTestRequest(BaseModel):
 
     api_key: str | None = None
     host: str | None = None
+    base_url: str | None = None
+
+
+class CodexAuthStatusResponse(BaseModel):
+    installed: bool
+    connected: bool
+    auth_mode: str | None = None
+    plan_type: str | None = None
+    version: str | None = None
+    error: str | None = None
+
+
+class CodexLoginStartResponse(BaseModel):
+    auth_url: str
+    login_id: str
 
 
 class ModelInfo(BaseModel):
@@ -127,6 +145,27 @@ def _validate_known(name: str) -> None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown provider: {name}")
 
 
+@router.get("/codex/auth/status", response_model=CodexAuthStatusResponse)
+async def codex_auth_status() -> CodexAuthStatusResponse:
+    """Return redacted state from Loom's isolated Codex app-server."""
+    state = await codex_connection_status()
+    return CodexAuthStatusResponse(
+        installed=state.installed,
+        connected=state.connected,
+        auth_mode=state.auth_mode,
+        plan_type=state.plan_type,
+        version=state.version,
+        error=state.error,
+    )
+
+
+@router.post("/codex/auth/start", response_model=CodexLoginStartResponse)
+async def codex_auth_start() -> CodexLoginStartResponse:
+    """Start ChatGPT browser login without exposing any OAuth tokens."""
+    login = await start_codex_login()
+    return CodexLoginStartResponse(auth_url=login.auth_url, login_id=login.login_id)
+
+
 @router.post("/{name}/test", response_model=TestProviderResponse)
 async def test_provider(
     name: str, payload: ProviderTestRequest | None = None
@@ -150,6 +189,9 @@ async def test_provider(
         if body.api_key is not None
         else (existing.api_key if existing else "") or "",
         host=body.host if body.host is not None else (existing.host if existing else "") or "",
+        base_url=body.base_url
+        if body.base_url is not None
+        else (existing.base_url if existing else "") or "",
         chat_model=existing.chat_model if existing else "",
         embed_model=(existing.embed_model if existing else "") or "",
     )
@@ -284,6 +326,6 @@ async def list_models(name: str) -> ModelsResponse:
     cfg = GlobalConfig.load(settings.config_path)
     if name == "ollama":
         return await _ollama_models(cfg)
-    if name == "anthropic":
-        return _static_models("anthropic")
+    if name in {"anthropic", "codex"}:
+        return _static_models(name)
     return await _openai_compatible_models(name, cfg)

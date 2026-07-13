@@ -93,7 +93,7 @@ export function defaultSettings(): Partial<Settings> {
     allowInvalidContainer: true,
     labelColor: { color: palette.label },
     labelSize: 11,
-    labelFont: "Inter, system-ui, sans-serif",
+    labelFont: readCssVar("--font", "Inter, system-ui, sans-serif"),
     labelWeight: "500",
     defaultEdgeColor: palette.edge,
     renderEdgeLabels: false,

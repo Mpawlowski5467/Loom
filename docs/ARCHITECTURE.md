@@ -597,7 +597,7 @@ The Graph UI is the visual interface where users see and interact with their kno
 - **Web-based (localhost)**: runs a local FastAPI server, opens in browser. Cross-platform for free — no packaging headaches on macOS, Linux, or Windows.
 - **Sigma.js**: WebGL-powered graph rendering. Handles thousands of nodes performantly without frame drops.
 - **Custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`): a hand-rolled renderer with `[[wikilink]]` support and inline marks — not a third-party WYSIWYG framework.
-- **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants ship alongside it in `tokens.css`.
+- **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember complete the final six-theme set.
 
 ### 6.2 Layout
 
@@ -746,7 +746,7 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 
 ### 6.11 Color System
 
-Loom's default is the **Paper** theme — warm cream paper surfaces with a single duotone accent split: **brick red** for user actions and **ink blue** for agent actions. This split gives instant "I did this" vs "an agent did this" distinction. Slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants ship alongside Paper in `tokens.css` (same token names, different palettes).
+Loom's default is the **Paper** theme — warm cream paper surfaces with a single duotone accent split: **brick red** for user actions and **ink blue** for agent actions. This split gives instant "I did this" vs "an agent did this" distinction. Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember complete the final selectable set (same token names, different palettes).
 
 #### Surfaces & Ink (Paper)
 
@@ -824,7 +824,7 @@ Loom is markdown-only today. A planned attachments model would let non-markdown 
 | Agent orchestration | LangGraph `StateGraph` (capture pipeline + Shuttle agents); nodes call Loom's own providers — no LangChain models |
 | Tracing | In-memory ring + on-disk mirror (`/api/traces`); run/step-grouped runs (`/api/traces/runs`) |
 | Streaming | Server-Sent Events (Council chat) |
-| Theme | Paper by default; slate / foundry / dune / carbon / lagoon / obsidian / ember / mulberry variants |
+| Theme | Paper by default; Porcelain / Herbarium / Midnight Ink / Lagoon / Ember variants |
 | Delivery | Localhost web app (browser-based) |
 | Repo | Monorepo |
 

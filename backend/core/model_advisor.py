@@ -8,12 +8,35 @@ against a :class:`~core.hardware.HardwareProfile`. No I/O — the callers
 from __future__ import annotations
 
 import re
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Literal
 
 if TYPE_CHECKING:
     from core.hardware import HardwareProfile
 
 Rating = Literal["good", "okay", "heavy"]
+
+
+@dataclass(frozen=True)
+class ModelFit:
+    """Minimal model facts used by the role-aware ranking policy."""
+
+    name: str
+    installed: bool
+    rating: Rating
+    est_ram_gb: float
+
+
+@dataclass(frozen=True)
+class BuiltinAgentModelProfile:
+    """Local-model preferences for one built-in Loom agent."""
+
+    name: str
+    role: str
+    family_preferences: tuple[str, ...]
+    recommendation_reason: str
+    requires_model: bool = True
+
 
 # Ollama reports parameter counts like "7.6B" or "137M".
 _PARAM_SIZE_RE = re.compile(r"(\d+(?:\.\d+)?)\s*([MB])", re.IGNORECASE)
@@ -29,6 +52,79 @@ _DISK_TO_RAM_FACTOR = 1.2
 _DEFAULT_ESTIMATE_GB = 4.0
 
 _EMBED_NAME_MARKERS = ("embed", "bge", "minilm", "e5")
+
+# These profiles are intentionally limited to Loom's built-in agents. Custom
+# agents have user-defined jobs, so Loom cannot infer a reliable role policy;
+# their provider/model remains an explicit user choice in the agent editor.
+BUILTIN_AGENT_MODEL_PROFILES: dict[str, BuiltinAgentModelProfile] = {
+    "weaver": BuiltinAgentModelProfile(
+        name="weaver",
+        role="creates notes from captures",
+        family_preferences=("devstral", "gpt-oss", "qwen", "llama", "mistral", "gemma", "phi"),
+        recommendation_reason="Prioritizes instruction following and structured note creation.",
+    ),
+    "spider": BuiltinAgentModelProfile(
+        name="spider",
+        role="auto-links across the vault",
+        family_preferences=("devstral", "qwen", "mistral", "llama", "gpt-oss", "gemma", "phi"),
+        recommendation_reason="Prioritizes structured relationship extraction and classification.",
+    ),
+    "archivist": BuiltinAgentModelProfile(
+        name="archivist",
+        role="folder hygiene & cleanup",
+        family_preferences=(),
+        recommendation_reason="Archivist currently uses deterministic vault checks; no model required.",
+        requires_model=False,
+    ),
+    "scribe": BuiltinAgentModelProfile(
+        name="scribe",
+        role="generates summaries",
+        family_preferences=(
+            "mistral-small",
+            "qwen",
+            "llama",
+            "mistral",
+            "gemma",
+            "devstral",
+            "phi",
+        ),
+        recommendation_reason="Prioritizes concise summarization and natural prose.",
+    ),
+    "sentinel": BuiltinAgentModelProfile(
+        name="sentinel",
+        role="validates edits before commit",
+        family_preferences=("gpt-oss", "devstral", "qwen", "llama", "mistral", "gemma", "phi"),
+        recommendation_reason="Prioritizes strict reasoning and machine-readable validation.",
+    ),
+    "researcher": BuiltinAgentModelProfile(
+        name="researcher",
+        role="queries the web and synthesizes",
+        family_preferences=(
+            "mistral-small",
+            "deepseek-r1",
+            "qwen",
+            "llama",
+            "gemma",
+            "devstral",
+            "phi",
+        ),
+        recommendation_reason="Prioritizes synthesis, grounded writing, and long-context reasoning.",
+    ),
+    "standup": BuiltinAgentModelProfile(
+        name="standup",
+        role="daily recap & planning",
+        family_preferences=(
+            "mistral-small",
+            "qwen",
+            "llama",
+            "mistral",
+            "gemma",
+            "devstral",
+            "phi",
+        ),
+        recommendation_reason="Prioritizes concise summaries and practical planning.",
+    ),
+}
 
 #: Popular pullable Ollama models with their known parameter counts, used to
 #: seed recommendations beyond what is already installed.
@@ -48,6 +144,47 @@ def is_embed_model_name(name: str) -> bool:
     """Whether a model name looks like an embedding model."""
     lowered = name.lower()
     return any(marker in lowered for marker in _EMBED_NAME_MARKERS)
+
+
+def rank_models_for_builtin_agent(agent_id: str, models: list[ModelFit]) -> list[ModelFit]:
+    """Rank installed, runnable chat models for one built-in agent.
+
+    Hardware fit is the first sort key so a role-specific family never wins at
+    the cost of an overloaded machine. Within the same fit tier, known model
+    families are ordered by the agent's task profile. Unknown families remain
+    useful fallbacks and are ranked by estimated capacity.
+
+    Custom/unknown agent IDs deliberately return no results.
+    """
+    profile = BUILTIN_AGENT_MODEL_PROFILES.get(agent_id)
+    if profile is None or not profile.requires_model:
+        return []
+
+    eligible = [
+        model
+        for model in models
+        if model.installed
+        and model.rating in {"good", "okay"}
+        and not is_embed_model_name(model.name)
+    ]
+    rating_rank = {"good": 0, "okay": 1}
+
+    def _family_rank(name: str) -> int:
+        lowered = name.lower()
+        for index, marker in enumerate(profile.family_preferences):
+            if marker in lowered:
+                return index
+        return len(profile.family_preferences)
+
+    eligible.sort(
+        key=lambda model: (
+            rating_rank[model.rating],
+            _family_rank(model.name),
+            -model.est_ram_gb,
+            model.name,
+        )
+    )
+    return eligible
 
 
 def _params_billions(name: str, parameter_size: str | None) -> float | None:

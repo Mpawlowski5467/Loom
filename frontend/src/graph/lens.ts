@@ -121,13 +121,12 @@ export function createLens(opts: {
     const ink = readCssVar("--ink", "#1a1815");
     const ink2 = readCssVar("--ink-2", "#5c5851");
     const ink3 = readCssVar("--ink-3", "#8c877d");
-    const typeColor =
-      (graph.getNodeAttribute(id, "color") as string) ?? ink;
+    const typeColor = (graph.getNodeAttribute(id, "color") as string) ?? ink;
 
     content.textContent = "";
     const wrap = document.createElement("div");
     wrap.style.cssText =
-      `font-family: Fraunces, serif; color: ${ink}; line-height: 1.4; ` +
+      `font-family: var(--serif); color: ${ink}; line-height: 1.4; ` +
       "padding: 12%; box-sizing: border-box; width: 100%; height: 100%; " +
       "display: flex; flex-direction: column; justify-content: center; " +
       "text-align: center; overflow: hidden;";
@@ -140,15 +139,14 @@ export function createLens(opts: {
 
     const metaEl = document.createElement("div");
     metaEl.style.cssText =
-      "font-family: 'JetBrains Mono', monospace; font-size: 8px; " +
+      "font-family: var(--mono); font-size: 8px; " +
       `color: ${ink3}; margin-bottom: 4px;`;
     metaEl.textContent = `${note.type} · ${connections} conn`;
     wrap.appendChild(metaEl);
 
     if (firstNonHeadingLine) {
       const leadEl = document.createElement("div");
-      leadEl.style.cssText =
-        `font-size: 9.5px; color: ${ink2}; font-style: italic;`;
+      leadEl.style.cssText = `font-size: 9.5px; color: ${ink2}; font-style: italic;`;
       leadEl.textContent = firstNonHeadingLine;
       wrap.appendChild(leadEl);
     }

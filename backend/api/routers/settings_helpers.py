@@ -8,12 +8,14 @@ from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
+    CodexProviderConfig,
     OllamaProviderConfig,
     OpenAICompatProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
+from core.providers.codex import CodexProvider
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openai_compatible import (
@@ -27,7 +29,7 @@ from core.providers.openai_compatible import (
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.xai import XAIProvider
 
-_LOCAL_PROVIDERS = frozenset({"ollama"})
+_LOCAL_PROVIDERS = frozenset({"codex", "ollama"})
 
 #: OpenAI-compatible providers, mapped to their provider class. Each is built
 #: the same way (shared config model); the class supplies the default base_url.
@@ -72,6 +74,8 @@ def build_provider_from_input(p: ProviderInput) -> BaseProvider:
     sanity-checked. Raises ProviderConfigError for unknown providers or
     missing required credentials.
     """
+    if p.name == "codex":
+        return CodexProvider(CodexProviderConfig(chat_model=p.chat_model or "default"))
     if p.name == "openai":
         return OpenAIProvider(
             OpenAIProviderConfig(

@@ -1,30 +1,37 @@
 /**
- * Theme registry. Keep in sync with `styles/tokens.css` — adding a theme
- * here without a matching `.theme-<name>` block is a runtime no-op.
+ * Public theme registry. Keep in sync with `backend/core/config.py`.
+ *
+ * Legacy CSS blocks remain for one migration window, but only these six
+ * themes appear in onboarding and Settings.
  */
 
 export type ThemeName =
   | "paper"
-  | "slate"
-  | "foundry"
-  | "dune"
-  | "carbon"
+  | "porcelain"
+  | "herbarium"
+  | "midnight"
   | "lagoon"
-  | "obsidian"
-  | "ember"
-  | "mulberry";
+  | "ember";
 
 export const THEMES: ThemeName[] = [
   "paper",
-  "slate",
-  "foundry",
-  "dune",
-  "carbon",
+  "porcelain",
+  "herbarium",
+  "midnight",
   "lagoon",
-  "obsidian",
   "ember",
-  "mulberry",
 ];
+
+/** Previously shipped names and their closest final replacement. */
+export const LEGACY_THEME_MIGRATIONS: Readonly<Record<string, ThemeName>> = {
+  slate: "porcelain",
+  foundry: "paper",
+  dune: "herbarium",
+  carbon: "midnight",
+  obsidian: "midnight",
+  mulberry: "ember",
+  nocturne: "midnight",
+};
 
 export type ThemeMode = "light" | "dark";
 
@@ -32,12 +39,9 @@ export interface ThemeMeta {
   name: ThemeName;
   label: string;
   description: string;
-  /**
-   * "dark" themes get ``data-theme-mode="dark"`` on <html> so any
-   * dark-only CSS (paper grain off, deeper shadows) kicks in.
-   */
+  /** Dark themes set `data-theme-mode="dark"` on `<html>`. */
   mode: ThemeMode;
-  /** A preview of the cardinal colors for the swatch chip in pickers. */
+  /** Cardinal colors used by the static theme-picker preview. */
   swatch: {
     bgBase: string;
     bgSurface: string;
@@ -48,12 +52,6 @@ export interface ThemeMeta {
   };
 }
 
-/**
- * Static swatches mirror the hex values shipped in `tokens.css`. Keeping
- * them inline (rather than reading via getComputedStyle) lets us render
- * all four cards at once on the theme picker without having to instantiate
- * each theme.
- */
 export const THEME_META: Record<ThemeName, ThemeMeta> = {
   paper: {
     name: "paper",
@@ -69,60 +67,46 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#4a6b3a",
     },
   },
-  slate: {
-    name: "slate",
-    label: "Slate",
-    description: "Cool stone — royal blue + persimmon.",
+  porcelain: {
+    name: "porcelain",
+    label: "Porcelain",
+    description: "Cool gallery paper — cobalt + vermilion.",
     mode: "light",
     swatch: {
-      bgBase: "#ecece6",
-      bgSurface: "#e0e0d9",
-      ink: "#1a1d20",
-      agent: "#1e3a8a",
-      you: "#c2410c",
-      node: "#15803d",
+      bgBase: "#f3f4f1",
+      bgSurface: "#e7e9e4",
+      ink: "#171b1f",
+      agent: "#295b85",
+      you: "#a23f32",
+      node: "#315a35",
     },
   },
-  foundry: {
-    name: "foundry",
-    label: "Foundry",
-    description: "Warm archival cream — ink-blue + brick.",
+  herbarium: {
+    name: "herbarium",
+    label: "Herbarium",
+    description: "Naturalist archive — forest + clay.",
     mode: "light",
     swatch: {
-      bgBase: "#f4efe3",
-      bgSurface: "#ebe3d0",
-      ink: "#211c15",
-      agent: "#2f4a78",
-      you: "#b0432e",
-      node: "#4f6b35",
+      bgBase: "#f1eddf",
+      bgSurface: "#e5deca",
+      ink: "#211f19",
+      agent: "#315d55",
+      you: "#923b30",
+      node: "#365529",
     },
   },
-  dune: {
-    name: "dune",
-    label: "Dune",
-    description: "Sandy khaki — deep teal + rust.",
-    mode: "light",
-    swatch: {
-      bgBase: "#ece4d0",
-      bgSurface: "#dcd1b4",
-      ink: "#2a2618",
-      agent: "#2b5654",
-      you: "#a8521f",
-      node: "#6f7b30",
-    },
-  },
-  carbon: {
-    name: "carbon",
-    label: "Carbon",
-    description: "True black — terminal green + magenta.",
+  midnight: {
+    name: "midnight",
+    label: "Midnight Ink",
+    description: "Navy-black paper — sky + coral.",
     mode: "dark",
     swatch: {
-      bgBase: "#0a0a0a",
-      bgSurface: "#161616",
-      ink: "#ededed",
-      agent: "#7eed90",
-      you: "#f06c9b",
-      node: "#9becff",
+      bgBase: "#0f1722",
+      bgSurface: "#172231",
+      ink: "#eef2f3",
+      agent: "#83b8df",
+      you: "#ef897a",
+      node: "#76d49b",
     },
   },
   lagoon: {
@@ -139,20 +123,6 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#7ddcb4",
     },
   },
-  obsidian: {
-    name: "obsidian",
-    label: "Obsidian",
-    description: "Near-black — sky + neon orange.",
-    mode: "dark",
-    swatch: {
-      bgBase: "#0a0a0c",
-      bgSurface: "#141418",
-      ink: "#f0f0ee",
-      agent: "#5fb8ff",
-      you: "#ff8a3a",
-      node: "#5fb8ff",
-    },
-  },
   ember: {
     name: "ember",
     label: "Ember",
@@ -167,34 +137,24 @@ export const THEME_META: Record<ThemeName, ThemeMeta> = {
       node: "#b3d164",
     },
   },
-  mulberry: {
-    name: "mulberry",
-    label: "Mulberry",
-    description: "Eggplant — lavender + rose.",
-    mode: "dark",
-    swatch: {
-      bgBase: "#1a1222",
-      bgSurface: "#261934",
-      ink: "#f0e6f5",
-      agent: "#b89dff",
-      you: "#ff8da8",
-      node: "#74e8c0",
-    },
-  },
 };
 
 export function isThemeName(value: unknown): value is ThemeName {
-  return (
-    typeof value === "string" && THEMES.includes(value as ThemeName)
-  );
+  return typeof value === "string" && THEMES.includes(value as ThemeName);
 }
 
-/** Theme names of a given mode, in registry order. */
+/** Normalize current and previously shipped theme names. */
+export function normalizeThemeName(value: unknown): ThemeName | null {
+  if (isThemeName(value)) return value;
+  if (typeof value !== "string") return null;
+  return LEGACY_THEME_MIGRATIONS[value] ?? null;
+}
+
 export function themesByMode(mode: ThemeMode): ThemeName[] {
   return THEMES.filter((name) => THEME_META[name].mode === mode);
 }
 
-/** The default theme to use for a mode when auto-switching (registry-first). */
+/** Registry-first defaults: Paper for light and Midnight Ink for dark. */
 export function defaultThemeForMode(mode: ThemeMode): ThemeName {
   return themesByMode(mode)[0] ?? "paper";
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
@@ -16,10 +16,13 @@ from core.config import GlobalConfig, settings
 from core.exceptions import ProviderConfigError
 from core.hardware import HardwareProfile, scan_hardware
 from core.model_advisor import (
+    BUILTIN_AGENT_MODEL_PROFILES,
     CURATED_OLLAMA_MODELS,
+    ModelFit,
     Rating,
     estimate_model_ram_gb,
     is_embed_model_name,
+    rank_models_for_builtin_agent,
     rate_model,
 )
 
@@ -57,9 +60,27 @@ class ModelRecommendation(BaseModel):
     size_bytes: int | None = None
 
 
+class AgentModelRecommendation(BaseModel):
+    """Catalog-based Ollama recommendation for one built-in agent."""
+
+    agent_id: str
+    agent_name: str
+    role: str
+    provider: str = "ollama"
+    source: Literal["catalog"] = "catalog"
+    confidence: Literal["provisional"] = "provisional"
+    model: str | None = None
+    installed: bool = False
+    rating: Rating | None = None
+    est_ram_gb: float | None = None
+    reason: str
+    alternatives: list[str] = Field(default_factory=list)
+
+
 class RecommendationsResponse(BaseModel):
     profile: HardwareProfile
     models: list[ModelRecommendation]
+    agents: list[AgentModelRecommendation]
 
 
 class BenchmarkRequest(BaseModel):
@@ -100,7 +121,7 @@ async def save_hardware(body: SaveHardwareRequest | None = None) -> SaveHardware
 
 @router.get("/recommendations", response_model=RecommendationsResponse)
 async def get_recommendations() -> RecommendationsResponse:
-    """Rate installed + curated Ollama models against the hardware profile."""
+    """Rate Ollama models and recommend installed fits for built-in agents."""
     cfg = GlobalConfig.load(settings.config_path)
     profile = cfg.hardware
     if profile is None:
@@ -109,9 +130,11 @@ async def get_recommendations() -> RecommendationsResponse:
         installed = await fetch_ollama_tags(ollama_host(cfg))
     except Exception:  # noqa: BLE001 — no Ollama is fine; curated list still helps
         installed = []
+    models = _build_recommendations(profile, installed)
     return RecommendationsResponse(
         profile=profile,
-        models=_build_recommendations(profile, installed),
+        models=models,
+        agents=_build_agent_recommendations(models),
     )
 
 
@@ -239,3 +262,78 @@ def _mark_recommended(models: list[ModelRecommendation]) -> None:
     best_embed = _best(embed=True)
     if best_embed is not None:
         best_embed.recommended_for = ["embed"]
+
+
+def _build_agent_recommendations(
+    models: list[ModelRecommendation],
+) -> list[AgentModelRecommendation]:
+    """Recommend hardware-compatible installed models for built-ins only."""
+    fits = [
+        ModelFit(
+            name=model.name,
+            installed=model.installed,
+            rating=model.rating,
+            est_ram_gb=model.est_ram_gb,
+        )
+        for model in models
+    ]
+    recommendations: list[AgentModelRecommendation] = []
+    for agent_id, profile in BUILTIN_AGENT_MODEL_PROFILES.items():
+        if not profile.requires_model:
+            recommendations.append(
+                AgentModelRecommendation(
+                    agent_id=agent_id,
+                    agent_name=profile.name,
+                    role=profile.role,
+                    reason=profile.recommendation_reason,
+                )
+            )
+            continue
+
+        ranked = rank_models_for_builtin_agent(agent_id, fits)
+        if not ranked:
+            recommendations.append(
+                AgentModelRecommendation(
+                    agent_id=agent_id,
+                    agent_name=profile.name,
+                    role=profile.role,
+                    reason=(
+                        "No installed Ollama chat model fits this hardware at a good or okay rating."
+                    ),
+                )
+            )
+            continue
+
+        selected = ranked[0]
+        if selected.rating != "good":
+            recommendations.append(
+                AgentModelRecommendation(
+                    agent_id=agent_id,
+                    agent_name=profile.name,
+                    role=profile.role,
+                    reason=(
+                        "No installed Ollama chat model rates good on this hardware; "
+                        "okay-rated options are available for manual opt-in."
+                    ),
+                    alternatives=[model.name for model in ranked[:2]],
+                )
+            )
+            continue
+
+        recommendations.append(
+            AgentModelRecommendation(
+                agent_id=agent_id,
+                agent_name=profile.name,
+                role=profile.role,
+                model=selected.name,
+                installed=True,
+                rating=selected.rating,
+                est_ram_gb=selected.est_ram_gb,
+                reason=(
+                    f"{profile.recommendation_reason} "
+                    f"{selected.name} is installed and rates good on this hardware."
+                ),
+                alternatives=[model.name for model in ranked[1:3]],
+            )
+        )
+    return recommendations

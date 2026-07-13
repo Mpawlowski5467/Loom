@@ -17,19 +17,28 @@ beforeEach(() => {
   window.localStorage.clear();
 });
 
+function appearance(patch: Partial<Appearance> = {}): Appearance {
+  return { ...APPEARANCE_DEFAULTS, ...patch };
+}
+
 describe("applyAppearance", () => {
   it("sets exactly one class per axis", () => {
-    applyAppearance({ fontScale: "lg", density: "compact", motion: "off" });
+    applyAppearance(
+      appearance({ fontScale: "lg", density: "compact", motion: "off" }),
+    );
+    expect(classes()).toContain("font-preset-editorial");
     expect(classes()).toContain("font-scale-lg");
     expect(classes()).toContain("density-compact");
     expect(classes()).toContain("motion-off");
     // Only one font-scale class is present.
-    expect(classes().filter((c) => c.startsWith("font-scale-"))).toHaveLength(1);
+    expect(classes().filter((c) => c.startsWith("font-scale-"))).toHaveLength(
+      1,
+    );
   });
 
   it("replaces the previous class when an axis changes", () => {
-    applyAppearance({ fontScale: "sm", density: "cozy", motion: "auto" });
-    applyAppearance({ fontScale: "lg", density: "cozy", motion: "auto" });
+    applyAppearance(appearance({ fontScale: "sm" }));
+    applyAppearance(appearance({ fontScale: "lg" }));
     expect(classes()).toContain("font-scale-lg");
     expect(classes()).not.toContain("font-scale-sm");
   });
@@ -37,16 +46,31 @@ describe("applyAppearance", () => {
   it("applies the motion-on class so 'Always on' has a CSS hook", () => {
     // Regression: motion-on previously had no class consumer/CSS, making the
     // "Always on" option inert under OS reduce-motion.
-    applyAppearance({ fontScale: "md", density: "cozy", motion: "on" });
+    applyAppearance(appearance({ motion: "on" }));
     expect(classes()).toContain("motion-on");
     expect(classes()).not.toContain("motion-off");
     expect(classes()).not.toContain("motion-auto");
   });
 
   it("persists the appearance to localStorage", () => {
-    const a: Appearance = { fontScale: "sm", density: "comfortable", motion: "on" };
+    const a = appearance({
+      fontPreset: "literary",
+      fontScale: "sm",
+      density: "comfortable",
+      motion: "on",
+    });
     applyAppearance(a);
     expect(JSON.parse(window.localStorage.getItem(LS_KEY)!)).toEqual(a);
+  });
+
+  it("replaces the active font preset", () => {
+    applyAppearance(appearance({ fontPreset: "modern" }));
+    applyAppearance(appearance({ fontPreset: "hyperlegible" }));
+    expect(classes()).toContain("font-preset-hyperlegible");
+    expect(classes()).not.toContain("font-preset-modern");
+    expect(classes().filter((c) => c.startsWith("font-preset-"))).toHaveLength(
+      1,
+    );
   });
 });
 
@@ -56,17 +80,41 @@ describe("readInitialAppearance", () => {
   });
 
   it("round-trips a persisted appearance", () => {
-    const a: Appearance = { fontScale: "lg", density: "compact", motion: "off" };
+    const a = appearance({
+      fontPreset: "native",
+      fontScale: "lg",
+      density: "compact",
+      motion: "off",
+    });
     window.localStorage.setItem(LS_KEY, JSON.stringify(a));
     expect(readInitialAppearance()).toEqual(a);
+  });
+
+  it("migrates older appearance JSON to the default font preset", () => {
+    window.localStorage.setItem(
+      LS_KEY,
+      JSON.stringify({ fontScale: "lg", density: "compact", motion: "off" }),
+    );
+    expect(readInitialAppearance()).toEqual({
+      fontPreset: "editorial",
+      fontScale: "lg",
+      density: "compact",
+      motion: "off",
+    });
   });
 
   it("falls back per-field for invalid stored values", () => {
     window.localStorage.setItem(
       LS_KEY,
-      JSON.stringify({ fontScale: "huge", density: "compact", motion: 42 }),
+      JSON.stringify({
+        fontPreset: "comic-sans",
+        fontScale: "huge",
+        density: "compact",
+        motion: 42,
+      }),
     );
     expect(readInitialAppearance()).toEqual({
+      fontPreset: APPEARANCE_DEFAULTS.fontPreset, // invalid → default
       fontScale: APPEARANCE_DEFAULTS.fontScale, // invalid → default
       density: "compact", // valid → kept
       motion: APPEARANCE_DEFAULTS.motion, // invalid → default

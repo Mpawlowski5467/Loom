@@ -5,6 +5,7 @@ import {
   themesByMode,
   defaultThemeForMode,
   isThemeName,
+  normalizeThemeName,
 } from "./themes";
 
 describe("themesByMode", () => {
@@ -23,6 +24,42 @@ describe("themesByMode", () => {
   it("partitions every theme into exactly one mode group", () => {
     const total = themesByMode("light").length + themesByMode("dark").length;
     expect(total).toBe(THEMES.length);
+  });
+
+  it("exposes only the six selected themes", () => {
+    expect(themesByMode("light")).toEqual(["paper", "porcelain", "herbarium"]);
+    expect(themesByMode("dark")).toEqual(["midnight", "lagoon", "ember"]);
+  });
+
+  it("provides complete hex swatches for every registered theme", () => {
+    for (const name of THEMES) {
+      expect(THEME_META[name].name).toBe(name);
+      for (const color of Object.values(THEME_META[name].swatch)) {
+        expect(color).toMatch(/^#[0-9a-f]{6}$/i);
+      }
+    }
+  });
+});
+
+describe("normalizeThemeName", () => {
+  it("keeps final theme names unchanged", () => {
+    expect(normalizeThemeName("lagoon")).toBe("lagoon");
+  });
+
+  it.each([
+    ["slate", "porcelain"],
+    ["foundry", "paper"],
+    ["dune", "herbarium"],
+    ["carbon", "midnight"],
+    ["obsidian", "midnight"],
+    ["mulberry", "ember"],
+    ["nocturne", "midnight"],
+  ])("migrates %s to %s", (legacy, expected) => {
+    expect(normalizeThemeName(legacy)).toBe(expected);
+  });
+
+  it("rejects unknown names", () => {
+    expect(normalizeThemeName("neon-rainbow")).toBeNull();
   });
 });
 

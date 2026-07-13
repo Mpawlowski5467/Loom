@@ -14,6 +14,7 @@ import {
 } from "../../components/icons/providers";
 
 export type ProviderName =
+  | "codex"
   | "openai"
   | "anthropic"
   | "xai"
@@ -47,6 +48,10 @@ export interface ProviderMeta {
   supportsBaseUrl: boolean;
   /** Placeholder shown when base_url is blank — the provider's hosted default. */
   defaultBaseUrl: string;
+  /** Truthful credential ceremony exposed by Loom's Settings UI. */
+  authMode: "api_key" | "oauth_pkce" | "local" | "codex";
+  /** Official account/key page for providers that do not expose app OAuth. */
+  credentialUrl: string;
 }
 
 export interface ProviderForm {
@@ -61,6 +66,22 @@ export interface ProviderForm {
 
 export const PROVIDERS: ProviderMeta[] = [
   {
+    name: "codex",
+    label: "Codex (ChatGPT)",
+    type: "local",
+    icon: OpenAIIcon,
+    defaultChat: "default",
+    defaultEmbed: "",
+    defaultHost: "",
+    chatModels: ["default"],
+    embedModels: [],
+    supportsEmbed: false,
+    supportsBaseUrl: false,
+    defaultBaseUrl: "",
+    authMode: "codex",
+    credentialUrl: "https://chatgpt.com/",
+  },
+  {
     name: "openai",
     label: "OpenAI",
     type: "cloud",
@@ -73,6 +94,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: false,
     defaultBaseUrl: "",
+    authMode: "api_key",
+    credentialUrl: "https://platform.openai.com/api-keys",
   },
   {
     name: "anthropic",
@@ -87,6 +110,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: false,
     supportsBaseUrl: false,
     defaultBaseUrl: "",
+    authMode: "api_key",
+    credentialUrl: "https://platform.claude.com/settings/keys",
   },
   {
     name: "xai",
@@ -101,6 +126,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: false,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://api.x.ai/v1",
+    authMode: "api_key",
+    credentialUrl: "https://console.x.ai/",
   },
   {
     name: "openrouter",
@@ -128,6 +155,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: false,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://openrouter.ai/api/v1",
+    authMode: "oauth_pkce",
+    credentialUrl: "https://openrouter.ai/settings/keys",
   },
   {
     name: "ollama",
@@ -142,6 +171,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: false,
     defaultBaseUrl: "",
+    authMode: "local",
+    credentialUrl: "https://ollama.com/download",
   },
   {
     name: "groq",
@@ -161,6 +192,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: false,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://api.groq.com/openai/v1",
+    authMode: "api_key",
+    credentialUrl: "https://console.groq.com/keys",
   },
   {
     name: "deepseek",
@@ -175,6 +208,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: false,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://api.deepseek.com/v1",
+    authMode: "api_key",
+    credentialUrl: "https://platform.deepseek.com/api_keys",
   },
   {
     name: "together",
@@ -194,6 +229,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://api.together.xyz/v1",
+    authMode: "api_key",
+    credentialUrl: "https://api.together.ai/settings/api-keys",
   },
   {
     name: "mistral",
@@ -213,6 +250,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://api.mistral.ai/v1",
+    authMode: "api_key",
+    credentialUrl: "https://console.mistral.ai/api-keys",
   },
   {
     name: "gemini",
@@ -232,6 +271,8 @@ export const PROVIDERS: ProviderMeta[] = [
     supportsEmbed: true,
     supportsBaseUrl: true,
     defaultBaseUrl: "https://generativelanguage.googleapis.com/v1beta/openai/",
+    authMode: "api_key",
+    credentialUrl: "https://aistudio.google.com/apikey",
   },
 ];
 

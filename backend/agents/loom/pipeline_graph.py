@@ -2,9 +2,10 @@
 
 Models the full capture→note pipeline:
 
-    weaver → spider → scribe → sentinel → (conditional)
-                                   ├─ failed & not retried → weaver (retry once)
-                                   └─ else                  → enforce → END
+    weaver → sentinel → (conditional)
+                  ├─ failed & not retried → weaver (retry once)
+                  ├─ passed/warning       → spider → scribe → enforce → END
+                  └─ unavailable/other    → enforce → END
 
 Each node wraps an existing Loom agent method (logic is reused, not rewritten)
 and runs inside a :func:`step` scope so its LLM calls are attributed to the
@@ -90,16 +91,22 @@ def build_pipeline_graph(
         # active notes both tagged source: capture:<id>.
         prev_note_path = state.get("note_path")
         label = "weaver" if attempts == 0 else "weaver-retry"
-        async with step(label, caller="weaver"):
+        async with step(label, caller="weaver") as record:
             weaver = get_weaver()
             if weaver is None:
-                errors.append("Weaver agent not initialized")
+                message = "Weaver agent not initialized"
+                errors.append(message)
+                record.status = "error"
+                record.error = message
                 return {"note": None, "errors": errors, "weaver_attempts": attempts + 1}
             try:
                 note, chain = await weaver.process_capture_full(_resolve(state["capture_path"]))
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("Weaver failed during pipeline run", exc_info=True)
-                errors.append(f"Weaver failed: {exc}")
+                message = f"Weaver failed: {exc}"
+                errors.append(message)
+                record.status = "error"
+                record.error = message
                 return {"note": None, "errors": errors, "weaver_attempts": attempts + 1}
         if note is None:
             # Empty capture is a clean skip, not an error — leave errors as-is
@@ -123,8 +130,6 @@ def build_pipeline_graph(
                 logger.warning(
                     "Failed to archive superseded note %s", prev_note_path, exc_info=True
                 )
-        if refresh_index is not None:
-            refresh_index(_resolve(note.file_path))
         return {
             "note": note,
             "chain": chain,
@@ -137,24 +142,31 @@ def build_pipeline_graph(
         errors = list(state.get("errors", []))
         linked: list[str] = []
         suggested: list[str] = []
-        async with step("spider", caller="spider"):
+        async with step("spider", caller="spider") as record:
             spider = get_spider()
-            if spider is not None:
-                try:
+            try:
+                # The draft is indexed only after Sentinel explicitly approves
+                # it. Failed/unavailable drafts never reach this node.
+                if refresh_index is not None:
+                    refresh_index(_resolve(state["note_path"]))
+                if spider is not None:
                     report = await spider.scan_and_report(_resolve(state["note_path"]))
                     linked = list(report.auto_linked)
                     suggested = list(report.suggested)
                     if refresh_index is not None:
                         refresh_index(_resolve(state["note_path"]))
-                except Exception as exc:
-                    logger.warning("Spider failed during pipeline run", exc_info=True)
-                    errors.append(f"Spider failed: {exc}")
+            except Exception as exc:
+                logger.warning("Spider failed during pipeline run", exc_info=True)
+                message = f"Spider failed: {exc}"
+                errors.append(message)
+                record.status = "error"
+                record.error = message
         return {"linked": linked, "suggested": suggested, "errors": errors}
 
     async def scribe_node(state: PipelineState) -> PipelineState:
         errors = list(state.get("errors", []))
         updated = False
-        async with step("scribe", caller="scribe"):
+        async with step("scribe", caller="scribe") as record:
             scribe = get_scribe()
             if scribe is not None:
                 try:
@@ -162,15 +174,33 @@ def build_pipeline_graph(
                     updated = True
                 except Exception as exc:
                     logger.warning("Scribe failed during pipeline run", exc_info=True)
-                    errors.append(f"Scribe failed: {exc}")
+                    message = f"Scribe failed: {exc}"
+                    errors.append(message)
+                    record.status = "error"
+                    record.error = message
         return {"index_updated": updated, "errors": errors}
 
     async def sentinel_node(state: PipelineState) -> PipelineState:
         errors = list(state.get("errors", []))
         validation: ValidationResult | None = None
-        async with step("sentinel", caller="sentinel"):
+        async with step("sentinel", caller="sentinel") as record:
             sentinel = get_sentinel()
-            if sentinel is not None:
+            if sentinel is None:
+                from agents.loom.sentinel import ValidationResult
+
+                message = "Sentinel agent not initialized"
+                errors.append(message)
+                record.status = "error"
+                record.error = message
+                validation = ValidationResult(
+                    status="unavailable",
+                    reasons=[message],
+                    agent_name="weaver",
+                    action="created",
+                    target=state.get("note_path", ""),
+                    modes=["unavailable"],
+                )
+            else:
                 try:
                     chain = state.get("chain")
                     if chain is None:
@@ -187,13 +217,26 @@ def build_pipeline_graph(
                     )
                 except Exception as exc:
                     logger.warning("Sentinel failed during pipeline run", exc_info=True)
-                    errors.append(f"Sentinel failed: {exc}")
+                    from agents.loom.sentinel import ValidationResult
+
+                    message = f"Sentinel failed: {exc}"
+                    errors.append(message)
+                    record.status = "error"
+                    record.error = message
+                    validation = ValidationResult(
+                        status="unavailable",
+                        reasons=[message],
+                        agent_name="weaver",
+                        action="created",
+                        target=state.get("note_path", ""),
+                        modes=["unavailable"],
+                    )
         return {"validation": validation, "errors": errors}
 
     def route_after_weaver(state: PipelineState) -> str:
         """Route after Weaver.
 
-        - Note produced → continue to spider.
+        - Note produced → validate with Sentinel before downstream mutations.
         - No note on the *first* attempt (empty capture / init failure) → END;
           there's nothing to link, index, validate, or archive.
         - No note on a *retry* (Weaver failed to regenerate) → enforce: the
@@ -202,17 +245,19 @@ def build_pipeline_graph(
           limbo (enforce must always run on the retry path).
         """
         if state.get("note") is not None:
-            return "spider"
+            return "sentinel"
         if state.get("weaver_attempts", 0) > 1 and state.get("note_path"):
             return "enforce"
         return "end"
 
     def route_after_sentinel(state: PipelineState) -> str:
-        """Loop back to Weaver once on a failed verdict, else enforce."""
+        """Retry failed drafts once; publish only explicit pass/warning verdicts."""
         validation = state.get("validation")
         verdict = validation.status if validation else ""
         if verdict == "failed" and state.get("weaver_attempts", 0) <= _MAX_WEAVER_RETRIES:
             return "weaver"
+        if verdict in {"passed", "warning"}:
+            return "spider"
         return "enforce"
 
     async def enforce_node(state: PipelineState) -> PipelineState:
@@ -240,12 +285,16 @@ def build_pipeline_graph(
     graph.add_node("enforce", enforce_node)
     graph.add_edge(START, "weaver")
     graph.add_conditional_edges(
-        "weaver", route_after_weaver, {"spider": "spider", "enforce": "enforce", "end": END}
+        "weaver",
+        route_after_weaver,
+        {"sentinel": "sentinel", "enforce": "enforce", "end": END},
+    )
+    graph.add_conditional_edges(
+        "sentinel",
+        route_after_sentinel,
+        {"weaver": "weaver", "spider": "spider", "enforce": "enforce"},
     )
     graph.add_edge("spider", "scribe")
-    graph.add_edge("scribe", "sentinel")
-    graph.add_conditional_edges(
-        "sentinel", route_after_sentinel, {"weaver": "weaver", "enforce": "enforce"}
-    )
+    graph.add_edge("scribe", "enforce")
     graph.add_edge("enforce", END)
     return graph.compile()

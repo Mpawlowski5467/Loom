@@ -213,7 +213,7 @@
   color: var(--ink-3);
 }
 .onb-probe-warn {
-  color: var(--red);
+  color: var(--warning);
 }
 
 .onb-existing {
@@ -262,9 +262,9 @@
 .onb-warn {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--red);
-  background: var(--you-bg);
-  border: 1px solid var(--you-line);
+  color: var(--warning);
+  background: var(--warning-bg);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
   padding: 8px 10px;
   border-radius: var(--r-sm);
 }
@@ -487,10 +487,10 @@
   font-size: 11px;
 }
 .onb-test-ok {
-  color: var(--green);
+  color: var(--success);
 }
 .onb-test-fail {
-  color: var(--red);
+  color: var(--danger);
 }
 .onb-help {
   font-family: var(--serif);
@@ -501,11 +501,11 @@
 .onb-submit-error {
   font-family: var(--mono);
   font-size: 11.5px;
-  color: var(--red);
-  border: 1px solid var(--you-line);
+  color: var(--danger);
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, transparent);
   border-radius: var(--r-sm);
   padding: 8px 10px;
-  background: var(--you-bg);
+  background: var(--danger-bg);
 }
 
 .onb-finish-hint {
@@ -569,9 +569,9 @@
   line-height: 1.4;
 }
 .banner-provider {
-  background: var(--you-bg);
-  color: var(--you);
-  border-bottom-color: var(--you-line);
+  background: var(--warning-bg);
+  color: var(--warning);
+  border-bottom-color: color-mix(in srgb, var(--warning) 40%, transparent);
 }
 .banner-offline {
   background: var(--agent-bg);

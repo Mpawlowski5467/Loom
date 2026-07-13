@@ -61,7 +61,7 @@
 ### Styling
 - CSS Modules (`.module.css`) for component-scoped styles where they exist; view-level styles under `frontend/src/styles/views/`
 - All colors come from `tokens.css` CSS variables — never hardcode hex values
-- Paper theme is the default; navy/forest/sepia ship in `tokens.css` under `.theme-*` classes. New colors must be added to every theme block.
+- Paper is the default; Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember complete the final set. New colors must be added to every public theme block.
 
 ### Project Patterns
 - Views go in `frontend/src/views/` — one file per view (GraphView, BoardView, InboxView, ThreadView)

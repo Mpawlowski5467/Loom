@@ -57,6 +57,25 @@ export interface TestProviderResponse {
   error: string | null;
 }
 
+export interface CodexAuthStatus {
+  installed: boolean;
+  connected: boolean;
+  auth_mode: string | null;
+  plan_type: string | null;
+  version: string | null;
+  error: string | null;
+}
+
+export interface CodexLoginStartResponse {
+  auth_url: string;
+  login_id: string;
+}
+
+export interface ProviderOAuthStartResponse {
+  authorization_url: string;
+  expires_in: number;
+}
+
 export interface ModelInfo {
   id: string;
   name: string;
@@ -164,6 +183,22 @@ export interface ModelRecommendation {
 export interface RecommendationsResponse {
   profile: HardwareProfile;
   models: ModelRecommendation[];
+  agents: AgentModelRecommendation[];
+}
+
+export interface AgentModelRecommendation {
+  agent_id: string;
+  agent_name: string;
+  role: string;
+  provider: "ollama";
+  model: string | null;
+  installed: boolean;
+  rating: ModelRating | null;
+  est_ram_gb: number | null;
+  reason: string;
+  alternatives: string[];
+  source: "catalog";
+  confidence: "provisional";
 }
 
 export interface BenchmarkRequest {
@@ -188,6 +223,8 @@ export interface AgentModelEntry {
   system: boolean;
   provider: string;
   chat_model: string;
+  role: string;
+  uses_model: boolean;
 }
 
 export interface AgentModelsResponse {
@@ -202,4 +239,5 @@ export interface AgentModelOverrideInput {
 
 export interface PutAgentModelsRequest {
   overrides: Record<string, AgentModelOverrideInput>;
+  scope?: "all" | "system";
 }

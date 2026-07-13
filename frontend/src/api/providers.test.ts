@@ -1,6 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { listModels, testProvider } from "./providers";
+import {
+  getCodexAuthStatus,
+  listModels,
+  startCodexLogin,
+  startOpenRouterOAuth,
+  testProvider,
+} from "./providers";
 import type { ModelsResponse } from "./types";
 
 afterEach(() => {
@@ -46,5 +52,52 @@ describe("testProvider", () => {
       undefined,
     );
     expect(res.ok).toBe(true);
+  });
+});
+
+describe("provider auth", () => {
+  it("reads Codex's local auth status without handling credentials", async () => {
+    const status = {
+      installed: true,
+      connected: true,
+      auth_mode: "chatgpt",
+      plan_type: "plus",
+      version: "0.142.4",
+      error: null,
+    };
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue(status);
+    expect(await getCodexAuthStatus()).toEqual(status);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/providers/codex/auth/status",
+      undefined,
+    );
+  });
+
+  it("starts the delegated Codex browser login", async () => {
+    const response = {
+      auth_url: "https://chatgpt.com/auth",
+      login_id: "login-1",
+    };
+    const spy = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+    expect(await startCodexLogin()).toEqual(response);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/providers/codex/auth/start",
+      {},
+      undefined,
+    );
+  });
+
+  it("starts OpenRouter PKCE without exposing a verifier", async () => {
+    const response = {
+      authorization_url: "https://openrouter.ai/auth?code_challenge=x",
+      expires_in: 600,
+    };
+    const spy = vi.spyOn(apiClient, "post").mockResolvedValue(response);
+    expect(await startOpenRouterOAuth()).toEqual(response);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/providers/openrouter/oauth/start",
+      {},
+      undefined,
+    );
   });
 });

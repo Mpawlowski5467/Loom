@@ -1009,6 +1009,52 @@ class TestSentinel:
         assert "llm_unavailable" not in result.modes
         assert result.mode_summary == "deterministic+llm"
 
+    @pytest.mark.asyncio
+    async def test_malformed_llm_verdict_is_unavailable(self, tmp_path: Path):
+        """A model response without a valid status can never approve a note."""
+        from unittest.mock import AsyncMock
+
+        root = _setup_vault(tmp_path)
+        provider = AsyncMock()
+        provider.chat = AsyncMock(return_value="Everything looks good to me.")
+        sentinel = Sentinel(root, chat_provider=provider)
+
+        from agents.chain import ReadChain
+
+        chain_result = ReadChain(root).execute(
+            "weaver", root / "threads" / "topics" / "alpha-topic.md"
+        )
+        result = await sentinel.validate_action(
+            "weaver", "created", root / "threads" / "topics" / "alpha-topic.md", chain_result
+        )
+
+        assert result.status == "unavailable"
+        assert any("missing a valid status" in reason for reason in result.reasons)
+
+    @pytest.mark.asyncio
+    async def test_configured_llm_failure_is_unavailable(self, tmp_path: Path):
+        """A configured validation model failing is degraded, not an implicit pass."""
+        from unittest.mock import AsyncMock
+
+        from core.exceptions import ProviderError
+
+        root = _setup_vault(tmp_path)
+        provider = AsyncMock()
+        provider.chat = AsyncMock(side_effect=ProviderError("test", "offline"))
+        sentinel = Sentinel(root, chat_provider=provider)
+
+        from agents.chain import ReadChain
+
+        chain_result = ReadChain(root).execute(
+            "weaver", root / "threads" / "topics" / "alpha-topic.md"
+        )
+        result = await sentinel.validate_action(
+            "weaver", "created", root / "threads" / "topics" / "alpha-topic.md", chain_result
+        )
+
+        assert result.status == "unavailable"
+        assert "llm_unavailable" in result.modes
+
 
 # =============================================================================
 # Pipeline test

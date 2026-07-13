@@ -301,7 +301,7 @@ flowchart LR
 
 ### Onboarding wizard
 - First-run multi-step flow: Welcome → Vault Setup → Theme Picker → Provider Config
-- Live theme previews (Paper, Slate, Foundry, Dune, Carbon, Lagoon, Obsidian, Ember, Mulberry) before commit
+- Live previews for the final themes: Paper, Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember
 - Inline "Test connection" against the picked provider — failures don't block save
 - Skip-friendly: provider step is optional, defaults pick safe models
 - Onboarding state lives in `~/.loom/config.yaml` under `onboarding.completed`

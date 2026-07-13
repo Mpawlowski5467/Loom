@@ -10,9 +10,12 @@ import pytest
 import core.hardware as hw
 from core.hardware import HardwareProfile, scan_hardware
 from core.model_advisor import (
+    BUILTIN_AGENT_MODEL_PROFILES,
     CURATED_OLLAMA_MODELS,
+    ModelFit,
     estimate_model_ram_gb,
     is_embed_model_name,
+    rank_models_for_builtin_agent,
     rate_model,
 )
 
@@ -124,6 +127,73 @@ class TestEmbedClassifier:
     )
     def test_classification(self, name: str, expected: bool) -> None:
         assert is_embed_model_name(name) is expected
+
+
+class TestBuiltinAgentModelPolicy:
+    def test_profiles_cover_exactly_the_builtin_agents(self) -> None:
+        assert set(BUILTIN_AGENT_MODEL_PROFILES) == {
+            "weaver",
+            "spider",
+            "archivist",
+            "scribe",
+            "sentinel",
+            "researcher",
+            "standup",
+        }
+
+    @pytest.mark.parametrize(
+        ("agent_id", "expected"),
+        [
+            ("weaver", "devstral:latest"),
+            ("spider", "devstral:latest"),
+            ("scribe", "mistral-small3.1:latest"),
+            ("sentinel", "gpt-oss:20b"),
+            ("researcher", "mistral-small3.1:latest"),
+            ("standup", "mistral-small3.1:latest"),
+        ],
+    )
+    def test_role_family_preferences(self, agent_id: str, expected: str) -> None:
+        models = [
+            ModelFit("devstral:latest", True, "good", 12.0),
+            ModelFit("gpt-oss:20b", True, "good", 12.0),
+            ModelFit("mistral-small3.1:latest", True, "good", 12.0),
+        ]
+        ranked = rank_models_for_builtin_agent(agent_id, models)
+        assert ranked[0].name == expected
+
+    def test_archivist_needs_no_model(self) -> None:
+        models = [ModelFit("devstral:latest", True, "good", 12.0)]
+        assert rank_models_for_builtin_agent("archivist", models) == []
+        assert BUILTIN_AGENT_MODEL_PROFILES["archivist"].requires_model is False
+
+    def test_hardware_fit_wins_over_role_preference(self) -> None:
+        models = [
+            ModelFit("gpt-oss:20b", True, "okay", 18.0),
+            ModelFit("qwen2.5:7b", True, "good", 7.2),
+        ]
+        ranked = rank_models_for_builtin_agent("sentinel", models)
+        assert [model.name for model in ranked] == ["qwen2.5:7b", "gpt-oss:20b"]
+
+    def test_excludes_uninstalled_embedding_and_heavy_models(self) -> None:
+        models = [
+            ModelFit("devstral:latest", False, "good", 12.0),
+            ModelFit("nomic-embed-text:latest", True, "good", 1.6),
+            ModelFit("gpt-oss:20b", True, "heavy", 18.0),
+            ModelFit("unknown-chat", True, "okay", 6.0),
+        ]
+        assert rank_models_for_builtin_agent("sentinel", models) == [models[-1]]
+
+    def test_unknown_family_falls_back_to_largest_compatible_model(self) -> None:
+        models = [
+            ModelFit("acme-small", True, "good", 4.0),
+            ModelFit("acme-large", True, "good", 9.0),
+        ]
+        ranked = rank_models_for_builtin_agent("weaver", models)
+        assert ranked[0].name == "acme-large"
+
+    def test_custom_agent_has_no_inferred_policy(self) -> None:
+        models = [ModelFit("devstral:latest", True, "good", 12.0)]
+        assert rank_models_for_builtin_agent("my-custom-agent", models) == []
 
 
 # ---------------------------------------------------------------------------

@@ -80,7 +80,7 @@ class ValidationResult:
     Combined as e.g. ``["deterministic", "llm"]`` or ``["deterministic", "llm_unavailable"]``.
     """
 
-    status: str = "passed"  # passed, failed, warning
+    status: str = "passed"  # passed, failed, warning, unavailable
     reasons: list[str] = field(default_factory=list)
     agent_name: str = ""
     action: str = ""
@@ -152,6 +152,8 @@ class Sentinel(BaseAgent):
             validation.modes.extend(llm_result.modes)
             if llm_result.status == "failed":
                 validation.status = "failed"
+            elif llm_result.status == "unavailable":
+                validation.status = "unavailable"
             elif llm_result.status == "warning" and validation.status == "passed":
                 validation.status = "warning"
             validation.reasons.extend(llm_result.reasons)
@@ -259,6 +261,7 @@ class Sentinel(BaseAgent):
         )
 
         if self._chat_provider is None:
+            result.status = "unavailable"
             result.modes.append("llm_unavailable")
             return result
         try:
@@ -271,6 +274,7 @@ class Sentinel(BaseAgent):
             return parsed
         except (ProviderError, ProviderConfigError):
             logger.warning("LLM validation failed", exc_info=True)
+            result.status = "unavailable"
             result.modes.append("llm_unavailable")
             result.reasons.append("LLM validation errored; deterministic checks only")
             return result
@@ -281,6 +285,7 @@ class Sentinel(BaseAgent):
     ) -> ValidationResult:
         """Parse LLM validation response."""
         result = ValidationResult(agent_name=agent_name, action=action, target=target)
+        found_status = False
 
         for line in text.strip().splitlines():
             line = line.strip()
@@ -288,12 +293,16 @@ class Sentinel(BaseAgent):
                 status = line.split(":", 1)[1].strip().lower()
                 if status in ("passed", "failed", "warning"):
                     result.status = status
+                    found_status = True
             elif line.startswith("- "):
                 reason = line[2:].strip()
                 if reason:
                     result.reasons.append(reason)
 
-        if not result.reasons:
+        if not found_status:
+            result.status = "unavailable"
+            result.reasons.insert(0, "LLM validation response missing a valid status")
+        elif not result.reasons:
             result.reasons.append("Validation complete")
         return result
 

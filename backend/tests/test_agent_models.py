@@ -264,6 +264,9 @@ class TestAgentModelsEndpoint:
         assert by_id["weaver"]["provider"] == "ollama"
         assert by_id["weaver"]["chat_model"] == "qwen2.5:7b"
         assert by_id["weaver"]["system"] is True
+        assert by_id["weaver"]["uses_model"] is True
+        assert by_id["weaver"]["role"]
+        assert by_id["archivist"]["uses_model"] is False
         assert by_id["spider"]["provider"] == ""
         assert by_id["spider"]["chat_model"] == ""
 
@@ -388,3 +391,50 @@ class TestAgentModelsEndpoint:
         assert resp.status_code == 200
         loaded = GlobalConfig.load(cfg_path)
         assert loaded.agent_models == {}
+
+    def test_put_system_scope_preserves_custom_overrides(
+        self, client: TestClient, tmp_path: Path
+    ) -> None:
+        _init_vault(client)
+        cfg = _ollama_config(
+            agent_models={
+                "weaver": AgentModelOverride(provider="ollama", chat_model="old:7b"),
+                "digest": AgentModelOverride(provider="ollama", chat_model="mistral:7b"),
+            }
+        )
+        cfg_path = _save_config(tmp_path, cfg)
+
+        with (
+            patch("api.routers.agent_models.settings") as mock_settings,
+            patch("api.runtime.reinit_providers_dependent_services"),
+        ):
+            mock_settings.config_path = cfg_path
+            resp = client.put(
+                "/api/settings/agent-models",
+                json={
+                    "scope": "system",
+                    "overrides": {"sentinel": {"provider": "ollama", "chat_model": "gpt-oss:20b"}},
+                },
+            )
+
+        assert resp.status_code == 200
+        loaded = GlobalConfig.load(cfg_path)
+        assert "weaver" not in loaded.agent_models
+        assert loaded.agent_models["sentinel"].chat_model == "gpt-oss:20b"
+        assert loaded.agent_models["digest"].chat_model == "mistral:7b"
+
+    def test_put_system_scope_rejects_custom_id(self, client: TestClient, tmp_path: Path) -> None:
+        _init_vault(client)
+        cfg_path = _save_config(tmp_path, _ollama_config())
+
+        with patch("api.routers.agent_models.settings") as mock_settings:
+            mock_settings.config_path = cfg_path
+            resp = client.put(
+                "/api/settings/agent-models",
+                json={
+                    "scope": "system",
+                    "overrides": {"digest": {"provider": "ollama", "chat_model": "mistral:7b"}},
+                },
+            )
+
+        assert resp.status_code == 422

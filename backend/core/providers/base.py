@@ -32,6 +32,16 @@ class OllamaProviderConfig(BaseModel):
     embed_model: str = "nomic-embed-text"
 
 
+class CodexProviderConfig(BaseModel):
+    """Codex local app-server bridge settings.
+
+    Authentication is owned by Codex in Loom's isolated Codex home, not by
+    Loom's provider config. ``default`` means to use Codex's recommended model.
+    """
+
+    chat_model: str = "default"
+
+
 class XAIProviderConfig(BaseModel):
     """xAI (OpenAI-compatible) provider settings."""
 

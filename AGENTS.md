@@ -10,7 +10,7 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama); every call traced
-- **Theme**: Paper theme — warm cream paper aesthetic, single duotone accent. Paper is the default; slate/foundry/dune (light) and carbon/lagoon/obsidian/ember/mulberry (dark) variants also ship in tokens.css.
+- **Theme**: Paper theme — warm cream paper aesthetic, single duotone accent. The final set is Paper, Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember.
 - **Packaging**: Docker (multi-stage build → single container serving UI + API on one port); `docker compose up`. Vaults persist in the `loom-data` named volume.
 
 ## Repo Layout

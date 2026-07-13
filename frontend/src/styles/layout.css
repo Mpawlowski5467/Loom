@@ -275,12 +275,12 @@
   border-color: var(--agent);
 }
 .tree-new-folder-input[aria-invalid="true"] {
-  border-color: var(--you);
+  border-color: var(--danger);
 }
 .tree-new-folder-error {
   font-family: var(--mono);
   font-size: 10px;
-  color: var(--you);
+  color: var(--danger);
   margin-top: 4px;
 }
 
@@ -295,7 +295,9 @@
 .tree-section-wrap {
   border-left: 2px solid transparent;
   padding-left: 0;
-  transition: border-color 120ms var(--ease), background 120ms var(--ease);
+  transition:
+    border-color 120ms var(--ease),
+    background 120ms var(--ease);
 }
 .tree-section-wrap.drop {
   border-left-color: var(--agent);
@@ -324,7 +326,7 @@
   outline: none;
 }
 .tree-rename-input[aria-invalid="true"] {
-  border-color: var(--you);
+  border-color: var(--danger);
 }
 
 .tree-context-menu {
@@ -360,10 +362,10 @@
   color: var(--ink);
 }
 .tree-context-menu button.danger {
-  color: var(--you);
+  color: var(--danger);
 }
 .tree-context-menu button.danger:hover {
-  background: var(--you-bg);
+  background: var(--danger-bg);
 }
 
 .tree-section {

@@ -51,6 +51,7 @@ describe("ModelAdvisorCard", () => {
   it("renders rated rows with installed and recommended badges", async () => {
     mockedRecs.mockResolvedValue({
       profile,
+      agents: [],
       models: [
         mkModel({ recommended_for: ["chat"] }),
         mkModel({
@@ -86,6 +87,7 @@ describe("ModelAdvisorCard", () => {
     const user = userEvent.setup();
     mockedRecs.mockResolvedValue({
       profile,
+      agents: [],
       models: [mkModel(), mkModel({ name: "mistral:7b" })],
     });
     let resolveBench: (r: BenchmarkResponse) => void = () => {};
@@ -116,15 +118,13 @@ describe("ModelAdvisorCard", () => {
       chars_per_sec: 6.1,
       error: null,
     });
-    expect(
-      await screen.findByText("820 ms · 6.1 chars/s"),
-    ).toBeInTheDocument();
+    expect(await screen.findByText("820 ms · 6.1 chars/s")).toBeInTheDocument();
     expect(buttons[1]!).toBeEnabled();
   });
 
   it("renders a failed benchmark's error inline", async () => {
     const user = userEvent.setup();
-    mockedRecs.mockResolvedValue({ profile, models: [mkModel()] });
+    mockedRecs.mockResolvedValue({ profile, agents: [], models: [mkModel()] });
     mockedBench.mockResolvedValue({
       ok: false,
       latency_ms: 100,
@@ -134,9 +134,7 @@ describe("ModelAdvisorCard", () => {
     });
     render(<ModelAdvisorCard />);
 
-    await user.click(
-      await screen.findByRole("button", { name: /benchmark/i }),
-    );
+    await user.click(await screen.findByRole("button", { name: /benchmark/i }));
 
     expect(await screen.findByText("model not found")).toBeInTheDocument();
   });

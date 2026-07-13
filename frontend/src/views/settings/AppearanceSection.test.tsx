@@ -34,8 +34,10 @@ beforeEach(() => {
 
 describe("AppearanceSection", () => {
   it("shows the current theme in the status line", () => {
-    renderSection("slate");
-    expect(screen.getByRole("status")).toHaveTextContent("Current theme: slate");
+    renderSection("porcelain");
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Current theme: porcelain",
+    );
   });
 
   it("updates the font-scale selection and reflects it via aria-pressed", async () => {
@@ -50,6 +52,21 @@ describe("AppearanceSection", () => {
       "aria-pressed",
       "false",
     );
+  });
+
+  it("updates the font style and applies its root class", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    const literary = screen.getByRole("button", { name: /Literary/ });
+    await user.click(literary);
+    expect(literary).toHaveAttribute("aria-pressed", "true");
+    expect(document.documentElement).toHaveClass("font-preset-literary");
+  });
+
+  it("offers six independent font presets", () => {
+    renderSection();
+    const group = screen.getByRole("group", { name: "Font style" });
+    expect(group.querySelectorAll("button")).toHaveLength(6);
   });
 
   it("updates the density selection", async () => {
@@ -68,8 +85,9 @@ describe("AppearanceSection", () => {
     expect(reduce).toHaveAttribute("aria-pressed", "true");
   });
 
-  it("renders all three typography/spacing groups", () => {
+  it("renders all typography/spacing groups", () => {
     renderSection();
+    expect(screen.getByText("Font style")).toBeInTheDocument();
     expect(screen.getByText("Font size")).toBeInTheDocument();
     expect(screen.getByText("UI density")).toBeInTheDocument();
     expect(screen.getByText("Motion")).toBeInTheDocument();
@@ -93,6 +111,7 @@ describe("AppearanceSection — reset to defaults", () => {
   it("restores defaults after a change", async () => {
     const user = userEvent.setup();
     renderSection();
+    await user.click(screen.getByRole("button", { name: /Modern/ }));
     await user.click(screen.getByRole("button", { name: "Large" }));
     const reset = screen.getByRole("button", { name: /Reset to defaults/ });
     expect(reset).toBeEnabled();
@@ -107,6 +126,9 @@ describe("AppearanceSection — reset to defaults", () => {
       "aria-pressed",
       "false",
     );
+    expect(
+      screen.getByRole("button", { name: /Loom Editorial/ }),
+    ).toHaveAttribute("aria-pressed", "true");
     expect(reset).toBeDisabled();
   });
 });
@@ -118,7 +140,7 @@ describe("AppearanceSection — follow OS appearance", () => {
   });
 
   it("reflects the following state from context", () => {
-    renderSection("obsidian", { followOsTheme: true });
+    renderSection("midnight", { followOsTheme: true });
     expect(screen.getByLabelText("Follow OS appearance")).toBeChecked();
     expect(screen.getByRole("status")).toHaveTextContent("Following OS");
   });
@@ -132,7 +154,7 @@ describe("AppearanceSection — follow OS appearance", () => {
 
   it("disabling the toggle asks the app to stop following the OS", async () => {
     const user = userEvent.setup();
-    const { setFollowOsTheme } = renderSection("obsidian", {
+    const { setFollowOsTheme } = renderSection("midnight", {
       followOsTheme: true,
     });
     await user.click(screen.getByLabelText("Follow OS appearance"));
@@ -140,7 +162,7 @@ describe("AppearanceSection — follow OS appearance", () => {
   });
 
   it("locks the theme grid while following the OS", () => {
-    const { container } = renderWithContainer("obsidian", {
+    const { container } = renderWithContainer("midnight", {
       followOsTheme: true,
     });
     expect(container.querySelector(".settings-theme-locked")).not.toBeNull();

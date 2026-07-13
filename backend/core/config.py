@@ -188,21 +188,36 @@ settings = LoomSettings()
 
 
 class ThemeName(StrEnum):
-    """Themes shipped with Loom. Paper is the default.
+    """Final public themes shipped with Loom. Paper is the default.
 
     Keep in sync with ``frontend/src/theme/themes.ts`` and the ``.theme-*``
     blocks in ``frontend/src/styles/tokens.css``.
     """
 
     paper = "paper"
-    slate = "slate"
-    foundry = "foundry"
-    dune = "dune"
-    carbon = "carbon"
+    porcelain = "porcelain"
+    herbarium = "herbarium"
+    midnight = "midnight"
     lagoon = "lagoon"
-    obsidian = "obsidian"
     ember = "ember"
-    mulberry = "mulberry"
+
+    @classmethod
+    def _missing_(cls, value: object) -> ThemeName | None:
+        """Accept retired names anywhere a theme enters the API or config."""
+        if isinstance(value, str):
+            return LEGACY_THEME_MIGRATIONS.get(value)
+        return None
+
+
+LEGACY_THEME_MIGRATIONS: dict[str, ThemeName] = {
+    "slate": ThemeName.porcelain,
+    "foundry": ThemeName.paper,
+    "dune": ThemeName.herbarium,
+    "carbon": ThemeName.midnight,
+    "obsidian": ThemeName.midnight,
+    "mulberry": ThemeName.ember,
+    "nocturne": ThemeName.midnight,
+}
 
 
 class ProviderConfig(BaseModel):

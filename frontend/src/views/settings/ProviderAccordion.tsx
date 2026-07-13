@@ -1,5 +1,12 @@
 import type { ReactNode } from "react";
-import { CheckCircle2, Plus, TestTube2, Trash2 } from "lucide-react";
+import {
+  CheckCircle2,
+  ExternalLink,
+  Link2,
+  Plus,
+  TestTube2,
+  Trash2,
+} from "lucide-react";
 import type { TestProviderResponse } from "../../api/types";
 import { ModelCombobox } from "./ModelCombobox";
 import type { ProviderForm, ProviderMeta } from "./providerModels";
@@ -11,11 +18,16 @@ interface Props {
   count: number;
   test?: TestProviderResponse;
   testing: boolean;
+  authBusy?: boolean;
+  connectionLabel?: string;
+  chatOptions?: string[];
+  embedOptions?: string[];
   onToggle: () => void;
   onAdd: () => void;
   onPatch: (patch: Partial<ProviderForm>) => void;
   onRemove: () => void;
   onTest: () => void;
+  onConnect?: () => void;
 }
 
 export function ProviderAccordion(props: Props): ReactNode {
@@ -34,7 +46,10 @@ export function ProviderAccordion(props: Props): ReactNode {
         </span>
         <span>
           <strong>{props.meta.label}</strong>
-          <small>{configured ? "Configured" : "Not configured"}</small>
+          <small>
+            {props.connectionLabel ??
+              (configured ? "Configured" : "Not configured")}
+          </small>
         </span>
         {configured && <CheckCircle2 size={15} aria-hidden="true" />}
       </button>
@@ -63,9 +78,42 @@ function ProviderFormFields(
 ): ReactNode {
   return (
     <>
-      {props.meta.name !== "ollama" && (
+      {props.meta.authMode === "codex" && (
+        <div className="settings-provider-connect-note" role="note">
+          <strong>Local Codex integration</strong>
+          <span>
+            Uses Codex's own ChatGPT sign-in and credential store. Loom never
+            reads or copies those tokens. Chat only; embeddings still need a
+            separate provider.
+          </span>
+          <button
+            className="btn btn-md"
+            type="button"
+            onClick={props.onConnect}
+            disabled={props.authBusy}
+          >
+            <Link2 size={14} aria-hidden="true" />
+            {props.authBusy ? "Opening…" : "Connect Codex"}
+          </button>
+        </div>
+      )}
+      {(props.meta.authMode === "api_key" ||
+        props.meta.authMode === "oauth_pkce") && (
         <label className="settings-field">
-          <span className="settings-field-label">API key</span>
+          <span className="settings-field-label">
+            API key
+            <a
+              className="settings-credential-link"
+              href={props.meta.credentialUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              {props.meta.authMode === "oauth_pkce"
+                ? "Create manually"
+                : "Create API key"}
+              <ExternalLink size={11} aria-hidden="true" />
+            </a>
+          </span>
           <input
             className="input mono"
             type="password"
@@ -77,7 +125,25 @@ function ProviderFormFields(
           />
         </label>
       )}
-      {props.meta.name === "ollama" && (
+      {props.meta.authMode === "oauth_pkce" && (
+        <div className="settings-provider-connect-note" role="note">
+          <strong>One-click connection</strong>
+          <span>
+            OpenRouter will ask you to approve Loom, then creates a dedicated
+            API key that Loom encrypts locally.
+          </span>
+          <button
+            className="btn btn-md"
+            type="button"
+            onClick={props.onConnect}
+            disabled={props.authBusy}
+          >
+            <Link2 size={14} aria-hidden="true" />
+            {props.authBusy ? "Opening…" : "Connect OpenRouter"}
+          </button>
+        </div>
+      )}
+      {props.meta.authMode === "local" && (
         <label className="settings-field">
           <span className="settings-field-label">Host</span>
           <input
@@ -108,13 +174,13 @@ function ProviderFormFields(
         <ModelCombobox
           label="Chat model"
           value={props.provider.chatModel}
-          options={props.meta.chatModels}
+          options={props.chatOptions ?? props.meta.chatModels}
           onChange={(chatModel) => props.onPatch({ chatModel })}
         />
         <ModelCombobox
           label="Embed model"
           value={props.provider.embedModel}
-          options={props.meta.embedModels}
+          options={props.embedOptions ?? props.meta.embedModels}
           disabled={!props.meta.supportsEmbed}
           onChange={(embedModel) => props.onPatch({ embedModel })}
         />

@@ -1,5 +1,6 @@
 """Captures inbox API routes: listing, dry-run preview, and Weaver processing."""
 
+import asyncio
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -160,6 +161,9 @@ def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
         err = "; ".join(result.errors) if result.errors else "Empty capture, skipped"
         return ProcessResult(processed=False, error=err)
     validation = result.validation
+    error = "; ".join(result.errors)
+    if not error and result.review_required and validation is not None:
+        error = "; ".join(validation.reasons)
     return ProcessResult(
         processed=True,
         note_id=note.id,
@@ -171,6 +175,7 @@ def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
         validation=validation.status if validation else "",
         validation_mode=validation.mode_summary if validation else "",
         validation_reasons=list(validation.reasons) if validation else [],
+        error=error,
         capture_archived=result.capture_archived,
         review_required=result.review_required,
         flagged=result.flagged,
@@ -280,44 +285,39 @@ async def _finalize_note(
     vm: VaultManager,
     index: NoteIndex,
 ) -> dict[str, Any]:
-    """Run the post-write chain shared by ``/process`` and ``/commit``.
+    """Validate a committed proposal before publishing downstream side effects.
 
-    Refreshes the index, runs Spider (auto-link) then Sentinel (validate), and
-    enforces the three Sentinel outcomes (passed/warning → archive the capture;
-    failed → keep it in the inbox flagged for review). Returns the outcome
-    fields the response models share. The caller owns the outer
-    ``set_caller('weaver')`` / ``clear_caller()`` bracket.
+    Sentinel runs first. Only an explicit passed/warning verdict allows index
+    refresh, Spider backlink mutations, Scribe index generation, or capture
+    archival. Missing/errored validation is represented as ``unavailable`` and
+    kept in the inbox for review. The caller owns the outer caller-tag bracket.
     """
     from core.traces import clear_caller, set_caller
 
     note_path = Path(note.file_path)
-    index.refresh_file(note_path)
-
-    # Chain: Spider links the new note, then Sentinel validates.
     linked: list[str] = []
     suggested: list[str] = []
     validation_status = ""
     validation_mode = ""
     validation_reasons: list[str] = []
-    try:
-        from agents.loom.spider import get_spider
 
-        spider = get_spider()
-        if spider is not None:
-            clear_caller()
-            set_caller("spider")
-            spider_report = await spider.scan_and_report(note_path)
-            linked = list(spider_report.auto_linked)
-            suggested = list(spider_report.suggested)
-            index.refresh_file(note_path)
-    except Exception:
-        logger.warning("Spider scan failed for new note", exc_info=True)
-
+    # Validate before Spider/Scribe mutate any other vault artifacts.
     try:
+        from agents.chain import ReadChain
         from agents.loom.sentinel import get_sentinel
 
         sentinel = get_sentinel()
-        if sentinel is not None and weaver_chain is not None:
+        if sentinel is None:
+            validation_status = "unavailable"
+            validation_mode = "unavailable"
+            validation_reasons = ["Sentinel agent not initialized"]
+        else:
+            if weaver_chain is None:
+                weaver_chain = await asyncio.to_thread(
+                    ReadChain(vm.active_vault_dir(), note_index=index).execute,
+                    "weaver",
+                    note_path,
+                )
             clear_caller()
             set_caller("sentinel")
             validation = await sentinel.validate_action(
@@ -326,13 +326,41 @@ async def _finalize_note(
             validation_status = validation.status
             validation_mode = validation.mode_summary
             validation_reasons = list(validation.reasons)
-    except Exception:
+    except Exception as exc:
         logger.warning("Sentinel validation failed for new note", exc_info=True)
+        validation_status = "unavailable"
+        validation_mode = "unavailable"
+        validation_reasons = [f"Sentinel failed: {exc}"]
 
-    # Sentinel enforcement via the shared verdict logic (passed/warning →
-    # archive capture; warning → flag note; failed → keep capture in inbox
-    # marked review_required). Single implementation, shared with the pipeline
-    # graph — no duplicated annotate/archive logic here.
+    if validation_status in {"passed", "warning"}:
+        index.refresh_file(note_path)
+
+        try:
+            from agents.loom.spider import get_spider
+
+            spider = get_spider()
+            if spider is not None:
+                clear_caller()
+                set_caller("spider")
+                spider_report = await spider.scan_and_report(note_path)
+                linked = list(spider_report.auto_linked)
+                suggested = list(spider_report.suggested)
+                index.refresh_file(note_path)
+        except Exception:
+            logger.warning("Spider scan failed for new note", exc_info=True)
+
+        try:
+            from agents.loom.scribe import get_scribe
+
+            scribe = get_scribe()
+            if scribe is not None:
+                clear_caller()
+                set_caller("scribe")
+                await scribe.update_index(note_path.parent)
+        except Exception:
+            logger.warning("Scribe index update failed for new note", exc_info=True)
+
+    # Shared fail-closed enforcement: only explicit passed/warning archives.
     from agents.loom.enforcement import enforce_verdict
 
     outcome = enforce_verdict(
@@ -474,28 +502,30 @@ async def commit_capture(
             detail="Weaver agent not initialized. Configure a chat provider.",
         )
 
-    # Re-validate existence — the capture may have been processed since preview.
-    if not capture_path.exists():
-        raise HTTPException(status_code=404, detail=f"Capture not found: {body.capture_path}")
-
+    from agents.file_locks import path_lock
     from core.traces import clear_caller, set_caller
 
-    try:
-        set_caller("weaver")
-        proposal = CaptureProposal(
-            note_type=body.note_type,
-            folder=body.folder,
-            title=body.title,
-            tags=body.tags,
-            body=body.body,
-        )
-        note, weaver_chain = await weaver.commit_proposal(capture_path, proposal)
-        if note is None:
-            raise HTTPException(status_code=400, detail="Failed to write note")
-        outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
-        return CommitResult(note=note, **outcome)
-    finally:
-        clear_caller()
+    async with path_lock(capture_path):
+        # Re-validate existence under the same lock used by auto-processing.
+        if not capture_path.exists():
+            raise HTTPException(status_code=404, detail=f"Capture not found: {body.capture_path}")
+
+        try:
+            set_caller("weaver")
+            proposal = CaptureProposal(
+                note_type=body.note_type,
+                folder=body.folder,
+                title=body.title,
+                tags=body.tags,
+                body=body.body,
+            )
+            note, weaver_chain = await weaver.commit_proposal(capture_path, proposal)
+            if note is None:
+                raise HTTPException(status_code=400, detail="Failed to write note")
+            outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
+            return CommitResult(note=note, **outcome)
+        finally:
+            clear_caller()
 
 
 @router.post("/process-all")

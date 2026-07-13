@@ -26,7 +26,7 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def find_note_by_capture_source(capture_id: str) -> NoteMeta | None:
+def find_note_by_capture_source(vault_root: Path, capture_id: str) -> NoteMeta | None:
     """Return an existing note created from a given capture, if any.
 
     Looks for a note whose ``source`` is ``capture:{capture_id}`` — the marker
@@ -37,6 +37,7 @@ def find_note_by_capture_source(capture_id: str) -> NoteMeta | None:
     legitimately collide).
 
     Args:
+        vault_root: Root of the vault whose Markdown source of truth is searched.
         capture_id: The originating capture's frontmatter id.
 
     Returns:
@@ -46,6 +47,24 @@ def find_note_by_capture_source(capture_id: str) -> NoteMeta | None:
         return None
     target = f"capture:{capture_id}"
     for meta in get_note_index().all_metas():
+        if meta.source == target:
+            return meta
+
+    # The watcher/index refresh is asynchronous. A retry can arrive after the
+    # note write but before NoteIndex sees it, so fall back to the Markdown source
+    # of truth rather than creating a duplicate.
+    from core.notes import parse_note_meta
+
+    threads_dir = vault_root / "threads"
+    if not threads_dir.exists():
+        return None
+    for path in threads_dir.rglob("*.md"):
+        if ".archive" in path.parts:
+            continue
+        try:
+            meta = parse_note_meta(path)
+        except (OSError, ValueError):
+            continue
         if meta.source == target:
             return meta
     return None

@@ -134,7 +134,7 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 
 ## Color System
 
-Default = **paper** theme. `tokens.css` also ships slate, foundry, dune, carbon, lagoon, obsidian, ember, and mulberry variants — same token names, different palettes.
+Default = **Paper**. The final selectable set is Paper, Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember — same token names, different palettes. Retired names migrate to their closest final theme when older configuration is loaded.
 
 | Token (paper) | Hex |
 |---------------|-----|

@@ -37,7 +37,7 @@
   margin-bottom: 3px;
 }
 .trace-item-meta.error {
-  color: var(--you);
+  color: var(--danger);
 }
 .trace-item-caller {
   color: var(--agent);
@@ -79,7 +79,7 @@
   color: var(--ink-2);
 }
 .run-step-row.error {
-  color: var(--you);
+  color: var(--danger);
 }
 .run-step-name {
   color: var(--ink);
@@ -92,7 +92,7 @@
 .run-step-error {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--you);
+  color: var(--danger);
   margin-top: 2px;
 }
 
@@ -159,7 +159,7 @@
 }
 
 .trace-modal-error {
-  color: var(--you);
+  color: var(--danger);
 }
 
 .trace-modal-loading {
@@ -213,5 +213,5 @@
   overflow: auto;
 }
 .trace-section-body.danger {
-  border-color: var(--you);
+  border-color: var(--danger);
 }

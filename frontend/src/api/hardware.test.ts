@@ -67,6 +67,7 @@ describe("getRecommendations", () => {
   it("fetches rated models with the profile", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue({
       profile: mkProfile(),
+      agents: [],
       models: [
         {
           name: "llama3.1:8b",
@@ -79,7 +80,10 @@ describe("getRecommendations", () => {
       ],
     });
     const res = await getRecommendations();
-    expect(spy).toHaveBeenCalledWith("/api/hardware/recommendations", undefined);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/hardware/recommendations",
+      undefined,
+    );
     expect(res.models[0]!.rating).toBe("good");
   });
 });
@@ -93,7 +97,10 @@ describe("runBenchmark", () => {
       chars_per_sec: 6.1,
       error: null,
     });
-    const res = await runBenchmark({ provider: "ollama", model: "llama3.1:8b" });
+    const res = await runBenchmark({
+      provider: "ollama",
+      model: "llama3.1:8b",
+    });
     expect(spy).toHaveBeenCalledWith(
       "/api/hardware/benchmark",
       { provider: "ollama", model: "llama3.1:8b" },

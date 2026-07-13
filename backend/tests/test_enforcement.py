@@ -103,6 +103,25 @@ def test_warning_archives_capture_and_flags_note(
     assert note_extra.get("flag_reasons") == ["thin content"]
 
 
+@pytest.mark.parametrize("verdict", ["", "unavailable", "bogus"])
+def test_unknown_verdict_fails_closed_and_marks_review_required(
+    vault_with_capture: tuple[Path, Path, Path], verdict: str
+) -> None:
+    root, capture, note = vault_with_capture
+
+    outcome = enforce_verdict(root, capture, note, verdict, [])
+
+    assert outcome.review_required is True
+    assert outcome.capture_archived is False
+    assert outcome.flagged is False
+    assert capture.exists()
+    assert not (root / "threads" / ".archive" / "cap.md").exists()
+    assert parse_note(capture).extra.get("review_required") is True
+    note_extra = parse_note(note).extra
+    assert note_extra.get("review_required") is True
+    assert note_extra.get("review_reasons")
+
+
 def test_annotation_preserves_unknown_user_frontmatter(
     vault_with_capture: tuple[Path, Path, Path],
 ) -> None:

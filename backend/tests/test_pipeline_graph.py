@@ -73,7 +73,7 @@ class TestPipelineGraphStructure:
             final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
             steps = [s.name for s in rec.steps]
 
-        assert steps == ["weaver", "spider", "scribe", "sentinel", "enforce"]
+        assert steps == ["weaver", "sentinel", "spider", "scribe", "enforce"]
         assert final["capture_archived"] is True
         # Weaver ran exactly once (no retry on a passed verdict).
         assert weaver.process_capture_full.call_count == 1
@@ -117,13 +117,11 @@ class TestSentinelRetryLoop:
         # cycle re-runs once before enforcing.
         assert steps == [
             "weaver",
-            "spider",
-            "scribe",
             "sentinel",
             "weaver-retry",
+            "sentinel",
             "spider",
             "scribe",
-            "sentinel",
             "enforce",
         ]
         assert weaver.process_capture_full.call_count == 2
@@ -139,7 +137,11 @@ class TestSentinelRetryLoop:
         runner._enforce_verdict = MagicMock(
             return_value={"capture_archived": False, "review_required": True, "flagged": False}
         )
-        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel)
+        spider = MagicMock()
+        spider.scan_and_report = AsyncMock()
+        scribe = MagicMock()
+        scribe.update_index = AsyncMock()
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel, spider=spider, scribe=scribe)
 
         graph = build_pipeline_graph(runner)
         async with run_scope("pipeline") as rec:
@@ -153,6 +155,64 @@ class TestSentinelRetryLoop:
         assert weaver.process_capture_full.call_count == 2  # initial + one retry
         assert final["review_required"] is True
         assert final["capture_archived"] is False
+        assert steps == ["weaver", "sentinel", "weaver-retry", "sentinel", "enforce"]
+        spider.scan_and_report.assert_not_awaited()
+        scribe.update_index.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_missing_sentinel_fails_closed_before_side_effects(self, monkeypatch) -> None:
+        weaver = MagicMock()
+        weaver.process_capture_full = AsyncMock(return_value=(_note(), _STUB_CHAIN))
+        spider = MagicMock()
+        spider.scan_and_report = AsyncMock()
+        scribe = MagicMock()
+        scribe.update_index = AsyncMock()
+        _install_agents(monkeypatch, weaver=weaver, sentinel=None, spider=spider, scribe=scribe)
+
+        runner = _fake_runner()
+        runner._enforce_verdict = MagicMock(
+            return_value={"capture_archived": False, "review_required": True, "flagged": False}
+        )
+        graph = build_pipeline_graph(runner)
+        async with run_scope("pipeline") as rec:
+            final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+
+        assert [s.name for s in rec.steps] == ["weaver", "sentinel", "enforce"]
+        assert final["validation"].status == "unavailable"
+        assert final["review_required"] is True
+        assert final["capture_archived"] is False
+        assert "Sentinel agent not initialized" in final["errors"]
+        spider.scan_and_report.assert_not_awaited()
+        scribe.update_index.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_sentinel_exception_fails_closed_before_side_effects(self, monkeypatch) -> None:
+        weaver = MagicMock()
+        weaver.process_capture_full = AsyncMock(return_value=(_note(), _STUB_CHAIN))
+        sentinel = MagicMock()
+        sentinel.validate_action = AsyncMock(side_effect=RuntimeError("boom"))
+        spider = MagicMock()
+        spider.scan_and_report = AsyncMock()
+        scribe = MagicMock()
+        scribe.update_index = AsyncMock()
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel, spider=spider, scribe=scribe)
+
+        runner = _fake_runner()
+        runner._enforce_verdict = MagicMock(
+            return_value={"capture_archived": False, "review_required": True, "flagged": False}
+        )
+        graph = build_pipeline_graph(runner)
+        async with run_scope("pipeline") as rec:
+            final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+
+        assert [s.name for s in rec.steps] == ["weaver", "sentinel", "enforce"]
+        sentinel_step = next(s for s in rec.steps if s.name == "sentinel")
+        assert sentinel_step.status == "error"
+        assert final["validation"].status == "unavailable"
+        assert final["review_required"] is True
+        assert any("Sentinel failed: boom" in error for error in final["errors"])
+        spider.scan_and_report.assert_not_awaited()
+        scribe.update_index.assert_not_awaited()
 
 
 class TestRetryOrphanHandling:

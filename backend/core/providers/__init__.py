@@ -19,12 +19,20 @@ from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
+    CodexProviderConfig,
     OllamaProviderConfig,
     OpenAIProviderConfig,
     OpenRouterProviderConfig,
     XAIProviderConfig,
 )
 from core.providers.cached import CachedProvider
+from core.providers.codex import (
+    CodexConnectionStatus,
+    CodexLoginStart,
+    CodexProvider,
+    codex_connection_status,
+    start_codex_login,
+)
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openrouter import OpenRouterProvider
@@ -47,6 +55,10 @@ __all__ = [
     "BaseProvider",
     "CachedProvider",
     "ChatProvider",
+    "CodexConnectionStatus",
+    "CodexLoginStart",
+    "CodexProvider",
+    "CodexProviderConfig",
     "EmbedProvider",
     "OllamaProvider",
     "OllamaProviderConfig",
@@ -58,9 +70,11 @@ __all__ = [
     "TracedProvider",
     "XAIProvider",
     "XAIProviderConfig",
+    "codex_connection_status",
     "get_chat_provider",
     "get_embed_provider",
     "get_registry",
     "reset_registry",
+    "start_codex_login",
     "unwrap_provider",
 ]

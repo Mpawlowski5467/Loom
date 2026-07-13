@@ -37,6 +37,7 @@ from api.routers.hardware import router as hardware_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
 from api.routers.onboarding import router as onboarding_router
+from api.routers.provider_auth import router as provider_auth_router
 from api.routers.providers import router as providers_router
 from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
@@ -66,7 +67,16 @@ _SECURITY_HEADERS = {
 
 # /api paths the optional token gate never challenges, so liveness/readiness
 # probes (and the Docker smoke test) keep working with no credentials.
-_TOKEN_GATE_OPEN_PATHS = frozenset({"/api/health", "/api/ready"})
+_TOKEN_GATE_OPEN_PATHS = frozenset(
+    {
+        "/api/health",
+        "/api/ready",
+        # OpenRouter redirects the browser here and cannot attach Loom's
+        # optional API-token header. The callback remains protected by a
+        # short-lived, one-time PKCE flow state.
+        "/api/providers/openrouter/oauth/callback",
+    }
+)
 
 
 def _extract_bearer_token(request: Request) -> str | None:
@@ -164,6 +174,23 @@ async def security_headers(request: Request, call_next: RequestResponseEndpoint)
 
 
 @app.middleware("http")
+async def redact_provider_oauth_query(
+    request: Request, call_next: RequestResponseEndpoint
+) -> Response:
+    """Keep one-time provider authorization codes out of Uvicorn access logs.
+
+    Uvicorn builds its access-log request target from the mutable ASGI scope
+    when the response starts. The callback must receive its query first, so we
+    clear it only after the route has produced a response but before the outer
+    server writes/logs that response.
+    """
+    response = await call_next(request)
+    if request.url.path == "/api/providers/openrouter/oauth/callback":
+        request.scope["query_string"] = b""
+    return response
+
+
+@app.middleware("http")
 async def api_token_gate(request: Request, call_next: RequestResponseEndpoint) -> Response:
     """Optional shared-token gate for the API (defense-in-depth, not auth).
 
@@ -212,6 +239,7 @@ app.include_router(hardware_router)
 app.include_router(settings_router)
 app.include_router(config_router)
 app.include_router(onboarding_router)
+app.include_router(provider_auth_router)
 app.include_router(providers_router)
 app.include_router(diagnostics_router)
 app.include_router(traces_router)

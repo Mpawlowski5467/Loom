@@ -212,6 +212,92 @@ class TestRecommendations:
 
         assert data["profile"]["cpu_model"] == "Saved Box"
 
+    def test_recommends_role_specific_installed_models_for_builtins(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        roomy = _PROFILE.model_copy(update={"ram_gb": 48.0, "cpu_model": "Apple M5 Pro"})
+        cfg_path = _setup_config(tmp_path, GlobalConfig(hardware=roomy))
+
+        async def fake_tags(host: str) -> list[dict[str, Any]]:  # noqa: ARG001
+            return [
+                {
+                    "name": "devstral:latest",
+                    "size": 14_000_000_000,
+                    "details": {"parameter_size": "24B"},
+                },
+                {
+                    "name": "gpt-oss:20b",
+                    "size": 13_000_000_000,
+                    "details": {"parameter_size": "20B"},
+                },
+                {
+                    "name": "mistral-small3.1:latest",
+                    "size": 14_000_000_000,
+                    "details": {"parameter_size": "24B"},
+                },
+                _OLLAMA_TAGS[1],
+            ]
+
+        monkeypatch.setattr("api.routers.hardware.fetch_ollama_tags", fake_tags)
+        with patch("api.routers.hardware.settings") as mock_settings:
+            mock_settings.config_path = cfg_path
+            data = client.get("/api/hardware/recommendations").json()
+
+        by_id = {agent["agent_id"]: agent for agent in data["agents"]}
+        assert set(by_id) == {
+            "weaver",
+            "spider",
+            "archivist",
+            "scribe",
+            "sentinel",
+            "researcher",
+            "standup",
+        }
+        assert by_id["weaver"]["model"] == "devstral:latest"
+        assert by_id["spider"]["model"] == "devstral:latest"
+        assert by_id["sentinel"]["model"] == "gpt-oss:20b"
+        assert by_id["scribe"]["model"] == "mistral-small3.1:latest"
+        assert by_id["researcher"]["model"] == "mistral-small3.1:latest"
+        assert by_id["standup"]["model"] == "mistral-small3.1:latest"
+        assert by_id["archivist"]["model"] is None
+        assert by_id["archivist"]["installed"] is False
+        assert "no model required" in by_id["archivist"]["reason"].lower()
+
+        for recommendation in by_id.values():
+            assert recommendation["provider"] == "ollama"
+            assert recommendation["source"] == "catalog"
+            assert recommendation["confidence"] == "provisional"
+        assert by_id["weaver"]["rating"] == "good"
+        assert by_id["weaver"]["installed"] is True
+        assert len(by_id["weaver"]["alternatives"]) <= 2
+
+    def test_okay_models_are_manual_alternatives_not_primary_recommendations(
+        self, client: TestClient, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        cfg_path = _setup_config(tmp_path, GlobalConfig(hardware=_PROFILE))
+
+        async def fake_tags(host: str) -> list[dict[str, Any]]:  # noqa: ARG001
+            return [
+                {
+                    "name": "qwen2.5:14b",
+                    "size": 9_000_000_000,
+                    "details": {"parameter_size": "14.8B"},
+                }
+            ]
+
+        monkeypatch.setattr("api.routers.hardware.fetch_ollama_tags", fake_tags)
+        with patch("api.routers.hardware.settings") as mock_settings:
+            mock_settings.config_path = cfg_path
+            data = client.get("/api/hardware/recommendations").json()
+
+        by_id = {agent["agent_id"]: agent for agent in data["agents"]}
+        sentinel = by_id["sentinel"]
+        assert sentinel["model"] is None
+        assert sentinel["rating"] is None
+        assert sentinel["installed"] is False
+        assert sentinel["alternatives"] == ["qwen2.5:14b"]
+        assert "manual opt-in" in sentinel["reason"]
+
 
 class _StubProvider:
     def __init__(

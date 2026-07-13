@@ -47,7 +47,7 @@ describe("useLoomConfig", () => {
 
     localStorage.setItem("loom.theme", "mulberry");
 
-    expect(readInitialTheme()).toBe("mulberry");
+    expect(readInitialTheme()).toBe("ember");
   });
 
   it("setTheme optimistically applies, then syncs with backend", async () => {
@@ -56,13 +56,13 @@ describe("useLoomConfig", () => {
     await waitFor(() => expect(result.current.configLoading).toBe(false));
 
     await act(async () => {
-      await result.current.setTheme("dune");
+      await result.current.setTheme("herbarium");
     });
 
-    expect(document.documentElement).toHaveClass("theme-dune");
-    expect(localStorage.getItem("loom.theme")).toBe("dune");
-    expect(patchConfigMock).toHaveBeenCalledWith({ theme: "dune" });
-    expect(result.current.theme).toBe("dune");
+    expect(document.documentElement).toHaveClass("theme-herbarium");
+    expect(localStorage.getItem("loom.theme")).toBe("herbarium");
+    expect(patchConfigMock).toHaveBeenCalledWith({ theme: "herbarium" });
+    expect(result.current.theme).toBe("herbarium");
   });
 
   it("fires a sync toast when backend theme differs from localStorage", async () => {
@@ -99,7 +99,8 @@ function stubMatchMedia(dark: boolean) {
   return {
     flip(toDark: boolean) {
       mql.matches = toDark;
-      for (const cb of listeners) cb({ matches: toDark } as MediaQueryListEvent);
+      for (const cb of listeners)
+        cb({ matches: toDark } as MediaQueryListEvent);
     },
   };
 }

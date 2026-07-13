@@ -2,12 +2,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { Save } from "lucide-react";
 import { patchConfig } from "../../api/config";
-import { testProvider } from "../../api/providers";
+import {
+  getCodexAuthStatus,
+  listModels,
+  startCodexLogin,
+  startOpenRouterOAuth,
+  testProvider,
+} from "../../api/providers";
 import {
   getSettingsProviders,
   saveSettingsProviders,
 } from "../../api/settings";
-import type { TestProviderResponse } from "../../api/types";
+import type {
+  CodexAuthStatus,
+  ModelsResponse,
+  TestProviderResponse,
+} from "../../api/types";
 import { useApp } from "../../context/app-ctx";
 import { ProviderAccordion } from "./ProviderAccordion";
 import {
@@ -31,6 +41,13 @@ export function ProvidersSection(): ReactNode {
     Partial<Record<ProviderName, TestProviderResponse>>
   >({});
   const [testing, setTesting] = useState<string | null>(null);
+  const [authBusy, setAuthBusy] = useState<ProviderName | null>(null);
+  const [codexStatus, setCodexStatus] = useState<CodexAuthStatus | null>(null);
+  const [liveModels, setLiveModels] = useState<
+    Partial<Record<ProviderName, ModelsResponse>>
+  >({});
+  const authPollRef = useRef<number | null>(null);
+  const modelsFetchedRef = useRef(new Set<ProviderName>());
   // Hydrate the forms only once. Without this, changing the default-provider
   // radio (which refreshes config) would re-fetch and wipe unsaved key edits.
   const hydratedRef = useRef(false);
@@ -66,6 +83,52 @@ export function ProvidersSection(): ReactNode {
     };
   }, [config?.default_provider]);
 
+  useEffect(() => {
+    let cancelled = false;
+    void getCodexAuthStatus()
+      .then((status) => {
+        if (!cancelled) setCodexStatus(status);
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setCodexStatus({
+            installed: false,
+            connected: false,
+            auth_mode: null,
+            plan_type: null,
+            version: null,
+            error: "Codex status unavailable",
+          });
+        }
+      });
+    return () => {
+      cancelled = true;
+      if (authPollRef.current !== null) {
+        window.clearInterval(authPollRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!providers[openName] || openName === "codex") return;
+    if (modelsFetchedRef.current.has(openName)) return;
+    modelsFetchedRef.current.add(openName);
+    let cancelled = false;
+    void listModels(openName)
+      .then((models) => {
+        if (!cancelled) {
+          setLiveModels((prev) => ({ ...prev, [openName]: models }));
+        }
+      })
+      .catch(() => {
+        // Static catalog and the saved model remain available offline.
+        modelsFetchedRef.current.delete(openName);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openName, providers]);
+
   const configuredNames = useMemo(
     () => PROVIDERS.map((p) => p.name).filter((name) => providers[name]),
     [providers],
@@ -74,9 +137,11 @@ export function ProvidersSection(): ReactNode {
   const embedProviderMissing = useMemo(() => {
     if (configuredNames.length === 0) return false;
     return !configuredNames.some(
-      (name) => PROVIDER_BY_NAME.get(name)?.supportsEmbed,
+      (name) =>
+        PROVIDER_BY_NAME.get(name)?.supportsEmbed &&
+        Boolean(providers[name]?.embedModel.trim()),
     );
-  }, [configuredNames]);
+  }, [configuredNames, providers]);
 
   const patchProvider = (name: ProviderName, patch: Partial<ProviderForm>) => {
     setProviders((prev) => ({
@@ -153,6 +218,99 @@ export function ProvidersSection(): ReactNode {
     }
   };
 
+  const stopAuthPolling = () => {
+    if (authPollRef.current !== null) {
+      window.clearInterval(authPollRef.current);
+      authPollRef.current = null;
+    }
+  };
+
+  const openAuthWindow = (url: string) => {
+    const popup = window.open(
+      url,
+      "loom-provider-auth",
+      "popup,width=560,height=760,noopener,noreferrer",
+    );
+    if (!popup) window.location.assign(url);
+  };
+
+  const connectCodex = async () => {
+    if (codexStatus?.connected) {
+      setMessage("Codex is already connected through its local ChatGPT login.");
+      return;
+    }
+    setAuthBusy("codex");
+    setMessage(null);
+    try {
+      const result = await startCodexLogin();
+      openAuthWindow(result.auth_url);
+      stopAuthPolling();
+      let attempts = 0;
+      authPollRef.current = window.setInterval(() => {
+        attempts += 1;
+        if (attempts > 80) {
+          stopAuthPolling();
+          setAuthBusy(null);
+          setMessage(
+            "Codex sign-in is still pending. Use Connect to try again.",
+          );
+          return;
+        }
+        void getCodexAuthStatus()
+          .then((status) => {
+            setCodexStatus(status);
+            if (!status.connected) return;
+            stopAuthPolling();
+            setAuthBusy(null);
+            setMessage("Codex connected. Add it as a provider, then save.");
+          })
+          .catch(() => undefined);
+      }, 1500);
+    } catch (err) {
+      setAuthBusy(null);
+      setMessage(err instanceof Error ? err.message : "Codex sign-in failed");
+    }
+  };
+
+  const connectOpenRouter = async () => {
+    setAuthBusy("openrouter");
+    setMessage(null);
+    try {
+      const result = await startOpenRouterOAuth();
+      openAuthWindow(result.authorization_url);
+      stopAuthPolling();
+      let attempts = 0;
+      authPollRef.current = window.setInterval(() => {
+        attempts += 1;
+        if (attempts > 80) {
+          stopAuthPolling();
+          setAuthBusy(null);
+          setMessage(
+            "OpenRouter authorization is still pending. Use Connect to try again.",
+          );
+          return;
+        }
+        void getSettingsProviders()
+          .then((settings) => {
+            const connected = settings.providers.find(
+              (provider) => provider.name === "openrouter",
+            );
+            if (!connected?.api_key_set) return;
+            patchProvider("openrouter", { apiKeySet: true });
+            stopAuthPolling();
+            setAuthBusy(null);
+            setMessage("OpenRouter connected and encrypted locally.");
+          })
+          .catch(() => undefined);
+      }, 1500);
+    } catch (err) {
+      setAuthBusy(null);
+      setMessage(
+        err instanceof Error ? err.message : "OpenRouter connection failed",
+      );
+    }
+  };
+
   const save = async () => {
     if (configuredNames.length === 0) {
       setMessage("At least one provider must be configured.");
@@ -161,7 +319,10 @@ export function ProvidersSection(): ReactNode {
     // Block empty keys: agents fail with a cryptic error later otherwise.
     // A key counts if it's typed now or already stored on the backend.
     const missingKeys = configuredNames.filter((name) => {
-      if (name === "ollama") return false;
+      const meta = PROVIDER_BY_NAME.get(name);
+      if (meta?.authMode === "local" || meta?.authMode === "codex") {
+        return false;
+      }
       const provider = providers[name];
       return !provider?.apiKey.trim() && !provider?.apiKeySet;
     });
@@ -197,9 +358,9 @@ export function ProvidersSection(): ReactNode {
       <div className="settings-banner settings-banner-note" role="note">
         <strong>Keys are encrypted at rest.</strong> Provider API keys are
         encrypted with a machine-local key before being written to{" "}
-        <code>config.yaml</code>. This protects the file if it leaks on its own —
-        but the API has no authentication yet, so still don't expose the backend
-        port to other devices.
+        <code>config.yaml</code>. This protects the file if it leaks on its own
+        — but the API has no authentication yet, so still don't expose the
+        backend port to other devices.
       </div>
       <DefaultProviderPicker
         names={configuredNames}
@@ -214,22 +375,49 @@ export function ProvidersSection(): ReactNode {
         </div>
       )}
       <div className="settings-provider-list">
-        {PROVIDERS.map((meta) => (
-          <ProviderAccordion
-            key={meta.name}
-            meta={meta}
-            provider={providers[meta.name]}
-            open={openName === meta.name}
-            count={configuredNames.length}
-            test={tests[meta.name]}
-            testing={testing === meta.name}
-            onToggle={() => setOpenName(meta.name)}
-            onAdd={() => addProvider(meta.name)}
-            onPatch={(patch) => patchProvider(meta.name, patch)}
-            onRemove={() => removeProvider(meta.name)}
-            onTest={() => void runTest(meta.name)}
-          />
-        ))}
+        {PROVIDERS.map((meta) => {
+          const provider = providers[meta.name];
+          const live = liveModels[meta.name];
+          return (
+            <ProviderAccordion
+              key={meta.name}
+              meta={meta}
+              provider={provider}
+              open={openName === meta.name}
+              count={configuredNames.length}
+              test={tests[meta.name]}
+              testing={testing === meta.name}
+              authBusy={authBusy === meta.name}
+              connectionLabel={connectionLabel(
+                meta.name,
+                provider,
+                codexStatus,
+              )}
+              chatOptions={mergeModelIds(
+                meta.chatModels,
+                live?.chat.map((model) => model.id) ?? [],
+                provider?.chatModel,
+              )}
+              embedOptions={mergeModelIds(
+                meta.embedModels,
+                live?.embed.map((model) => model.id) ?? [],
+                provider?.embedModel,
+              )}
+              onToggle={() => setOpenName(meta.name)}
+              onAdd={() => addProvider(meta.name)}
+              onPatch={(patch) => patchProvider(meta.name, patch)}
+              onRemove={() => removeProvider(meta.name)}
+              onTest={() => void runTest(meta.name)}
+              onConnect={
+                meta.name === "codex"
+                  ? () => void connectCodex()
+                  : meta.name === "openrouter"
+                    ? () => void connectOpenRouter()
+                    : undefined
+              }
+            />
+          );
+        })}
       </div>
       <div className="settings-actions">
         <button
@@ -244,6 +432,37 @@ export function ProvidersSection(): ReactNode {
       </div>
     </div>
   );
+}
+
+function mergeModelIds(
+  staticIds: string[],
+  liveIds: string[],
+  current?: string,
+): string[] {
+  return Array.from(
+    new Set([...(current ? [current] : []), ...liveIds, ...staticIds]),
+  );
+}
+
+function connectionLabel(
+  name: ProviderName,
+  provider: ProviderForm | undefined,
+  codexStatus: CodexAuthStatus | null,
+): string | undefined {
+  const meta = PROVIDER_BY_NAME.get(name);
+  if (name === "codex") {
+    if (!codexStatus) return "Checking local status…";
+    if (!codexStatus.installed) return "Codex CLI unavailable";
+    if (codexStatus.connected) {
+      const plan = codexStatus.plan_type ? ` · ${codexStatus.plan_type}` : "";
+      return `Connected via ${codexStatus.auth_mode ?? "Codex"}${plan}`;
+    }
+    return "Installed · sign-in required";
+  }
+  if (!provider) return undefined;
+  if (meta?.authMode === "local") return "Local endpoint";
+  if (provider.apiKeySet) return "Connected · key encrypted";
+  return "Needs credential";
 }
 
 function DefaultProviderPicker(props: {

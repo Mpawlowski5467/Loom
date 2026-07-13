@@ -7,6 +7,8 @@ mirroring how provider-settings saves rebind agents.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field
 
@@ -31,6 +33,8 @@ class AgentModelEntry(BaseModel):
     system: bool
     provider: str = ""
     chat_model: str = ""
+    role: str = ""
+    uses_model: bool = True
 
 
 class AgentModelsResponse(BaseModel):
@@ -44,9 +48,10 @@ class OverrideInput(BaseModel):
 
 
 class PutOverridesRequest(BaseModel):
-    """Full replacement map of per-agent overrides."""
+    """Replacement map for all overrides or the built-in-agent subset."""
 
     overrides: dict[str, OverrideInput] = Field(default_factory=dict)
+    scope: Literal["all", "system"] = "all"
 
 
 def _override_fields(override: AgentModelOverride | None) -> tuple[str, str]:
@@ -69,6 +74,8 @@ def _collect(cfg: GlobalConfig, vm: VaultManager) -> AgentModelsResponse:
                 system=True,
                 provider=provider,
                 chat_model=chat_model,
+                role=str(raw.get("role", "")),
+                uses_model=str(raw["id"]) != "archivist",
             )
         )
     for raw in _load_custom(vm):
@@ -91,6 +98,7 @@ def _collect(cfg: GlobalConfig, vm: VaultManager) -> AgentModelsResponse:
                 system=False,
                 provider=provider,
                 chat_model=chat_model,
+                role=str(raw.get("role", "")),
             )
         )
     return AgentModelsResponse(
@@ -115,9 +123,14 @@ async def put_agent_models(
     body: PutOverridesRequest,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> AgentModelsResponse:
-    """Replace the per-agent override map and rebind agents immediately."""
+    """Replace the requested override scope and rebind agents immediately."""
     overrides: dict[str, AgentModelOverride] = {}
     for agent_id, item in body.overrides.items():
+        if body.scope == "system" and agent_id not in _SYSTEM_IDS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"Agent '{agent_id}' is not a built-in agent.",
+            )
         provider = (item.provider or "").strip() or None
         chat_model = (item.chat_model or "").strip() or None
         if provider is not None and provider not in _KNOWN:
@@ -131,6 +144,17 @@ async def put_agent_models(
         overrides[agent_id] = AgentModelOverride(provider=provider, chat_model=chat_model)
 
     cfg = GlobalConfig.load(settings.config_path)
+    if body.scope == "system":
+        # Settings owns built-in bindings only. Preserve custom-agent overrides
+        # managed by their Add/Edit Agent flow so a built-in save cannot erase
+        # or silently shadow those user choices.
+        custom_overrides = {
+            agent_id: override
+            for agent_id, override in cfg.agent_models.items()
+            if agent_id not in _SYSTEM_IDS
+        }
+        custom_overrides.update(overrides)
+        overrides = custom_overrides
     cfg.agent_models = overrides
     cfg.save(settings.config_path)
 

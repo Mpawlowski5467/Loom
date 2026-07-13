@@ -8,7 +8,7 @@ interface Props {
 /**
  * Static preview chip showing the cardinal colors of a theme. Used in the
  * theme picker. Reads from THEME_META rather than getComputedStyle so we can
- * render all four themes simultaneously.
+ * render every theme simultaneously.
  */
 export function ThemeSwatch({ theme }: Props): ReactNode {
   const meta = THEME_META[theme];

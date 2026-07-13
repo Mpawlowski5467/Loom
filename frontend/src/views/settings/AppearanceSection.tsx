@@ -6,6 +6,7 @@ import { useApp } from "../../context/app-ctx";
 import type { ThemeName } from "../../theme/themes";
 import {
   APPEARANCE_DEFAULTS,
+  FONT_PRESET_OPTIONS,
   applyAppearance,
   readInitialAppearance,
   type Density,
@@ -56,6 +57,7 @@ export function AppearanceSection(): ReactNode {
   };
 
   const isDefaultAppearance =
+    appearance.fontPreset === APPEARANCE_DEFAULTS.fontPreset &&
     appearance.fontScale === APPEARANCE_DEFAULTS.fontScale &&
     appearance.density === APPEARANCE_DEFAULTS.density &&
     appearance.motion === APPEARANCE_DEFAULTS.motion;
@@ -112,16 +114,53 @@ export function AppearanceSection(): ReactNode {
           className="btn btn-md"
           onClick={resetAppearance}
           disabled={isDefaultAppearance}
-          title="Restore font size, density, and motion to defaults"
+          title="Restore typography, density, and motion to defaults"
         >
           <RotateCcw size={13} aria-hidden="true" />
           Reset to defaults
         </button>
       </div>
       <p className="settings-copy">
-        These are local preferences — they apply on this device only and
-        survive reloads.
+        These are local preferences — they apply on this device only and survive
+        reloads.
       </p>
+
+      <fieldset className="settings-font-presets">
+        <legend className="settings-field-label">Font style</legend>
+        <div className="settings-font-preset-grid">
+          {FONT_PRESET_OPTIONS.map((option) => {
+            const active = appearance.fontPreset === option.value;
+            return (
+              <button
+                key={option.value}
+                type="button"
+                className={`settings-font-preset ${active ? "active" : ""}`}
+                onClick={() => update({ fontPreset: option.value })}
+                aria-pressed={active}
+              >
+                <span
+                  className="settings-font-preset-sample"
+                  style={{ fontFamily: option.previewFont }}
+                  aria-hidden="true"
+                >
+                  Aa
+                </span>
+                <span className="settings-font-preset-copy">
+                  <span className="settings-font-preset-name">
+                    {option.label}
+                  </span>
+                  <span className="settings-font-preset-pairing">
+                    {option.pairing}
+                  </span>
+                  <span className="settings-font-preset-description">
+                    {option.description}
+                  </span>
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      </fieldset>
 
       <div className="settings-field">
         <span className="settings-field-label">Font size</span>

@@ -29,12 +29,57 @@ body,
   --space-5: calc(20px * var(--space-scale));
   --space-6: calc(24px * var(--space-scale));
 }
-html.font-scale-sm { --font-scale: 0.9; }
-html.font-scale-md { --font-scale: 1; }
-html.font-scale-lg { --font-scale: 1.15; }
-html.density-compact { --space-scale: 0.85; }
-html.density-cozy { --space-scale: 1; }
-html.density-comfortable { --space-scale: 1.15; }
+
+/* Typography presets override the theme's font tokens while leaving palette
+   choices independent. Bundled variable fonts keep every preset offline. */
+html.font-preset-editorial {
+  --font: "Inter Variable", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces Variable", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono Variable", "SF Mono", Menlo, monospace;
+}
+html.font-preset-source {
+  --font: "Source Sans 3 Variable", system-ui, -apple-system, sans-serif;
+  --serif: "Source Serif 4 Variable", "Iowan Old Style", Georgia, serif;
+  --mono: "Source Code Pro Variable", "SF Mono", Menlo, monospace;
+}
+html.font-preset-modern {
+  --font: "Manrope Variable", system-ui, -apple-system, sans-serif;
+  --serif: "Manrope Variable", system-ui, -apple-system, sans-serif;
+  --mono: "JetBrains Mono Variable", "SF Mono", Menlo, monospace;
+}
+html.font-preset-literary {
+  --font: "Manrope Variable", system-ui, -apple-system, sans-serif;
+  --serif: "Newsreader Variable", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono Variable", "SF Mono", Menlo, monospace;
+}
+html.font-preset-hyperlegible {
+  --font: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+  --serif: "Atkinson Hyperlegible Next Variable", system-ui, sans-serif;
+  --mono: "JetBrains Mono Variable", "SF Mono", Menlo, monospace;
+}
+html.font-preset-native {
+  --font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --serif: "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+html.font-scale-sm {
+  --font-scale: 0.9;
+}
+html.font-scale-md {
+  --font-scale: 1;
+}
+html.font-scale-lg {
+  --font-scale: 1.15;
+}
+html.density-compact {
+  --space-scale: 0.85;
+}
+html.density-cozy {
+  --space-scale: 1;
+}
+html.density-comfortable {
+  --space-scale: 1.15;
+}
 
 @media (prefers-reduced-motion: reduce) {
   html.motion-auto * {
@@ -70,12 +115,22 @@ body {
 }
 
 /* Paper texture — only on the paper theme. Other themes get clean fills. */
-:root body,
+:root:not([class*="theme-"]) body,
 .theme-paper body {
   background-image:
-    radial-gradient(circle at 1px 1px, rgba(var(--ink-rgb), 0.018) 1px, transparent 0),
-    radial-gradient(circle at 2px 3px, rgba(var(--ink-rgb), 0.012) 1px, transparent 0);
-  background-size: 3px 3px, 7px 7px;
+    radial-gradient(
+      circle at 1px 1px,
+      rgba(var(--ink-rgb), 0.018) 1px,
+      transparent 0
+    ),
+    radial-gradient(
+      circle at 2px 3px,
+      rgba(var(--ink-rgb), 0.012) 1px,
+      transparent 0
+    );
+  background-size:
+    3px 3px,
+    7px 7px;
 }
 
 /* Dark-mode-only overrides. Wins over the :root fallback above. */

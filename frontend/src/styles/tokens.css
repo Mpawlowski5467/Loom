@@ -9,8 +9,11 @@
    Tokens consumed by Sigma.js (graph) live near the bottom of each
    block: they are read with getComputedStyle() at paint time.
 
-   Light: paper, slate, foundry, dune.
-   Dark:  carbon, lagoon, obsidian, ember, mulberry.
+   Final light set: paper, porcelain, herbarium.
+   Final dark set:  midnight, lagoon, ember.
+
+   Retired palette blocks remain for one migration window so an older cached
+   class can still paint safely before applyTheme() replaces it.
    ────────────────────────────────────────────────────────────────── */
 
 :root,
@@ -22,8 +25,8 @@
 
   /* Ink */
   --ink: #1a1815;
-  --ink-2: #5c5851;
-  --ink-3: #8c877d;
+  --ink-2: #544f49;
+  --ink-3: #5f5a53;
   --ink-rgb: 26, 24, 21;
 
   /* Hairlines */
@@ -43,10 +46,19 @@
   --you-bg: rgba(var(--you-rgb), 0.08);
   --you-line: rgba(var(--you-rgb), 0.4);
 
-  /* Status */
-  --green: #4a6b3a;
-  --green-bg: rgba(74, 107, 58, 0.12);
-  --red: #a83a2c;
+  /* Semantic status. The legacy aliases keep existing components/plugins safe. */
+  --success: #405d32;
+  --success-rgb: 64, 93, 50;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #784713;
+  --warning-rgb: 120, 71, 19;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #a83a2c;
+  --danger-rgb: 168, 58, 44;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   /* Node-type swatches */
   --node-project: #2d4a7c;
@@ -87,8 +99,8 @@
   --bg-elevated: #d2d2c8;
 
   --ink: #1a1d20;
-  --ink-2: #555a60;
-  --ink-3: #8a8f96;
+  --ink-2: #454b51;
+  --ink-3: #545a60;
   --ink-rgb: 26, 29, 32;
 
   --rule: rgba(var(--ink-rgb), 0.08);
@@ -105,9 +117,18 @@
   --you-bg: rgba(var(--you-rgb), 0.08);
   --you-line: rgba(var(--you-rgb), 0.4);
 
-  --green: #15803d;
-  --green-bg: rgba(21, 128, 61, 0.12);
-  --red: #c2410c;
+  --success: #075c2a;
+  --success-rgb: 7, 92, 42;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #734009;
+  --warning-rgb: 115, 64, 9;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #9f350a;
+  --danger-rgb: 159, 53, 10;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #1e3a8a;
   --node-topic: #15803d;
@@ -140,8 +161,8 @@
   --bg-elevated: #e0d6bf;
 
   --ink: #211c15;
-  --ink-2: #6b6359;
-  --ink-3: #928b7e;
+  --ink-2: #59534b;
+  --ink-3: #635d54;
   --ink-rgb: 33, 28, 21;
 
   --rule: rgba(var(--ink-rgb), 0.08);
@@ -158,9 +179,18 @@
   --you-bg: rgba(var(--you-rgb), 0.08);
   --you-line: rgba(var(--you-rgb), 0.4);
 
-  --green: #4f6b35;
-  --green-bg: rgba(79, 107, 53, 0.12);
-  --red: #b0432e;
+  --success: #435e2d;
+  --success-rgb: 67, 94, 45;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #86501c;
+  --warning-rgb: 134, 80, 28;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #9c3928;
+  --danger-rgb: 156, 57, 40;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #2f4a78;
   --node-topic: #4f6b35;
@@ -193,8 +223,8 @@
   --bg-elevated: #cec1a0;
 
   --ink: #2a2618;
-  --ink-2: #6b6450;
-  --ink-3: #928b73;
+  --ink-2: #45402f;
+  --ink-3: #4f4936;
   --ink-rgb: 42, 38, 24;
 
   --rule: rgba(var(--ink-rgb), 0.08);
@@ -211,9 +241,18 @@
   --you-bg: rgba(var(--you-rgb), 0.08);
   --you-line: rgba(var(--you-rgb), 0.4);
 
-  --green: #6f7b30;
-  --green-bg: rgba(111, 123, 48, 0.12);
-  --red: #a8521f;
+  --success: #3a501d;
+  --success-rgb: 58, 80, 29;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #703909;
+  --warning-rgb: 112, 57, 9;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #873216;
+  --danger-rgb: 135, 50, 22;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #2b5654;
   --node-topic: #6f7b30;
@@ -246,8 +285,8 @@
   --bg-elevated: #1f1f1f;
 
   --ink: #ededed;
-  --ink-2: #9a9a9a;
-  --ink-3: #5e5e5e;
+  --ink-2: #aaaaaa;
+  --ink-3: #8e8e8e;
   --ink-rgb: 237, 237, 237;
 
   --rule: rgba(var(--ink-rgb), 0.07);
@@ -264,9 +303,18 @@
   --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #9becff;
-  --green-bg: rgba(155, 236, 255, 0.14);
-  --red: #f06c9b;
+  --success: #7eed90;
+  --success-rgb: 126, 237, 144;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #f0d56c;
+  --warning-rgb: 240, 213, 108;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ff728c;
+  --danger-rgb: 255, 114, 140;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #7eed90;
   --node-topic: #9becff;
@@ -299,8 +347,8 @@
   --bg-elevated: #1d404a;
 
   --ink: #e8f0f0;
-  --ink-2: #94abad;
-  --ink-3: #5d7376;
+  --ink-2: #afc0c2;
+  --ink-3: #98adb0;
   --ink-rgb: 232, 240, 240;
 
   --rule: rgba(var(--ink-rgb), 0.07);
@@ -317,9 +365,18 @@
   --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #7ddcb4;
-  --green-bg: rgba(125, 220, 180, 0.14);
-  --red: #f5d56b;
+  --success: #7ddcb4;
+  --success-rgb: 125, 220, 180;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #f5d56b;
+  --warning-rgb: 245, 213, 107;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ff7d8b;
+  --danger-rgb: 255, 125, 139;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #ff8a7a;
   --node-topic: #7ddcb4;
@@ -352,8 +409,8 @@
   --bg-elevated: #1f1f25;
 
   --ink: #f0f0ee;
-  --ink-2: #9a9aa0;
-  --ink-3: #62626a;
+  --ink-2: #aaaaaf;
+  --ink-3: #898990;
   --ink-rgb: 240, 240, 238;
 
   --rule: rgba(var(--ink-rgb), 0.07);
@@ -370,9 +427,18 @@
   --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #5fb8ff;
-  --green-bg: rgba(95, 184, 255, 0.14);
-  --red: #ff8a3a;
+  --success: #8ef06a;
+  --success-rgb: 142, 240, 106;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #ffc857;
+  --warning-rgb: 255, 200, 87;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ff6474;
+  --danger-rgb: 255, 100, 116;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #8ef06a;
   --node-topic: #5fb8ff;
@@ -405,8 +471,8 @@
   --bg-elevated: #33211a;
 
   --ink: #f0e6d8;
-  --ink-2: #b39c8a;
-  --ink-3: #6e5d50;
+  --ink-2: #b9a391;
+  --ink-3: #a18a79;
   --ink-rgb: 240, 230, 216;
 
   --rule: rgba(var(--ink-rgb), 0.07);
@@ -423,9 +489,18 @@
   --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #b3d164;
-  --green-bg: rgba(179, 209, 100, 0.14);
-  --red: #e664a4;
+  --success: #b3d164;
+  --success-rgb: 179, 209, 100;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #f0a83a;
+  --warning-rgb: 240, 168, 58;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ef718d;
+  --danger-rgb: 239, 113, 141;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #f0a83a;
   --node-topic: #b3d164;
@@ -458,8 +533,8 @@
   --bg-elevated: #332343;
 
   --ink: #f0e6f5;
-  --ink-2: #b29bc4;
-  --ink-3: #776588;
+  --ink-2: #baa5ca;
+  --ink-3: #a38daf;
   --ink-rgb: 240, 230, 245;
 
   --rule: rgba(var(--ink-rgb), 0.07);
@@ -476,9 +551,18 @@
   --you-bg: rgba(var(--you-rgb), 0.11);
   --you-line: rgba(var(--you-rgb), 0.45);
 
-  --green: #74e8c0;
-  --green-bg: rgba(116, 232, 192, 0.14);
-  --red: #ff8da8;
+  --success: #74e8c0;
+  --success-rgb: 116, 232, 192;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #f5b876;
+  --warning-rgb: 245, 184, 118;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ff718f;
+  --danger-rgb: 255, 113, 143;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
 
   --node-project: #b89dff;
   --node-topic: #74e8c0;
@@ -486,6 +570,254 @@
   --node-daily: #9a8aaa;
   --node-capture: #f5b876;
   --node-custom: #7ec7e5;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
+  --edge-color-hover: rgba(var(--you-rgb), 0.6);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Porcelain — cool gallery paper · cobalt + vermilion ────────── */
+.theme-porcelain {
+  --bg-base: #f3f4f1;
+  --bg-surface: #e7e9e4;
+  --bg-elevated: #d8dcd5;
+
+  --ink: #171b1f;
+  --ink-2: #465158;
+  --ink-3: #566167;
+  --ink-rgb: 23, 27, 31;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #295b85;
+  --agent-rgb: 41, 91, 133;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #a23f32;
+  --you-rgb: 162, 63, 50;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --success: #315a35;
+  --success-rgb: 49, 90, 53;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #754813;
+  --warning-rgb: 117, 72, 19;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #9f3c32;
+  --danger-rgb: 159, 60, 50;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
+
+  --node-project: #295b85;
+  --node-topic: #315a35;
+  --node-people: #704b72;
+  --node-daily: #566167;
+  --node-capture: #754813;
+  --node-custom: #28666a;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Herbarium — naturalist archive · forest + clay ─────────────── */
+.theme-herbarium {
+  --bg-base: #f1eddf;
+  --bg-surface: #e5deca;
+  --bg-elevated: #d6ccb3;
+
+  --ink: #211f19;
+  --ink-2: #484b3f;
+  --ink-3: #525749;
+  --ink-rgb: 33, 31, 25;
+
+  --rule: rgba(var(--ink-rgb), 0.08);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #315d55;
+  --agent-rgb: 49, 93, 85;
+  --agent-bg: rgba(var(--agent-rgb), 0.08);
+  --agent-line: rgba(var(--agent-rgb), 0.35);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #923b30;
+  --you-rgb: 146, 59, 48;
+  --you-bg: rgba(var(--you-rgb), 0.08);
+  --you-line: rgba(var(--you-rgb), 0.4);
+
+  --success: #365529;
+  --success-rgb: 54, 85, 41;
+  --success-bg: rgba(var(--success-rgb), 0.12);
+  --warning: #764716;
+  --warning-rgb: 118, 71, 22;
+  --warning-bg: rgba(var(--warning-rgb), 0.12);
+  --danger: #923b30;
+  --danger-rgb: 146, 59, 48;
+  --danger-bg: rgba(var(--danger-rgb), 0.12);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
+
+  --node-project: #355c79;
+  --node-topic: #365529;
+  --node-people: #694568;
+  --node-daily: #525749;
+  --node-capture: #764716;
+  --node-custom: #315d55;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.18);
+  --edge-color-hover: rgba(var(--you-rgb), 0.55);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.05);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(var(--ink-rgb), 0.1);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Midnight Ink — navy-black paper · sky + coral ──────────────── */
+.theme-midnight {
+  --bg-base: #0f1722;
+  --bg-surface: #172231;
+  --bg-elevated: #213044;
+
+  --ink: #eef2f3;
+  --ink-2: #bdc7cb;
+  --ink-3: #a9b5bb;
+  --ink-rgb: 238, 242, 243;
+
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #83b8df;
+  --agent-rgb: 131, 184, 223;
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #ef897a;
+  --you-rgb: 239, 137, 122;
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --success: #76d49b;
+  --success-rgb: 118, 212, 155;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #e4bd63;
+  --warning-rgb: 228, 189, 99;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #ef7481;
+  --danger-rgb: 239, 116, 129;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
+
+  --node-project: #83b8df;
+  --node-topic: #76d49b;
+  --node-people: #c49bea;
+  --node-daily: #a9b5bb;
+  --node-capture: #e4bd63;
+  --node-custom: #70c8d2;
+
+  --label-color: var(--ink-2);
+  --edge-color: rgba(var(--ink-rgb), 0.16);
+  --edge-color-hover: rgba(var(--you-rgb), 0.6);
+  --edge-color-faint: rgba(var(--ink-rgb), 0.06);
+  --node-dimmed: rgba(var(--ink-rgb), 0.1);
+
+  --shadow-elev: rgba(0, 0, 0, 0.55);
+
+  --font: "Inter", system-ui, -apple-system, sans-serif;
+  --serif: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --mono: "JetBrains Mono", "SF Mono", Menlo, monospace;
+  --r-sm: 4px;
+  --r-md: 6px;
+  --r-lg: 10px;
+  --ease: cubic-bezier(0.2, 0.7, 0.3, 1);
+}
+
+/* ── Nocturne — restrained plum-black · periwinkle + coral ──────── */
+.theme-nocturne {
+  --bg-base: #19151f;
+  --bg-surface: #251d2d;
+  --bg-elevated: #34273d;
+
+  --ink: #f2ebf0;
+  --ink-2: #c7b9c4;
+  --ink-3: #b3a4b0;
+  --ink-rgb: 242, 235, 240;
+
+  --rule: rgba(var(--ink-rgb), 0.07);
+  --rule-2: rgba(var(--ink-rgb), 0.18);
+
+  --agent: #a9b9e8;
+  --agent-rgb: 169, 185, 232;
+  --agent-bg: rgba(var(--agent-rgb), 0.11);
+  --agent-line: rgba(var(--agent-rgb), 0.42);
+  --agent-line-fade: rgba(var(--agent-rgb), 0);
+
+  --you: #eb8b81;
+  --you-rgb: 235, 139, 129;
+  --you-bg: rgba(var(--you-rgb), 0.11);
+  --you-line: rgba(var(--you-rgb), 0.45);
+
+  --success: #7fd5a7;
+  --success-rgb: 127, 213, 167;
+  --success-bg: rgba(var(--success-rgb), 0.14);
+  --warning: #e4b76b;
+  --warning-rgb: 228, 183, 107;
+  --warning-bg: rgba(var(--warning-rgb), 0.14);
+  --danger: #eb7888;
+  --danger-rgb: 235, 120, 136;
+  --danger-bg: rgba(var(--danger-rgb), 0.14);
+  --green: var(--success);
+  --green-bg: var(--success-bg);
+  --red: var(--danger);
+
+  --node-project: #a9b9e8;
+  --node-topic: #7fd5a7;
+  --node-people: #d79bdd;
+  --node-daily: #b3a4b0;
+  --node-capture: #e4b76b;
+  --node-custom: #77c7d0;
 
   --label-color: var(--ink-2);
   --edge-color: rgba(var(--ink-rgb), 0.16);

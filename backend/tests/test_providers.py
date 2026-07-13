@@ -8,6 +8,7 @@ from core.config import GlobalConfig, ProviderConfig
 from core.exceptions import ProviderConfigError
 from core.providers import (
     AnthropicProvider,
+    CodexProvider,
     OllamaProvider,
     OpenAIProvider,
     ProviderRegistry,
@@ -57,6 +58,17 @@ class TestRegistryInit:
 
 
 class TestRegistryGetValid:
+    @patch("core.providers.codex._codex_binary", return_value="/usr/bin/codex")
+    def test_get_codex_provider(self, _binary) -> None:
+        """get('codex') returns the opt-in local app-server bridge."""
+        cfg = _make_config(providers={"codex": {"chat_model": "default"}})
+        registry = ProviderRegistry(cfg)
+
+        provider = registry.get("codex")
+
+        assert isinstance(unwrap_provider(provider), CodexProvider)
+        assert provider.name == "codex"
+
     def test_get_ollama_provider(self) -> None:
         """get('ollama') returns an OllamaProvider instance."""
         cfg = _make_config(providers={"ollama": {"host": "http://localhost:11434"}})

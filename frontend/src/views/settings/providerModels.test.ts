@@ -29,6 +29,7 @@ describe("createProvider", () => {
   });
 
   it("leaves embedModel blank for a chat-only provider", () => {
+    expect(createProvider("codex").embedModel).toBe("");
     expect(createProvider("anthropic").embedModel).toBe("");
     expect(createProvider("xai").embedModel).toBe("");
   });
@@ -74,7 +75,9 @@ describe("toProviderInput", () => {
 
   it("keeps embed_model for an embed-capable provider", () => {
     const form = createProvider("ollama");
-    expect(toProviderInput(form, "ollama").embed_model).toBe("nomic-embed-text");
+    expect(toProviderInput(form, "ollama").embed_model).toBe(
+      "nomic-embed-text",
+    );
   });
 });
 
@@ -96,5 +99,20 @@ describe("provider metadata invariants", () => {
     const names = PROVIDERS.filter((p) => p.supportsEmbed).map((p) => p.name);
     expect(names).toContain("openai");
     expect(names as ProviderName[]).toContain("ollama");
+  });
+
+  it("only exposes OAuth labels for providers with a real delegated flow", () => {
+    expect(PROVIDER_BY_NAME.get("codex")?.authMode).toBe("codex");
+    expect(PROVIDER_BY_NAME.get("openrouter")?.authMode).toBe("oauth_pkce");
+    expect(PROVIDER_BY_NAME.get("openai")?.authMode).toBe("api_key");
+    expect(PROVIDER_BY_NAME.get("ollama")?.authMode).toBe("local");
+  });
+
+  it("gives every API-key provider an official credential link", () => {
+    for (const provider of PROVIDERS) {
+      if (provider.authMode === "api_key") {
+        expect(provider.credentialUrl).toMatch(/^https:\/\//);
+      }
+    }
   });
 });

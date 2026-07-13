@@ -4,8 +4,9 @@ capture endpoint.
 Three outcomes mirror Sentinel's verdicts:
   passed  → archive the capture, ship the note clean
   warning → archive the capture, annotate the note as "flagged"
-  failed  → keep the capture in the inbox marked review_required; the note
-            exists but the user is warned to check it
+  anything else (failed/unavailable/missing) → keep the capture in the inbox
+            marked review_required; the note exists but the user is warned
+            to check it
 
 Frontmatter annotation is best-effort: a failure is logged, never raised — the
 user-visible flow (note created, capture maybe archived) matters more than the
@@ -42,7 +43,9 @@ def enforce_verdict(
 ) -> EnforcementOutcome:
     """Apply Sentinel's verdict to the capture and note. See module docstring."""
     outcome = EnforcementOutcome()
-    if verdict == "failed":
+    if verdict not in {"passed", "warning"}:
+        if not reasons:
+            reasons = ["Sentinel validation unavailable or incomplete"]
         outcome.review_required = True
         if note_path is not None:
             annotate_frontmatter(
@@ -53,7 +56,7 @@ def enforce_verdict(
         )
         return outcome
 
-    # passed or warning (or no sentinel) → archive the capture.
+    # Only an explicit passed or warning verdict may archive the capture.
     try:
         from agents.loom.weaver_io import archive_capture
 

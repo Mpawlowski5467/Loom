@@ -87,6 +87,14 @@ export function buildGraphSvg(
   const w = container.clientWidth;
   const h = container.clientHeight;
   const bg = getComputedStyle(container).backgroundColor || "#f5f1e8";
+  const labelFont = String(
+    sigma.getSetting("labelFont") ?? "Inter, system-ui, sans-serif",
+  );
+  const labelColor =
+    typeof sigma.getSetting("labelColor") === "object"
+      ? ((sigma.getSetting("labelColor") as { color?: string }).color ??
+        "#1a1815")
+      : "#1a1815";
 
   const parts: string[] = [];
   parts.push(
@@ -149,8 +157,8 @@ export function buildGraphSvg(
       parts.push(
         `<text x="${(p.x + scaled + 3).toFixed(2)}" ` +
           `y="${(p.y + 4).toFixed(2)}" ` +
-          `font-family="Inter, sans-serif" font-size="11" ` +
-          `fill="#1a1815">${escapeXml(label)}</text>`,
+          `font-family="${escapeXml(labelFont)}" font-size="11" ` +
+          `fill="${escapeXml(labelColor)}">${escapeXml(label)}</text>`,
       );
     }
   });

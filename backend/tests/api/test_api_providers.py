@@ -12,11 +12,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 from starlette.testclient import TestClient
 
 
-def _config_with(name: str, *, embed_model: str = "") -> MagicMock:
+def _config_with(name: str, *, embed_model: str = "", base_url: str = "") -> MagicMock:
     """A GlobalConfig stub exposing one configured provider."""
     provider = MagicMock()
     provider.api_key = "sk-test"
     provider.host = ""
+    provider.base_url = base_url
     provider.chat_model = "gpt-4o"
     provider.embed_model = embed_model
     cfg = MagicMock()
@@ -74,6 +75,32 @@ class TestProviderTestEndpoint:
         assert resp.status_code == 200
         assert resp.json()["ok"] is True
         stub_provider.embed.assert_awaited_once()
+
+    def test_custom_base_url_is_forwarded_to_the_test_provider(self, client: TestClient) -> None:
+        """Unsaved custom endpoints must be the endpoint the Test button probes."""
+        stub_provider = AsyncMock()
+        stub_provider.chat = AsyncMock(return_value="pong")
+        captured = []
+
+        def build(runtime):
+            captured.append(runtime)
+            return stub_provider
+
+        with (
+            patch(
+                "api.routers.providers.GlobalConfig.load",
+                return_value=_config_with("xai"),
+            ),
+            patch("api.routers.providers.build_provider_from_input", side_effect=build),
+        ):
+            resp = client.post(
+                "/api/providers/xai/test",
+                json={"base_url": "https://gateway.example.test/v1"},
+            )
+
+        assert resp.status_code == 200
+        assert resp.json()["ok"] is True
+        assert captured[0].base_url == "https://gateway.example.test/v1"
 
     def test_provider_error_returns_ok_false_with_message(self, client: TestClient) -> None:
         """A provider that raises surfaces ok=False and the error inline (HTTP 200)."""

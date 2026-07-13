@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import TYPE_CHECKING, Any
 
@@ -40,7 +41,7 @@ class PipelineResult:
 
     @property
     def success(self) -> bool:
-        return self.note is not None and not self.errors
+        return self.note is not None and not self.errors and not self.review_required
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -103,7 +104,21 @@ class AgentRunner:
         return agents
 
     async def run_pipeline(self, capture_path: Path, refresh_index: Any = None) -> PipelineResult:
-        """Run the full capture pipeline: Weaver → Spider → Scribe → Sentinel.
+        """Run one capture transaction under a process-wide per-capture lock.
+
+        The lock covers the idempotency check, graph side effects, validation,
+        and enforcement. Two overlapping ``/process`` or ``/process-all`` calls
+        for the same capture therefore cannot both create a note.
+        """
+        from agents.file_locks import path_lock
+
+        async with path_lock(capture_path):
+            return await self._run_pipeline_locked(capture_path, refresh_index)
+
+    async def _run_pipeline_locked(
+        self, capture_path: Path, refresh_index: Any = None
+    ) -> PipelineResult:
+        """Run the full capture pipeline: Weaver → Sentinel → Spider → Scribe.
 
         Orchestrated as a LangGraph ``StateGraph`` (see
         :mod:`agents.loom.pipeline_graph`). The graph adds a Sentinel-retry
@@ -148,10 +163,15 @@ class AgentRunner:
                 existing.id,
             )
             result.note = existing
-            async with run_scope("pipeline"), step("enforce"):
-                self._enforce_into_result(
-                    capture_path, _resolve_path(existing.file_path), None, result
-                )
+            note_path = _resolve_path(existing.file_path)
+            async with run_scope("pipeline"):
+                async with step("sentinel", caller="sentinel") as record:
+                    result.validation = await self._validate_existing_note(note_path, result.errors)
+                    if result.validation.status == "unavailable":
+                        record.status = "error"
+                        record.error = "; ".join(result.validation.reasons)
+                async with step("enforce"):
+                    self._enforce_into_result(capture_path, note_path, result.validation, result)
             return result
 
         graph = build_pipeline_graph(self, refresh_index)
@@ -170,6 +190,47 @@ class AgentRunner:
         result.review_required = bool(final.get("review_required", result.review_required))
         result.flagged = bool(final.get("flagged", result.flagged))
         return result
+
+    async def _validate_existing_note(self, note_path: Path, errors: list[str]) -> ValidationResult:
+        """Revalidate a note found by the idempotency guard before enforcement.
+
+        A prior run may have stopped after writing the note but before Sentinel
+        or capture archival. Crash recovery must not treat that missing verdict
+        as approval, so it reconstructs the read chain and asks Sentinel again.
+        """
+        from agents.chain import ReadChain
+        from agents.loom.sentinel import ValidationResult, get_sentinel
+
+        sentinel = get_sentinel()
+        if sentinel is None:
+            message = "Sentinel agent not initialized"
+            errors.append(message)
+            return ValidationResult(
+                status="unavailable",
+                reasons=[message],
+                agent_name="weaver",
+                action="created",
+                target=str(note_path),
+                modes=["unavailable"],
+            )
+
+        try:
+            chain = await asyncio.to_thread(
+                ReadChain(self._vault_root).execute, "weaver", note_path
+            )
+            return await sentinel.validate_action("weaver", "created", note_path, chain)
+        except Exception as exc:  # noqa: BLE001 - convert recovery failure to a safe verdict
+            logger.warning("Sentinel failed while resuming pipeline", exc_info=True)
+            message = f"Sentinel failed: {exc}"
+            errors.append(message)
+            return ValidationResult(
+                status="unavailable",
+                reasons=[message],
+                agent_name="weaver",
+                action="created",
+                target=str(note_path),
+                modes=["unavailable"],
+            )
 
     def _enforce_verdict(
         self,
@@ -283,7 +344,7 @@ class AgentRunner:
             capture_id = parse_note_meta(capture_path).id
         except (OSError, ValueError):
             return None
-        meta = find_note_by_capture_source(capture_id)
+        meta = find_note_by_capture_source(self._vault_root, capture_id)
         if meta is None or not meta.file_path:
             return None
         note_file = _resolve_path(meta.file_path)

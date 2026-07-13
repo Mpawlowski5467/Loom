@@ -1,11 +1,13 @@
 """Tests for the captures API routes in api/routers/captures.py."""
 
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from starlette.testclient import TestClient
 
+from agents.loom.sentinel import ValidationResult
 from agents.loom.spider_models import LinkCandidate
 from agents.loom.weaver import CaptureProposal
 from core.notes import Note
@@ -151,9 +153,20 @@ class TestProcessCapture:
 
         mock_weaver = MagicMock()
         # Router calls process_capture_full(), which returns (note, chain).
-        mock_weaver.process_capture_full = AsyncMock(return_value=(mock_note, None))
+        mock_weaver.process_capture_full = AsyncMock(
+            return_value=(mock_note, SimpleNamespace(success=True))
+        )
+        mock_sentinel = MagicMock()
+        mock_sentinel.validate_action = AsyncMock(
+            return_value=ValidationResult(status="passed", modes=["deterministic"])
+        )
 
-        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.sentinel.get_sentinel", return_value=mock_sentinel),
+            patch("agents.loom.spider.get_spider", return_value=None),
+            patch("agents.loom.scribe.get_scribe", return_value=None),
+        ):
             resp = client.post(
                 "/api/captures/process",
                 json={"capture_path": "captures/raw-idea.md"},
@@ -165,6 +178,8 @@ class TestProcessCapture:
         assert data["note_id"] == "thr_new001"
         assert data["note_title"] == "Processed Note"
         assert data["note_type"] == "topic"
+        assert data["validation"] == "passed"
+        assert data["capture_archived"] is True
 
     def test_process_capture_empty_returns_skipped(
         self, client: TestClient, seeded_captures: Path
@@ -374,9 +389,18 @@ class TestCommitCapture:
             body="## Summary\n\nx\n",
         )
         mock_weaver = MagicMock()
-        mock_weaver.commit_proposal = AsyncMock(return_value=(note, None))
+        mock_weaver.commit_proposal = AsyncMock(return_value=(note, SimpleNamespace(success=True)))
+        mock_sentinel = MagicMock()
+        mock_sentinel.validate_action = AsyncMock(
+            return_value=ValidationResult(status="passed", modes=["deterministic"])
+        )
 
-        with patch("agents.loom.weaver.get_weaver", return_value=mock_weaver):
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.sentinel.get_sentinel", return_value=mock_sentinel),
+            patch("agents.loom.spider.get_spider", return_value=None),
+            patch("agents.loom.scribe.get_scribe", return_value=None),
+        ):
             resp = client.post(
                 "/api/captures/commit",
                 json={
@@ -396,6 +420,47 @@ class TestCommitCapture:
         assert data["capture_archived"] is True
         # Capture is moved out of the inbox.
         assert not (seeded_captures / "threads" / "captures" / "raw-idea.md").exists()
+
+    def test_commit_missing_sentinel_keeps_capture_for_review(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """A committed proposal is not published when Sentinel is unavailable."""
+        note = Note(
+            id="thr_review",
+            title="Needs Review",
+            type="topic",
+            file_path="/tmp/threads/topics/needs-review.md",
+            body="## Summary\n\nx\n",
+        )
+        mock_weaver = MagicMock()
+        mock_weaver.commit_proposal = AsyncMock(return_value=(note, SimpleNamespace(success=True)))
+        mock_spider = MagicMock()
+        mock_spider.scan_and_report = AsyncMock()
+
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.sentinel.get_sentinel", return_value=None),
+            patch("agents.loom.spider.get_spider", return_value=mock_spider),
+        ):
+            resp = client.post(
+                "/api/captures/commit",
+                json={
+                    "capture_path": "captures/raw-idea.md",
+                    "note_type": "topic",
+                    "folder": "topics",
+                    "title": "Needs Review",
+                    "tags": ["idea"],
+                    "body": "## Summary\n\nx\n",
+                },
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["validation"] == "unavailable"
+        assert data["capture_archived"] is False
+        assert data["review_required"] is True
+        assert (seeded_captures / "threads" / "captures" / "raw-idea.md").exists()
+        mock_spider.scan_and_report.assert_not_awaited()
 
     def test_commit_404_when_capture_missing(
         self, client: TestClient, seeded_captures: Path

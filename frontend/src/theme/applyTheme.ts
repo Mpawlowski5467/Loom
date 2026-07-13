@@ -1,4 +1,4 @@
-import { THEMES, THEME_META, type ThemeName, isThemeName } from "./themes";
+import { THEME_META, type ThemeName, normalizeThemeName } from "./themes";
 
 const THEME_CLASS_PREFIX = "theme-";
 const MODE_ATTR = "data-theme-mode";
@@ -14,9 +14,11 @@ const LS_KEY = "loom.theme";
 export function applyTheme(theme: ThemeName): void {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
-  for (const name of THEMES) {
-    root.classList.toggle(`${THEME_CLASS_PREFIX}${name}`, name === theme);
+  for (const className of Array.from(root.classList)) {
+    if (className.startsWith(THEME_CLASS_PREFIX))
+      root.classList.remove(className);
   }
+  root.classList.add(`${THEME_CLASS_PREFIX}${theme}`);
   root.setAttribute(MODE_ATTR, THEME_META[theme].mode);
   try {
     window.localStorage.setItem(LS_KEY, theme);
@@ -35,13 +37,15 @@ export function readInitialTheme(): ThemeName {
   if (typeof window !== "undefined") {
     try {
       const qs = new URLSearchParams(window.location.search).get("theme");
-      if (isThemeName(qs)) return qs;
+      const queryTheme = normalizeThemeName(qs);
+      if (queryTheme) return queryTheme;
     } catch {
       // Falls through.
     }
     try {
       const stored = window.localStorage.getItem(LS_KEY);
-      if (isThemeName(stored)) return stored;
+      const storedTheme = normalizeThemeName(stored);
+      if (storedTheme) return storedTheme;
     } catch {
       // Falls through.
     }

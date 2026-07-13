@@ -19,6 +19,7 @@ from core.providers.anthropic import AnthropicProvider
 from core.providers.base import (
     AnthropicProviderConfig,
     BaseProvider,
+    CodexProviderConfig,
     OllamaProviderConfig,
     OpenAICompatProviderConfig,
     OpenAIProviderConfig,
@@ -26,6 +27,7 @@ from core.providers.base import (
     XAIProviderConfig,
 )
 from core.providers.cached import CachedProvider
+from core.providers.codex import CodexProvider
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
 from core.providers.openai_compatible import (
@@ -58,6 +60,7 @@ if TYPE_CHECKING:
     from pydantic import BaseModel
 
 _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
+    "codex": CodexProviderConfig,
     "openai": OpenAIProviderConfig,
     "anthropic": AnthropicProviderConfig,
     "ollama": OllamaProviderConfig,
@@ -71,6 +74,7 @@ _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
 }
 
 _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
+    "codex": CodexProvider,
     "openai": OpenAIProvider,
     "anthropic": AnthropicProvider,
     "ollama": OllamaProvider,

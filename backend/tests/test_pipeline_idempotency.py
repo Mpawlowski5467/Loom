@@ -8,6 +8,7 @@ interrupted archive instead of re-creating.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from pathlib import Path
 
@@ -88,6 +89,54 @@ def _reset_note_index():
 
 
 class TestPipelineIdempotency:
+    @pytest.mark.asyncio
+    async def test_concurrent_same_capture_runs_create_one_note(self, tmp_path: Path) -> None:
+        """Two runners racing the same capture serialize around the full transaction."""
+        root = _build_vault(tmp_path)
+        _scaffold_all_agents(root)
+        capture_path = _write_capture(
+            root, "cap-race.md", "Race Note", "Body about concurrent pipelines.\n"
+        )
+        capture_id = parse_note_meta(capture_path).id
+        runner_a = _init_runtime(root)
+
+        from agents.loom.weaver import get_weaver
+        from agents.runner import AgentRunner
+
+        weaver = get_weaver()
+        assert weaver is not None
+        original = weaver.process_capture_full
+        entered = asyncio.Event()
+        release = asyncio.Event()
+        calls = 0
+
+        async def gated_process(path: Path):
+            nonlocal calls
+            calls += 1
+            entered.set()
+            await release.wait()
+            return await original(path)
+
+        weaver.process_capture_full = gated_process  # type: ignore[method-assign]
+        runner_b = AgentRunner(root)
+
+        first = asyncio.create_task(
+            runner_a.run_pipeline(capture_path, refresh_index=get_note_index().refresh_file)
+        )
+        await entered.wait()
+        second = asyncio.create_task(
+            runner_b.run_pipeline(capture_path, refresh_index=get_note_index().refresh_file)
+        )
+        await asyncio.sleep(0)
+        release.set()
+        result_a, result_b = await asyncio.gather(first, second)
+
+        assert calls == 1
+        assert sum(result.note is not None for result in (result_a, result_b)) == 1
+        assert sum(result.capture_archived for result in (result_a, result_b)) == 1
+        assert not capture_path.exists()
+        assert len(_notes_with_capture_source(root, capture_id)) == 1
+
     @pytest.mark.asyncio
     async def test_archive_crash_then_retry_creates_no_duplicate(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

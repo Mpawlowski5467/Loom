@@ -6,20 +6,38 @@ import { AppCtx, type AppContextValue } from "../../context/app-ctx";
 import { ProvidersSection } from "./ProvidersSection";
 import type { SettingsProvider } from "../../api/settings";
 
-const { getSettingsProviders, saveSettingsProviders, patchConfig, testProvider } =
-  vi.hoisted(() => ({
-    getSettingsProviders: vi.fn(),
-    saveSettingsProviders: vi.fn(),
-    patchConfig: vi.fn(),
-    testProvider: vi.fn(),
-  }));
+const {
+  getSettingsProviders,
+  saveSettingsProviders,
+  patchConfig,
+  testProvider,
+  getCodexAuthStatus,
+  listModels,
+  startCodexLogin,
+  startOpenRouterOAuth,
+} = vi.hoisted(() => ({
+  getSettingsProviders: vi.fn(),
+  saveSettingsProviders: vi.fn(),
+  patchConfig: vi.fn(),
+  testProvider: vi.fn(),
+  getCodexAuthStatus: vi.fn(),
+  listModels: vi.fn(),
+  startCodexLogin: vi.fn(),
+  startOpenRouterOAuth: vi.fn(),
+}));
 
 vi.mock("../../api/settings", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../api/settings")>();
   return { ...actual, getSettingsProviders, saveSettingsProviders };
 });
 vi.mock("../../api/config", () => ({ patchConfig }));
-vi.mock("../../api/providers", () => ({ testProvider }));
+vi.mock("../../api/providers", () => ({
+  testProvider,
+  getCodexAuthStatus,
+  listModels,
+  startCodexLogin,
+  startOpenRouterOAuth,
+}));
 
 function mkSettingsProvider(
   overrides: Partial<SettingsProvider> = {},
@@ -73,6 +91,19 @@ beforeEach(() => {
   saveSettingsProviders.mockReset();
   patchConfig.mockReset();
   testProvider.mockReset();
+  getCodexAuthStatus.mockReset();
+  listModels.mockReset();
+  startCodexLogin.mockReset();
+  startOpenRouterOAuth.mockReset();
+  getCodexAuthStatus.mockResolvedValue({
+    installed: true,
+    connected: true,
+    auth_mode: "chatgpt",
+    plan_type: "plus",
+    version: "0.142.4",
+    error: null,
+  });
+  listModels.mockResolvedValue({ chat: [], embed: [] });
   patchConfig.mockResolvedValue({});
   saveSettingsProviders.mockResolvedValue({
     saved: 1,
@@ -90,9 +121,7 @@ describe("ProvidersSection — hydration", () => {
 
   it("warns when no configured provider supports embeddings", async () => {
     // Anthropic is chat-only → no embed provider configured.
-    renderSection([
-      mkSettingsProvider({ name: "anthropic", embed_model: "" }),
-    ]);
+    renderSection([mkSettingsProvider({ name: "anthropic", embed_model: "" })]);
     expect(
       await screen.findByText(/No embedding provider/),
     ).toBeInTheDocument();
@@ -103,6 +132,24 @@ describe("ProvidersSection — hydration", () => {
     expect(
       await screen.findByText(/Keys are encrypted at rest/),
     ).toBeInTheDocument();
+  });
+
+  it("shows the delegated Codex connection without exposing credentials", async () => {
+    renderSection([mkSettingsProvider()]);
+    expect(
+      await screen.findByText("Connected via chatgpt · plus"),
+    ).toBeInTheDocument();
+  });
+
+  it("links API-key providers to their official credential page", async () => {
+    renderSection([mkSettingsProvider()]);
+    const link = await screen.findByRole("link", { name: "Create API key" });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://platform.openai.com/api-keys",
+    );
+    expect(link).toHaveAttribute("target", "_blank");
+    expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
   it("does not warn when an embed-capable provider is configured", async () => {
@@ -125,7 +172,9 @@ describe("ProvidersSection — saving", () => {
     expect(payload[0]).toMatchObject({ name: "openai", is_default: true });
     expect(patchConfig).toHaveBeenCalledWith({ default_provider: "openai" });
     expect(refreshConfig).toHaveBeenCalled();
-    expect(await screen.findByText("Provider settings saved.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Provider settings saved."),
+    ).toBeInTheDocument();
   });
 
   it("blocks saving a cloud provider with no key (typed or stored)", async () => {
@@ -216,5 +265,34 @@ describe("ProvidersSection — test connection", () => {
     expect(
       await screen.findByText(/Failed — connection refused/),
     ).toBeInTheDocument();
+  });
+});
+
+describe("ProvidersSection — delegated linking", () => {
+  it("opens OpenRouter's server-generated PKCE authorization URL", async () => {
+    const user = userEvent.setup();
+    const popup = vi.spyOn(window, "open").mockReturnValue({} as Window);
+    startOpenRouterOAuth.mockResolvedValue({
+      authorization_url: "https://openrouter.ai/auth?code_challenge=safe",
+      expires_in: 600,
+    });
+    renderSection([
+      mkSettingsProvider({
+        name: "openrouter",
+        api_key_set: false,
+        embed_model: "",
+      }),
+    ]);
+
+    await user.click(
+      await screen.findByRole("button", { name: "Connect OpenRouter" }),
+    );
+
+    await waitFor(() => expect(startOpenRouterOAuth).toHaveBeenCalledOnce());
+    expect(popup).toHaveBeenCalledWith(
+      "https://openrouter.ai/auth?code_challenge=safe",
+      "loom-provider-auth",
+      "popup,width=560,height=760,noopener,noreferrer",
+    );
   });
 });

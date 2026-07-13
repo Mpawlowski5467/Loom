@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
-import { getAgentModels, putAgentModels } from "./agentModels";
+import {
+  getAgentModels,
+  putAgentModels,
+  putSystemAgentModels,
+} from "./agentModels";
 import type { AgentModelsResponse } from "./types";
 
 afterEach(() => {
@@ -17,6 +21,8 @@ const response: AgentModelsResponse = {
       system: true,
       provider: "",
       chat_model: "",
+      role: "creates notes",
+      uses_model: true,
     },
   ],
   default_provider: "openai",
@@ -52,6 +58,21 @@ describe("putAgentModels", () => {
     expect(spy).toHaveBeenCalledWith(
       "/api/settings/agent-models",
       { overrides: {} },
+      undefined,
+    );
+  });
+});
+
+describe("putSystemAgentModels", () => {
+  it("scopes replacement to built-in bindings", async () => {
+    const spy = vi.spyOn(apiClient, "put").mockResolvedValue(response);
+    const overrides = {
+      sentinel: { provider: "ollama", chat_model: "gpt-oss:20b" },
+    };
+    await putSystemAgentModels(overrides);
+    expect(spy).toHaveBeenCalledWith(
+      "/api/settings/agent-models",
+      { overrides, scope: "system" },
       undefined,
     );
   });

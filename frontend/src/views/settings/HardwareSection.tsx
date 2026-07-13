@@ -9,8 +9,8 @@ export function HardwareSection(): ReactNode {
       <div className="settings-kicker">Hardware</div>
       <h1 className="settings-title">Hardware &amp; Models</h1>
       <p className="settings-copy">
-        Profile this machine, see which local models it can run comfortably,
-        and pick a chat model per agent.
+        Profile this machine, see which local models it can run comfortably, and
+        apply role-aware recommendations to Loom's built-in agents.
       </p>
       <HardwareScanCard />
       <ModelAdvisorCard />

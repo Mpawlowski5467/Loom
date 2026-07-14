@@ -2,20 +2,27 @@
 
 import asyncio
 import logging
-import shutil
+import os
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 
 from agents.file_locks import path_lock
+from core.archive_paths import (
+    ARCHIVE_ORIGINAL_PATH_FIELD,
+    ArchivePathError,
+    archive_directory,
+    relative_existing_note_path,
+    safe_note_destination,
+)
+from core.events import publish_note_change
 from core.note_index import NoteIndex, get_note_index
 from core.notes import (
     Note,
     NoteMeta,
     atomic_write_text,
     generate_id,
-    note_to_file_content,
     now_iso,
     parse_note,
 )
@@ -166,6 +173,7 @@ async def create_note(
             from pathlib import Path
 
             index.refresh_file(Path(note.file_path))
+            publish_note_change()
             return note
         except Exception:
             logger.warning("Weaver create_from_modal failed, falling back", exc_info=True)
@@ -214,8 +222,9 @@ async def create_note(
 
     # Eagerly update the index so the new note is immediately findable
     index.refresh_file(file_path)
-
-    return parse_note(file_path)
+    note = parse_note(file_path)
+    publish_note_change()
+    return note
 
 
 @router.put("/{note_id}")
@@ -283,46 +292,217 @@ async def update_note(
                 path = new_path
 
         index.refresh_file(path)
-        return parse_note(path)
+        updated = parse_note(path)
+        publish_note_change()
+        return updated
 
 
 @router.delete("/{note_id}")
 @limiter.limit(WRITE_LIMIT)
-def archive_note(
+async def archive_note(
     request: Request,  # noqa: ARG001 — required by slowapi
     note_id: str,
+    base_modified: str | None = Query(
+        None,
+        description="Reject the archive if the note changed since this timestamp",
+    ),
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
     index: NoteIndex = Depends(get_note_index),  # noqa: B008
 ) -> dict[str, str]:
-    """Archive a note by moving it to .archive/."""
-    tdir = vm.active_threads_dir()
+    """Archive a note under the shared writer lock with optional versioning."""
     path = index.get_path_by_id(note_id)
     if path is None or not path.exists():
         raise HTTPException(status_code=404, detail=f"Note '{note_id}' not found")
 
-    archive_dir = tdir / ".archive"
-    archive_dir.mkdir(parents=True, exist_ok=True)
-
-    # Update frontmatter before moving
-    note = parse_note(path)
-    ts = now_iso()
-    meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
-    meta["status"] = "archived"
-    meta["modified"] = ts
-    meta["history"].append(
-        {"action": "archived", "by": "user", "at": ts, "reason": "Archived via API"},
+    result = await _archive_note_transaction(
+        path=path,
+        note_id=note_id,
+        base_modified=base_modified,
+        vault_root=vm.active_vault_dir(),
+        threads_dir=vm.active_threads_dir(),
+        index=index,
     )
-    atomic_write_text(path, note_to_file_content(meta, note.body))
+    publish_note_change()
+    return result
 
-    dest = archive_dir / path.name
-    if dest.exists():
-        # Collision: prior archive of a note with the same filename.
-        # Suffix with the archival timestamp (filesystem-safe) to keep both.
-        safe_ts = ts.replace(":", "-")
-        dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
-    shutil.move(str(path), str(dest))
 
-    # Remove from index (archived notes are excluded)
-    index.remove_file(path)
+async def _archive_note_transaction(
+    *,
+    path: Path,
+    note_id: str,
+    base_modified: str | None,
+    vault_root: Path,
+    threads_dir: Path,
+    index: NoteIndex,
+) -> dict[str, str]:
+    """Perform the archive read-modify-move as one rollback-safe operation."""
+    async with path_lock(path):
+        # The index lookup happens before waiting for the lock. Revalidate both
+        # identity and location after acquiring it in case a title edit renamed
+        # the file while this request was queued.
+        current_path = index.get_path_by_id(note_id)
+        if current_path is None or current_path.resolve() != path.resolve() or not path.exists():
+            raise HTTPException(
+                status_code=409,
+                detail="Note changed location while being archived; reload and retry.",
+            )
 
-    return {"status": "archived", "path": str(dest)}
+        try:
+            original_rel = relative_existing_note_path(threads_dir, path)
+        except ArchivePathError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+        original_content = path.read_text(encoding="utf-8")
+        note = parse_note(path)
+        if base_modified is not None and base_modified != note.modified:
+            raise HTTPException(
+                status_code=409,
+                detail="Note was modified since it was loaded; reload and retry.",
+            )
+
+        ts = now_iso()
+        meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
+        meta["status"] = "archived"
+        meta["modified"] = ts
+        # Persist the exact threads/-relative location. This is authoritative
+        # during restore and keeps custom/nested folders intact even when an
+        # archive filename needs a collision suffix.
+        meta[ARCHIVE_ORIGINAL_PATH_FIELD] = original_rel.as_posix()
+        meta["history"].append(
+            {
+                "action": "archived",
+                "by": "user",
+                "at": ts,
+                "reason": "Archived via API",
+            },
+        )
+
+        archive_dir = _archive_directory(threads_dir)
+
+        # Source paths have independent locks, so serialize destination choice
+        # as well. This prevents simultaneous same-filename archives from
+        # selecting and replacing the same target.
+        async with path_lock(archive_dir / ".destination-lock"):
+            try:
+                dest = _available_archive_path(archive_dir, original_rel, note_id)
+            except ArchivePathError as exc:
+                raise HTTPException(status_code=409, detail=str(exc)) from exc
+            try:
+                # Keep the frontmatter write and same-filesystem move in one
+                # await-free critical section. Request cancellation therefore
+                # cannot strand an active note with archived frontmatter.
+                vault_write_note(vault_root, path, meta, note.body)
+                for _attempt in range(100):
+                    try:
+                        _move_note_to_archive(path, dest)
+                        break
+                    except FileExistsError:
+                        # Another process may create ``dest`` after our
+                        # exists-check. Re-select and retry without overwriting
+                        # it; the source still exists until the link succeeds.
+                        dest = _available_archive_path(archive_dir, original_rel, note_id)
+                else:
+                    raise OSError("Could not reserve a collision-free archive path")
+            except Exception as exc:
+                rollback_error = _restore_failed_archive(path, dest, original_content)
+                detail = "Failed to archive note; the original note was restored."
+                if rollback_error is not None:
+                    logger.critical(
+                        "Archive move and rollback both failed for %s: %s",
+                        path,
+                        rollback_error,
+                        exc_info=True,
+                    )
+                    detail = "Failed to archive note and could not restore the original file."
+                raise HTTPException(status_code=500, detail=detail) from exc
+
+        index.remove_file(path)
+        return {"status": "archived", "path": str(dest)}
+
+
+def _available_archive_path(
+    archive_dir: Path,
+    relative_path: Path,
+    note_id: str,
+) -> Path:
+    """Choose a collision-free deterministic archive destination."""
+    candidate = safe_note_destination(archive_dir, relative_path)
+    if not _path_occupied(candidate):
+        return candidate
+    safe_id = to_kebab(note_id) or "archived"
+    candidate = candidate.with_stem(f"{candidate.stem}-{safe_id}")
+    suffix = 2
+    while _path_occupied(candidate):
+        candidate = candidate.with_name(f"{relative_path.stem}-{safe_id}-{suffix}.md")
+        suffix += 1
+    return candidate
+
+
+def _path_occupied(path: Path) -> bool:
+    """Treat dangling symlinks as occupied destinations too."""
+    return path.exists() or path.is_symlink()
+
+
+def _archive_directory(threads_dir: Path) -> Path:
+    """Create and validate the reserved archive directory without following links."""
+    try:
+        result = archive_directory(threads_dir, create=True)
+    except ArchivePathError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    assert result is not None
+    return result
+
+
+def _move_note_to_archive(source: Path, destination: Path) -> None:
+    """Move a note without replacing a concurrently-created destination."""
+    source_stat = source.stat(follow_symlinks=False)
+    os.link(source, destination, follow_symlinks=False)
+    try:
+        destination_stat = destination.stat(follow_symlinks=False)
+        if (destination_stat.st_dev, destination_stat.st_ino) != (
+            source_stat.st_dev,
+            source_stat.st_ino,
+        ):
+            raise OSError("Archive destination changed during reservation")
+        source.unlink()
+    except Exception:
+        try:
+            current = destination.stat(follow_symlinks=False)
+            if (current.st_dev, current.st_ino) == (source_stat.st_dev, source_stat.st_ino):
+                destination.unlink()
+        except OSError:
+            logger.warning(
+                "Could not clean up failed archive destination %s",
+                destination,
+                exc_info=True,
+            )
+        raise
+
+
+def _restore_failed_archive(
+    source: Path,
+    destination: Path,
+    original_content: str,
+) -> Exception | None:
+    """Best-effort rollback for a failed archive move."""
+    try:
+        # A filesystem may report an error after completing the move. Move
+        # the destination back first in that uncommon state, then restore the
+        # exact pre-archive bytes in either case.
+        if destination.exists() and not source.exists():
+            os.link(destination, source, follow_symlinks=False)
+            destination.unlink()
+        elif destination.exists() and source.exists():
+            # A failed source unlink can leave both hard links behind. Remove
+            # only the destination that still names our source inode.
+            source_stat = source.stat(follow_symlinks=False)
+            destination_stat = destination.stat(follow_symlinks=False)
+            if (source_stat.st_dev, source_stat.st_ino) == (
+                destination_stat.st_dev,
+                destination_stat.st_ino,
+            ):
+                destination.unlink()
+        atomic_write_text(source, original_content)
+    except Exception as exc:
+        return exc
+    return None

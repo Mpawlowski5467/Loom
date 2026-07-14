@@ -51,15 +51,31 @@ class ResearchRequest(BaseModel):
     """Request body for Researcher query."""
 
     question: str
+    save_capture: bool = True
+    persist_chat: bool = False
+
+
+class ResearchReference(BaseModel):
+    """A vault note used as grounded evidence for a Researcher answer."""
+
+    note_id: str
+    title: str
+    path: str
+    heading: str
+    snippet: str
+    score: float
+    type: str
+    note_type: str
 
 
 class ResearchResponse(BaseModel):
     """Response from Researcher query."""
 
     answer: str
-    referenced_notes: list[dict[str, Any]]
+    referenced_notes: list[ResearchReference]
     capture_id: str
     capture_path: str
+    saved_to_inbox: bool
 
 
 class StandupRequest(BaseModel):
@@ -74,6 +90,8 @@ class StandupResponse(BaseModel):
     recap: str
     date: str
     notes_modified: int
+    calendar_events: int = 0
+    calendar_error: str = ""
     capture_id: str
     capture_path: str
 
@@ -218,12 +236,23 @@ async def researcher_query(request: Request, body: ResearchRequest) -> ResearchR
     if researcher is None:
         raise HTTPException(status_code=503, detail="Researcher agent not initialized")
 
-    result = await researcher.query(body.question)
+    result = await researcher.query(body.question, save_capture=body.save_capture)
+    if body.persist_chat:
+        # The dedicated workspace uses this endpoint for structured evidence,
+        # rather than /api/chat/send. Persist the successful turn here so its
+        # conversation does not disappear when the workspace is reopened.
+        from agents.chat import get_chat_history
+
+        chat = get_chat_history()
+        if chat is not None:
+            chat.save_message("researcher", "user", body.question)
+            chat.save_message("researcher", "assistant", result.answer)
     return ResearchResponse(
         answer=result.answer,
-        referenced_notes=result.referenced_notes,
+        referenced_notes=[ResearchReference(**ref) for ref in result.referenced_notes],
         capture_id=result.capture_id,
         capture_path=result.capture_path,
+        saved_to_inbox=result.saved_to_inbox,
     )
 
 
@@ -239,13 +268,18 @@ async def standup_generate(request: Request, body: StandupRequest) -> StandupRes
 
     target_date = None
     if body.date:
-        target_date = date.fromisoformat(body.date)
+        try:
+            target_date = date.fromisoformat(body.date)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail="date must use YYYY-MM-DD format") from exc
 
     result = await standup.generate(target_date)
     return StandupResponse(
         recap=result.recap,
         date=result.date,
         notes_modified=result.notes_modified,
+        calendar_events=result.calendar_events,
+        calendar_error=result.calendar_error,
         capture_id=result.capture_id,
         capture_path=result.capture_path,
     )

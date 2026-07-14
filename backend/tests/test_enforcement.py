@@ -65,10 +65,14 @@ def test_passed_archives_capture_and_ships_note_clean(
     # Capture moved out of the inbox into .archive/.
     assert not capture.exists()
     assert (root / "threads" / ".archive" / "cap.md").exists()
-    # Note untouched by flags.
-    parsed = parse_note(note)
-    assert "review_required" not in parsed.extra
-    assert "flagged" not in parsed.extra
+    # Note carries the final clean lifecycle state.
+    note_extra = parse_note(note).extra
+    assert note_extra.get("enforcement_outcome") == "filed"
+    assert note_extra.get("validation") == "passed"
+    assert note_extra.get("review_required") is False
+    assert note_extra.get("review_reasons") == []
+    assert note_extra.get("flagged") is False
+    assert note_extra.get("flag_reasons") == []
 
 
 def test_failed_keeps_capture_and_marks_review_required(
@@ -82,10 +86,51 @@ def test_failed_keeps_capture_and_marks_review_required(
     assert outcome.capture_archived is False
     # Capture stays in the inbox, flagged for review.
     assert capture.exists()
-    assert parse_note(capture).extra.get("review_required") is True
+    capture_extra = parse_note(capture).extra
+    assert capture_extra.get("review_required") is True
+    assert capture_extra.get("draft_note_id") == "thr_note01"
+    assert capture_extra.get("draft_note_path") == str(note)
     note_extra = parse_note(note).extra
     assert note_extra.get("review_required") is True
     assert note_extra.get("review_reasons") == ["missing summary"]
+
+
+def test_failed_then_passed_retry_clears_stale_note_review_state(
+    vault_with_capture: tuple[Path, Path, Path],
+) -> None:
+    root, capture, note = vault_with_capture
+
+    first = enforce_verdict(
+        root,
+        capture,
+        note,
+        "failed",
+        ["missing summary"],
+        validation_mode="deterministic",
+    )
+    assert first.review_required is True
+    assert parse_note(note).extra.get("enforcement_outcome") == "needs_review"
+
+    retried = enforce_verdict(
+        root,
+        capture,
+        note,
+        "passed",
+        [],
+        validation_mode="llm",
+    )
+
+    assert retried.capture_archived is True
+    assert retried.review_required is False
+    note_extra = parse_note(note).extra
+    assert note_extra.get("enforcement_outcome") == "filed"
+    assert note_extra.get("validation") == "passed"
+    assert note_extra.get("validation_mode") == "llm"
+    assert note_extra.get("validation_reasons") == []
+    assert note_extra.get("review_required") is False
+    assert note_extra.get("review_reasons") == []
+    assert note_extra.get("flagged") is False
+    assert note_extra.get("flag_reasons") == []
 
 
 def test_warning_archives_capture_and_flags_note(

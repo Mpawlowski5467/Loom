@@ -1,10 +1,11 @@
 """Integration tests for agent action routes."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, call, patch
 
 from starlette.testclient import TestClient
 
 from agents.loom.spider_models import ScanReport
+from agents.shuttle.researcher import ResearchResult
 from tests.conftest import _seed_notes
 
 
@@ -95,3 +96,122 @@ def test_spider_scan_not_initialized_returns_503(
         resp = client.post("/api/agents/spider/scan?note_id=thr_x")
 
     assert resp.status_code == 503
+
+
+def test_researcher_query_returns_structured_evidence_and_respects_preview(
+    client: TestClient,
+    vault_manager,
+    note_index,
+) -> None:
+    _seed_notes(vault_manager, note_index, [])
+    researcher = MagicMock()
+    researcher.query = AsyncMock(
+        return_value=ResearchResult(
+            answer="Use [[Caching Strategies]].",
+            referenced_notes=[
+                {
+                    "note_id": "thr_cache0",
+                    "title": "Caching Strategies",
+                    "path": "topics/caching-strategies.md",
+                    "heading": "Summary",
+                    "snippet": "Overview of caching techniques.",
+                    "score": 0.91,
+                    "type": "topic",
+                    "note_type": "topic",
+                }
+            ],
+            saved_to_inbox=False,
+        )
+    )
+
+    with patch("agents.shuttle.researcher.get_researcher", return_value=researcher):
+        response = client.post(
+            "/api/agents/researcher/query",
+            json={"question": "What is caching?", "save_capture": False},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "answer": "Use [[Caching Strategies]].",
+        "referenced_notes": [
+            {
+                "note_id": "thr_cache0",
+                "title": "Caching Strategies",
+                "path": "topics/caching-strategies.md",
+                "heading": "Summary",
+                "snippet": "Overview of caching techniques.",
+                "score": 0.91,
+                "type": "topic",
+                "note_type": "topic",
+            }
+        ],
+        "capture_id": "",
+        "capture_path": "",
+        "saved_to_inbox": False,
+    }
+    researcher.query.assert_awaited_once_with("What is caching?", save_capture=False)
+
+
+def test_researcher_query_defaults_to_legacy_save_behavior(
+    client: TestClient,
+    vault_manager,
+    note_index,
+) -> None:
+    _seed_notes(vault_manager, note_index, [])
+    researcher = MagicMock()
+    researcher.query = AsyncMock(
+        return_value=ResearchResult(
+            answer="Saved answer",
+            capture_id="thr_saved",
+            capture_path="/vault/threads/captures/research-thr_saved.md",
+            saved_to_inbox=True,
+        )
+    )
+
+    with patch("agents.shuttle.researcher.get_researcher", return_value=researcher):
+        response = client.post("/api/agents/researcher/query", json={"question": "Keep this"})
+
+    assert response.status_code == 200
+    assert response.json()["saved_to_inbox"] is True
+    researcher.query.assert_awaited_once_with("Keep this", save_capture=True)
+
+
+def test_researcher_query_can_persist_a_successful_workspace_turn(
+    client: TestClient,
+    vault_manager,
+    note_index,
+) -> None:
+    _seed_notes(vault_manager, note_index, [])
+    researcher = MagicMock()
+    researcher.query = AsyncMock(return_value=ResearchResult(answer="Grounded [[Answer]]."))
+    chat = MagicMock()
+
+    with (
+        patch("agents.shuttle.researcher.get_researcher", return_value=researcher),
+        patch("agents.chat.get_chat_history", return_value=chat),
+    ):
+        response = client.post(
+            "/api/agents/researcher/query",
+            json={
+                "question": "What did we decide?",
+                "save_capture": False,
+                "persist_chat": True,
+            },
+        )
+
+    assert response.status_code == 200
+    assert chat.save_message.call_args_list == [
+        call("researcher", "user", "What did we decide?"),
+        call("researcher", "assistant", "Grounded [[Answer]]."),
+    ]
+
+
+def test_standup_rejects_an_invalid_date(client: TestClient) -> None:
+    with patch("agents.shuttle.standup.get_standup", return_value=MagicMock()):
+        response = client.post(
+            "/api/agents/standup/generate",
+            json={"date": "tomorrow-ish"},
+        )
+
+    assert response.status_code == 422
+    assert response.json()["detail"] == "date must use YYYY-MM-DD format"

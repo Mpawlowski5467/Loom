@@ -16,9 +16,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from agents.base import BaseAgent
+from core.capture_ingress import ingest_capture
 from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import generate_id, now_iso
-from core.vault_io import write_note
+from core.notes import now_iso
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -94,7 +94,7 @@ class CustomAgent(BaseAgent):
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
             context = self._gather_context()
             output = await self._generate(context, chain)
-            capture_id, capture_path = self._save_capture(output)
+            capture_id, capture_path = await self._save_capture(output)
             return {
                 "action": "ran",
                 "details": f"{self._display_name} produced a capture",
@@ -162,36 +162,20 @@ class CustomAgent(BaseAgent):
             )
             return f"## Context (generation failed)\n\n{context}"
 
-    def _save_capture(self, output: str) -> tuple[str, Path]:
-        """Write the agent's output to captures/ with full frontmatter."""
-        captures_dir = self._vault_root / "threads" / "captures"
-        captures_dir.mkdir(parents=True, exist_ok=True)
-
-        capture_id = generate_id()
+    async def _save_capture(self, output: str) -> tuple[str, Path]:
+        """Write the agent's output through the shared Inbox ingress."""
         ts = now_iso()
         author = f"agent:{self._id}"
         body = f"## {self._display_name}\n\n{output}\n"
-        meta = {
-            "id": capture_id,
-            "title": f"{self._display_name}: run {ts[:10]}",
-            "type": "capture",
-            "tags": ["custom-agent", self._id],
-            "created": ts,
-            "modified": ts,
-            "author": author,
-            "source": author,
-            "links": [],
-            "status": "active",
-            "history": [
-                {
-                    "action": "created",
-                    "by": author,
-                    "at": ts,
-                    "reason": "Custom agent run",
-                },
-            ],
-        }
-        path = captures_dir / f"{self._id}-{capture_id}.md"
-        _assert_capture_path(path)
-        write_note(self._vault_root, path, meta, body)
-        return capture_id, path
+        result = await ingest_capture(
+            self._vault_root,
+            title=f"{self._display_name}: run {ts[:10]}",
+            body=body,
+            source=author,
+            author=author,
+            tags=["custom-agent", self._id],
+            history_reason="Custom agent run",
+            filename_prefix=self._id,
+        )
+        _assert_capture_path(result.capture_path)
+        return result.capture.id, result.capture_path

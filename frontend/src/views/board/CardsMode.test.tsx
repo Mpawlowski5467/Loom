@@ -30,6 +30,16 @@ vi.mock("./AgentDetailModal", () => ({
     <div data-testid="agent-detail">{agent.name}</div>
   ),
 }));
+vi.mock("./ResearcherWorkspace", () => ({
+  ResearcherWorkspace: () => (
+    <div data-testid="researcher-workspace">Researcher workspace</div>
+  ),
+}));
+vi.mock("./StandupWorkspace", () => ({
+  StandupWorkspace: () => (
+    <div data-testid="standup-workspace">Standup workspace</div>
+  ),
+}));
 
 function mkAgent(over: Partial<Agent> = {}): Agent {
   return {
@@ -137,6 +147,44 @@ describe("CardsMode agent detail", () => {
     await user.keyboard("{Enter}");
 
     expect(screen.getByTestId("agent-detail")).toBeInTheDocument();
+  });
+
+  it("opens the one-to-one workspace from the built-in Researcher card", async () => {
+    const user = userEvent.setup();
+    renderCards([], [mkAgent({ id: "researcher", name: "researcher" })]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Open researcher workspace" }),
+    );
+
+    expect(screen.getByTestId("researcher-workspace")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-detail")).not.toBeInTheDocument();
+  });
+
+  it("keeps the Researcher detail inspector available from the card body", async () => {
+    const user = userEvent.setup();
+    renderCards([], [mkAgent({ id: "researcher", name: "researcher" })]);
+
+    await user.click(
+      screen.getByRole("button", { name: "researcher details" }),
+    );
+
+    expect(screen.getByTestId("agent-detail")).toHaveTextContent("researcher");
+    expect(
+      screen.queryByTestId("researcher-workspace"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("opens the dedicated Standup workspace", async () => {
+    const user = userEvent.setup();
+    renderCards([], [mkAgent({ id: "standup", name: "standup" })]);
+
+    await user.click(
+      screen.getByRole("button", { name: "Open standup workspace" }),
+    );
+
+    expect(screen.getByTestId("standup-workspace")).toBeInTheDocument();
+    expect(screen.queryByTestId("agent-detail")).not.toBeInTheDocument();
   });
 });
 

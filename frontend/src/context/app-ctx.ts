@@ -155,6 +155,7 @@ export interface AppContextValue {
   selectedCaptureId: string | null;
   selectCapture: (id: string | null) => void;
   setCaptureStatus: (id: string, s: CaptureStatus) => void;
+  removeCapture: (id: string) => void;
 
   theme: ThemeName;
   setTheme: (t: ThemeName) => Promise<void>;

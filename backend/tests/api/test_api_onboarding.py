@@ -7,10 +7,14 @@ the gate. Config is round-tripped through a temp home so load/save are real.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 
 import pytest
 from starlette.testclient import TestClient
+
+import core.vault_handoff as handoff_mod
+from core.standup_scheduler import StandupSchedulerService
 
 
 @pytest.fixture(autouse=True)
@@ -115,6 +119,45 @@ class TestOnboardingComplete:
         data = resp.json()
         assert data["onboarding"]["completed"] is True
         assert data["default_provider"] == "ollama"
+
+    def test_complete_switch_resumes_scheduler(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post("/api/vaults", json={"name": "old"})
+        scheduler = StandupSchedulerService()
+        monkeypatch.setattr(handoff_mod, "get_standup_scheduler", lambda: scheduler)
+
+        resp = client.post(
+            "/api/onboarding/complete",
+            json={"vault_name": "new", "steps_done": ["vault"]},
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["active_vault"] == "new"
+        assert scheduler.paused is False
+
+    def test_complete_switch_refuses_running_scheduled_standup(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post("/api/vaults", json={"name": "old"})
+        scheduler = StandupSchedulerService()
+        asyncio.run(scheduler._run_lock.acquire())
+        monkeypatch.setattr(handoff_mod, "get_standup_scheduler", lambda: scheduler)
+        try:
+            resp = client.post(
+                "/api/onboarding/complete",
+                json={"vault_name": "new", "steps_done": ["vault"]},
+            )
+        finally:
+            scheduler._run_lock.release()
+
+        assert resp.status_code == 409
+        assert client.get("/api/vaults/active").json()["name"] == "old"
+        assert scheduler.paused is False
 
 
 class TestOnboardingReset:

@@ -57,6 +57,7 @@ class TestSendMessageResearcher:
         assert data["user_message"]["content"] == "What is caching?"
         assert data["assistant_message"]["role"] == "assistant"
         assert data["assistant_message"]["content"] == "Caching stores data for fast retrieval."
+        mock_researcher.query.assert_awaited_once_with("What is caching?", save_capture=False)
 
 
 # ---------------------------------------------------------------------------

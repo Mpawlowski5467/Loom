@@ -52,9 +52,15 @@ export function ThreadView(): ReactNode {
     toId: string;
   } | null>(null);
 
-  const note = currentNoteId ? noteById(currentNoteId) ?? null : null;
+  const note = currentNoteId ? (noteById(currentNoteId) ?? null) : null;
   const [draft, setDraft] = useState<string>(note?.body ?? "");
   const [saving, setSaving] = useState(false);
+  // Version snapshots must stay paired with the text the user saw when an
+  // action began. Reading live ``note.modified`` at submit time could bless a
+  // newer SSE-delivered agent edit while sending an older local draft.
+  const draftBaseModifiedRef = useRef(note?.modified ?? "");
+  const titleBaseModifiedRef = useRef(note?.modified ?? "");
+  const archiveBaseModifiedRef = useRef(note?.modified ?? "");
 
   const dirty = !!note && draft !== note.body;
   const canSave = dirty && !saving;
@@ -77,9 +83,11 @@ export function ThreadView(): ReactNode {
   draftRef.current = draft;
   const editingRef = useRef(editing);
   editingRef.current = editing;
-  const prevNoteRef = useRef<{ id: string; title: string; body: string } | null>(
-    note ? { id: note.id, title: note.title, body: note.body } : null,
-  );
+  const prevNoteRef = useRef<{
+    id: string;
+    title: string;
+    body: string;
+  } | null>(note ? { id: note.id, title: note.title, body: note.body } : null);
   // Set while the user is intentionally discarding (confirmed) so the guard
   // below lets that one switch through instead of re-prompting.
   const discardingRef = useRef(false);
@@ -92,12 +100,13 @@ export function ThreadView(): ReactNode {
   useLayoutEffect(() => {
     const prev = prevNoteRef.current;
     const switched = (prev?.id ?? null) !== (note?.id ?? null);
+    const draftWasDirty = !!prev && draftRef.current !== prev.body;
     if (
       switched &&
       prev &&
       !discardingRef.current &&
       editingRef.current &&
-      draftRef.current !== prev.body
+      draftWasDirty
     ) {
       setPendingDiscard({ fromTitle: prev.title, toId: note?.id ?? prev.id });
       openNote(prev.id); // revert navigation, keep the in-progress draft
@@ -107,14 +116,27 @@ export function ThreadView(): ReactNode {
     prevNoteRef.current = note
       ? { id: note.id, title: note.title, body: note.body }
       : null;
-    if (switched) setDraft(note?.body ?? "");
+    if (switched) {
+      setDraft(note?.body ?? "");
+      draftBaseModifiedRef.current = note?.modified ?? "";
+    } else if ((!editingRef.current || !draftWasDirty) && note) {
+      // Keep the dormant editor paired with same-note SSE refreshes. Once an
+      // edit is in progress, both draft and base version remain frozen.
+      setDraft(note.body);
+      draftBaseModifiedRef.current = note.modified;
+    }
   }, [currentNoteId, note, openNote]);
 
   const save = async () => {
     if (!note || !canSave) return;
     setSaving(true);
     try {
-      const record = await apiUpdateNote(note.id, { body: draft });
+      const record = await apiUpdateNote(note.id, {
+        body: draft,
+        base_modified: draftBaseModifiedRef.current,
+      });
+      draftBaseModifiedRef.current = record.modified;
+      titleBaseModifiedRef.current = record.modified;
       updateNote(backendNoteToFrontend(record, titleMapFromNotes(notes)));
       pushToast({
         icon: "✓",
@@ -159,7 +181,21 @@ export function ThreadView(): ReactNode {
 
   const beginTitleEdit = () => {
     setTitleDraft(note.title);
+    titleBaseModifiedRef.current = note.modified;
     setEditingTitle(true);
+  };
+
+  const toggleBodyEdit = () => {
+    if (!editing) {
+      setDraft(note.body);
+      draftBaseModifiedRef.current = note.modified;
+    }
+    setEditing(!editing);
+  };
+
+  const beginArchive = () => {
+    archiveBaseModifiedRef.current = note.modified;
+    setConfirmArchive(true);
   };
 
   const saveTitle = async () => {
@@ -169,7 +205,12 @@ export function ThreadView(): ReactNode {
       return;
     }
     try {
-      const record = await apiUpdateNote(note.id, { title: next });
+      const record = await apiUpdateNote(note.id, {
+        title: next,
+        base_modified: titleBaseModifiedRef.current,
+      });
+      titleBaseModifiedRef.current = record.modified;
+      draftBaseModifiedRef.current = record.modified;
       updateNote(backendNoteToFrontend(record, titleMapFromNotes(notes)));
       pushToast({
         icon: "✎",
@@ -189,7 +230,7 @@ export function ThreadView(): ReactNode {
   // Archive runs after the user confirms in the modal. Errors propagate so the
   // ConfirmModal shows them inline and stays open for a retry.
   const archiveNow = async () => {
-    await apiArchiveNote(note.id);
+    await apiArchiveNote(note.id, archiveBaseModifiedRef.current);
     removeNote(note.id);
     pushToast({
       icon: "📦",
@@ -254,13 +295,13 @@ export function ThreadView(): ReactNode {
             <span>modified {formatDate(note.modified)}</span>
             <Button
               variant={editing ? "active" : "default"}
-              onClick={() => setEditing(!editing)}
+              onClick={toggleBodyEdit}
               aria-pressed={editing}
             >
               ✎ edit
             </Button>
             <Button
-              onClick={() => setConfirmArchive(true)}
+              onClick={beginArchive}
               aria-label="Archive note"
               title="Archive note"
             >
@@ -345,8 +386,7 @@ export function ThreadView(): ReactNode {
                     />
                     <span className="history-when">{when}</span>
                     <span>
-                      <span className="history-actor">{actor}</span>{" "}
-                      {h.action}
+                      <span className="history-actor">{actor}</span> {h.action}
                       {h.reason ? ` — ${h.reason}` : ""}
                     </span>
                   </div>

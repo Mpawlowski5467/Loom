@@ -1,0 +1,550 @@
+"""Durability, recovery, discovery, and worker tests for capture jobs."""
+
+from __future__ import annotations
+
+import asyncio
+import threading
+import time
+from concurrent.futures import ThreadPoolExecutor
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
+
+import pytest
+
+from core.capture_jobs import (
+    CaptureJobConflictError,
+    CaptureJobsBusyError,
+    CaptureJobService,
+    CaptureJobStore,
+    CaptureJobWorker,
+    JobExecutionResult,
+)
+from core.config import CaptureProcessingConfig
+from core.events import CAPTURE_JOB_CHANGED, get_event_hub
+from core.notes import note_to_file_content, parse_note
+
+
+def _vault(tmp_path: Path, name: str = "vault") -> Path:
+    root = tmp_path / name
+    (root / ".loom").mkdir(parents=True)
+    (root / "threads" / "captures").mkdir(parents=True)
+    (root / "vault.yaml").write_text(f"name: {name}\n")
+    return root
+
+
+def _write_capture(
+    root: Path,
+    capture_id: str,
+    *,
+    source: str = "manual",
+    filename: str | None = None,
+    extra: dict[str, object] | None = None,
+) -> Path:
+    path = root / "threads" / "captures" / (filename or f"{capture_id}.md")
+    meta: dict[str, object] = {
+        "id": capture_id,
+        "title": f"Capture {capture_id}",
+        "type": "capture",
+        "tags": [],
+        "created": "2026-07-13T12:00:00+00:00",
+        "modified": "2026-07-13T12:00:00+00:00",
+        "author": "user",
+        "source": source,
+        "status": "active",
+        "history": [],
+    }
+    meta.update(extra or {})
+    path.write_text(note_to_file_content(meta, "## Content\n\nQueue me."))
+    return path
+
+
+def _policy(**updates: object) -> CaptureProcessingConfig:
+    return CaptureProcessingConfig.model_validate({"base_backoff_seconds": 0.1, **updates})
+
+
+def _completed(path: Path) -> JobExecutionResult:
+    return JobExecutionResult(
+        status="completed",
+        outcome="filed",
+        note_id="thr_note",
+        note_title="Filed Note",
+        note_type="topic",
+        target_path=str(path.parent.parent / "topics" / "filed.md"),
+    )
+
+
+def test_store_is_persistent_and_enqueue_is_idempotent(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1", source="bridge:gmail")
+    policy = _policy(max_retries=3)
+
+    first = CaptureJobStore(root).enqueue(capture, "thr_cap1", "bridge:gmail", policy)
+    second_store = CaptureJobStore(root)
+    second = second_store.enqueue(capture, "thr_cap1", "bridge:gmail", policy)
+
+    assert first.created is True
+    assert second.created is False
+    assert second.job.id == first.job.id
+    assert second.job.max_attempts == 4
+    assert second_store.get(first.job.id) == first.job
+    assert (root / ".loom" / "capture-jobs.sqlite3").exists()
+
+
+def test_claim_and_terminal_completion_are_durable(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    queued = store.enqueue(capture, "thr_cap1", "manual", _policy()).job
+
+    running = store.claim_next()
+    assert running is not None
+    assert running.id == queued.id
+    assert running.status == "running"
+    assert running.attempts == 1
+
+    finished = store.finish(running.id, _completed(capture))
+    assert finished.status == "completed"
+    assert finished.outcome == "filed"
+    assert finished.note_id == "thr_note"
+    assert CaptureJobStore(root).get(running.id) == finished
+
+
+def test_history_pruning_keeps_actionable_failures(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    store = CaptureJobStore(root)
+
+    completed_capture = _write_capture(root, "thr_completed")
+    completed = store.enqueue(
+        completed_capture,
+        "thr_completed",
+        "manual",
+        _policy(),
+    ).job
+    assert store.claim_next() is not None
+    store.finish(completed.id, _completed(completed_capture))
+
+    cancelled_capture = _write_capture(root, "thr_cancelled")
+    cancelled = store.enqueue(
+        cancelled_capture,
+        "thr_cancelled",
+        "manual",
+        _policy(),
+    ).job
+    store.cancel(cancelled.id)
+
+    failed_capture = _write_capture(root, "thr_failed")
+    failed = store.enqueue(
+        failed_capture,
+        "thr_failed",
+        "manual",
+        _policy(),
+    ).job
+    assert store.claim_next() is not None
+    store.fail_or_retry(
+        failed.id,
+        error="Needs attention",
+        transient=False,
+        base_backoff_seconds=0.1,
+    )
+
+    assert store.prune_history(before=datetime.now(UTC) - timedelta(days=1)) == 0
+    assert store.prune_history(before=datetime.now(UTC) + timedelta(days=1)) == 2
+    assert store.get(completed.id) is None
+    assert store.get(cancelled.id) is None
+    assert store.get(failed.id) is not None
+    assert store.get(failed.id).status == "failed"  # type: ignore[union-attr]
+
+
+def test_transient_failures_back_off_then_stop_at_bound(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    queued = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=1)).job
+
+    first = store.claim_next()
+    assert first is not None
+    retrying = store.fail_or_retry(
+        queued.id,
+        error="connection timed out",
+        transient=True,
+        base_backoff_seconds=0.1,
+    )
+    assert retrying.status == "retrying"
+    assert retrying.outcome is None
+    assert store.claim_next() is None
+
+    time.sleep(0.12)
+    second = store.claim_next()
+    assert second is not None
+    terminal = store.fail_or_retry(
+        queued.id,
+        error="connection timed out again",
+        transient=True,
+        base_backoff_seconds=0.1,
+    )
+    assert terminal.status == "failed"
+    assert terminal.outcome == "failed"
+    assert terminal.attempts == 2
+
+
+def test_non_transient_failure_does_not_auto_retry(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    job = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=5)).job
+    assert store.claim_next() is not None
+
+    failed = store.fail_or_retry(
+        job.id,
+        error="Weaver agent not initialized",
+        transient=False,
+        base_backoff_seconds=0.1,
+    )
+
+    assert failed.status == "failed"
+    assert failed.attempts == 1
+
+
+def test_claim_and_synchronous_cancel_never_overwrite_running_state(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    store = CaptureJobStore(root)
+
+    for index in range(12):
+        capture_id = f"thr_race{index}"
+        capture = _write_capture(root, capture_id)
+        queued = store.enqueue(capture, capture_id, "manual", _policy()).job
+        barrier = threading.Barrier(2)
+
+        def claim(sync: threading.Barrier = barrier) -> object:
+            sync.wait()
+            return store.claim_next()
+
+        def cancel(sync: threading.Barrier = barrier, current_id: str = capture_id) -> object:
+            sync.wait()
+            try:
+                return store.cancel_by_capture(current_id, "manual path won")
+            except CaptureJobConflictError as exc:
+                return exc
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            claimed_future = pool.submit(claim)
+            cancelled_future = pool.submit(cancel)
+            claimed = claimed_future.result()
+            cancelled = cancelled_future.result()
+
+        final = store.get(queued.id)
+        assert final is not None
+        if final.status == "running":
+            assert getattr(claimed, "id", None) == queued.id
+            assert isinstance(cancelled, CaptureJobConflictError)
+            store.finish(queued.id, _completed(capture))
+        else:
+            assert final.status == "cancelled"
+            assert claimed is None
+
+
+@pytest.mark.asyncio
+async def test_interrupted_final_attempt_gets_one_idempotent_recovery(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    job = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=0)).job
+    assert store.claim_next() is not None
+
+    recovered = store.recover_interrupted()
+    assert recovered[0].status == "retrying"
+    assert recovered[0].max_attempts == 2
+    running = store.claim_next()
+    assert running is not None
+
+    # Simulate a crash after the pipeline wrote its note and archived source,
+    # but before the job row was finalized.
+    topic = root / "threads" / "topics" / "filed.md"
+    topic.parent.mkdir(parents=True)
+    topic.write_text(
+        note_to_file_content(
+            {
+                "id": "thr_note",
+                "title": "Filed",
+                "type": "topic",
+                "source": "capture:thr_cap1",
+                "history": [],
+            },
+            "Filed body",
+        )
+    )
+    capture.unlink()
+    worker = CaptureJobWorker(root, _policy())
+    await worker._execute(running, capture)
+
+    final = store.get(job.id)
+    assert final is not None
+    assert final.status == "completed"
+    assert final.outcome == "filed"
+
+
+def test_repeated_restart_recovery_is_bounded(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    job = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=0)).job
+    assert store.claim_next() is not None
+
+    first_recovery = store.recover_interrupted()[0]
+    assert first_recovery.status == "retrying"
+    assert store.claim_next() is not None
+
+    second_recovery = store.recover_interrupted()[0]
+    assert second_recovery.status == "failed"
+    assert second_recovery.outcome == "failed"
+    assert second_recovery.attempts == 2
+    assert store.claim_next() is None
+    assert store.get(job.id) == second_recovery
+
+
+@pytest.mark.asyncio
+async def test_discovery_respects_trusted_policy_and_terminal_markers(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    allowed = _write_capture(root, "thr_allowed", source="Agent:Researcher", filename="allowed.md")
+    _write_capture(root, "thr_blocked", source="manual", filename="blocked.md")
+    _write_capture(
+        root,
+        "thr_review",
+        source="agent:researcher",
+        filename="review.md",
+        extra={"enforcement_outcome": "needs_review", "review_required": True},
+    )
+    worker = CaptureJobWorker(
+        root,
+        _policy(mode="trusted", trusted_sources=[" agent:researcher "]),
+    )
+
+    assert await worker.reconcile() == 1
+    jobs = worker.store.list_jobs()
+    assert [job.capture_id for job in jobs] == ["thr_allowed"]
+    assert jobs[0].capture_path == str(allowed.resolve())
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_replaced_capture_identity(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_original", filename="same.md")
+    called = False
+
+    async def processor(path: Path) -> JobExecutionResult:
+        nonlocal called
+        called = True
+        return _completed(path)
+
+    worker = CaptureJobWorker(root, _policy(), processor=processor)
+    job = worker.store.enqueue(capture, "thr_original", "manual", _policy()).job
+    running = worker.store.claim_next()
+    assert running is not None
+    _write_capture(root, "thr_replacement", filename="same.md")
+
+    await worker._execute(running, capture)
+
+    final = worker.store.get(job.id)
+    assert final is not None
+    assert final.status == "failed"
+    assert "replaced" in final.error.lower()
+    assert called is False
+
+
+@pytest.mark.asyncio
+async def test_worker_rejects_capture_source_changed_after_enqueue(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_original", source="agent:researcher")
+    worker = CaptureJobWorker(root, _policy())
+    job = worker.store.enqueue(capture, "thr_original", "agent:researcher", _policy()).job
+    running = worker.store.claim_next()
+    assert running is not None
+    _write_capture(root, "thr_original", source="manual")
+
+    await worker._execute(running, capture)
+
+    final = worker.store.get(job.id)
+    assert final is not None
+    assert final.status == "failed"
+    assert "source changed" in final.error.lower()
+
+
+@pytest.mark.asyncio
+async def test_job_state_only_transition_emits_only_job_domain(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+
+    async def processor(path: Path) -> JobExecutionResult:
+        return _completed(path)
+
+    worker = CaptureJobWorker(root, _policy(), processor=processor)
+    queued = worker.store.enqueue(capture, "thr_cap1", "manual", _policy()).job
+    running = worker.store.claim_next()
+    assert running is not None
+    hub = get_event_hub()
+    events = hub.subscribe()
+    try:
+        await worker._execute(running, capture)
+
+        assert events.get_nowait() == CAPTURE_JOB_CHANGED
+        assert events.empty()
+    finally:
+        hub.unsubscribe(events)
+
+    assert worker.store.get(queued.id).status == "completed"  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
+async def test_worker_processes_jobs_without_rewriting_capture_frontmatter(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+
+    async def processor(path: Path) -> JobExecutionResult:
+        return _completed(path)
+
+    worker = CaptureJobWorker(root, _policy(), processor=processor)
+    job = worker.store.enqueue(capture, "thr_cap1", "manual", _policy()).job
+    await worker.start()
+    worker.notify()
+    try:
+        for _ in range(100):
+            current = worker.store.get(job.id)
+            if current is not None and current.status == "completed":
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("worker did not finish queued capture")
+    finally:
+        await worker.aclose()
+
+    untouched = parse_note(capture)
+    assert "processing_status" not in untouched.extra
+    assert "job_id" not in untouched.extra
+
+
+@pytest.mark.asyncio
+async def test_concurrency_can_shrink_then_grow_again(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    worker = CaptureJobWorker(root, _policy(concurrency=3))
+    await worker.start()
+    try:
+        await worker.update_policy(_policy(concurrency=1))
+        for _ in range(100):
+            if all(index == 0 or task.done() for index, task in worker._tasks.items()):
+                break
+            await asyncio.sleep(0.01)
+        await worker.update_policy(_policy(concurrency=3))
+        active = {index for index, task in worker._tasks.items() if not task.done()}
+        assert active == {0, 1, 2}
+    finally:
+        await worker.aclose()
+
+
+@pytest.mark.asyncio
+async def test_service_rebinds_without_polling_old_vault(tmp_path: Path) -> None:
+    first = _vault(tmp_path, "first")
+    second = _vault(tmp_path, "second")
+    service = CaptureJobService()
+    first_worker = await service.activate(first, _policy())
+    await service.prepare_vault_switch()
+    assert service.worker is None
+    assert first_worker.running is False
+
+    second_worker = await service.activate(second, _policy())
+    try:
+        assert service.worker is second_worker
+        assert second_worker.vault_root == second.resolve()
+        assert first_worker.vault_root == first.resolve()
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_second_worker_cannot_recover_live_claims_for_same_vault(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    first = CaptureJobWorker(root, _policy())
+    second = CaptureJobWorker(root, _policy())
+    await first.start()
+    try:
+        with pytest.raises(CaptureJobsBusyError):
+            await second.start()
+    finally:
+        await first.aclose()
+
+    await second.start()
+    await second.aclose()
+
+
+@pytest.mark.asyncio
+async def test_request_self_heal_cannot_override_vault_handoff(
+    tmp_path: Path,
+) -> None:
+    first = _vault(tmp_path, "first")
+    second = _vault(tmp_path, "second")
+    service = CaptureJobService()
+    await service.activate(first, _policy())
+    await service.prepare_vault_switch()
+
+    with pytest.raises(CaptureJobsBusyError):
+        await service.ensure_active(first, _policy())
+
+    assert service.worker is None
+    rebound = await service.activate(second, _policy())
+    try:
+        assert rebound.vault_root == second.resolve()
+    finally:
+        await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_switch_checks_external_reservation_without_worker(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    policy = _policy()
+    service = CaptureJobService()
+    service.enable(root)
+    store = CaptureJobStore(root)
+    running = store.reserve_external(capture, "thr_cap1", "manual", policy)
+
+    with pytest.raises(CaptureJobsBusyError):
+        await service.prepare_vault_switch()
+
+    store.finish(running.id, _completed(capture))
+    await service.prepare_vault_switch()
+    await service.aclose()
+
+
+@pytest.mark.asyncio
+async def test_service_refuses_vault_switch_while_job_is_running(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    service = CaptureJobService()
+    worker = await service.activate(root, _policy())
+    await worker.pause_claims()
+    job = worker.store.enqueue(capture, "thr_cap1", "manual", _policy()).job
+    running = worker.store.claim_next()
+    assert running is not None
+    worker.resume_claims()
+
+    with pytest.raises(CaptureJobsBusyError):
+        await service.prepare_vault_switch()
+
+    assert service.worker is worker
+    worker.store.finish(job.id, _completed(capture))
+    await service.aclose()

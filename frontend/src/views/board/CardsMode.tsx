@@ -6,6 +6,8 @@ import { ConfirmModal } from "../../components/ConfirmModal";
 import { AddAgentModal } from "./AddAgentModal";
 import { AgentCard } from "./AgentCard";
 import { AgentDetailModal } from "./AgentDetailModal";
+import { ResearcherWorkspace } from "./ResearcherWorkspace";
+import { StandupWorkspace } from "./StandupWorkspace";
 import { RecentActivity } from "./RecentActivity";
 import {
   deleteCustomAgent,
@@ -40,6 +42,8 @@ export function CardsMode(): ReactNode {
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
+  const [researcherOpen, setResearcherOpen] = useState(false);
+  const [standupOpen, setStandupOpen] = useState(false);
   // Accessible confirm dialog (replaces window.confirm) for deleting an agent.
   const [confirmDelete, setConfirmDelete] = useState<Agent | null>(null);
 
@@ -88,7 +92,11 @@ export function CardsMode(): ReactNode {
   const deleteNow = async (a: Agent) => {
     await deleteCustomAgent(a.id);
     await refreshCustomAgents();
-    pushToast({ icon: "🗑", agent: "archivist", body: `Deleted agent ${a.name}` });
+    pushToast({
+      icon: "🗑",
+      agent: "archivist",
+      body: `Deleted agent ${a.name}`,
+    });
   };
 
   // Per-agent last event: changelog is sorted newest-first, so the first hit
@@ -116,6 +124,14 @@ export function CardsMode(): ReactNode {
       onRun={() => void handleRun(a)}
       onEdit={() => void handleEdit(a)}
       onDelete={() => setConfirmDelete(a)}
+      onWorkspace={
+        a.id === "researcher" && !customIds.has(a.id)
+          ? () => setResearcherOpen(true)
+          : a.id === "standup" && !customIds.has(a.id)
+            ? () => setStandupOpen(true)
+          : undefined
+      }
+      workspaceLabel={a.id === "standup" ? "open" : "ask"}
       onOpen={() => setDetailId(a.id)}
     />
   );
@@ -163,6 +179,12 @@ export function CardsMode(): ReactNode {
           }}
           onClose={() => setDetailId(null)}
         />
+      )}
+      {researcherOpen && (
+        <ResearcherWorkspace onClose={() => setResearcherOpen(false)} />
+      )}
+      {standupOpen && (
+        <StandupWorkspace onClose={() => setStandupOpen(false)} />
       )}
       {adding && (
         <AddAgentModal

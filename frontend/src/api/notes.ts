@@ -91,7 +91,9 @@ export function listNotesBulk(
  * ``BULK_PAGE_SIZE`` notes stays well under the limit. An ``AbortError`` from a
  * cancelled load still propagates so an in-flight load can be cancelled.
  */
-export async function loadAllNotes(signal?: AbortSignal): Promise<NoteRecord[]> {
+export async function loadAllNotes(
+  signal?: AbortSignal,
+): Promise<NoteRecord[]> {
   const records: NoteRecord[] = [];
   let offset = 0;
   let total = Number.POSITIVE_INFINITY;
@@ -132,9 +134,13 @@ export function updateNote(
 
 export function archiveNote(
   id: string,
+  baseModified?: string,
 ): Promise<{ status: string; path: string }> {
+  const query = baseModified
+    ? `?base_modified=${encodeURIComponent(baseModified)}`
+    : "";
   return apiClient.delete<{ status: string; path: string }>(
-    `/api/notes/${id}`,
+    `/api/notes/${encodeURIComponent(id)}${query}`,
   );
 }
 
@@ -220,7 +226,9 @@ export function titleMapFromNotes(notes: Note[]): Map<string, string> {
   return new Map(notes.map((n) => [n.title.toLowerCase(), n.id]));
 }
 
-export function titleMapFromRecords(records: NoteRecord[]): Map<string, string> {
+export function titleMapFromRecords(
+  records: NoteRecord[],
+): Map<string, string> {
   const map = new Map<string, string>();
   for (const n of records) {
     const slug = n.file_path

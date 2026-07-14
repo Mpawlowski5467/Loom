@@ -303,7 +303,9 @@ async def _researcher_reply(message: str) -> str:
     if researcher is None:
         return "Researcher agent is not available. Please configure a chat provider."
 
-    result = await researcher.query(message)
+    # A conversational question should not silently add work to the Inbox.
+    # The dedicated Researcher endpoint exposes an explicit save_capture flag.
+    result = await researcher.query(message, save_capture=False)
     return result.answer
 
 

@@ -82,11 +82,14 @@ Style guide: @docs/style-guide.md
 **Implemented**
 - All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with `execute_with_chain()` + read-before-write
 - Both Shuttle Layer agents (Researcher, Standup)
+- Unified capture ingress (`core/capture_ingress.py`) for HTTP, Shuttle agents, and Bridge sources, with external-ID idempotency and immediate durable-job policy
+- Durable Inbox processing: per-vault SQLite jobs, retry/backoff/cancel/review, Active/Review/History UI, retention controls, and typed SSE refresh domains
+- Scheduled Standup workspace with timezone-aware durable scheduling and an encrypted, read-only iCalendar Bridge that can enrich recaps and create event captures
 - LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Spider→Scribe→Sentinel→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
 - 4 views: GraphView (Sigma.js — constellation + orbit with 5 selectable scenes, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
-- Settings UI: Appearance, Providers (with key validation), Vault, About (diagnostics + re-run onboarding), Danger Zone
+- Settings UI: Appearance, Providers (with key validation), Connections, Vault, About (diagnostics + re-run onboarding), Danger Zone
 - Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
 - Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
 - Provider system: OpenAI, Anthropic, xAI, OpenRouter, Ollama — chat + embed independently configurable
@@ -94,16 +97,17 @@ Style guide: @docs/style-guide.md
 - Multi-vault management via `/api/vaults`
 - Cmd+K palette, file tree with filter bar, toasts
 - CI in `.github/workflows/`, LICENSE present
+- Bounded disk-streamed vault export/import with atomic overwrite rollback/startup recovery; lock/version/rollback-safe note archival
 
 **In flight**
 - Scribe daily-log generation works; summary phrasing is still being tuned
 - Sentinel AI-assisted validation works (LLM path with deterministic fallback); broadening rule coverage
-- Standup `generate()` works; no external calendar link yet
+- Google/Outlook OAuth, GitHub, and Email Bridge adapters are not yet implemented; Calendar currently uses private iCalendar feeds
 
 **Known gaps**
 - Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
 - No auth layer on the API (safe on localhost; do not expose the port as-is). `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
-- AppContext still hosts most global state; `useLoomConfig`, `useAgentPolling`, and `useHealthPolling` are split out so far
+- AppContext remains the compatibility shell; high-churn vault/capture loading, agent/health polling, config, and typed SSE refresh are split into domain hooks
 - Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested
 
 ## Conventions

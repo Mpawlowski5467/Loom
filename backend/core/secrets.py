@@ -1,6 +1,6 @@
-"""Secret encryption for API keys stored at rest.
+"""Secret encryption for provider keys and private connection values at rest.
 
-API keys live on ``ProviderConfig.api_key`` and are persisted to
+Provider API keys and private Calendar feed URLs are persisted to
 ``~/.loom/config.yaml``. To avoid storing them in plain text, values are
 encrypted with a machine-local master key (Fernet / AES-128-CBC + HMAC) and
 written with an ``enc:v1:`` prefix so encrypted and legacy-plaintext values are
@@ -117,7 +117,7 @@ def decrypt(value: str | None) -> str | None:
         return _fernet().decrypt(token.encode("ascii")).decode("utf-8")
     except InvalidToken:
         logger.warning(
-            "Could not decrypt a stored API key (wrong or rotated master key). "
-            "Re-enter the key in Settings → Providers."
+            "Could not decrypt a stored secret (wrong or rotated master key). "
+            "Re-enter it in Settings."
         )
         return None

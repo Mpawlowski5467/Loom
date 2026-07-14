@@ -248,7 +248,15 @@ class AgentRunner:
 
         verdict = validation.status if validation else ""
         reasons = list(validation.reasons) if validation else []
-        outcome = enforce_verdict(self._vault_root, capture_path, note_path, verdict, reasons)
+        validation_mode = validation.mode_summary if validation else ""
+        outcome = enforce_verdict(
+            self._vault_root,
+            capture_path,
+            note_path,
+            verdict,
+            reasons,
+            validation_mode,
+        )
         return {
             "capture_archived": outcome.capture_archived,
             "review_required": outcome.review_required,

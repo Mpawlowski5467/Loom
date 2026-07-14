@@ -152,6 +152,19 @@ class TestResearcherGraph:
         assert [s["name"] for s in latest["steps"]] == ["search", "synthesize", "save"]
 
     @pytest.mark.asyncio
+    async def test_graph_skips_save_for_preview_query(self, tmp_path) -> None:
+        root = _setup_vault(tmp_path)
+        get_trace_store().set_disk_dir(root / ".loom" / "traces")
+        researcher = Researcher(root, chat_provider=None)
+
+        result = await researcher.query("caching", save_capture=False)
+
+        assert result.saved_to_inbox is False
+        runs = get_trace_store().list_run_summaries()
+        latest = next(r for r in runs if r["agent"] == "researcher")
+        assert [s["name"] for s in latest["steps"]] == ["search", "synthesize"]
+
+    @pytest.mark.asyncio
     async def test_graph_llm_call_tagged_with_run_and_step(self, tmp_path) -> None:
         """End-to-end through the real TracedProvider: the synthesize step's
         LLM call is recorded and grouped under the run, tagged step=synthesize."""

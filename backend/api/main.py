@@ -27,6 +27,7 @@ from api.routers.agent_models import router as agent_models_router
 from api.routers.agents import router as agents_router
 from api.routers.agents_registry import router as agents_registry_router
 from api.routers.archive import router as archive_router
+from api.routers.automations import router as automations_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
@@ -43,9 +44,14 @@ from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
 from api.routers.traces import router as traces_router
 from api.routers.tree import router as tree_router
-from api.routers.vaults import router as vaults_router
+from api.routers.vaults import (
+    recover_interrupted_vault_imports,
+)
+from api.routers.vaults import (
+    router as vaults_router,
+)
 from api.runtime import initialize_vault_runtime
-from core.config import settings
+from core.config import GlobalConfig, settings
 from core.rate_limit import limiter, rate_limit_exceeded_handler
 from core.vault import get_vault_manager
 from core.watcher import stop_watcher
@@ -118,8 +124,30 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
     app.state.started_at = datetime.now(UTC)
     vm = get_vault_manager()
+    # Resolve an interrupted overwrite before the watcher, index, or workers
+    # open handles against a missing or half-promoted active vault.
+    recover_interrupted_vault_imports(vm._settings.vaults_dir)
     vault_dir = vm.active_vault_dir()
     initialize_vault_runtime(vault_dir, loop=asyncio.get_running_loop())
+    # The durable Inbox worker is active-vault-only because Loom agents are
+    # process-global. Interrupted rows remain recoverable if startup cannot
+    # initialize the worker; queue availability must not take down the API.
+    try:
+        from core.capture_jobs import get_capture_job_service
+
+        get_capture_job_service().enable(vault_dir)
+        if vault_dir.exists() and (vault_dir / "vault.yaml").exists():
+            await get_capture_job_service().activate(
+                vault_dir, GlobalConfig.load(vm.config_path()).capture_processing
+            )
+    except Exception:
+        logger.warning("Capture job worker initialization failed", exc_info=True)
+    try:
+        from core.standup_scheduler import get_standup_scheduler
+
+        await get_standup_scheduler().start()
+    except Exception:
+        logger.warning("Standup scheduler initialization failed", exc_info=True)
     # Mirror traces to disk so they survive restarts and we can page back
     # beyond the 500-item in-memory ring buffer. The vault label tags rows in
     # the (install-wide) Postgres mirror so its reads scope per vault too.
@@ -134,6 +162,18 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     retention = TraceRetention(keep_days=settings.trace_retention_days)
     retention.start()
     yield
+    try:
+        from core.capture_jobs import get_capture_job_service
+
+        await get_capture_job_service().aclose()
+    except Exception:
+        logger.warning("Capture job worker shutdown failed", exc_info=True)
+    try:
+        from core.standup_scheduler import get_standup_scheduler
+
+        await get_standup_scheduler().aclose()
+    except Exception:
+        logger.warning("Standup scheduler shutdown failed", exc_info=True)
     stop_watcher()
     await retention.aclose()
     await shutdown_optional_services()
@@ -226,6 +266,7 @@ register_exception_handlers(app)
 app.include_router(vaults_router)
 app.include_router(notes_router)
 app.include_router(archive_router)
+app.include_router(automations_router)
 app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)

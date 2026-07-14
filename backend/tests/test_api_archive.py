@@ -5,7 +5,9 @@ from pathlib import Path
 import pytest
 from starlette.testclient import TestClient
 
-from core.notes import note_to_file_content
+import api.routers.archive as archive_routes
+from core.archive_paths import ARCHIVE_ORIGINAL_PATH_FIELD
+from core.notes import note_to_file_content, parse_note
 from tests.conftest import _seed_notes
 
 _NOTES = [
@@ -127,6 +129,165 @@ def test_restore_preserves_tree_archived_folder(client: TestClient, seeded_vault
     restore = client.post("/api/archive/thr_ccc333/restore")
     assert restore.status_code == 200
     assert (Path(seeded_vault) / "threads" / "projects" / "loom.md").exists()
+
+
+def test_note_archive_restore_preserves_nested_custom_folder(
+    client: TestClient,
+    seeded_vault: Path,
+    note_index,
+) -> None:
+    """Note-level archive round-trips the exact custom folder, not its type folder."""
+    rel = Path("custom") / "clients" / "acme" / "brief.md"
+    source = seeded_vault / "threads" / rel
+    source.parent.mkdir(parents=True)
+    source.write_text(
+        note_to_file_content(
+            {
+                "id": "thr_custom1",
+                "title": "Acme Brief",
+                # A type-derived restore would incorrectly choose topics/.
+                "type": "topic",
+                "tags": [],
+                "created": "2026-03-03T00:00:00+00:00",
+                "modified": "2026-03-03T00:00:00+00:00",
+                "author": "user",
+                "status": "active",
+                "history": [],
+            },
+            "Nested custom content.\n",
+        ),
+        encoding="utf-8",
+    )
+    note_index.refresh_file(source)
+
+    archived_response = client.delete("/api/notes/thr_custom1")
+    assert archived_response.status_code == 200
+    archived = Path(archived_response.json()["path"])
+    assert archived == seeded_vault / "threads" / ".archive" / rel
+    assert parse_note(archived).extra[ARCHIVE_ORIGINAL_PATH_FIELD] == rel.as_posix()
+
+    listed = client.get("/api/archive")
+    assert listed.status_code == 200
+    custom_entry = next(n for n in listed.json()["notes"] if n["id"] == "thr_custom1")
+    assert custom_entry["original_path"] == rel.as_posix()
+
+    restored_response = client.post("/api/archive/thr_custom1/restore")
+    assert restored_response.status_code == 200
+    assert source.exists()
+    assert not archived.exists()
+    restored = parse_note(source)
+    assert restored.body == "Nested custom content.\n"
+    assert ARCHIVE_ORIGINAL_PATH_FIELD not in restored.extra
+    assert not (seeded_vault / "threads" / "topics" / "brief.md").exists()
+
+
+def test_restore_legacy_flat_archive_uses_type_folder(
+    client: TestClient,
+    seeded_vault: Path,
+    note_index,
+) -> None:
+    """Pre-path-metadata flat archives remain restorable."""
+    source = seeded_vault / "threads" / "topics" / "python.md"
+    archive = seeded_vault / "threads" / ".archive"
+    archive.mkdir(exist_ok=True)
+    legacy = archive / "python.md"
+    source.rename(legacy)
+    note_index.remove_file(source)
+
+    listed = client.get("/api/archive")
+    assert listed.status_code == 200
+    assert listed.json()["notes"][0]["original_path"] == "topics/python.md"
+
+    restored = client.post("/api/archive/thr_aaa111/restore")
+    assert restored.status_code == 200
+    assert source.exists()
+    assert not legacy.exists()
+
+
+def test_restore_unlink_failure_rolls_back_live_copy(
+    client: TestClient,
+    seeded_vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The archive remains authoritative if restore cannot remove it."""
+    _archive(client, "thr_aaa111")
+    archive_file = seeded_vault / "threads" / ".archive" / "topics" / "python.md"
+    restored_file = seeded_vault / "threads" / "topics" / "python.md"
+
+    def fail_remove(path: Path) -> None:  # noqa: ARG001
+        raise OSError("injected archive unlink failure")
+
+    monkeypatch.setattr(archive_routes, "_remove_archive_file", fail_remove)
+    response = client.post("/api/archive/thr_aaa111/restore")
+
+    assert response.status_code == 500
+    assert archive_file.exists()
+    assert not restored_file.exists()
+
+
+def test_restore_exclusive_create_preserves_racing_destination(
+    client: TestClient,
+    seeded_vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A destination created after the initial check is never overwritten."""
+    _archive(client, "thr_aaa111")
+    destination = seeded_vault / "threads" / "topics" / "python.md"
+    archived = seeded_vault / "threads" / ".archive" / "topics" / "python.md"
+    real_write = archive_routes.vault_write_note_exclusive
+
+    def race_write(vault_root: Path, path: Path, meta: dict, body: str) -> tuple[int, int]:
+        path.write_text("external writer won\n", encoding="utf-8")
+        return real_write(vault_root, path, meta, body)
+
+    monkeypatch.setattr(archive_routes, "vault_write_note_exclusive", race_write)
+    response = client.post("/api/archive/thr_aaa111/restore")
+
+    assert response.status_code == 409
+    assert destination.read_text(encoding="utf-8") == "external writer won\n"
+    assert archived.exists()
+
+
+def test_restore_rejects_tampered_traversal_metadata(
+    client: TestClient,
+    seeded_vault: Path,
+) -> None:
+    """An edited archive record cannot restore outside threads/."""
+    _archive(client, "thr_aaa111")
+    archived_path = seeded_vault / "threads" / ".archive" / "topics" / "python.md"
+    archived = parse_note(archived_path)
+    meta = archived.model_dump(exclude={"body", "wikilinks", "file_path"})
+    meta[ARCHIVE_ORIGINAL_PATH_FIELD] = "../../escaped.md"
+    archived_path.write_text(note_to_file_content(meta, archived.body), encoding="utf-8")
+
+    response = client.post("/api/archive/thr_aaa111/restore")
+
+    assert response.status_code == 400
+    assert archived_path.exists()
+    assert not (seeded_vault / "escaped.md").exists()
+
+
+def test_restore_rejects_symlinked_destination_parent(
+    client: TestClient,
+    seeded_vault: Path,
+) -> None:
+    """A symlinked custom folder cannot redirect a restore outside the vault."""
+    _archive(client, "thr_aaa111")
+    archived_path = seeded_vault / "threads" / ".archive" / "topics" / "python.md"
+    archived = parse_note(archived_path)
+    meta = archived.model_dump(exclude={"body", "wikilinks", "file_path"})
+    meta[ARCHIVE_ORIGINAL_PATH_FIELD] = "linked/python.md"
+    archived_path.write_text(note_to_file_content(meta, archived.body), encoding="utf-8")
+
+    outside = seeded_vault.parent / "outside"
+    outside.mkdir()
+    (seeded_vault / "threads" / "linked").symlink_to(outside, target_is_directory=True)
+
+    response = client.post("/api/archive/thr_aaa111/restore")
+
+    assert response.status_code == 400
+    assert archived_path.exists()
+    assert not (outside / "python.md").exists()
 
 
 # -- Restore: collision -------------------------------------------------------

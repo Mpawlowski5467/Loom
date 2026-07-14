@@ -6,9 +6,9 @@ Loom is a local-first, privacy-respecting AI knowledge base that lives on your m
 
 > **Status legend.** This document describes what Loom ships **today**. Sections carry one of two tags — ✅ shipped · 🟡 partial (ships and works, still being refined). The north-star design — work that is planned but not yet built — lives in [docs/VISION.md](VISION.md). Quick map:
 >
-> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle chat), custom agents (registry + Board UI + execution — running one writes a capture for triage), the Rules Engine, the Graph UI (Paper theme, orbit mode, display controls).
+> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle workspaces), custom agents, the Rules Engine, the Graph UI, durable Inbox jobs, and the first Bridge slice (read-only iCalendar → Standup/Inbox).
 > - 🟡 **Partial (ships and works, still being refined)**: Scribe daily logs — generation works, summary phrasing is still being tuned; Sentinel AI validation — the LLM-assisted path (with a deterministic fallback) works, rule coverage is being broadened.
-> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: the Bridge (integrations), the Prompt Compiler, and multi-file attachments — described there as future direction, not built today.
+> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: remaining Bridge adapters/OAuth, the Prompt Compiler, and multi-file attachments.
 >
 > Sections 7–9 below are brief stubs that summarize each planned subsystem and link to its full design in VISION.md.
 
@@ -159,10 +159,15 @@ Every folder can have an `_index.md` — a living, auto-generated summary of wha
 
 Raw information lands here through three paths:
 1. **Manually**: user drops a note or text file in
-2. **Via integrations** (planned — see [VISION.md](VISION.md#layer-6-the-bridge)): the Bridge layer would drop external data (emails, GitHub events, calendar) into the inbox
+2. **Via integrations**: the shipped Calendar Bridge turns read-only iCalendar occurrences into idempotent captures; GitHub and Email remain planned in [VISION.md](VISION.md#layer-6-the-bridge)
 3. **From Shuttle agents**: task agents output their work here
 
-Loom Layer agents process captures, break them apart, and file them into the right places according to the rules engine. The raw capture stays in `.archive/` as a reference.
+All normal producers enter through `core.capture_ingress.ingest_capture`, which
+validates provenance, deduplicates `source + external_id`, writes and indexes the
+capture, applies the automatic-processing policy, and emits typed live events.
+Per-vault SQLite jobs survive restarts and expose queued/running/retrying,
+review, failed, completed, and cancelled states. Loom Layer agents process the
+captures and the raw source stays in `.archive/` as a reference.
 
 ---
 
@@ -653,11 +658,11 @@ The agent dashboard showing both Loom and Shuttle layer agents.
 - Activity log showing all recent agent actions with timestamps and validation status
 
 #### 6.4.3 Captures Inbox
-Queue-style view of everything in `captures/` waiting to be processed.
-- Cards showing source (email/github/manual), preview text, status
-- Filter tabs: All, Pending, Processing, Done, by source
-- Action buttons: Process (trigger Weaver), Preview, Archive
-- Right sidebar shows raw capture preview with Weaver's suggested filing
+Durable queue view for captures and their processing ledger.
+- Capture cards show provenance, source, attempt count, and live job state
+- Active, Review, and History job tabs remain useful after a source capture is archived
+- Source/status filters plus bulk queue/skip, retry, cancel, and terminal-history retention
+- Right pane shows raw content, Weaver preview, validation/review details, and filed-note outcome
 
 #### 6.4.4 Thread View (in right sidebar)
 Rendered markdown view of a specific note when selected from graph or file tree.
@@ -742,7 +747,7 @@ Modal footer shows: "🕸 Weaver will read prime.md → apply schema → create 
 ### 6.10 Notifications & Real-Time
 
 - **Toast notifications**: small popups in the bottom-right corner that fade away. Ink-blue border (`--agent`) for agent actions. Shown for note creation, linking, issue flagging.
-- **Live refresh**: the UI holds an SSE stream (`GET /api/events/stream`); when the file watcher emits a `vault-changed` event the UI re-fetches notes and captures (one debounced reload per burst), so agent and external edits reach an open UI without a manual reload. The Board additionally polls agent activity on a short, tab/visibility-gated interval.
+- **Live refresh**: one SSE stream (`GET /api/events/stream`) carries typed, payload-free domains: `note-changed`, `capture-changed`, `capture-job-changed`, `standup-schedule-changed`, and the broad watcher fallback `vault-changed`. Clients refresh only the affected store; short active-job polling is a disconnect-recovery fallback. The Board additionally polls agent activity on a tab/visibility-gated interval.
 
 ### 6.11 Color System
 
@@ -795,7 +800,17 @@ Default ease for any transition longer than 100ms: `cubic-bezier(.2, .7, .3, 1)`
 
 ## 7. Layer 6: The Bridge
 
-The Bridge is the planned integration layer that lands external data (GitHub, Email, Calendar, and later community plugins) in `captures/` for Loom's agents to process. It is not yet built — the capture-processing pipeline it would feed is real, so dropping files into `captures/` manually already works today. **Full design: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
+The first Bridge vertical slice is shipped. `backend/bridge/calendar.py` fetches
+bounded read-only HTTP(S)/`webcal` iCalendar feeds, expands recurring events in
+the configured IANA timezone, treats event text as untrusted input, and never
+returns the private URL to the frontend. The URL is Fernet-encrypted in global
+config. A manual or scheduled sync creates one capture per stable occurrence;
+Standup can also use those events directly as recap context. Connections
+settings provide save/test/sync/disconnect controls, while the Board exposes a
+date-aware Standup workspace and durable daily schedule.
+
+Google/Outlook OAuth, GitHub, Email, and a community adapter contract remain
+planned. **Full direction: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
 
 ---
 

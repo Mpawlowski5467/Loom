@@ -2,11 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
-  Capture,
-  CaptureStatus,
   CouncilMessage,
   CouncilWho,
-  Note,
   NoteId,
   NodeType,
   SettingsSection,
@@ -24,10 +21,7 @@ import {
   parseGraphFixture,
   type GraphFixtureSize,
 } from "../data/graphFixtures";
-import { backendCaptureToFrontend, listCaptures } from "../api/captures";
-import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
-import { subscribeVaultEvents } from "../api/events";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import {
@@ -38,6 +32,7 @@ import {
 import { useLoomConfig } from "./useLoomConfig";
 import { useAgentPolling } from "./useAgentPolling";
 import { useHealthPolling } from "./useHealthPolling";
+import { useVaultContent } from "./useVaultContent";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
@@ -205,50 +200,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           : [],
     [demo, graphFixture],
   );
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
-  // Demo seeds are present immediately; a live vault is "loaded" only after the
-  // initial fetch resolves, so the tree can distinguish loading from empty.
-  const [notesLoaded, setNotesLoaded] = useState<boolean>(() => demo);
-  const appendNote = useCallback((note: Note) => {
-    setNotes((prev) =>
-      prev.some((n) => n.id === note.id) ? prev : [...prev, note],
-    );
-  }, []);
-  const updateNote = useCallback((note: Note) => {
-    setNotes((prev) => {
-      const idx = prev.findIndex((n) => n.id === note.id);
-      if (idx === -1) return [...prev, note];
-      const next = prev.slice();
-      next[idx] = note;
-      return next;
-    });
-  }, []);
-  const removeNote = useCallback((id: string) => {
-    setNotes((prev) => prev.filter((n) => n.id !== id));
-  }, []);
-  const noteById = useCallback(
-    (id: string): Note | undefined => notes.find((n) => n.id === id),
-    [notes],
-  );
-  const backlinksFor = useCallback(
-    (id: string): string[] =>
-      notes.filter((n) => n.links.includes(id)).map((n) => n.id),
-    [notes],
-  );
-
-  const wikilinkMap = useMemo(() => {
-    const m = new Map<string, NoteId>();
-    for (const n of notes) m.set(n.title.toLowerCase(), n.id);
-    return m;
-  }, [notes]);
-
-  const resolveWikilink = useCallback(
-    (raw: string): NoteId | undefined => {
-      const key = raw.split("|")[0]!.trim().toLowerCase();
-      return wikilinkMap.get(key);
-    },
-    [wikilinkMap],
-  );
+  const initialCaptures = useMemo(() => (demo ? capturesSeed : []), [demo]);
 
   const [tab, setTab] = useState<Tab>("graph");
   const [settingsSection, setSettingsSection] =
@@ -422,6 +374,38 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           offline: true,
           onboardingComplete: true,
         };
+
+  const reportVaultContentError = useCallback(
+    (_domain: "notes" | "captures", message: string) => {
+      pushToast({ icon: "!", agent: "loom", body: message });
+    },
+    [pushToast],
+  );
+  const {
+    notes,
+    notesLoaded,
+    wikilinkMap,
+    resolveWikilink,
+    noteById,
+    backlinksFor,
+    appendNote,
+    updateNote,
+    removeNote,
+    captures,
+    capturesLoaded,
+    capturesError,
+    selectedCaptureId,
+    selectCapture,
+    setCaptureStatus,
+    removeCapture,
+  } = useVaultContent({
+    enabled: !demo && loomConfig.onboardingComplete && !loomConfig.offline,
+    activeVault: loomConfig.config?.active_vault,
+    initialNotes,
+    initialCaptures,
+    setCurrentNoteId,
+    onLoadError: reportVaultContentError,
+  });
 
   // Agents are part of the program (Weaver, Spider, …). Identities always
   // show; runtime stats / lastAction are only populated in demo mode.
@@ -624,104 +608,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);
 
-  const [captures, setCaptures] = useState<Capture[]>(demo ? capturesSeed : []);
-  const [capturesLoaded, setCapturesLoaded] = useState<boolean>(() => demo);
-  const [capturesError, setCapturesError] = useState<string | null>(null);
-  const [selectedCaptureId, selectCapture] = useState<string | null>(
-    demo ? (capturesSeed[0]?.id ?? null) : null,
-  );
-
-  // Bumped to force a re-fetch of notes + captures — e.g. when the backend
-  // pushes a `vault-changed` SSE event (an agent or external edit landed).
-  const [reloadTick, setReloadTick] = useState(0);
-
-  useEffect(() => {
-    // No live fetch in demo/offline/pre-onboarding — treat as already loaded
-    // so the tree shows its empty state rather than a perpetual skeleton.
-    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) {
-      setNotesLoaded(true);
-      setCapturesLoaded(true);
-      return;
-    }
-    const ctrl = new AbortController();
-
-    void loadAllNotes(ctrl.signal)
-      .then((records) => {
-        if (ctrl.signal.aborted) return;
-        const loaded = backendNotesToFrontend(records);
-        setNotes(loaded);
-        setCurrentNoteId((current) => {
-          if (current && loaded.some((n) => n.id === current)) return current;
-          return loaded[0]?.id ?? null;
-        });
-      })
-      .catch((err) => {
-        if ((err as DOMException)?.name === "AbortError") return;
-        pushToast({
-          icon: "!",
-          agent: "loom",
-          body: err instanceof Error ? err.message : "Failed to load notes",
-        });
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setNotesLoaded(true);
-      });
-
-    void listCaptures(ctrl.signal)
-      .then((records) => {
-        if (ctrl.signal.aborted) return;
-        const loaded = records.map(backendCaptureToFrontend);
-        setCaptures(loaded);
-        setCapturesError(null);
-        selectCapture((current) => {
-          if (current && loaded.some((c) => c.id === current)) return current;
-          return loaded[0]?.id ?? null;
-        });
-      })
-      .catch((err) => {
-        if ((err as DOMException)?.name === "AbortError") return;
-        const msg =
-          err instanceof Error ? err.message : "Failed to load captures";
-        setCapturesError(msg);
-        pushToast({ icon: "!", agent: "loom", body: msg });
-      })
-      .finally(() => {
-        if (!ctrl.signal.aborted) setCapturesLoaded(true);
-      });
-
-    return () => ctrl.abort();
-  }, [
-    demo,
-    loomConfig.config?.active_vault,
-    loomConfig.offline,
-    loomConfig.onboardingComplete,
-    pushToast,
-    reloadTick,
-  ]);
-
-  // Live refresh: subscribe to backend vault-change events and re-fetch (one
-  // debounced reload per burst of edits) so an agent's writes reach an open UI
-  // without a manual reload. Only when live — never in demo/offline/pre-onboarding.
-  useEffect(() => {
-    if (demo || !loomConfig.onboardingComplete || loomConfig.offline) return;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = subscribeVaultEvents(() => {
-      // Coalesce a burst of file writes into a single reload.
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => setReloadTick((tick) => tick + 1), 400);
-    });
-    return () => {
-      if (timer) clearTimeout(timer);
-      unsubscribe();
-    };
-  }, [demo, loomConfig.offline, loomConfig.onboardingComplete]);
-
-  const setCaptureStatus = useCallback((id: string, s: CaptureStatus) => {
-    setCaptures((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, status: s } : c)),
-    );
-  }, []);
-
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
   const addFolder = useCallback((path: string) => {
     setExtraFolders((prev) => (prev.includes(path) ? prev : [...prev, path]));
@@ -822,6 +708,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       selectedCaptureId,
       selectCapture,
       setCaptureStatus,
+      removeCapture,
 
       extraFolders,
       addFolder,
@@ -901,6 +788,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       removeNote,
       selectCapture,
       setCaptureStatus,
+      removeCapture,
       addFolder,
       // loomConfig fields enumerated individually (NOT the raw object)
       cfgTheme,

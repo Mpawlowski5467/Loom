@@ -906,6 +906,83 @@
   font-weight: 600;
 }
 
+.settings-connection-card {
+  display: grid;
+  gap: 16px;
+  margin-top: 22px;
+  padding: 16px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  background: var(--bg-surface);
+}
+
+.settings-connection-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.settings-connection-head h2 {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 0 4px;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 550;
+  color: var(--ink);
+}
+
+.settings-connection-head p,
+.settings-connection-status {
+  margin: 0;
+  font-size: 11.5px;
+  line-height: 1.45;
+  color: var(--ink-3);
+}
+
+.settings-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--ink-2);
+}
+
+.settings-switch input {
+  accent-color: var(--agent);
+}
+
+.settings-field-grow {
+  grid-column: span 1;
+}
+
+.settings-field-label em {
+  color: var(--agent);
+  font-style: normal;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.settings-calendar-preview {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border-left: 3px solid var(--agent);
+  background: var(--agent-bg);
+  color: var(--ink-2);
+  font-size: 11.5px;
+}
+
+.settings-calendar-preview strong {
+  color: var(--ink);
+}
+
 @media (max-width: 760px) {
   .settings-provider-connect-note {
     grid-template-columns: minmax(0, 1fr);
@@ -925,5 +1002,10 @@
 
   .settings-agent-no-model {
     grid-column: 1;
+  }
+
+  .settings-connection-head {
+    align-items: stretch;
+    flex-direction: column;
   }
 }

@@ -15,6 +15,7 @@ export type Tab = "graph" | "thread" | "inbox" | "board" | "settings";
 export type SettingsSection =
   | "appearance"
   | "providers"
+  | "connections"
   | "hardware"
   | "vault"
   | "archived"
@@ -70,7 +71,14 @@ export interface Note {
   source: string;
 }
 
-export type CaptureStatus = "pending" | "processing" | "done";
+export type CaptureStatus =
+  | "pending"
+  | "processing"
+  | "needs_review"
+  | "failed"
+  | "done";
+
+export type CaptureOutcome = "filed" | "needs_review" | "skipped" | "failed";
 
 export interface CaptureSuggestion {
   type: NodeType;
@@ -87,6 +95,24 @@ export interface Capture {
   body: string;
   receivedAt: string;
   status: CaptureStatus;
+  /** Where the capture came from: manual, bridge:browser, agent:researcher, … */
+  source?: string;
+  /** Stable identifier supplied by an external connector for deduplication. */
+  externalId?: string;
+  /** Connector-owned, display-safe provenance such as a canonical URL. */
+  provenance?: Record<string, string>;
+  outcome?: CaptureOutcome;
+  reviewRequired?: boolean;
+  flagged?: boolean;
+  validation?: string;
+  validationMode?: string;
+  validationReasons?: string[];
+  /** Draft created by Weaver but retained for user review after validation. */
+  draftNoteId?: NoteId;
+  draftNotePath?: string;
+  lastAttemptOutcome?: CaptureOutcome;
+  lastError?: string;
+  lastAttemptAt?: string;
   filePath?: string;
   suggestion?: CaptureSuggestion;
   filedAs?: NoteId;

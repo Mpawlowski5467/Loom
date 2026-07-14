@@ -1,9 +1,8 @@
-"""Server-Sent Events stream for live vault-change notifications.
+"""Server-Sent Events stream for payload-free resource refresh signals.
 
-The frontend opens one ``GET /api/events/stream`` and re-fetches notes/graph
-when a ``vault-changed`` event arrives — replacing the previous "load once per
-vault, never refresh" behavior where an agent's edits never reached an open UI
-without a manual reload.
+The stream carries scoped capture, capture-job, and note events alongside the
+legacy broad ``vault-changed`` signal. Clients re-fetch the named resource
+domain instead of trusting event payload diffs.
 """
 
 from __future__ import annotations
@@ -28,7 +27,7 @@ _HEARTBEAT_SECONDS = 15.0
 
 @router.get("/stream")
 async def event_stream(request: Request) -> StreamingResponse:
-    """Stream vault-change events to the client as Server-Sent Events."""
+    """Stream typed refresh events to the client as Server-Sent Events."""
     hub = get_event_hub()
     queue = hub.subscribe()
 

@@ -1,6 +1,6 @@
 # Loom — Architecture Reference
 
-Condensed reference for Claude Code. Full shipped design: see `ARCHITECTURE.md`. Planned/north-star work (the Bridge, Prompt Compiler, multi-file attachments, v2+ roadmap): see `VISION.md`.
+Condensed reference for Claude Code. Full shipped design: see `ARCHITECTURE.md`. The read-only iCalendar Bridge is shipped; planned/north-star work (remaining Bridge adapters, Prompt Compiler, multi-file attachments, v2+ roadmap) lives in `VISION.md`.
 
 ## Vault Structure
 
@@ -68,6 +68,12 @@ history:
 
 **Boundary**: Shuttle agents write to `captures/` only. Loom agents process from there.
 
+**Unified ingress + jobs**: HTTP, Shuttle agents, and Bridge adapters call
+`core.capture_ingress.ingest_capture`. `source + external_id` is the idempotency
+key; the service writes/indexes once, applies the processing policy immediately,
+and persists a per-vault SQLite job. The Inbox exposes Active/Review/History,
+retry/cancel, and safe terminal-row retention.
+
 **Custom agents**: a registry (`/api/agents/registry`) + a Board "Add agent" modal let users define their own Shuttle-tier agents (persisted to `agents.yaml`, optionally with per-agent `provider`/`chat_model` fields); the 7 built-ins stay read-only. Customs are runnable and editable from their Board card (all board keying uses the registry id, never the display name). Running a custom agent dispatches through `AgentRunner` to `agents.shuttle.custom.CustomAgent`, which gathers vault context, calls the chat provider with the agent's system prompt, and writes a capture for triage.
 
 **Per-agent models**: `GlobalConfig.agent_models` maps agent id → `{provider, chat_model}`; `/api/settings/agent-models` (GET/PUT) edits it and rebinds agents immediately. `ProviderRegistry.get(name, chat_model)` caches one instance per `(provider, model)` pair; `get_chat_provider_for(agent_id)` resolves override → agents.yaml record → global default.
@@ -78,6 +84,7 @@ Multi-step agent work runs as **LangGraph `StateGraph`s**, not imperative call c
 
 - **Capture pipeline** (`agents/loom/pipeline_graph.py`): `weaver → spider → scribe → sentinel → enforce`. Conditional edges short-circuit to `END` on an empty capture and loop back to Weaver once on a `failed` Sentinel verdict (regenerate → re-validate, then enforce regardless). `AgentRunner.run_pipeline` drives it; `POST /api/captures/process` calls that.
 - **Shuttle graphs** (`agents/shuttle/researcher_graph.py`, `standup_graph.py`): Researcher = `search → synthesize → save`; Standup = `collect → (conditional) → generate/skip → save`.
+- **Standup automation** (`core/standup_scheduler.py`, `bridge/calendar.py`): active-vault daily schedule with durable attempts, local timezone, private encrypted iCalendar feed, recurrence expansion, optional event captures, and Calendar-enriched Standup context.
 
 Graph nodes wrap the existing agent methods (so the read-before-write chain, changelog, and memory still fire) and call Loom's own provider layer — LangGraph is the orchestrator only; **no LangChain model objects**, so the dependency stays small. The shared run/step recorder + enforcement live in `agents/shuttle/graph_runtime.py` and `agents/loom/enforcement.py`.
 
@@ -126,11 +133,11 @@ Hard block on failure (default). Soft warning for trusted agents (configurable).
 - Editor: custom markdown renderer ([`frontend/src/editor/renderMarkdown.tsx`](../frontend/src/editor/renderMarkdown.tsx)) with `[[wikilink]]` support and inline marks
 - Create note: modal (segmented type chips with node-color dots, nested-folder picker, tag chip editor) → Weaver processes via read chain
 - Toasts: bottom-right for agent actions
-- Live refresh: the UI holds an SSE stream (`GET /api/events/stream`) and re-fetches notes/captures (one debounced reload per burst) when the file watcher emits a `vault-changed` event, so agent/external edits reach an open UI without a manual reload. The Board additionally polls agent activity on a short, tab/visibility-gated interval.
+- Live refresh: one SSE stream carries `note-changed`, `capture-changed`, `capture-job-changed`, `standup-schedule-changed`, and broad watcher `vault-changed` events. Domain hooks refresh only affected data; active-job polling is a disconnect-recovery fallback. The Board polls agent activity on a tab/visibility-gated interval.
 - Bidirectional sync: graph ↔ file tree
 - Graph display panel: labels/size/spacing/edge-thickness/breathing/travelers, persisted to localStorage
 - Board: two modes — cards (agent grid) and pulse (live activity). Clicking a card opens an agent-detail modal: instructions (registry system prompt), model override, the agent's recent runs + LLM calls (drill into the raw-call inspector), and Run/Edit/Delete actions. There is no page-level trace feed
-- Settings: appearance, providers (key validation), hardware & models (scan → local-model ratings, opt-in Ollama benchmark, per-agent model pickers), vault, about/diagnostics, danger zone
+- Settings: appearance, providers (key validation), Connections (Standup schedule + Calendar), hardware & models (scan → local-model ratings, opt-in Ollama benchmark, per-agent model pickers), vault, about/diagnostics, danger zone
 
 ## Color System
 

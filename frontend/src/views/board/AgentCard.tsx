@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Loader2, Pencil, Play, Trash2 } from "lucide-react";
+import { Loader2, MessageCircle, Pencil, Play, Trash2 } from "lucide-react";
 import { StatusBadge } from "../../components/primitives/StatusBadge";
 import { AgentBlob } from "../../components/primitives/AgentBlob";
 import type { AgentActivity } from "../../api/activity";
@@ -17,6 +17,9 @@ interface AgentCardProps {
   onRun: () => void;
   onEdit: () => void;
   onDelete: () => void;
+  /** Optional dedicated workspace action for interactive Shuttle agents. */
+  onWorkspace?: () => void;
+  workspaceLabel?: string;
   /** Open the agent detail modal (clicking the card body / Enter / Space). */
   onOpen: () => void;
 }
@@ -31,6 +34,8 @@ export function AgentCard({
   onRun,
   onEdit,
   onDelete,
+  onWorkspace,
+  workspaceLabel = "ask",
   onOpen,
 }: AgentCardProps): ReactNode {
   const status = boardStatus(agent, live);
@@ -84,8 +89,22 @@ export function AgentCard({
       <div className="agent-card-last" title={lastActionText}>
         {lastActionText}
       </div>
-      {(runnable || isCustom) && (
+      {(runnable || isCustom || onWorkspace) && (
         <div className="agent-card-actions">
+          {onWorkspace && (
+            <button
+              type="button"
+              className="btn btn-md btn-purple"
+              onClick={(e) => {
+                e.stopPropagation();
+                onWorkspace();
+              }}
+              aria-label={`Open ${agent.name} workspace`}
+            >
+              <MessageCircle size={13} aria-hidden="true" />
+              <span>{workspaceLabel}</span>
+            </button>
+          )}
           {runnable && (
             <button
               type="button"

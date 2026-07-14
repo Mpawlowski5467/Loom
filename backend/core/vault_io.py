@@ -26,9 +26,12 @@ Notes:
 from __future__ import annotations
 
 import logging
+import os
+import tempfile
 from pathlib import Path
 from typing import Any
 
+from core.graph_state import mark_dirty
 from core.notes import atomic_write_text, note_to_file_content
 
 logger = logging.getLogger(__name__)
@@ -51,6 +54,57 @@ def write_note(
     """
     safe_path = _check_writable(vault_root, path)
     atomic_write_text(safe_path, note_to_file_content(meta, body))
+
+
+def write_note_exclusive(
+    vault_root: Path,
+    path: Path,
+    meta: dict[str, Any],
+    body: str,
+) -> tuple[int, int]:
+    """Create a complete note without ever replacing an existing path.
+
+    The serialized note is first written and fsynced to a private temporary
+    file in the destination directory. A hard link then exposes that inode at
+    ``path`` atomically; unlike ``os.replace``, this fails with
+    ``FileExistsError`` if another writer (or a symlink) won the destination.
+
+    Returns the created file's ``(device, inode)`` identity so a caller can
+    perform an identity-checked rollback without deleting a later replacement.
+    """
+    safe_path = _check_writable(vault_root, path)
+    content = note_to_file_content(meta, body)
+
+    try:
+        fd, raw_tmp = tempfile.mkstemp(
+            dir=safe_path.parent,
+            prefix=f".{safe_path.name}.",
+            suffix=".tmp",
+        )
+    except OSError as exc:
+        raise VaultIOError(f"Cannot stage note at {safe_path}: {exc}") from exc
+
+    tmp_path = Path(raw_tmp)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+
+        identity_stat = tmp_path.stat()
+        os.link(tmp_path, safe_path)
+    except FileExistsError:
+        raise
+    except OSError as exc:
+        raise VaultIOError(f"Cannot create note at {safe_path}: {exc}") from exc
+    finally:
+        try:
+            tmp_path.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove staged note file %s", tmp_path, exc_info=True)
+
+    mark_dirty(vault_root / ".loom")
+    return identity_stat.st_dev, identity_stat.st_ino
 
 
 def write_text(

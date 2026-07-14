@@ -7,6 +7,8 @@ import {
   titleMapFromRecords,
   notePathOf,
   loadAllNotes,
+  archiveNote,
+  updateNote,
   type NoteRecord,
 } from "./notes";
 import type { Note } from "../data/types";
@@ -118,8 +120,17 @@ describe("backendNoteToFrontend", () => {
 describe("backendNotesToFrontend", () => {
   it("cross-resolves wikilinks across the batch", () => {
     const records = [
-      mkRecord({ id: "a", title: "Alpha", file_path: "/v/threads/topics/alpha.md", wikilinks: ["Beta"] }),
-      mkRecord({ id: "b", title: "Beta", file_path: "/v/threads/topics/beta.md" }),
+      mkRecord({
+        id: "a",
+        title: "Alpha",
+        file_path: "/v/threads/topics/alpha.md",
+        wikilinks: ["Beta"],
+      }),
+      mkRecord({
+        id: "b",
+        title: "Beta",
+        file_path: "/v/threads/topics/beta.md",
+      }),
     ];
     const notes = backendNotesToFrontend(records);
     const alpha = notes.find((n) => n.id === "a")!;
@@ -142,7 +153,11 @@ describe("titleMapFromNotes", () => {
 describe("titleMapFromRecords", () => {
   it("maps both the filename slug and the title to the id", () => {
     const map = titleMapFromRecords([
-      mkRecord({ id: "thr_1", title: "Caching", file_path: "/v/threads/topics/caching.md" }),
+      mkRecord({
+        id: "thr_1",
+        title: "Caching",
+        file_path: "/v/threads/topics/caching.md",
+      }),
     ]);
     expect(map.get("caching")).toBe("thr_1"); // slug
     expect(map.get("caching")).toBe("thr_1"); // title (same here)
@@ -150,8 +165,16 @@ describe("titleMapFromRecords", () => {
 
   it("keeps the first id for a duplicated key", () => {
     const map = titleMapFromRecords([
-      mkRecord({ id: "first", title: "Dup", file_path: "/v/threads/topics/dup.md" }),
-      mkRecord({ id: "second", title: "Dup", file_path: "/v/threads/topics/other.md" }),
+      mkRecord({
+        id: "first",
+        title: "Dup",
+        file_path: "/v/threads/topics/dup.md",
+      }),
+      mkRecord({
+        id: "second",
+        title: "Dup",
+        file_path: "/v/threads/topics/other.md",
+      }),
     ]);
     expect(map.get("dup")).toBe("first");
   });
@@ -176,6 +199,42 @@ describe("notePathOf", () => {
 
   it("falls back to 'note.md' when the title kebabs to empty", () => {
     expect(notePathOf({ folder: "", title: "!!!" })).toBe("note.md");
+  });
+});
+
+describe("note mutation requests", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("encodes the note id and forwards optimistic update metadata", async () => {
+    const put = vi.spyOn(apiClient, "put").mockResolvedValue(mkRecord());
+
+    await updateNote("note/with spaces", {
+      title: "New title",
+      base_modified: "2026-07-14T12:34:56+00:00",
+    });
+
+    expect(put).toHaveBeenCalledWith("/api/notes/note%2Fwith%20spaces", {
+      title: "New title",
+      base_modified: "2026-07-14T12:34:56+00:00",
+    });
+  });
+
+  it("encodes archive ids and the optional base-modified query", async () => {
+    const del = vi.spyOn(apiClient, "delete").mockResolvedValue({
+      status: "archived",
+      path: "threads/.archive/note.md",
+    });
+
+    await archiveNote("note/with spaces", "2026-07-14T12:34:56+00:00");
+    await archiveNote("plain");
+
+    expect(del).toHaveBeenNthCalledWith(
+      1,
+      "/api/notes/note%2Fwith%20spaces?base_modified=2026-07-14T12%3A34%3A56%2B00%3A00",
+    );
+    expect(del).toHaveBeenNthCalledWith(2, "/api/notes/plain");
   });
 });
 

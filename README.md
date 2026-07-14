@@ -127,7 +127,7 @@ flowchart TB
 | **Scribe** | Loom | Writes folder `_index.md` files and daily logs. |
 | **Sentinel** | Loom | Validates every agent action against `prime.md` rules and schemas. |
 | **Researcher** | Shuttle | Answers questions by searching the vault and citing source notes. |
-| **Standup** | Shuttle | Generates a daily activity recap from changelogs and modified notes. |
+| **Standup** | Shuttle | Generates scheduled daily recaps from vault activity and an optional read-only calendar feed. |
 
 ## Read-before-write
 
@@ -152,6 +152,12 @@ Hard block on failure by default; trusted agents can be configured for soft-warn
 ### From capture to note
 
 A raw capture never becomes a note in one step. Weaver classifies and formats it, Sentinel validates the result against `prime.md` and the matching schema, the note is written to disk, and Spider connects it to the rest of the vault. The inbox lets you `preview` this whole chain as a dry run before you `commit`.
+
+Capture producers all use one ingress service. Manual/API captures, Researcher,
+Standup, custom agents, and Calendar receive the same provenance validation,
+external-ID deduplication, indexing, durable job creation, and live-update events.
+The Inbox exposes Active, Review, and History job views; queued work and terminal
+outcomes survive restarts.
 
 ```mermaid
 sequenceDiagram
@@ -456,6 +462,9 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `POST` `PUT` `DELETE` | `/api/notes` | Note CRUD (delete = archive) |
 | `GET` | `/api/search?q=...` | Hybrid search |
 | `GET` `POST` | `/api/captures` | List & process captures (single or batch) |
+| `GET` `POST` `DELETE` | `/api/captures/jobs` | Durable Inbox jobs, retry/cancel, and terminal-history retention |
+| `GET` `PATCH` | `/api/automations/standup` | Daily Standup schedule and redacted Calendar connection state |
+| `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
 | `GET` | `/api/agents` | Agent status + action counts |
 | `GET` | `/api/agents/activity` | Live per-agent activity (polled by the Pulse view) |
 | `GET` `POST` `PATCH` `DELETE` | `/api/agents/registry` | List / create / edit / remove custom agents |
@@ -501,6 +510,8 @@ What works today:
 - Both Shuttle Layer agents (Researcher, Standup) plus user-defined custom agents
 - Scribe daily-log generation and Sentinel AI-assisted validation (LLM path with a deterministic fallback)
 - Graph, Board, Inbox, and Thread views
+- Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
+- Scheduled Standup workspace plus encrypted read-only iCalendar connection
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection
@@ -514,6 +525,9 @@ What works today:
 - Bounded provider retry (backoff + jitter) at the trace chokepoint — a transient blip no longer fails a whole search or index pass (OpenRouter keeps its own 429 loop)
 - Index-drift detection: notes that land in the metadata index but miss the vector store are reconciled on startup, surfaced via `/api/health`, and shown as a "rebuilding" banner
 - Idempotent capture pipeline — a crash between note-write and archive can't create a duplicate on retry
+- One shared capture-ingress path gives every producer immediate idempotency, provenance, indexing, queue policy, and typed live events
+- Vault export/import is size-bounded and disk-streamed; overwrite restores use an atomic staged swap with rollback and startup recovery
+- Note archival shares the edit lock, supports optimistic version checks, and restores the exact original on a failed move
 - Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
 - End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
 - Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
@@ -521,10 +535,10 @@ What works today:
 **Known gaps (deliberate v1 boundaries):**
 - **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
 - **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
-- **Deferred by design** — the Bridge (GitHub/Email/Calendar integrations, including a Standup calendar link), the Prompt Compiler, and multi-file attachments are planned, not built; see [`docs/VISION.md`](docs/VISION.md)
-- `AppContext` still hosts most global frontend state; the `useGraph*` graph hooks remain the main untested area (backend and the rest of the frontend are well covered)
+- **Bridge status** — the first production slice is shipped: private iCalendar feeds can enrich scheduled Standups and create idempotent Inbox jobs. Google/Outlook OAuth, GitHub, Email, the general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
+- `AppContext` remains the public compatibility shell, while high-churn vault/capture loading and typed SSE refresh logic are being split into domain hooks. `useGraphInstance` remains the main graph-hook test gap.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/VISION.md`](docs/VISION.md) for the north-star/planned work (the Bridge, Prompt Compiler, attachments, and the v2+ roadmap), and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/VISION.md`](docs/VISION.md) for the remaining Bridge adapters, Prompt Compiler, attachments, and v2+ roadmap, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 
 ## Wireframes
 

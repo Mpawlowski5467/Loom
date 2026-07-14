@@ -3,6 +3,7 @@ import {
   Archive,
   Cpu,
   Info,
+  Link2,
   Palette,
   Server,
   ShieldAlert,
@@ -12,6 +13,7 @@ import { useApp } from "../context/app-ctx";
 import type { SettingsSection } from "../data/types";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { AboutSection } from "./settings/AboutSection";
+import { ConnectionsSection } from "./settings/ConnectionsSection";
 import { ArchivedSection } from "./settings/ArchivedSection";
 import { DangerZoneSection } from "./settings/DangerZoneSection";
 import { HardwareSection } from "./settings/HardwareSection";
@@ -25,6 +27,7 @@ const SECTIONS: {
 }[] = [
   { id: "appearance", label: "Appearance", icon: <Palette size={15} /> },
   { id: "providers", label: "Providers", icon: <Server size={15} /> },
+  { id: "connections", label: "Connections", icon: <Link2 size={15} /> },
   { id: "hardware", label: "Hardware & Models", icon: <Cpu size={15} /> },
   { id: "vault", label: "Vault", icon: <Vault size={15} /> },
   { id: "archived", label: "Archived", icon: <Archive size={15} /> },
@@ -67,6 +70,8 @@ function renderSection(section: SettingsSection): ReactNode {
       return <AppearanceSection />;
     case "providers":
       return <ProvidersSection />;
+    case "connections":
+      return <ConnectionsSection />;
     case "hardware":
       return <HardwareSection />;
     case "vault":

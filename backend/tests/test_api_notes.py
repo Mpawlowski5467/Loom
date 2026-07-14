@@ -1,10 +1,16 @@
 """Tests for the notes, tree, and graph API routes."""
 
+import asyncio
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
 
+import api.routers.notes as notes_routes
+from agents.file_locks import path_lock
+from core.events import NOTE_CHANGED, get_event_hub
+from core.notes import parse_note
 from tests.conftest import _seed_notes
 
 _NOTES = [
@@ -115,6 +121,31 @@ def test_create_note(client: TestClient, seeded_vault: Path) -> None:
     assert data["type"] == "topic"
 
 
+def test_note_mutations_emit_only_note_domain(client: TestClient, seeded_vault: Path) -> None:
+    hub = get_event_hub()
+    events = hub.subscribe()
+    try:
+        # Agent singletons may still point at a vault used by an earlier API
+        # suite. This event-domain test exercises the direct note route and
+        # must not depend on process-global Weaver lifecycle state.
+        with patch("agents.loom.weaver.get_weaver", return_value=None):
+            created = client.post(
+                "/api/notes",
+                json={"title": "Evented", "type": "topic", "content": "First"},
+            )
+        assert created.status_code == 201
+        note_id = created.json()["id"]
+        assert client.put(f"/api/notes/{note_id}", json={"body": "Second"}).status_code == 200
+        assert client.delete(f"/api/notes/{note_id}").status_code == 200
+
+        delivered: list[str] = []
+        while not events.empty():
+            delivered.append(events.get_nowait())
+        assert delivered == [NOTE_CHANGED, NOTE_CHANGED, NOTE_CHANGED]
+    finally:
+        hub.unsubscribe(events)
+
+
 def test_create_note_does_not_overwrite_same_title(client: TestClient, seeded_vault: Path) -> None:
     """Two notes with the same title in the same folder must both survive.
 
@@ -171,6 +202,108 @@ def test_archive_note(client: TestClient, seeded_vault: Path) -> None:
     resp2 = client.get("/api/notes")
     ids = [n["id"] for n in resp2.json()["notes"]]
     assert "thr_bbb222" not in ids
+
+    archived = parse_note(Path(data["path"]))
+    assert archived.status == "archived"
+    assert archived.history[-1].action == "archived"
+
+
+def test_archive_rejects_stale_version(client: TestClient, seeded_vault: Path) -> None:
+    loaded = client.get("/api/notes/thr_aaa111").json()
+    update = client.put(
+        "/api/notes/thr_aaa111",
+        json={"body": "A concurrent edit", "base_modified": loaded["modified"]},
+    )
+    assert update.status_code == 200
+
+    resp = client.delete(
+        "/api/notes/thr_aaa111",
+        params={"base_modified": loaded["modified"]},
+    )
+
+    assert resp.status_code == 409
+    current = client.get("/api/notes/thr_aaa111")
+    assert current.status_code == 200
+    assert current.json()["body"] == "A concurrent edit"
+
+
+def test_archive_move_failure_restores_original(
+    client: TestClient,
+    seeded_vault: Path,
+    note_index,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    path = note_index.get_path_by_id("thr_bbb222")
+    assert path is not None
+    original = path.read_text(encoding="utf-8")
+
+    def fail_move(source: Path, destination: Path) -> None:  # noqa: ARG001
+        raise OSError("injected move failure")
+
+    monkeypatch.setattr(notes_routes, "_move_note_to_archive", fail_move)
+
+    resp = client.delete("/api/notes/thr_bbb222")
+
+    assert resp.status_code == 500
+    assert path.read_text(encoding="utf-8") == original
+    assert parse_note(path).status == "active"
+    assert note_index.get_path_by_id("thr_bbb222") == path
+    assert not list((seeded_vault / "threads" / ".archive").glob("fastapi*.md"))
+
+
+def test_archive_destination_race_does_not_overwrite_external_file(
+    client: TestClient,
+    seeded_vault: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Archive retries another name if a destination appears after selection."""
+    expected = seeded_vault / "threads" / ".archive" / "topics" / "fastapi.md"
+    real_move = notes_routes._move_note_to_archive
+    first_attempt = True
+
+    def race_move(source: Path, destination: Path) -> None:
+        nonlocal first_attempt
+        if first_attempt:
+            first_attempt = False
+            destination.write_text("external archive entry\n", encoding="utf-8")
+        real_move(source, destination)
+
+    monkeypatch.setattr(notes_routes, "_move_note_to_archive", race_move)
+    response = client.delete("/api/notes/thr_bbb222")
+
+    assert response.status_code == 200
+    assert expected.read_text(encoding="utf-8") == "external archive entry\n"
+    archived_path = Path(response.json()["path"])
+    assert archived_path != expected
+    assert archived_path.parent == expected.parent
+    assert parse_note(archived_path).id == "thr_bbb222"
+
+
+@pytest.mark.asyncio
+async def test_archive_waits_for_shared_note_lock(
+    seeded_vault: Path,
+    note_index,
+) -> None:
+    path = note_index.get_path_by_id("thr_ccc333")
+    assert path is not None
+
+    async with path_lock(path):
+        archive_task = asyncio.create_task(
+            notes_routes._archive_note_transaction(
+                path=path,
+                note_id="thr_ccc333",
+                base_modified=None,
+                vault_root=seeded_vault,
+                threads_dir=seeded_vault / "threads",
+                index=note_index,
+            )
+        )
+        await asyncio.sleep(0)
+        assert not archive_task.done()
+
+    result = await archive_task
+    assert result["status"] == "archived"
+    assert not path.exists()
 
 
 # -- Tree endpoint ------------------------------------------------------------

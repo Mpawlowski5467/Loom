@@ -1,12 +1,18 @@
 """Integration tests for vault API endpoints."""
 
+import asyncio
 import io
 import tarfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+import pytest
 from starlette.testclient import TestClient
 
+import api.routers.vaults as vault_routes
+import core.vault_handoff as handoff_mod
 from core.notes import note_to_file_content
+from core.standup_scheduler import StandupSchedulerService
 
 
 def _write_note(vault_root: Path, note_id: str, title: str) -> None:
@@ -129,6 +135,72 @@ class TestActiveVault:
         resp = client.put("/api/vaults/active", json={"name": "nope"})
         assert resp.status_code == 404
 
+    @pytest.mark.parametrize(
+        "operation",
+        ["switch", "archive", "delete", "rename", "import"],
+    )
+    def test_active_handoff_refuses_a_running_scheduled_standup(
+        self,
+        operation: str,
+        client: TestClient,
+        vault_manager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post("/api/vaults", json={"name": "first"})
+        client.post("/api/vaults", json={"name": "second"})
+        root = vault_manager.vault_path("first")
+        marker = root / "threads" / "handoff-marker.md"
+        marker.write_text("unchanged", encoding="utf-8")
+        scheduler = StandupSchedulerService()
+        asyncio.run(scheduler._run_lock.acquire())
+        monkeypatch.setattr(handoff_mod, "get_standup_scheduler", lambda: scheduler)
+        try:
+            if operation == "switch":
+                resp = client.put("/api/vaults/active", json={"name": "second"})
+            elif operation == "archive":
+                resp = client.post("/api/vaults/first/archive")
+            elif operation == "delete":
+                resp = client.delete("/api/vaults/first", params={"hard": "true"})
+            elif operation == "rename":
+                resp = client.patch("/api/vaults/first", json={"new_name": "renamed"})
+            else:
+                resp = client.post(
+                    "/api/vaults/first/import",
+                    params={"overwrite": "true"},
+                    content=_make_export_tarball("first"),
+                )
+        finally:
+            scheduler._run_lock.release()
+
+        assert resp.status_code == 409
+        assert client.get("/api/vaults/active").json()["name"] == "first"
+        assert marker.read_text(encoding="utf-8") == "unchanged"
+        assert not vault_manager.vault_path("renamed").exists()
+        assert not list(vault_manager._settings.vaults_dir.glob("first.archived-*"))
+        assert not (root / "threads" / "topics" / "thr_imp.md").exists()
+        assert scheduler.paused is False
+
+    def test_set_active_resumes_scheduler_after_reload_failure(
+        self,
+        client: TestClient,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post("/api/vaults", json={"name": "first"})
+        client.post("/api/vaults", json={"name": "second"})
+        scheduler = StandupSchedulerService()
+        monkeypatch.setattr(handoff_mod, "get_standup_scheduler", lambda: scheduler)
+        monkeypatch.setattr(
+            vault_routes,
+            "reload_active_vault_runtime",
+            lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError("reload failed")),
+        )
+
+        resp = client.put("/api/vaults/active", json={"name": "second"})
+
+        assert resp.status_code == 409
+        assert client.get("/api/vaults/active").json()["name"] == "first"
+        assert scheduler.paused is False
+
 
 class TestVaultExists:
     """GET /api/vaults/exists"""
@@ -176,6 +248,9 @@ class TestExportVault:
         assert "test/agents/weaver/config.yaml" in names
         assert "test/rules/prime.md" in names
         assert "test/prompts/shared/system-preamble.md" in names
+        # FileResponse removes its on-disk spool only after the response body
+        # has finished streaming.
+        assert not list(vault_manager._settings.loom_home.glob(".loom-export-*"))
 
 
 class TestImportVault:
@@ -248,6 +323,139 @@ class TestImportVault:
     def test_import_empty_body_rejected(self, client: TestClient) -> None:
         resp = client.post("/api/vaults/anything/import", content=b"")
         assert resp.status_code == 400
+
+    def test_import_rejects_compressed_size_over_limit(
+        self,
+        client: TestClient,
+        vault_manager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        payload = _make_export_tarball("large")
+        monkeypatch.setattr(vault_routes, "_MAX_IMPORT_ARCHIVE_BYTES", len(payload) - 1)
+
+        resp = client.post("/api/vaults/large/import", content=payload)
+
+        assert resp.status_code == 413
+        assert not vault_manager.vault_path("large").exists()
+        assert not list(vault_manager._settings.loom_home.glob(".loom-import-upload-*"))
+
+    def test_import_rejects_expanded_size_over_limit(
+        self,
+        client: TestClient,
+        vault_manager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        monkeypatch.setattr(vault_routes, "_MAX_IMPORT_EXPANDED_BYTES", 1)
+
+        resp = client.post(
+            "/api/vaults/expanded/import",
+            content=_make_export_tarball("expanded"),
+        )
+
+        assert resp.status_code == 413
+        assert not vault_manager.vault_path("expanded").exists()
+        assert not list(vault_manager._settings.loom_home.glob(".loom-import-upload-*"))
+
+    def test_failed_promotion_restores_previous_vault(
+        self,
+        client: TestClient,
+        vault_manager,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        client.post("/api/vaults", json={"name": "occupied"})
+        root = vault_manager.vault_path("occupied")
+        marker = root / "threads" / "old-state.md"
+        marker.write_text("original vault", encoding="utf-8")
+        real_rename = vault_routes._atomic_rename
+
+        def fail_ready_promotion(source: Path, destination: Path) -> None:
+            if source.name == ".occupied.import-ready" and destination.name == "occupied":
+                raise OSError("injected promotion failure")
+            real_rename(source, destination)
+
+        monkeypatch.setattr(vault_routes, "_atomic_rename", fail_ready_promotion)
+
+        resp = client.post(
+            "/api/vaults/occupied/import",
+            params={"overwrite": "true"},
+            content=_make_export_tarball("occupied"),
+        )
+
+        assert resp.status_code == 500
+        assert marker.read_text(encoding="utf-8") == "original vault"
+        assert not (root / "threads" / "topics" / "thr_imp.md").exists()
+        assert not vault_routes._import_ready_path(root).exists()
+        assert not vault_routes._import_backup_path(root).exists()
+
+    def test_non_vault_directory_requires_explicit_overwrite(
+        self,
+        client: TestClient,
+        vault_manager,
+    ) -> None:
+        root = vault_manager.vault_path("unmanaged")
+        root.mkdir(parents=True)
+        marker = root / "keep.txt"
+        marker.write_text("do not clobber", encoding="utf-8")
+
+        resp = client.post(
+            "/api/vaults/unmanaged/import",
+            content=_make_export_tarball("unmanaged"),
+        )
+
+        assert resp.status_code == 409
+        assert marker.read_text(encoding="utf-8") == "do not clobber"
+
+
+def test_recover_interrupted_import_restores_backup_and_discards_ready(
+    vault_manager,
+) -> None:
+    vaults_dir = vault_manager._settings.vaults_dir
+    vaults_dir.mkdir(parents=True, exist_ok=True)
+    dest = vaults_dir / "recovering"
+    dest.mkdir()
+    (dest / "old.txt").write_text("old", encoding="utf-8")
+    backup = vault_routes._import_backup_path(dest)
+    ready = vault_routes._import_ready_path(dest)
+    dest.replace(backup)
+    ready.mkdir()
+    (ready / "new.txt").write_text("new", encoding="utf-8")
+
+    vault_routes.recover_interrupted_vault_imports(vaults_dir)
+
+    assert (dest / "old.txt").read_text(encoding="utf-8") == "old"
+    assert not (dest / "new.txt").exists()
+    assert not backup.exists()
+    assert not ready.exists()
+
+
+def test_concurrent_create_only_imports_do_not_overwrite_each_other(
+    tmp_path: Path,
+) -> None:
+    vaults_dir = tmp_path / "vaults"
+    vaults_dir.mkdir()
+    first_archive = tmp_path / "first.tar.gz"
+    second_archive = tmp_path / "second.tar.gz"
+    first_archive.write_bytes(_make_export_tarball("first"))
+    second_archive.write_bytes(_make_export_tarball("second"))
+    dest = vaults_dir / "shared"
+
+    def restore(archive: Path) -> str:
+        try:
+            vault_routes._restore_tarball(
+                archive,
+                dest,
+                vaults_dir,
+                overwrite=False,
+            )
+        except vault_routes.VaultImportConflictError:
+            return "conflict"
+        return "restored"
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        outcomes = list(executor.map(restore, (first_archive, second_archive)))
+
+    assert sorted(outcomes) == ["conflict", "restored"]
+    assert (dest / "threads" / "topics" / "thr_imp.md").exists()
 
 
 class TestRenameVault:

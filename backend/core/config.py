@@ -6,13 +6,11 @@ Two layers:
 * :class:`GlobalConfig` — YAML-persisted state at ``~/.loom/config.yaml``
   (providers, active vault, UI prefs, onboarding gate).
 
-API keys live on ``ProviderConfig.api_key``. In memory they are plain text;
-on disk (``~/.loom/config.yaml``) they are encrypted at rest with a machine-
-local master key (see :mod:`core.secrets`) and written with an ``enc:v1:``
-prefix. :meth:`GlobalConfig.load` transparently decrypts; :meth:`GlobalConfig.save`
-transparently encrypts. Legacy plaintext keys are read as-is and re-encrypted on
-the next save. ``GlobalConfig.to_public()`` returns a redacted view (no keys)
-safe for the frontend.
+Provider keys and private connection URLs are plain text only in memory. On
+disk (``~/.loom/config.yaml``) they are encrypted with a machine-local master
+key (see :mod:`core.secrets`) and an ``enc:v1:`` prefix. Load/save decrypt and
+encrypt transparently; legacy plaintext values migrate on the next save.
+``GlobalConfig.to_public()`` returns a redacted frontend-safe view.
 
 Encryption at rest protects ``config.yaml`` if it leaks on its own; it does not
 add API authentication, so the backend port must still not be exposed.
@@ -26,10 +24,10 @@ import re
 from datetime import datetime
 from enum import StrEnum
 from pathlib import Path
-from typing import Any, Self
+from typing import Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 from core.hardware import HardwareProfile
@@ -259,6 +257,136 @@ class RateLimitConfig(BaseModel):
     write: str = "30/minute"
 
 
+class CaptureProcessingConfig(BaseModel):
+    """Durable Inbox processing policy.
+
+    ``manual`` never discovers/enqueues captures automatically. ``trusted``
+    only accepts exact (case-insensitive) source matches from
+    ``trusted_sources``; ``all`` accepts every valid capture. Explicit enqueue
+    and retry requests are available in every mode. The allowlist is an
+    automation policy, not authentication: capture ``source`` is caller-supplied
+    provenance and must not be treated as a security boundary.
+    """
+
+    mode: Literal["manual", "trusted", "all"] = "manual"
+    trusted_sources: list[str] = Field(default_factory=list, max_length=200)
+    concurrency: int = Field(default=1, ge=1, le=8)
+    max_retries: int = Field(default=2, ge=0, le=10)
+    base_backoff_seconds: float = Field(default=2.0, ge=0.1, le=3600.0)
+
+    @classmethod
+    def _normalized_sources(cls, values: list[str]) -> list[str]:
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for raw in values:
+            source = raw.strip().lower()
+            if not source or source in seen:
+                continue
+            if len(source) > 200:
+                raise ValueError("trusted sources must be at most 200 characters")
+            seen.add(source)
+            normalized.append(source)
+        return normalized
+
+    def model_post_init(self, __context: Any) -> None:
+        """Normalize allowlist entries loaded from YAML or API payloads."""
+        self.trusted_sources = self._normalized_sources(self.trusted_sources)
+
+    def permits(self, source: str) -> bool:
+        """Return whether a source should be discovered automatically."""
+        if self.mode == "all":
+            return True
+        if self.mode == "trusted":
+            return source.strip().lower() in set(self.trusted_sources)
+        return False
+
+
+class StandupScheduleConfig(BaseModel):
+    """Per-install schedule for the active vault's Standup agent."""
+
+    enabled: bool = False
+    run_time: str = "08:00"
+    timezone: str = "UTC"
+
+    @field_validator("run_time")
+    @classmethod
+    def _valid_run_time(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) > 5:
+            raise ValueError("run_time must use 24-hour HH:MM format")
+        if not re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value):
+            raise ValueError("run_time must use 24-hour HH:MM format")
+        return value
+
+    @field_validator("timezone")
+    @classmethod
+    def _valid_timezone(cls, value: str) -> str:
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        value = value.strip()
+        if not value or len(value) > 100:
+            raise ValueError("timezone must be a valid IANA timezone")
+        try:
+            ZoneInfo(value)
+        except (ZoneInfoNotFoundError, ValueError) as exc:
+            raise ValueError("timezone must be a valid IANA timezone") from exc
+        return value
+
+
+class CalendarBridgeConfig(BaseModel):
+    """Private read-only iCalendar connection used by Standup and Inbox."""
+
+    enabled: bool = False
+    feed_url: str | None = None
+    name: str = "Calendar"
+    include_in_standup: bool = True
+    create_captures: bool = True
+
+    @field_validator("feed_url")
+    @classmethod
+    def _normalize_feed_url(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        # Persisted private values are decrypted only after the full config is
+        # validated, matching provider API-key handling below.
+        if value.startswith("enc:v1:"):
+            return value
+        from bridge.calendar import normalize_feed_url
+
+        return normalize_feed_url(value)
+
+    @field_validator("name")
+    @classmethod
+    def _normalize_name(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("calendar name must not be blank")
+        if len(value) > 300:
+            raise ValueError("calendar name must be at most 300 characters")
+        if any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("calendar name must be a single printable line")
+        return value
+
+    def to_public(self) -> CalendarBridgeConfigPublic:
+        return CalendarBridgeConfigPublic(
+            enabled=self.enabled,
+            feed_url_set=bool(self.feed_url),
+            name=self.name,
+            include_in_standup=self.include_in_standup,
+            create_captures=self.create_captures,
+        )
+
+
+class CalendarBridgeConfigPublic(BaseModel):
+    """Calendar connection state without its private feed URL."""
+
+    enabled: bool
+    feed_url_set: bool
+    name: str
+    include_in_standup: bool
+    create_captures: bool
+
+
 class UIState(BaseModel):
     """Persisted UI preferences."""
 
@@ -300,6 +428,9 @@ class GlobalConfig(BaseModel):
     embed_provider: str | None = None
     chat_provider: str | None = None
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
+    capture_processing: CaptureProcessingConfig = Field(default_factory=CaptureProcessingConfig)
+    standup_schedule: StandupScheduleConfig = Field(default_factory=StandupScheduleConfig)
+    calendar: CalendarBridgeConfig = Field(default_factory=CalendarBridgeConfig)
     ui: UIState = Field(default_factory=UIState)
     onboarding: OnboardingState = Field(default_factory=OnboardingState)
     agent_models: dict[str, AgentModelOverride] = Field(default_factory=dict)
@@ -354,20 +485,36 @@ class GlobalConfig(BaseModel):
         tmp_path.replace(path)
 
     def _decrypt_keys(self) -> None:
-        """Decrypt every provider ``api_key`` in place (encrypted → plaintext)."""
+        """Decrypt provider keys and private connection URLs in place."""
         from core.secrets import decrypt
 
         for provider in self.providers.values():
             if provider.api_key:
                 provider.api_key = decrypt(provider.api_key)
+        if self.calendar.feed_url:
+            decrypted = decrypt(self.calendar.feed_url)
+            if decrypted:
+                from bridge.calendar import CalendarFeedError, normalize_feed_url
+
+                try:
+                    self.calendar.feed_url = normalize_feed_url(decrypted)
+                except CalendarFeedError:
+                    logger.warning(
+                        "Stored calendar feed URL is invalid; reconnect it in Settings."
+                    )
+                    self.calendar.feed_url = None
+            else:
+                self.calendar.feed_url = None
 
     def _encrypt_keys(self) -> None:
-        """Encrypt every provider ``api_key`` in place (plaintext → encrypted)."""
+        """Encrypt provider keys and private connection URLs in place."""
         from core.secrets import encrypt
 
         for provider in self.providers.values():
             if provider.api_key:
                 provider.api_key = encrypt(provider.api_key)
+        if self.calendar.feed_url:
+            self.calendar.feed_url = encrypt(self.calendar.feed_url)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""
@@ -375,6 +522,9 @@ class GlobalConfig(BaseModel):
             active_vault=self.active_vault,
             default_provider=self.default_provider,
             providers={name: cfg.to_public() for name, cfg in self.providers.items()},
+            capture_processing=self.capture_processing,
+            standup_schedule=self.standup_schedule,
+            calendar=self.calendar.to_public(),
             ui=self.ui,
             onboarding=self.onboarding,
         )
@@ -386,6 +536,9 @@ class GlobalConfigPublic(BaseModel):
     active_vault: str
     default_provider: str
     providers: dict[str, ProviderConfigPublic]
+    capture_processing: CaptureProcessingConfig
+    standup_schedule: StandupScheduleConfig
+    calendar: CalendarBridgeConfigPublic
     ui: UIState
     onboarding: OnboardingState
 

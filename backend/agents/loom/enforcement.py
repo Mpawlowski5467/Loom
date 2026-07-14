@@ -34,29 +34,67 @@ class EnforcementOutcome:
     flagged: bool = False
 
 
+def _draft_reference(note_path: Path | None) -> dict[str, str]:
+    """Return persistent draft identity for a capture that needs review."""
+    if note_path is None:
+        return {}
+    try:
+        from core.notes import parse_note_meta
+
+        meta = parse_note_meta(note_path)
+        return {
+            "draft_note_id": meta.id,
+            "draft_note_path": str(note_path),
+        }
+    except Exception:
+        logger.warning("Failed to resolve draft note reference", exc_info=True)
+        return {"draft_note_path": str(note_path)}
+
+
 def enforce_verdict(
     vault_dir: Path,
     capture_path: Path,
     note_path: Path | None,
     verdict: str,
     reasons: list[str],
+    validation_mode: str = "",
 ) -> EnforcementOutcome:
     """Apply Sentinel's verdict to the capture and note. See module docstring."""
     outcome = EnforcementOutcome()
+    validation_status = verdict or "unavailable"
     if verdict not in {"passed", "warning"}:
         if not reasons:
             reasons = ["Sentinel validation unavailable or incomplete"]
         outcome.review_required = True
+        fields = {
+            "enforcement_outcome": "needs_review",
+            "validation": validation_status,
+            "validation_mode": validation_mode,
+            "validation_reasons": reasons,
+            "review_required": True,
+            "review_reasons": reasons,
+        }
         if note_path is not None:
-            annotate_frontmatter(
-                vault_dir, note_path, {"review_required": True, "review_reasons": reasons}
-            )
-        annotate_frontmatter(
-            vault_dir, capture_path, {"review_required": True, "review_reasons": reasons}
-        )
+            annotate_frontmatter(vault_dir, note_path, fields)
+        capture_fields = {**fields, **_draft_reference(note_path)}
+        annotate_frontmatter(vault_dir, capture_path, capture_fields)
         return outcome
 
     # Only an explicit passed or warning verdict may archive the capture.
+    # Stamp the lifecycle verdict before the move so the archived source keeps
+    # its provenance and the final enforcement decision for audit/replay.
+    lifecycle_fields = {
+        "enforcement_outcome": "filed",
+        "validation": validation_status,
+        "validation_mode": validation_mode,
+        "validation_reasons": reasons,
+        "review_required": False,
+        "review_reasons": [],
+        "flagged": verdict == "warning",
+        "flag_reasons": reasons if verdict == "warning" else [],
+    }
+    annotate_frontmatter(vault_dir, capture_path, lifecycle_fields)
+    note_fields = lifecycle_fields
     try:
         from agents.loom.weaver_io import archive_capture
 
@@ -64,10 +102,33 @@ def enforce_verdict(
         outcome.capture_archived = True
     except Exception:
         logger.warning("Capture archive failed", exc_info=True)
-    if verdict == "warning":
-        outcome.flagged = True
-        if note_path is not None:
-            annotate_frontmatter(vault_dir, note_path, {"flagged": True, "flag_reasons": reasons})
+        # The draft may be valid, but the Inbox transaction did not finish.
+        # Fail closed and leave durable state that tells the UI not to call it
+        # filed merely because a note exists.
+        archive_reasons = ["Capture could not be archived after validation"]
+        outcome.review_required = True
+        note_fields = {
+            **lifecycle_fields,
+            "enforcement_outcome": "needs_review",
+            "review_required": True,
+            "review_reasons": archive_reasons,
+        }
+        annotate_frontmatter(
+            vault_dir,
+            capture_path,
+            {
+                "enforcement_outcome": "needs_review",
+                "review_required": True,
+                "review_reasons": archive_reasons,
+                **_draft_reference(note_path),
+            },
+        )
+    if note_path is not None:
+        # A retry may reuse a draft annotated by an earlier failed verdict.
+        # Always stamp the current lifecycle state so stale review/validation
+        # metadata cannot leak into a successfully filed note.
+        annotate_frontmatter(vault_dir, note_path, note_fields)
+    outcome.flagged = verdict == "warning"
     return outcome
 
 

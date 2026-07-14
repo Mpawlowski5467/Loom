@@ -17,7 +17,11 @@ These sections were moved verbatim out of the architecture document so that docu
 
 ## Layer 6: The Bridge
 
-> 🔭 **Planned — not yet built.** There is no `backend/bridge/` today; the integrations below are a design target, not shipped code. The capture-processing pipeline they would feed (Weaver → Spider → Scribe → Sentinel) *is* real, so dropping files into `captures/` manually already works.
+> 🌓 **Partially shipped.** The connector contract is still evolving, but the
+> first vertical slice now lives in `backend/bridge/`: a bounded, read-only
+> iCalendar adapter with recurrence/timezone support, encrypted private URL,
+> Standup context, and idempotent Inbox sync. GitHub, Email, provider-specific
+> Calendar OAuth, and community plugins remain design targets.
 
 The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
 
@@ -32,7 +36,10 @@ The Bridge is how Loom connects to the outside world. All integrations follow th
 
 **Email**: local IMAP listener or forwarding address. Receives emails, parses them into markdown captures with sender, subject, date, and body.
 
-**Calendar**: connects to Google Calendar or iCal. Pulls today's events, auto-seeds the daily log with meeting blocks (time, title, attendees). Scribe enriches after user adds notes.
+**Calendar**: private iCalendar feeds are shipped. They pull a selected day's
+expanded occurrences into Standup context and optionally create Inbox captures
+with stable event provenance. Native Google/Outlook OAuth and multi-calendar
+selection remain planned.
 
 ### 7.3 Integration Data Flow
 
@@ -278,7 +285,7 @@ These milestones extend the shipped MVP and v1 roadmap (see [ARCHITECTURE.md §1
 ### v2 — "Connect and Grow"
 
 - GitHub integration (commits, issues, PRs → captures)
-- Calendar integration (events → daily notes)
+- Calendar integration (read-only iCalendar → Standup/Inbox shipped; OAuth adapters remain)
 - Email integration (IMAP/forwarding → captures)
 - Plugin architecture for community integrations
 - Custom Shuttle agents (user-defined via config folders)

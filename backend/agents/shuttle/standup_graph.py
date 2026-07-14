@@ -29,6 +29,9 @@ class StandupState(TypedDict, total=False):
     changelog_text: str
     notes_text: str
     notes_modified: int
+    calendar_text: str
+    calendar_events: int
+    calendar_error: str
     recap: str
     capture_id: str
     capture_path: str
@@ -42,16 +45,26 @@ def build_standup_graph(agent: Standup, target_date: date) -> CompiledStateGraph
         async with step("collect"):
             changelog_text = agent._collect_changelog(target_date)
             modified_notes = agent._find_modified_notes(target_date)
+            calendar_text, calendar_events, calendar_error = await agent._calendar_context(
+                target_date
+            )
         notes_text = "\n".join(f"- [[{n['title']}]] ({n['type']})" for n in modified_notes)
         return {
             "changelog_text": changelog_text,
             "notes_text": notes_text,
             "notes_modified": len(modified_notes),
+            "calendar_text": calendar_text,
+            "calendar_events": calendar_events,
+            "calendar_error": calendar_error,
         }
 
     def route_after_collect(state: StandupState) -> str:
         """Route to END when the day had no activity, else to generate."""
-        if not state.get("changelog_text", "").strip() and not state.get("notes_modified"):
+        if (
+            not state.get("changelog_text", "").strip()
+            and not state.get("notes_modified")
+            and not state.get("calendar_events")
+        ):
             return "skip"
         return "generate"
 
@@ -66,12 +79,13 @@ def build_standup_graph(agent: Standup, target_date: date) -> CompiledStateGraph
                 state["date_str"],
                 state.get("changelog_text", ""),
                 state.get("notes_text", ""),
+                state.get("calendar_text", ""),
             )
         return {"recap": recap}
 
     async def save(state: StandupState) -> StandupState:
         async with step("save"):
-            capture_id, capture_path = agent._save_capture(
+            capture_id, capture_path = await agent._save_capture(
                 state["date_str"], state.get("recap", "")
             )
         return {"capture_id": capture_id, "capture_path": str(capture_path)}

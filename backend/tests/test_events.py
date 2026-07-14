@@ -1,10 +1,21 @@
-"""Tests for the in-process vault-change event hub."""
+"""Tests for the in-process typed refresh-event hub."""
 
 import asyncio
 
 import pytest
 
-from core.events import VAULT_CHANGED, EventHub, get_event_hub
+from core.events import (
+    CAPTURE_CHANGED,
+    CAPTURE_JOB_CHANGED,
+    NOTE_CHANGED,
+    VAULT_CHANGED,
+    EventHub,
+    get_event_hub,
+    publish_capture_change,
+    publish_capture_job_change,
+    publish_note_change,
+    publish_vault_change,
+)
 
 
 @pytest.mark.asyncio
@@ -18,6 +29,26 @@ async def test_publish_fans_out_to_all_subscribers() -> None:
     assert await asyncio.wait_for(q1.get(), 1) == VAULT_CHANGED
     assert await asyncio.wait_for(q2.get(), 1) == VAULT_CHANGED
     assert hub.subscriber_count() == 2
+
+
+@pytest.mark.asyncio
+async def test_scoped_publish_helpers_emit_distinct_event_domains() -> None:
+    hub = get_event_hub()
+    queue = hub.subscribe()
+    try:
+        publish_capture_change()
+        publish_capture_job_change()
+        publish_note_change()
+        publish_vault_change()
+
+        assert [await asyncio.wait_for(queue.get(), 1) for _ in range(4)] == [
+            CAPTURE_CHANGED,
+            CAPTURE_JOB_CHANGED,
+            NOTE_CHANGED,
+            VAULT_CHANGED,
+        ]
+    finally:
+        hub.unsubscribe(queue)
 
 
 @pytest.mark.asyncio

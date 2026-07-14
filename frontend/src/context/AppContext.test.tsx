@@ -47,7 +47,7 @@ vi.mock("../api/chat", () => ({
   streamCouncilMessage: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("../api/events", () => ({
-  subscribeVaultEvents: vi.fn(() => () => {}),
+  subscribeEventDomains: vi.fn(() => () => {}),
 }));
 vi.mock("../api/agentsRegistry", () => ({
   listAgentRegistry: vi.fn(() => Promise.resolve([])),

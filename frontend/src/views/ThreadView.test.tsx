@@ -88,7 +88,8 @@ function renderThread(
   } = {},
 ): Spies {
   const note = opts.note === undefined ? mkNote() : opts.note;
-  const allNotes = opts.notes ?? (note ? [note, ...(opts.extraNotes ?? [])] : []);
+  const allNotes =
+    opts.notes ?? (note ? [note, ...(opts.extraNotes ?? [])] : []);
   const byId = new Map(allNotes.map((n) => [n.id, n]));
 
   const spies: Spies = {
@@ -180,7 +181,10 @@ describe("ThreadView — title rename", () => {
     await user.type(input, "New title{Enter}");
 
     await waitFor(() =>
-      expect(updateNote).toHaveBeenCalledWith("thr_1", { title: "New title" }),
+      expect(updateNote).toHaveBeenCalledWith("thr_1", {
+        title: "New title",
+        base_modified: "2026-05-02T10:30:00Z",
+      }),
     );
     expect(spies.updateNote).toHaveBeenCalled();
     expect(spies.pushToast).toHaveBeenCalledWith(
@@ -240,12 +244,83 @@ describe("ThreadView — editing", () => {
     await waitFor(() =>
       expect(updateNote).toHaveBeenCalledWith("thr_1", {
         body: "Lead line.\n\n## Section A\n\nDetail about [[Embeddings]]. extra",
+        base_modified: "2026-05-02T10:30:00Z",
       }),
     );
     expect(spies.updateNote).toHaveBeenCalled();
     expect(spies.setEditing).toHaveBeenCalledWith(false);
     expect(spies.pushToast).toHaveBeenCalledWith(
       expect.objectContaining({ icon: "✓" }),
+    );
+  });
+
+  it("keeps the draft's base version when SSE refreshes the open note", async () => {
+    const user = userEvent.setup();
+    const original = mkNote({
+      body: "Original body",
+      modified: "2026-05-02T10:30:00Z",
+    });
+    updateNote.mockResolvedValue(
+      mkRecord({
+        body: "Original body — local",
+        modified: "2026-05-02T10:32:00Z",
+      }),
+    );
+
+    function Harness(): ReactNode {
+      const [liveNote, setLiveNote] = useState(original);
+      const [editing, setEditing] = useState(true);
+      const value = {
+        currentNoteId: liveNote.id,
+        notes: [liveNote],
+        noteById: () => liveNote,
+        backlinksFor: () => [],
+        primaryOpen: false,
+        secondaryOpen: false,
+        editing,
+        setEditing,
+        openNote: vi.fn(),
+        updateNote: vi.fn(),
+        removeNote: vi.fn(),
+        pushToast: vi.fn(),
+        setTab: vi.fn(),
+        setPrimaryOpen: vi.fn(),
+        setSecondaryOpen: vi.fn(),
+        resolveWikilink: () => undefined,
+        setNewNoteOpen: vi.fn(),
+        setNewNoteTitle: vi.fn(),
+      } as unknown as AppContextValue;
+      return (
+        <AppCtx.Provider value={value}>
+          <ThreadView />
+          <button
+            type="button"
+            onClick={() =>
+              setLiveNote((current) => ({
+                ...current,
+                body: "Remote agent body",
+                modified: "2026-05-02T10:31:00Z",
+              }))
+            }
+          >
+            Simulate remote edit
+          </button>
+        </AppCtx.Provider>
+      );
+    }
+
+    render(<Harness />);
+    await user.type(screen.getByRole("textbox"), " — local");
+    await user.click(
+      screen.getByRole("button", { name: "Simulate remote edit" }),
+    );
+    await user.click(screen.getByRole("button", { name: /Save note/ }));
+
+    await waitFor(() =>
+      expect(updateNote).toHaveBeenCalledWith("thr_1", {
+        body: "Original body — local",
+        base_modified: "2026-05-02T10:30:00Z",
+      }),
     );
   });
 
@@ -287,7 +362,9 @@ describe("ThreadView — archive", () => {
     await user.click(screen.getByRole("button", { name: "Archive note" }));
     await user.click(screen.getByRole("button", { name: "Archive" }));
 
-    await waitFor(() => expect(archiveNote).toHaveBeenCalledWith("thr_1"));
+    await waitFor(() =>
+      expect(archiveNote).toHaveBeenCalledWith("thr_1", "2026-05-02T10:30:00Z"),
+    );
     expect(spies.removeNote).toHaveBeenCalledWith("thr_1");
     expect(spies.setTab).toHaveBeenCalledWith("graph");
     expect(spies.pushToast).toHaveBeenCalledWith(

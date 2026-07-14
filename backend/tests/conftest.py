@@ -30,6 +30,7 @@ def _hermetic_globals():
     """
     import core.note_index as note_index_mod
     from core.cache import reset_response_cache
+    from core.capture_jobs import force_reset_capture_job_service_for_tests
     from core.rate_limit import limiter
     from core.traces import get_trace_store
 
@@ -39,8 +40,10 @@ def _hermetic_globals():
     # settings.redis_url on first access, and a test-installed Postgres
     # mirror on the trace store would leak into every later test.
     reset_response_cache()
+    force_reset_capture_job_service_for_tests()
     get_trace_store().set_pg_mirror(None)
     yield
+    force_reset_capture_job_service_for_tests()
 
 
 @pytest.fixture()

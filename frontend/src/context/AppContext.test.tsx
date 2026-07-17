@@ -30,8 +30,8 @@ vi.mock("./useLoomConfig", () => ({
 // AppProvider hydrates the vault on mount (notes, captures, council history,
 // custom agents) and polls agent/health endpoints. Stub those network seams so
 // mounting is deterministic and produces no late, test-confusing state churn.
-// Stable references keep polling results from invalidating the memoized context
-// value on every render.
+// Stable references (a shared empty array) keep the polling results from
+// invalidating the memoized context value on every render.
 const { EMPTY } = vi.hoisted(() => ({ EMPTY: [] as never[] }));
 
 vi.mock("../api/notes", () => ({
@@ -40,14 +40,14 @@ vi.mock("../api/notes", () => ({
 }));
 vi.mock("../api/captures", () => ({
   listCaptures: vi.fn(() => Promise.resolve([])),
-  backendCaptureToFrontend: vi.fn((capture: unknown) => capture),
+  backendCaptureToFrontend: vi.fn((c: unknown) => c),
 }));
 vi.mock("../api/chat", () => ({
   loadChatHistory: vi.fn(() => Promise.resolve({ messages: [] })),
   streamCouncilMessage: vi.fn(() => Promise.resolve()),
 }));
 vi.mock("../api/events", () => ({
-  subscribeEventDomains: vi.fn(() => () => {}),
+  subscribeVaultEvents: vi.fn(() => () => {}),
 }));
 vi.mock("../api/agentsRegistry", () => ({
   listAgentRegistry: vi.fn(() => Promise.resolve([])),
@@ -137,12 +137,13 @@ describe("AppContext", () => {
       await new Promise((resolve) => setTimeout(resolve, 0));
     });
 
-    const before = seen.length;
+    const lenBefore = seen.length;
     const valueBefore = seen[seen.length - 1];
+
     await user.click(screen.getByRole("button", { name: "bump" }));
 
     // A re-render happened (a new value snapshot was captured)...
-    expect(seen.length).toBeGreaterThan(before);
+    expect(seen.length).toBeGreaterThan(lenBefore);
     // ...but the memoized value is the SAME object reference: the bump touched
     // no provider state, so consumers must not be handed a new object.
     expect(seen[seen.length - 1]).toBe(valueBefore);

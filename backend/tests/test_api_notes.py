@@ -191,6 +191,49 @@ def test_update_note(client: TestClient, seeded_vault: Path) -> None:
     assert len(data["history"]) == 1  # the edit entry
 
 
+def test_update_note_rename(client: TestClient, seeded_vault: Path) -> None:
+    """A title change renames the file to the new kebab stem."""
+    resp = client.put("/api/notes/thr_aaa111", json={"title": "Python Renamed"})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["title"] == "Python Renamed"
+
+    old_path = seeded_vault / "threads" / "topics" / "python.md"
+    new_path = seeded_vault / "threads" / "topics" / "python-renamed.md"
+    assert not old_path.exists()
+    assert new_path.exists()
+    assert parse_note(new_path).id == "thr_aaa111"
+
+
+def test_update_rename_collision_leaves_file_untouched(
+    client: TestClient, seeded_vault: Path
+) -> None:
+    """Renaming onto an existing note 409s WITHOUT mutating the file first.
+
+    Regression: the route used to persist the new title/modified/history
+    before checking the rename target, so a failed 409 still rewrote the
+    note on disk.
+    """
+    target = seeded_vault / "threads" / "topics" / "python.md"
+    colliding = seeded_vault / "threads" / "topics" / "fastapi.md"
+    target_before = target.read_bytes()
+    colliding_before = colliding.read_bytes()
+
+    resp = client.put("/api/notes/thr_aaa111", json={"title": "FastAPI"})
+    assert resp.status_code == 409
+    assert "fastapi.md" in resp.json()["detail"]
+
+    # Both files are byte-identical — content, frontmatter, and history.
+    assert target.read_bytes() == target_before
+    assert colliding.read_bytes() == colliding_before
+
+    # The note still serves its original title and empty history.
+    again = client.get("/api/notes/thr_aaa111")
+    assert again.status_code == 200
+    assert again.json()["title"] == "Python"
+    assert again.json()["history"] == []
+
+
 def test_archive_note(client: TestClient, seeded_vault: Path) -> None:
     resp = client.delete("/api/notes/thr_bbb222")
     assert resp.status_code == 200

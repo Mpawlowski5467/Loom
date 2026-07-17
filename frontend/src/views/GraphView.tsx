@@ -35,6 +35,7 @@ export function GraphView(): ReactNode {
   const {
     notes,
     notesLoaded,
+    notesError,
     openNote,
     graphFocusId,
     setGraphFocusId,
@@ -428,7 +429,10 @@ export function GraphView(): ReactNode {
 
   // Only show "empty" once the initial load has settled — otherwise a
   // populated vault flashes "your graph is empty" for the whole cold fetch.
-  const empty = notesLoaded && notes.length === 0;
+  // A failed fetch shows an error state instead, so a backend outage is never
+  // mistaken for an empty vault.
+  const loadFailed = notesLoaded && notesError !== null && notes.length === 0;
+  const empty = notesLoaded && notesError === null && notes.length === 0;
   const filteredEmpty =
     notesLoaded &&
     notes.length > 0 &&
@@ -445,7 +449,7 @@ export function GraphView(): ReactNode {
         notes={notes}
         onExport={handleExport}
         onFitView={handleFitView}
-        fitDisabled={empty || loadingNotes || building}
+        fitDisabled={empty || loadFailed || loadingNotes || building}
       />
       <div className="graph-canvas">
         <div
@@ -501,6 +505,16 @@ export function GraphView(): ReactNode {
             loading your vault…
           </div>
         )}
+        {loadFailed && (
+          <div className="graph-empty graph-load-error" role="alert">
+            <span className="graph-empty-title">
+              Couldn’t load your vault
+            </span>
+            <span className="graph-empty-hint">
+              {notesError}. Check the backend and reload.
+            </span>
+          </div>
+        )}
         {empty && (
           <div className="graph-empty">
             Your graph is empty — capture a note to start weaving.
@@ -514,13 +528,13 @@ export function GraphView(): ReactNode {
             </button>
           </div>
         )}
-        {!empty && !filteredEmpty && !loadingNotes && building && (
+        {!empty && !loadFailed && !filteredEmpty && !loadingNotes && building && (
           <div className="graph-loading" role="status">
             <span className="graph-loading-orbit" aria-hidden />
             arranging {stats.nodes} nodes…
           </div>
         )}
-        {!empty && !filteredEmpty && layout !== "force" && (
+        {!empty && !loadFailed && !filteredEmpty && layout !== "force" && (
           <div className="graph-scene-caption" key={stagedScene}>
             <span className="graph-scene-kicker">Layout</span>
             <span className="graph-scene-name">
@@ -528,7 +542,7 @@ export function GraphView(): ReactNode {
             </span>
           </div>
         )}
-        {!empty && !filteredEmpty && (
+        {!empty && !loadFailed && !filteredEmpty && (
           <div className="graph-stats">
             {stats.nodes === notes.length
               ? `${stats.nodes} ${stats.nodes === 1 ? "node" : "nodes"}`

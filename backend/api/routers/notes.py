@@ -275,21 +275,28 @@ async def update_note(
         )
 
         new_body = body.body if body.body is not None else note.body
-        vault_write_note(vm.active_vault_dir(), path, meta, new_body)
 
-        # If the title changed, rename the file to match the new kebab stem.
+        # If the title changed, the file is renamed to match the new kebab
+        # stem. Check the rename target for a collision BEFORE persisting
+        # anything, so a 409 leaves the on-disk note byte-identical.
+        new_path: Path | None = None
         if title_changed:
             new_stem = to_kebab(meta["title"]) or path.stem
-            new_path = path.with_name(f"{new_stem}.md")
-            if new_path != path:
-                if new_path.exists():
+            candidate = path.with_name(f"{new_stem}.md")
+            if candidate != path:
+                if candidate.exists():
                     raise HTTPException(
                         status_code=409,
-                        detail=f"A note already exists at {new_path.name}",
+                        detail=f"A note already exists at {candidate.name}",
                     )
-                path.rename(new_path)
-                index.remove_file(path)
-                path = new_path
+                new_path = candidate
+
+        vault_write_note(vm.active_vault_dir(), path, meta, new_body)
+
+        if new_path is not None:
+            path.rename(new_path)
+            index.remove_file(path)
+            path = new_path
 
         index.refresh_file(path)
         updated = parse_note(path)

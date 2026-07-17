@@ -81,6 +81,8 @@ export interface AppContextValue {
   notes: Note[];
   /** True once the initial note fetch has resolved (or in demo/offline mode). */
   notesLoaded: boolean;
+  /** Set when the notes fetch failed — distinguishes an error from an empty vault. */
+  notesError: string | null;
   wikilinkMap: Map<string, NoteId>;
   resolveWikilink: (raw: string) => NoteId | undefined;
   noteById: (id: string) => Note | undefined;

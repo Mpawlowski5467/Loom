@@ -218,4 +218,43 @@ describe("useVaultContent", () => {
     expect(mocks.subscribeEventDomains).not.toHaveBeenCalled();
     unmount();
   });
+
+  it("surfaces a failed notes fetch as notesError and clears it on recovery", async () => {
+    mocks.loadAllNotes.mockRejectedValueOnce(new Error("backend down"));
+    const { result, unmount, onLoadError } = renderContent();
+
+    await advance(0);
+
+    // Loaded-but-errored: distinguishable from a genuinely empty vault.
+    expect(result.current.notesLoaded).toBe(true);
+    expect(result.current.notesError).toBe("backend down");
+    expect(result.current.notes).toEqual([]);
+    expect(onLoadError).toHaveBeenCalledWith("notes", "backend down");
+
+    const recoveredNote = note("recovered");
+    mocks.loadAllNotes.mockResolvedValue([recoveredNote]);
+    act(() => mocks.events.listener?.("note-changed"));
+    await advance(650);
+
+    expect(result.current.notesError).toBeNull();
+    expect(result.current.notes).toEqual([recoveredNote]);
+    unmount();
+  });
+
+  it("keeps prior notes visible when a refresh fails", async () => {
+    const loadedNote = note("loaded");
+    mocks.loadAllNotes.mockResolvedValue([loadedNote]);
+    const { result, unmount } = renderContent();
+    await advance(0);
+    expect(result.current.notes).toEqual([loadedNote]);
+
+    mocks.loadAllNotes.mockRejectedValue(new Error("backend down"));
+    act(() => mocks.events.listener?.("note-changed"));
+    await advance(650);
+
+    // The error is recorded but the stale notes are not discarded.
+    expect(result.current.notesError).toBe("backend down");
+    expect(result.current.notes).toEqual([loadedNote]);
+    unmount();
+  });
 });

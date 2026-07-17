@@ -384,6 +384,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const {
     notes,
     notesLoaded,
+    notesError,
     wikilinkMap,
     resolveWikilink,
     noteById,
@@ -641,6 +642,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     () => ({
       notes,
       notesLoaded,
+      notesError,
       wikilinkMap,
       resolveWikilink,
       noteById,
@@ -730,6 +732,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       // Changing state
       notes,
       notesLoaded,
+      notesError,
       wikilinkMap,
       tab,
       settingsSection,

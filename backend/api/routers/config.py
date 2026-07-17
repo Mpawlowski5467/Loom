@@ -76,9 +76,7 @@ async def patch_config_route(
                         )
                         service = get_capture_job_service()
                         if service.enabled:
-                            await service.activate(
-                                vm.active_vault_dir(), config.capture_processing
-                            )
+                            await service.activate(vm.active_vault_dir(), config.capture_processing)
                     except Exception as e:
                         try:
                             vm.set_active_vault(old_active)

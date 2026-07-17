@@ -1088,9 +1088,7 @@ async def skip_capture(
                             _restore_cancelled_job_unlocked(vault_root, previous_job)
                         )
                     except Exception:
-                        logger.exception(
-                            "Failed to restore capture job after skip rollback"
-                        )
+                        logger.exception("Failed to restore capture job after skip rollback")
                 raise
 
             if cancelled_job is not None:

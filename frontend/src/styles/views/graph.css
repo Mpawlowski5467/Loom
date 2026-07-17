@@ -575,6 +575,26 @@
   font-family: var(--serif);
   font-style: italic;
 }
+.graph-load-error {
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+.graph-load-error .graph-empty-title {
+  color: var(--danger);
+}
+.graph-empty-title {
+  font-family: var(--serif);
+  font-style: italic;
+  font-size: 17px;
+  color: var(--ink-2);
+}
+.graph-empty-hint {
+  font-family: var(--font);
+  font-style: normal;
+  font-size: 12px;
+  color: var(--ink-3);
+}
 .graph-filter-empty {
   flex-direction: column;
   gap: 10px;

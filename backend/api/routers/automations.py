@@ -120,11 +120,14 @@ def _calendar_or_409(config: GlobalConfig) -> str:
 
 def _validation_detail(exc: ValidationError) -> str:
     """Format validation failures without echoing private submitted values."""
-    messages = [str(error.get("msg") or "Invalid automation setting") for error in exc.errors(
-        include_url=False,
-        include_context=False,
-        include_input=False,
-    )]
+    messages = [
+        str(error.get("msg") or "Invalid automation setting")
+        for error in exc.errors(
+            include_url=False,
+            include_context=False,
+            include_input=False,
+        )
+    ]
     return "; ".join(messages) or "Invalid automation setting"
 
 

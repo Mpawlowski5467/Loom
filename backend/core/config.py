@@ -499,9 +499,7 @@ class GlobalConfig(BaseModel):
                 try:
                     self.calendar.feed_url = normalize_feed_url(decrypted)
                 except CalendarFeedError:
-                    logger.warning(
-                        "Stored calendar feed URL is invalid; reconnect it in Settings."
-                    )
+                    logger.warning("Stored calendar feed URL is invalid; reconnect it in Settings.")
                     self.calendar.feed_url = None
             else:
                 self.calendar.feed_url = None

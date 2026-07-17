@@ -720,8 +720,7 @@ def _validated_import_members(archive_path: Path) -> list[tarfile.TarInfo]:
                 expanded_bytes += member.size
                 if expanded_bytes > _MAX_IMPORT_EXPANDED_BYTES:
                     raise VaultImportLimitError(
-                        "Import archive expands beyond "
-                        f"{_MAX_IMPORT_EXPANDED_BYTES} bytes"
+                        f"Import archive expands beyond {_MAX_IMPORT_EXPANDED_BYTES} bytes"
                     )
             members.append(member)
     if not members:
@@ -771,9 +770,7 @@ def _recover_one_import(dest: Path, ready: Path, backup: Path) -> None:
         raise VaultPathError("Refusing symbolic links in vault import recovery state")
     if backup.exists():
         if ready.exists() and dest.exists():
-            raise VaultPathError(
-                f"Ambiguous interrupted import state for vault '{dest.name}'"
-            )
+            raise VaultPathError(f"Ambiguous interrupted import state for vault '{dest.name}'")
         if dest.exists():
             _remove_path(backup)
         else:
@@ -790,9 +787,9 @@ def recover_interrupted_vault_imports(vaults_dir: Path) -> None:
     with _IMPORT_SWAP_LOCK:
         backups = list(vaults_dir.glob(f".*{_IMPORT_BACKUP_SUFFIX}"))
         ready_paths = list(vaults_dir.glob(f".*{_IMPORT_READY_SUFFIX}"))
-        names = {
-            path.name[1 : -len(_IMPORT_BACKUP_SUFFIX)] for path in backups
-        } | {path.name[1 : -len(_IMPORT_READY_SUFFIX)] for path in ready_paths}
+        names = {path.name[1 : -len(_IMPORT_BACKUP_SUFFIX)] for path in backups} | {
+            path.name[1 : -len(_IMPORT_READY_SUFFIX)] for path in ready_paths
+        }
         for name in sorted(names):
             if not name:
                 continue

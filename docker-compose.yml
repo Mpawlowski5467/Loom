@@ -1,12 +1,17 @@
 # Loom — one-command local run.
 #
 #   cp .env.example .env     # optional: add provider key(s)
-#   docker compose up        # builds + runs
+#   docker compose up        # builds + runs just the app container
 #   → open http://localhost:8000
 #
 # Notes persist in the named volume `loom-data` across restarts and rebuilds.
 # To browse the markdown on your host instead, swap the volume for a bind
 # mount (see the commented line below).
+#
+# Optional backends: `docker compose --profile full up` additionally starts
+# Redis (LLM/embed response cache) and Postgres (trace/run mirror). Set
+# LOOM_REDIS_URL / LOOM_DATABASE_URL in .env to wire them in — see
+# .env.example. Loom treats either one being unset/empty as "disabled".
 
 services:
   loom:
@@ -24,12 +29,13 @@ services:
     environment:
       # Vault data root (matches the volume mount below).
       LOOM_HOME: /data
-      # Optional backends wired to the sibling services below. Redis caches
-      # LLM/embed responses; Postgres keeps a durable trace/run mirror. Loom
-      # runs fine without either — remove these lines (and the services) to
-      # go back to the single-container setup.
-      LOOM_REDIS_URL: redis://redis:6379/0
-      LOOM_DATABASE_URL: postgresql://loom:${LOOM_PG_PASSWORD:-loom}@postgres:5432/loom
+      # Optional backends (Redis response cache, Postgres trace mirror). Empty
+      # means disabled — the backend treats an empty URL exactly like unset —
+      # so the default single-container run wires nothing. Point these at the
+      # profile-gated services below when running `--profile full`; the
+      # ready-made values are in .env.example.
+      LOOM_REDIS_URL: ${LOOM_REDIS_URL:-}
+      LOOM_DATABASE_URL: ${LOOM_DATABASE_URL:-}
     # Provider API keys (and any other overrides) come from .env if present.
     # Missing file is fine — keys can also be added in the onboarding wizard.
     env_file:
@@ -43,7 +49,9 @@ services:
     # Wait for the optional backends when they come up cleanly, but don't let
     # them block the app: `required: false` (Compose v2.20+) starts loom with
     # a warning if either never turns healthy — Loom degrades gracefully
-    # (cache misses / no trace mirror) instead of refusing to boot.
+    # (cache misses / no trace mirror) instead of refusing to boot. Both are
+    # profile-gated, so in the default run they are not started at all and
+    # these dependencies are simply skipped.
     depends_on:
       redis:
         condition: service_healthy
@@ -56,6 +64,9 @@ services:
   redis:
     image: redis:7-alpine
     container_name: loom-redis
+    # Opt-in via `docker compose --profile full up`; the default single-
+    # container run starts loom alone.
+    profiles: ["full"]
     # Append-only file so cached responses survive restarts. No host port —
     # only the loom container can reach it, on the compose network.
     command: ["redis-server", "--appendonly", "yes"]
@@ -71,6 +82,8 @@ services:
   postgres:
     image: postgres:16-alpine
     container_name: loom-postgres
+    # Opt-in via `docker compose --profile full up`.
+    profiles: ["full"]
     # Durable store for LLM traces + run summaries. No host port — reachable
     # only from the loom container. Override the password via LOOM_PG_PASSWORD
     # in .env; the default is fine for a network-isolated local setup.

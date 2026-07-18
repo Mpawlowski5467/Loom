@@ -100,28 +100,20 @@ def test_cancelled_override_is_omitted_and_moved_override_keeps_occurrence_id() 
         "DTSTART;TZID=America/Chicago:20260714T170000\r\n"
         "DTEND;TZID=America/Chicago:20260714T180000\r\nSUMMARY:Moved sync"
     )
-    moved_event = parse_events(
-        _calendar(master, moved), date(2026, 7, 14), "America/Chicago"
-    )[0]
+    moved_event = parse_events(_calendar(master, moved), date(2026, 7, 14), "America/Chicago")[0]
     assert moved_event.title == "Moved sync"
     assert moved_event.start.hour == 17
     assert moved_event.external_id == original.external_id
 
     cancelled = _event(
-        "UID:daily\r\nRECURRENCE-ID;TZID=America/Chicago:20260714T150000\r\n"
-        "STATUS:CANCELLED"
+        "UID:daily\r\nRECURRENCE-ID;TZID=America/Chicago:20260714T150000\r\nSTATUS:CANCELLED"
     )
-    assert parse_events(
-        _calendar(master, cancelled), date(2026, 7, 14), "America/Chicago"
-    ) == []
+    assert parse_events(_calendar(master, cancelled), date(2026, 7, 14), "America/Chicago") == []
 
 
 def test_duration_is_honored_when_dtend_is_absent() -> None:
     payload = _calendar(
-        _event(
-            "UID:duration\r\nDTSTART:20260714T120000Z\r\n"
-            "DURATION:PT45M\r\nSUMMARY:Timed block"
-        )
+        _event("UID:duration\r\nDTSTART:20260714T120000Z\r\nDURATION:PT45M\r\nSUMMARY:Timed block")
     )
     event = parse_events(payload, date(2026, 7, 14), "UTC")[0]
     assert event.end - event.start == timedelta(minutes=45)
@@ -130,8 +122,7 @@ def test_duration_is_honored_when_dtend_is_absent() -> None:
 def test_rejects_recurrence_that_can_expand_without_a_daily_bound() -> None:
     payload = _calendar(
         _event(
-            "UID:burst\r\nDTSTART:20260714T000000Z\r\n"
-            "RRULE:FREQ=MINUTELY\r\nSUMMARY:Too frequent"
+            "UID:burst\r\nDTSTART:20260714T000000Z\r\nRRULE:FREQ=MINUTELY\r\nSUMMARY:Too frequent"
         )
     )
     with pytest.raises(CalendarFeedError, match="too frequent"):
@@ -142,9 +133,7 @@ def test_external_id_is_stable_for_same_instant_in_different_timezones() -> None
     chicago = CalendarEvent(
         uid="same",
         title="Meeting",
-        start=datetime(2026, 7, 14, 9, tzinfo=UTC).astimezone(
-            ZoneInfo("America/Chicago")
-        ),
+        start=datetime(2026, 7, 14, 9, tzinfo=UTC).astimezone(ZoneInfo("America/Chicago")),
         end=datetime(2026, 7, 14, 10, tzinfo=UTC),
         all_day=False,
     )
@@ -173,10 +162,7 @@ def test_calendar_prompt_content_is_scrubbed() -> None:
 @pytest.mark.asyncio
 async def test_fetches_calendar_with_mock_transport() -> None:
     payload = _calendar(
-        _event(
-            "UID:one\r\nDTSTART:20260714T120000Z\r\n"
-            "DTEND:20260714T130000Z\r\nSUMMARY:Review"
-        )
+        _event("UID:one\r\nDTSTART:20260714T120000Z\r\nDTEND:20260714T130000Z\r\nSUMMARY:Review")
     )
     transport = httpx.MockTransport(lambda request: httpx.Response(200, content=payload))
     async with httpx.AsyncClient(transport=transport) as client:

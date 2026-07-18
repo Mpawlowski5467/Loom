@@ -259,6 +259,13 @@ class _VaultEventHandler(FileSystemEventHandler):
 _observer: BaseObserver | None = None
 _handler: _VaultEventHandler | None = None
 _reconcile_timer: threading.Timer | None = None
+# Guards the reconcile timer chain against surviving a stop/restart. Each
+# chain captures ``_reconcile_generation`` when scheduled; ``stop_watcher``
+# (and ``start_watcher``) bump it, so a timer that fires late — or a reconcile
+# that was already executing when the cancel landed — sees itself as stale
+# and neither touches the index nor reschedules.
+_reconcile_lock = threading.Lock()
+_reconcile_generation = 0
 
 
 def failed_index_paths() -> int:
@@ -284,6 +291,8 @@ def _schedule_reconcile(
     threads_dir: Path,
     loom_dir: Path,
     loop: asyncio.AbstractEventLoop | None = None,
+    *,
+    generation: int | None = None,
 ) -> None:
     """Schedule a periodic *differential* index reconcile.
 
@@ -292,30 +301,47 @@ def _schedule_reconcile(
     each rebuild, and a hard wall at the timeout). ``reconcile_vault`` only
     embeds notes missing from the store and drops orphaned chunks, so periodic
     drift healing costs almost nothing when the vault is idle.
+
+    A reschedule passes along the chain's ``generation``; if the watcher was
+    stopped or restarted since the chain began, the reschedule is a no-op and
+    the orphaned chain dies here instead of firing against the new vault.
     """
     global _reconcile_timer
 
-    def _do_reconcile() -> None:
-        from index.indexer import get_indexer
+    with _reconcile_lock:
+        if generation is None:
+            generation = _reconcile_generation
+        elif generation != _reconcile_generation:
+            # Stale chain from a stopped/superseded watcher — do not
+            # reschedule into the new vault's lifetime.
+            return
 
-        indexer = get_indexer()
-        if indexer is not None:
-            try:
-                if loop is not None and not loop.is_closed():
-                    future = asyncio.run_coroutine_threadsafe(
-                        indexer.reconcile_vault(threads_dir), loop
-                    )
-                    future.result(timeout=_RECONCILE_TIMEOUT_SECONDS)
-                else:
-                    logger.warning("Event loop unavailable — skipping index reconcile")
-            except Exception:
-                logger.warning("Index reconcile failed", exc_info=True)
-        # Reschedule
-        _schedule_reconcile(threads_dir, loom_dir, loop)
+        def _do_reconcile() -> None:
+            with _reconcile_lock:
+                if generation != _reconcile_generation:
+                    # Fired after stop/restart — the cancel lost the race.
+                    # Do nothing: the indexer is now bound to another vault.
+                    return
+            from index.indexer import get_indexer
 
-    _reconcile_timer = threading.Timer(_RECONCILE_SECONDS, _do_reconcile)
-    _reconcile_timer.daemon = True
-    _reconcile_timer.start()
+            indexer = get_indexer()
+            if indexer is not None:
+                try:
+                    if loop is not None and not loop.is_closed():
+                        future = asyncio.run_coroutine_threadsafe(
+                            indexer.reconcile_vault(threads_dir), loop
+                        )
+                        future.result(timeout=_RECONCILE_TIMEOUT_SECONDS)
+                    else:
+                        logger.warning("Event loop unavailable — skipping index reconcile")
+                except Exception:
+                    logger.warning("Index reconcile failed", exc_info=True)
+            # Reschedule — no-op if this chain went stale mid-run.
+            _schedule_reconcile(threads_dir, loom_dir, loop, generation=generation)
+
+        _reconcile_timer = threading.Timer(_RECONCILE_SECONDS, _do_reconcile)
+        _reconcile_timer.daemon = True
+        _reconcile_timer.start()
 
 
 def start_watcher(
@@ -328,11 +354,18 @@ def start_watcher(
         vault_root: Root directory of the vault.
         loop: The main asyncio event loop, used for thread-safe async calls.
     """
-    global _observer, _handler
+    global _observer, _handler, _reconcile_timer, _reconcile_generation
     if _observer is not None:
         _observer.stop()
     if _handler is not None:
         _handler.stop()
+    with _reconcile_lock:
+        # Cancel any pre-existing reconcile chain and invalidate an in-flight
+        # reconcile from the previous watcher before starting a new chain.
+        _reconcile_generation += 1
+        if _reconcile_timer is not None:
+            _reconcile_timer.cancel()
+            _reconcile_timer = None
 
     threads_dir = vault_root / "threads"
     loom_dir = vault_root / ".loom"
@@ -357,13 +390,18 @@ def start_watcher(
 
 def stop_watcher() -> None:
     """Stop the active file watcher, worker thread, and reconcile timer."""
-    global _observer, _handler, _reconcile_timer
+    global _observer, _handler, _reconcile_timer, _reconcile_generation
     if _observer is not None:
         _observer.stop()
         _observer = None
     if _handler is not None:
         _handler.stop()
         _handler = None
-    if _reconcile_timer is not None:
-        _reconcile_timer.cancel()
-        _reconcile_timer = None
+    with _reconcile_lock:
+        # Bump the generation first so a reconcile that is already executing
+        # (past the cancel) sees itself as stale and does not reschedule an
+        # orphaned chain into the next vault's lifetime.
+        _reconcile_generation += 1
+        if _reconcile_timer is not None:
+            _reconcile_timer.cancel()
+            _reconcile_timer = None

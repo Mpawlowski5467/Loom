@@ -247,9 +247,7 @@ def test_retry_rejects_a_replaced_capture_file(client: TestClient, empty_job_vau
     assert "replaced" in response.json()["detail"].lower()
 
 
-def test_successful_skip_cancels_existing_job(
-    client: TestClient, empty_job_vault: Path
-) -> None:
+def test_successful_skip_cancels_existing_job(client: TestClient, empty_job_vault: Path) -> None:
     capture = _create_capture(client)["capture"]
     job = client.post(
         "/api/captures/jobs/enqueue", json={"capture_path": capture["file_path"]}
@@ -275,9 +273,7 @@ def test_failed_skip_move_restores_exact_pending_job(
     assert before is not None
 
     with patch("api.routers.captures.shutil.move", side_effect=OSError("disk failure")):
-        response = client.post(
-            "/api/captures/skip", json={"capture_path": capture["file_path"]}
-        )
+        response = client.post("/api/captures/skip", json={"capture_path": capture["file_path"]})
 
     assert response.status_code == 500
     assert capture_job_store(empty_job_vault).get(job["id"]) == before
@@ -299,9 +295,7 @@ def test_failed_skip_write_restores_exact_pending_job(
         "api.routers.captures.vault_write_note",
         side_effect=VaultIOError("write failed"),
     ):
-        response = client.post(
-            "/api/captures/skip", json={"capture_path": capture["file_path"]}
-        )
+        response = client.post("/api/captures/skip", json={"capture_path": capture["file_path"]})
 
     assert response.status_code == 400
     assert capture_job_store(empty_job_vault).get(job["id"]) == before

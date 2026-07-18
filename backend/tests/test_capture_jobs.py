@@ -205,6 +205,89 @@ def test_non_transient_failure_does_not_auto_retry(tmp_path: Path) -> None:
     assert failed.attempts == 1
 
 
+def test_sync_reservation_preserves_background_retry_budget(tmp_path: Path) -> None:
+    """A legacy /process reservation must not consume the backoff retry budget.
+
+    Reserving a capture for the synchronous pipeline marks the row ``running``
+    for observability, but ``attempts`` counts worker claims only: after a
+    crash mid-reservation, the recovered job must still get its full
+    max_retries backoff sequence instead of going terminal on the first
+    transient failure.
+    """
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    policy = _policy(max_retries=1)  # max_attempts = 2
+
+    reserved = store.reserve_external(capture, "thr_cap1", "manual", policy)
+    assert reserved.status == "running"
+    assert reserved.attempts == 0
+    assert reserved.max_attempts == 2
+
+    # Simulate a crash before the sync result was reconciled: startup recovery
+    # requeues the reservation, then the worker's first transient failure must
+    # schedule a backoff retry rather than an immediate terminal failure.
+    recovered = store.recover_interrupted()
+    assert recovered[0].status == "retrying"
+
+    first = store.claim_next()
+    assert first is not None
+    assert first.attempts == 1
+    retrying = store.fail_or_retry(
+        first.id,
+        error="connection timed out",
+        transient=True,
+        base_backoff_seconds=0.1,
+    )
+    assert retrying.status == "retrying"
+    assert retrying.outcome is None
+
+    # The budget is still bounded: the next transient failure goes terminal.
+    time.sleep(0.12)
+    second = store.claim_next()
+    assert second is not None
+    terminal = store.fail_or_retry(
+        second.id,
+        error="connection timed out again",
+        transient=True,
+        base_backoff_seconds=0.1,
+    )
+    assert terminal.status == "failed"
+    assert terminal.attempts == 2
+
+
+def test_repeated_sync_reservations_do_not_inflate_attempts(tmp_path: Path) -> None:
+    """Repeated manual /process runs must not erode a later background retry."""
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    policy = _policy(max_retries=1)  # max_attempts = 2
+
+    for _ in range(3):
+        reserved = store.reserve_external(capture, "thr_cap1", "manual", policy)
+        assert reserved.attempts == 0
+        finished = store.finish(
+            reserved.id,
+            JobExecutionResult(status="failed", outcome="failed", error="boom"),
+        )
+        assert finished.status == "failed"
+        assert finished.attempts == 0
+
+    # A crash during the next reservation still grants the full retry budget.
+    store.reserve_external(capture, "thr_cap1", "manual", policy)
+    assert store.recover_interrupted()[0].status == "retrying"
+    claimed = store.claim_next()
+    assert claimed is not None
+    assert claimed.attempts == 1
+    retrying = store.fail_or_retry(
+        claimed.id,
+        error="connection timed out",
+        transient=True,
+        base_backoff_seconds=0.1,
+    )
+    assert retrying.status == "retrying"
+
+
 def test_claim_and_synchronous_cancel_never_overwrite_running_state(
     tmp_path: Path,
 ) -> None:

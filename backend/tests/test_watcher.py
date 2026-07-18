@@ -13,6 +13,7 @@ from watchdog.events import (
     FileMovedEvent,
 )
 
+import core.watcher as watcher
 from core.note_index import IndexEntry, NoteIndex
 from core.watcher import _VaultEventHandler
 
@@ -337,3 +338,132 @@ class TestIsMd:
 
         event = DirModifiedEvent(str(tmp_path / "topics"))
         assert handler._is_md(event) is False
+
+
+# ---------------------------------------------------------------------------
+# Reconcile chain lifecycle (generation guard)
+# ---------------------------------------------------------------------------
+
+
+class TestReconcileLifecycle:
+    """The periodic reconcile chain must not survive a watcher stop/restart."""
+
+    def test_stop_racing_inflight_reconcile_leaves_no_chain(self, tmp_path: Path) -> None:
+        """A reconcile executing when stop_watcher lands must not reschedule.
+
+        Regression: _do_reconcile used to reschedule unconditionally, so a
+        reconcile already running when stop_watcher cancelled the timer
+        re-created the chain — an orphaned timer that would later index the
+        old vault's threads_dir into the new vault's store.
+        """
+        watcher.stop_watcher()  # normalize module state
+        threads_dir = tmp_path / "threads"
+        threads_dir.mkdir()
+        loom_dir = tmp_path / ".loom"
+        loom_dir.mkdir()
+
+        reconcile_started = threading.Event()
+        release_reconcile = threading.Event()
+        calls = 0
+
+        def _blocking_get_indexer() -> None:
+            nonlocal calls
+            calls += 1
+            reconcile_started.set()
+            release_reconcile.wait(timeout=5)
+            return None  # no indexer: the reconcile body becomes a no-op
+
+        try:
+            with (
+                patch.object(watcher, "_RECONCILE_SECONDS", 0.05),
+                patch("index.indexer.get_indexer", side_effect=_blocking_get_indexer),
+            ):
+                watcher._schedule_reconcile(threads_dir, loom_dir, None)
+                # The timer fires and the reconcile is now in flight, blocked
+                # inside get_indexer — stop_watcher lands mid-run.
+                assert reconcile_started.wait(timeout=5)
+                timer = watcher._reconcile_timer
+                assert timer is not None
+                watcher.stop_watcher()
+                release_reconcile.set()
+                timer.join(timeout=5)  # let the in-flight reconcile finish
+
+                # The stale chain must not have rescheduled or fired again.
+                assert watcher._reconcile_timer is None
+                assert calls == 1
+        finally:
+            release_reconcile.set()
+            watcher.stop_watcher()
+
+    def test_fired_reconcile_after_stop_is_noop(self, tmp_path: Path) -> None:
+        """A timer that fires after stop_watcher must not touch the index."""
+        watcher.stop_watcher()  # normalize module state
+        threads_dir = tmp_path / "threads"
+        threads_dir.mkdir()
+        loom_dir = tmp_path / ".loom"
+        loom_dir.mkdir()
+
+        try:
+            watcher._schedule_reconcile(threads_dir, loom_dir, None)
+            timer = watcher._reconcile_timer
+            assert timer is not None
+            watcher.stop_watcher()
+
+            # Simulate the cancel losing the race: the timer fires anyway.
+            with patch("index.indexer.get_indexer") as mock_get_indexer:
+                timer.function()
+            mock_get_indexer.assert_not_called()
+            assert watcher._reconcile_timer is None
+        finally:
+            watcher.stop_watcher()
+
+    def test_start_watcher_cancels_preexisting_reconcile_timer(self, tmp_path: Path) -> None:
+        """start_watcher cancels a leftover chain before starting a new one."""
+        watcher.stop_watcher()  # normalize module state
+        vault_root = tmp_path / "vault"
+        threads_dir = vault_root / "threads"
+        threads_dir.mkdir(parents=True)
+
+        leftover = threading.Timer(3600, lambda: None)
+        leftover.start()
+        watcher._reconcile_timer = leftover
+        generation_before = watcher._reconcile_generation
+
+        try:
+            with patch.object(watcher, "_RECONCILE_SECONDS", 3600):
+                watcher.start_watcher(vault_root)
+            assert not leftover.is_alive()
+            assert watcher._reconcile_timer is not None
+            assert watcher._reconcile_timer is not leftover
+            assert watcher._reconcile_generation > generation_before
+        finally:
+            watcher.stop_watcher()
+
+    def test_running_chain_keeps_rescheduling(self, tmp_path: Path) -> None:
+        """An unstopped chain still reschedules (generation guard is not over-eager)."""
+        watcher.stop_watcher()  # normalize module state
+        threads_dir = tmp_path / "threads"
+        threads_dir.mkdir()
+        loom_dir = tmp_path / ".loom"
+        loom_dir.mkdir()
+
+        fires = 0
+
+        def _count_get_indexer() -> None:
+            nonlocal fires
+            fires += 1
+            return None
+
+        try:
+            with (
+                patch.object(watcher, "_RECONCILE_SECONDS", 0.05),
+                patch("index.indexer.get_indexer", side_effect=_count_get_indexer),
+            ):
+                watcher._schedule_reconcile(threads_dir, loom_dir, None)
+                deadline = time.monotonic() + 2
+                while fires < 2 and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                assert fires >= 2
+                assert watcher._reconcile_timer is not None
+        finally:
+            watcher.stop_watcher()

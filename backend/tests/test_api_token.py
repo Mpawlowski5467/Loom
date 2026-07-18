@@ -83,6 +83,35 @@ def test_valid_token_passes_gate_to_routing(with_token: str) -> None:
     assert resp.status_code == 404
 
 
+def test_cors_preflight_options_passes_gate_without_token(
+    with_token: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A cross-origin preflight never carries the token, so the gate must let
+    CORSMiddleware answer it — otherwise the dev SPA (Vite on :5173) breaks
+    entirely when a token is configured."""
+    monkeypatch.setattr(settings, "cors_origins", ["http://localhost:5173"])
+    client = TestClient(app)
+    resp = client.options(
+        PROBE_PATH,
+        headers={
+            "Origin": "http://localhost:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert resp.status_code == 200
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+    # The follow-up real request is still challenged without the token.
+    assert client.get(PROBE_PATH, headers={"Origin": "http://localhost:5173"}).status_code == 401
+
+
+def test_non_preflight_options_also_passes_gate(with_token: str) -> None:
+    """A plain OPTIONS (no CORS headers) is unchallenged too — it reaches
+    routing (404 here) instead of being blocked as a 401 by the gate."""
+    client = TestClient(app)
+    assert client.options(PROBE_PATH).status_code == 404
+
+
 def test_health_stays_open_with_token_configured(with_token: str) -> None:
     """The liveness probe is exempt so the Docker smoke test keeps passing."""
     client = TestClient(app)

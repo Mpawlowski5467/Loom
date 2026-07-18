@@ -240,12 +240,23 @@ async def api_token_gate(request: Request, call_next: RequestResponseEndpoint) -
     probes must present a matching token (``Authorization: Bearer <token>`` or
     ``X-Loom-Token: <token>``); a miss returns a 401 in the standard error shape.
 
+    CORS preflight (``OPTIONS``) is never challenged: browsers do not attach
+    Authorization to preflight requests, so gating them would break the
+    cross-origin dev SPA (Vite on :5173) whenever a token is set. The preflight
+    carries no credentials and only asks CORSMiddleware (inner middleware) for
+    permission metadata; the actual request is still gated when it arrives.
+
     This is a speed bump for users who expose the port, not access control for
     untrusted networks — pair it with a reverse proxy that adds real auth + TLS.
     """
     required = settings.api_token
     path = request.url.path
-    if required and path.startswith("/api/") and path not in _TOKEN_GATE_OPEN_PATHS:
+    if (
+        required
+        and request.method != "OPTIONS"
+        and path.startswith("/api/")
+        and path not in _TOKEN_GATE_OPEN_PATHS
+    ):
         provided = _extract_bearer_token(request)
         # hmac.compare_digest is constant-time so a wrong token can't leak the
         # secret's content via timing. Bytes (not str) so non-ASCII tokens never

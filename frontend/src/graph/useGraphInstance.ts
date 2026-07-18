@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { GraphDisplay } from "../context/app-ctx";
@@ -105,8 +105,9 @@ export function useGraphInstance(args: {
   // React skips this effect; the separate content-sync effect below patches
   // title/type changes in place. This avoids a sigma.kill() + 220-iteration
   // ForceAtlas2 on the main thread (and the camera reset + lost pan/zoom) on
-  // every save.
-  const structKey = structuralKey(notes);
+  // every save. Memoized on ``notes`` so unrelated context re-renders don't
+  // re-sort every node id and edge in the vault.
+  const structKey = useMemo(() => structuralKey(notes), [notes]);
 
   useEffect(() => {
     if (!hostRef.current || notesRef.current.length === 0) return;
@@ -365,8 +366,9 @@ export function useGraphInstance(args: {
   // not, patch the affected node attributes in place and refresh — far cheaper
   // than a full rebuild. Keyed on contentKey so it only fires on real changes.
   // Skipped on a structural change because the build effect above (which shares
-  // the same render) already rebuilds with fresh content.
-  const contKey = contentKey(notes);
+  // the same render) already rebuilds with fresh content. Memoized on
+  // ``notes`` for the same reason as structKey above.
+  const contKey = useMemo(() => contentKey(notes), [notes]);
   useEffect(() => {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;

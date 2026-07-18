@@ -215,9 +215,7 @@ async def complete_onboarding(payload: OnboardingCompleteRequest) -> GlobalConfi
                 get_note_index().build(vm.active_threads_dir())
                 service = get_capture_job_service()
                 if service.enabled:
-                    await service.activate(
-                        vm.active_vault_dir(), config.capture_processing
-                    )
+                    await service.activate(vm.active_vault_dir(), config.capture_processing)
             except Exception:
                 logger.warning("Post-onboarding service reinitialization failed", exc_info=True)
             finally:

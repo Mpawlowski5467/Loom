@@ -5,6 +5,67 @@ All notable changes to Loom are documented here.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+- **Durable Inbox processing** — captures are processed through a per-vault
+  SQLite job queue (`core/capture_jobs.py`) with bounded exponential-backoff
+  retries, cancel, manual retry, a needs-review lane, retention controls, and
+  Active/Review/History views in the Inbox. Queued work and terminal outcomes
+  survive restarts; rows interrupted by a crash are recovered on startup.
+- **Unified capture ingress** — one ingress path (`core/capture_ingress.py`)
+  for HTTP, Shuttle agents, and Bridge sources, with external-ID idempotency,
+  provenance validation, indexing, durable job creation, and typed live events.
+- **Scheduled Standup workspace** — timezone-aware durable scheduling for
+  Standup recaps (`core/standup_scheduler.py`, `/api/automations/standup`)
+  with a Board-side workspace UI.
+- **iCalendar Bridge** — an encrypted, read-only private iCalendar feed
+  connection (`backend/bridge/`) that enriches scheduled Standups and creates
+  idempotent event captures in the Inbox (`/api/automations/calendar/*`).
+- **Bounded vault export/import** — size-bounded, disk-streamed vault export
+  and import with an atomic staged swap, rollback, and startup recovery for
+  interrupted overwrites.
+- **Note archival hardening** — archival and restore share the edit lock,
+  support optimistic version checks, and restore the exact original on a
+  failed move.
+
+### Changed
+- **`docker compose up` is single-container again** — the Redis and Postgres
+  services moved behind the `full` compose profile (`docker compose --profile
+  full up`), and `LOOM_REDIS_URL` / `LOOM_DATABASE_URL` now default to empty
+  (disabled) instead of being injected unconditionally; the backend treats an
+  empty URL exactly like unset.
+- **Pinned backend dependencies** — `backend/requirements.lock` is the pinned
+  dependency set for reproducible Docker builds; the Dockerfile installs the
+  lock before installing the project itself with `--no-deps`.
+
+### Fixed
+- **Watcher reconcile-timer generation guard** — a watcher stop/restart can no
+  longer orphan a reconcile timer chain that would index the old vault into
+  the new vault's vector store; `start_watcher` cancels pre-existing timers.
+- **Note rename write ordering** — note updates validate rename-target
+  collisions before persisting, so a 409 leaves the on-disk note
+  byte-identical.
+- **Notes-load error state** — GraphView surfaces notes-fetch failures as an
+  error state instead of the misleading "empty vault" prompt.
+- **Memoized graph keys** — structural/content keys are memoized on notes so
+  unrelated context re-renders no longer re-sort every node id and edge.
+- **Capture-job retry budget** — synchronous `/process` / `/process-all`
+  reservations no longer consume the background backoff budget (`attempts`
+  counts worker claims only), so a recovered job gets its full retry sequence
+  instead of going terminal on the first transient failure.
+- **Token gate vs. CORS preflight** — the optional `LOOM_API_TOKEN` gate no
+  longer 401s CORS preflight `OPTIONS` requests, so the cross-origin dev SPA
+  keeps working when a token is configured.
+- **Healthchecks hit readiness** — the Docker `HEALTHCHECK` and the CI smoke
+  test now probe `/api/ready` (503 on unready components) instead of the
+  always-200 liveness endpoint.
+- **`LOOM_HOME` env var is honored** — `LoomSettings.loom_home` previously
+  derived `LOOM_LOOM_HOME` from the class env prefix, silently ignoring the
+  `LOOM_HOME` set by the Dockerfile and compose; the container wrote vaults to
+  `~/.loom` instead of the mounted `/data` volume. The field now names
+  `LOOM_HOME` explicitly (the derived name stays accepted).
+
 ## [1.0.0] - 2026-06-21
 
 Loom 1.0 — the resilience-and-honesty milestone. The 0.x line proved the product
@@ -181,6 +242,7 @@ layer — safe on localhost, do not expose the port as-is).
   in-app and in the README; OS-keychain support is not yet implemented.
 - No authentication on the API. Intended for local use only.
 
+[Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.0.0...HEAD
 [1.0.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.4.0

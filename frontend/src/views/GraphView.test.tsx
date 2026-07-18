@@ -100,12 +100,14 @@ function renderGraph(
   notesLoaded = true,
   graphFilters: Set<NodeType> = new Set(),
   graphSelectedId: string | null = null,
+  notesError: string | null = null,
 ) {
   const openNote = vi.fn();
   const setGraphSelectedId = vi.fn();
   const value = {
     notes,
     notesLoaded,
+    notesError,
     openNote,
     graphFocusId: null,
     setGraphFocusId: vi.fn(),
@@ -154,6 +156,17 @@ describe("GraphView", () => {
     expect(screen.getByText(/loading your vault/)).toBeInTheDocument();
     // Must NOT flash "empty" before the load settles.
     expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
+  });
+
+  it("shows an error state instead of the empty prompt after a failed fetch", () => {
+    renderGraph([], "force", true, new Set(), null, "Network error");
+    const alert = screen.getByRole("alert");
+    expect(alert).toHaveTextContent("Couldn’t load your vault");
+    expect(alert).toHaveTextContent(/Network error.*Check the backend/);
+    // A backend failure must NOT masquerade as an empty vault.
+    expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
+    // No stats line for a failed load either.
+    expect(screen.queryByText(/nodes ·/)).not.toBeInTheDocument();
   });
 
   it("renders the node and edge counts", () => {

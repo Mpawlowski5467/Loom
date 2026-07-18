@@ -84,9 +84,7 @@ class CalendarEvent:
             attendee_text = ", ".join(scrub_untrusted(value) for value in visible)
             if len(self.attendees) > len(visible):
                 attendee_text += f", and {len(self.attendees) - len(visible)} more"
-            details.append(
-                "attendees: " + attendee_text
-            )
+            details.append("attendees: " + attendee_text)
         if details:
             lines.append(f"  {'; '.join(details)}")
         return "\n".join(lines)
@@ -105,8 +103,7 @@ class CalendarEvent:
             rows.append(f"- **Location:** {scrub_untrusted(self.location)}")
         if self.attendees:
             rows.append(
-                "- **Attendees:** "
-                + ", ".join(scrub_untrusted(value) for value in self.attendees)
+                "- **Attendees:** " + ", ".join(scrub_untrusted(value) for value in self.attendees)
             )
         if self.url:
             rows.append(f"- **Link:** <{self.url}>")
@@ -224,7 +221,9 @@ async def fetch_feed(
                     logical_url = redirect_url
                     continue
                 if last_connect_error is not None:
-                    raise CalendarFeedError("Calendar feed could not be reached") from last_connect_error
+                    raise CalendarFeedError(
+                        "Calendar feed could not be reached"
+                    ) from last_connect_error
                 raise CalendarFeedError("Calendar feed could not be reached")
             raise CalendarFeedError("Calendar feed redirected too many times")
     except CalendarFeedError:
@@ -369,9 +368,7 @@ def _normalize_component(
     all_day = isinstance(raw_start, date) and not isinstance(raw_start, datetime)
     start = _as_datetime(raw_start, timezone)
     raw_recurrence_id = (
-        component.decoded("RECURRENCE-ID")
-        if component.get("RECURRENCE-ID") is not None
-        else None
+        component.decoded("RECURRENCE-ID") if component.get("RECURRENCE-ID") is not None else None
     )
     recurrence_id = (
         _as_datetime(raw_recurrence_id, timezone) if raw_recurrence_id is not None else None
@@ -398,9 +395,7 @@ def _normalize_component(
         uid = hashlib.sha256(f"{title}\x00{start.isoformat()}".encode()).hexdigest()
     attendees = tuple(
         value
-        for value in (
-            _attendee_text(item) for item in _as_list(component.get("ATTENDEE"))[:100]
-        )
+        for value in (_attendee_text(item) for item in _as_list(component.get("ATTENDEE"))[:100])
         if value
     )
     return CalendarEvent(

@@ -84,7 +84,10 @@ Style guide: @docs/style-guide.md
 - Both Shuttle Layer agents (Researcher, Standup)
 - LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Spider→Scribe→Sentinel→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage. Customs are runnable and editable from their Board card (keyed by registry id); the builder modal has an icon picker, prompt starter templates, and an optional per-agent provider/model override
-- 4 views: GraphView (Sigma.js — six layout options with fluid drag physics, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle; clicking a card opens a detail modal with the agent's instructions, its recent runs, and its LLM calls — the page-level trace feed is gone)
+- Unified capture ingress (`core/capture_ingress.py`) for HTTP, Shuttle agents, and Bridge sources, with external-ID idempotency and immediate durable-job policy
+- Durable Inbox processing: per-vault SQLite jobs with retry/backoff/cancel/review, Active/Review/History UI, retention controls, and typed SSE refresh domains
+- Scheduled Standup workspace with timezone-aware durable scheduling and an encrypted, read-only iCalendar Bridge that can enrich recaps and create event captures
+- 4 views: GraphView (Sigma.js — force layout plus five orbit scenes (rings/spiral/arms/galaxy/wave) with fluid drag physics, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle; clicking a card opens a detail modal with the agent's instructions, its recent runs, and its LLM calls)
 - File tree renders only on Graph and Board and can be hidden (nav toggle or ⌘B, persisted at `loom.treeVisible`); Thread/Inbox/Settings are full-width
 - Create-note modal: segmented type chips with node-color dots, nested-folder picker, tag chip editor (own stylesheet `styles/views/note-modal.css`)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
@@ -105,7 +108,7 @@ Style guide: @docs/style-guide.md
 **Known gaps (deliberate v1 boundaries)**
 - Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
 - No auth layer on the API by design (safe on localhost; do not expose the port as-is). The optional `LOOM_API_TOKEN` gate is a speed bump, not real auth. `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
-- Deferred by design (planned, not built — see `docs/VISION.md`): the Bridge (GitHub/Email/Calendar integrations, including a Standup calendar link), the Prompt Compiler, and multi-file attachments
+- Deferred by design (planned, not built — see `docs/VISION.md`): the remaining Bridge adapters (Google/Outlook OAuth, GitHub, Email — the read-only iCalendar Bridge and scheduled Standups ship), the Prompt Compiler, and multi-file attachments
 - AppContext still hosts most global state; `useLoomConfig`, `useAgentPolling`, and `useHealthPolling` are split out so far
 - Frontend test coverage is broad (views, graph logic, API clients, settings, board cards/pulse all covered); the `useGraph*` graph hooks remain the main untested area
 

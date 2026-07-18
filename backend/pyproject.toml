@@ -7,6 +7,16 @@ name = "loom-backend"
 version = "1.0.0"
 description = "Loom — local-first AI memory system"
 requires-python = ">=3.11"
+# Runtime ranges below express compatibility intent. The pinned set actually
+# installed by the Docker image lives in requirements.lock (same directory) —
+# regenerate it from a venv where the full test suite passes:
+#   backend/.venv/bin/python -m pip freeze --exclude-editable \
+#     | grep -vE '^(loom-backend|.*file://)' \
+#     | grep -vE '^(ruff|mypy|pytest|pytest-asyncio|types-PyYAML)==' \
+#     > backend/requirements.lock
+# (Keep the header comment when regenerating; the dev-only tools are excluded
+# so production images don't ship them. The Dockerfile installs the lock
+# first, then the project itself with `pip install --no-deps .`.)
 dependencies = [
     "fastapi>=0.115",
     "pydantic>=2.0",

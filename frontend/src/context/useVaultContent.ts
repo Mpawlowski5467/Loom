@@ -22,6 +22,7 @@ interface UseVaultContentOptions {
 export interface VaultContentState {
   notes: Note[];
   notesLoaded: boolean;
+  notesError: string | null;
   wikilinkMap: Map<string, NoteId>;
   resolveWikilink: (raw: string) => NoteId | undefined;
   noteById: (id: string) => Note | undefined;
@@ -60,6 +61,7 @@ export function useVaultContent({
   const [notesLoadedState, setNotesLoadedState] = useState(
     initialNotes.length > 0,
   );
+  const [notesError, setNotesError] = useState<string | null>(null);
   const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
   const [capturesLoadedState, setCapturesLoadedState] = useState(
     initialCaptures.length > 0,
@@ -80,6 +82,7 @@ export function useVaultContent({
       if (ctrl.signal.aborted) return;
       const loaded = backendNotesToFrontend(records);
       setNotes(loaded);
+      setNotesError(null);
       setCurrentNoteId((current) => {
         if (current && loaded.some((note) => note.id === current)) {
           return current;
@@ -88,10 +91,10 @@ export function useVaultContent({
       });
     } catch (err) {
       if ((err as DOMException)?.name === "AbortError") return;
-      onLoadError(
-        "notes",
-        err instanceof Error ? err.message : "Failed to load notes",
-      );
+      const message =
+        err instanceof Error ? err.message : "Failed to load notes";
+      setNotesError(message);
+      onLoadError("notes", message);
     } finally {
       if (notesRequest.current === ctrl) {
         notesRequest.current = null;
@@ -246,6 +249,7 @@ export function useVaultContent({
   return {
     notes,
     notesLoaded: enabled ? notesLoadedState : true,
+    notesError,
     wikilinkMap,
     resolveWikilink,
     noteById,

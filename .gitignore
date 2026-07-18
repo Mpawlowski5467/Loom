@@ -62,3 +62,6 @@ docs/v1-roadmap.md
 
 # Understand Anything knowledge graph (local analysis artifacts)
 .understand-anything/
+
+# Live-test session videos (kept local; report is committed)
+docs/recording/*.mp4

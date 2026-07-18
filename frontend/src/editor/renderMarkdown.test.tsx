@@ -46,6 +46,55 @@ describe("renderMarkdown", () => {
   });
 });
 
+describe("renderMarkdown — XSS safety", () => {
+  // Lock-in: the renderer must stay XSS-safe (react-markdown v10, no
+  // rehype-raw, default urlTransform). Note bodies are untrusted input.
+  it("renders no <script>, no inline handlers, and no javascript: href", () => {
+    const { container } = renderMarkdownWithContext(
+      [
+        "<script>alert(1)</script>",
+        "",
+        "<img src=x onerror=alert(1)>",
+        "",
+        "[click](javascript:alert(1))",
+      ].join("\n"),
+    );
+
+    // Raw HTML never becomes DOM: no script element, no img with an onerror
+    // handler. react-markdown (no rehype-raw) emits it as inert escaped text.
+    expect(container.querySelector("script")).toBeNull();
+    expect(container.querySelector("img")).toBeNull();
+    expect(container.innerHTML).toContain("&lt;script&gt;");
+    expect(container.innerHTML).not.toContain("<script>");
+
+    // No element anywhere in the tree carries an inline event handler.
+    for (const el of Array.from(container.querySelectorAll("*"))) {
+      for (const attr of Array.from(el.attributes)) {
+        expect(attr.name.toLowerCase().startsWith("on")).toBe(false);
+      }
+    }
+
+    // The link still renders its text, but the javascript: URL is neutralized
+    // by the default urlTransform (it never becomes an href).
+    const link = container.querySelector("a");
+    expect(link).not.toBeNull();
+    expect(link!.textContent).toBe("click");
+    expect(link!.getAttribute("href") ?? "").not.toMatch(/^\s*javascript:/i);
+  });
+
+  it("keeps rendering safe markdown images without inline handlers", () => {
+    const { container } = renderMarkdownWithContext(
+      "![alt text](https://example.com/pic.png)",
+    );
+    const img = container.querySelector("img");
+    expect(img).not.toBeNull();
+    expect(img!.getAttribute("src")).toBe("https://example.com/pic.png");
+    for (const attr of Array.from(img!.attributes)) {
+      expect(attr.name.toLowerCase().startsWith("on")).toBe(false);
+    }
+  });
+});
+
 describe("extractHeadings ↔ rendered heading ids", () => {
   // A document that exercises every heading form that used to drift between the
   // two enumerations: ATX, setext (= and -), a blockquote-nested heading, and a

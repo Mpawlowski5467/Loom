@@ -212,3 +212,27 @@ class TestRunnerDispatch:
         runner = AgentRunner(root)
         assert runner._lookup_custom_record("b")["name"] == "B"
         assert runner._lookup_custom_record("missing") is None
+
+    def test_lookup_rejects_unsafe_ids(self, tmp_path: Path):
+        """Hand-edited ids that would escape the vault as paths never match."""
+        root = _setup_vault(tmp_path)
+        (root / "agents.yaml").write_text(
+            yaml.safe_dump({"agents": [_record(id="../../x"), _record(id="digest-a1b2")]}),
+            encoding="utf-8",
+        )
+        runner = AgentRunner(root)
+        for bad in ("../../x", "../digest", "a/b", "..", "a b", "UPPER"):
+            assert runner._lookup_custom_record(bad) is None, bad
+        # Registry-shaped slugs (incl. the -<hex> collision suffix) still resolve.
+        assert runner._lookup_custom_record("digest-a1b2") is not None
+
+    @pytest.mark.asyncio
+    async def test_run_scheduled_rejects_unsafe_id(self, tmp_path: Path):
+        root = _setup_vault(tmp_path)
+        (root / "agents.yaml").write_text(
+            yaml.safe_dump({"agents": [_record(id="../../x")]}),
+            encoding="utf-8",
+        )
+        runner = AgentRunner(root)
+        result = await runner.run_scheduled("../../x")
+        assert "error" in result

@@ -139,6 +139,7 @@ export function Council(): ReactNode {
         <input
           className="input"
           placeholder={streaming ? "council is responding…" : "ask the council…"}
+          aria-label="Ask the Loom Council"
           value={text}
           disabled={streaming}
           onChange={(e) => setText(e.target.value)}

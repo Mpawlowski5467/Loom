@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useDeferredValue,
   useEffect,
   useLayoutEffect,
@@ -127,7 +128,7 @@ export function ThreadView(): ReactNode {
     }
   }, [currentNoteId, note, openNote]);
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!note || !canSave) return;
     setSaving(true);
     try {
@@ -153,7 +154,7 @@ export function ThreadView(): ReactNode {
     } finally {
       setSaving(false);
     }
-  };
+  }, [note, canSave, draft, notes, updateNote, pushToast, setEditing]);
 
   useEffect(() => {
     if (!editing) return;
@@ -165,7 +166,25 @@ export function ThreadView(): ReactNode {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  });
+  }, [editing, save]);
+
+  // Read-path rendering is memoized on the note body so unrelated state churn
+  // (sidebar toggles, hover, saving flags) doesn't re-parse the markdown —
+  // mirrors the edit-preview memoization above. Headings feed only the
+  // outline sidebar, so they're computed only while it's actually shown.
+  const noteBody = note?.body ?? null;
+  const renderedBody = useMemo(
+    () =>
+      noteBody === null
+        ? null
+        : renderMarkdown(noteBody, { bodyClass: "thread-body" }),
+    [noteBody],
+  );
+  const outlineOpen = secondaryOpen && !editing;
+  const headings = useMemo(
+    () => (noteBody === null || !outlineOpen ? [] : extractHeadings(noteBody)),
+    [noteBody, outlineOpen],
+  );
 
   if (!note) {
     return (
@@ -240,7 +259,6 @@ export function ThreadView(): ReactNode {
     setTab("graph");
   };
 
-  const headings = extractHeadings(note.body);
   const back = backlinksFor(note.id);
   const related = Array.from(new Set([...note.links, ...back])).slice(0, 6);
 
@@ -355,7 +373,7 @@ export function ThreadView(): ReactNode {
             </div>
           </div>
         ) : (
-          renderMarkdown(note.body, { bodyClass: "thread-body" })
+          renderedBody
         )}
       </div>
 

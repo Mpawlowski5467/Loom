@@ -12,6 +12,7 @@ from agents.loom.weaver_prompts import (
     FORMAT_SYSTEM,
     SKELETON_SECTIONS,
 )
+from agents.sanitize import scrub_untrusted
 from core.exceptions import ProviderConfigError, ProviderError
 from core.tokens import truncate_to_tokens
 
@@ -54,7 +55,7 @@ async def classify_capture(content: str, chat_provider: BaseProvider | None) -> 
 
     user_message = (
         f"Classify this capture:\n\n---\n"
-        f"{truncate_to_tokens(content, _CLASSIFY_CONTENT_TOKENS)}\n---\n\n"
+        f"{scrub_untrusted(truncate_to_tokens(content, _CLASSIFY_CONTENT_TOKENS))}\n---\n\n"
         "Respond with type, folder, title, and tags."
     )
 
@@ -107,7 +108,7 @@ async def generate_note_body(
         f"Required ## headings — use these EXACT headings in this EXACT order, "
         f"and use NO other ## headings:\n{headings}\n\n"
         f"Source content:\n---\n"
-        f"{truncate_to_tokens(raw_content, _BODY_CONTENT_TOKENS)}\n---\n\n"
+        f"{scrub_untrusted(truncate_to_tokens(raw_content, _BODY_CONTENT_TOKENS))}\n---\n\n"
         "Return only the body. Start with the first `## ` heading. "
         "Every required heading must appear, even if its section is one line."
     )
@@ -138,7 +139,7 @@ async def format_content(
         f"Required ## headings — use these EXACT headings in this EXACT order, "
         f"and use NO other ## headings:\n{headings}\n\n"
         f"User content:\n---\n"
-        f"{truncate_to_tokens(content, _BODY_CONTENT_TOKENS)}\n---\n\n"
+        f"{scrub_untrusted(truncate_to_tokens(content, _BODY_CONTENT_TOKENS))}\n---\n\n"
         "Return only the body. Start with the first `## ` heading. "
         "Every required heading must appear, even if its section is one line."
     )

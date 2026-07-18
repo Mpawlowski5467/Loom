@@ -127,7 +127,8 @@ describe("useVaultContent", () => {
 
     expect(result.current.notes).toEqual([loadedNote]);
     expect(result.current.captures).toEqual([loadedCapture]);
-    expect(result.current.selectedCaptureId).toBe("loaded");
+    // No auto-selection from a refresh: nothing was selected before it.
+    expect(result.current.selectedCaptureId).toBeNull();
     expect(result.current.notesLoaded).toBe(true);
     expect(result.current.capturesLoaded).toBe(true);
     expect(result.current.resolveWikilink("Note loaded|alias")).toBe("loaded");
@@ -145,6 +146,31 @@ describe("useVaultContent", () => {
     expect(result.current.captures[0]?.status).toBe("processing");
     act(() => result.current.removeCapture("loaded"));
     expect(result.current.captures).toEqual([]);
+    expect(result.current.selectedCaptureId).toBeNull();
+    unmount();
+  });
+
+  it("clears a vanished selection to null on refresh instead of jumping to the first capture", async () => {
+    const a = capture("a");
+    const b = capture("b");
+    mocks.listCaptures.mockResolvedValue([a, b]);
+    const { result, unmount } = renderContent({ initialCaptures: [a, b] });
+    await advance(0);
+
+    // The initial preselection survives while its capture is still present.
+    expect(result.current.selectedCaptureId).toBe("a");
+
+    // Archiving the selected capture clears the selection…
+    act(() => result.current.removeCapture("a"));
+    expect(result.current.selectedCaptureId).toBeNull();
+
+    // …and the refresh that confirms its disappearance must NOT re-select the
+    // new first capture (which would fire an unprompted preview).
+    mocks.listCaptures.mockResolvedValue([b]);
+    act(() => mocks.events.listener?.("capture-changed"));
+    await advance(650);
+
+    expect(result.current.captures).toEqual([b]);
     expect(result.current.selectedCaptureId).toBeNull();
     unmount();
   });

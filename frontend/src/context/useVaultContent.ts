@@ -117,7 +117,10 @@ export function useVaultContent({
         if (current && loaded.some((capture) => capture.id === current)) {
           return current;
         }
-        return loaded[0]?.id ?? null;
+        // A vanished selection clears instead of jumping to the first
+        // capture — auto-selecting here would fire an unprompted preview
+        // right after the user archived/skipped the selected capture.
+        return null;
       });
     } catch (err) {
       if ((err as DOMException)?.name === "AbortError") return;

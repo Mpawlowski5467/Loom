@@ -228,14 +228,18 @@ describe("InboxView — listing & filtering", () => {
 
   it("shows and searches capture source and provenance", async () => {
     const user = userEvent.setup();
-    renderInbox([
-      mkCapture({
-        id: "mail",
-        title: "Imported message",
-        source: "bridge:gmail",
-        provenance: { sender: "ada@example.com" },
-      }),
-    ]);
+    renderInbox(
+      [
+        mkCapture({
+          id: "mail",
+          title: "Imported message",
+          source: "bridge:gmail",
+          provenance: { sender: "ada@example.com" },
+        }),
+      ],
+      // Selected so the detail pane renders the provenance.
+      { selectedCaptureId: "mail" },
+    );
 
     expect(screen.getByText("bridge:gmail")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
@@ -727,6 +731,14 @@ describe("InboxView — bulk actions", () => {
 });
 
 describe("InboxView — selection", () => {
+  it("does not fall back to the first capture when the selected id is gone", () => {
+    renderInbox([mkCapture()], { selectedCaptureId: "ghost" });
+
+    // No forced selection → no detail pane and no unprompted preview fetch.
+    expect(document.querySelector(".inbox-detail")).toBeNull();
+    expect(previewCapture).not.toHaveBeenCalled();
+  });
+
   it("clicking a capture row selects it", async () => {
     const user = userEvent.setup();
     const spies = renderInbox([

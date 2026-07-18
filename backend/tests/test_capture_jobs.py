@@ -645,6 +645,49 @@ async def test_service_refuses_vault_switch_while_job_is_running(
     await service.aclose()
 
 
+@pytest.mark.asyncio
+async def test_vault_switch_proceeds_past_stale_running_job(tmp_path: Path) -> None:
+    """A provably stale running row must not pin a vault switch (issue #22).
+
+    The fresh-running refusal above guards live work; its mirror here: a row
+    whose liveness is older than the policy cutoff has lost its executor, so
+    the switch proceeds and the stale-reclaim path finalizes the row.
+    """
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    service = CaptureJobService()
+    worker = await service.activate(root, _policy())
+    await worker.pause_claims()
+    worker.store.enqueue(capture, "thr_cap1", "manual", _policy())
+    running = worker.store.claim_next()
+    assert running is not None
+    worker.resume_claims()
+    _make_stale(worker.store, running.id)
+
+    await service.prepare_vault_switch()
+    assert service.worker is None
+    await service.aclose()
+
+
+def test_has_running_stale_cutoff(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    policy = _policy()
+    store.enqueue(capture, "thr_cap1", "manual", policy)
+    running = store.claim_next()
+    assert running is not None
+
+    # Fresh claim: counted with and without a cutoff.
+    assert store.has_running() is True
+    assert store.has_running(stale_after_seconds=policy.stale_running_seconds) is True
+
+    # Backdated past the cutoff: ignored by the stale-aware check only.
+    _make_stale(store, running.id)
+    assert store.has_running() is True
+    assert store.has_running(stale_after_seconds=policy.stale_running_seconds) is False
+
+
 def test_reclaim_stale_running_requeues_with_remaining_budget(tmp_path: Path) -> None:
     root = _vault(tmp_path)
     capture = _write_capture(root, "thr_cap1")

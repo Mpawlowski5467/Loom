@@ -32,6 +32,7 @@ const DEFAULT_PROCESSING_POLICY: CaptureProcessingPolicy = {
   concurrency: 1,
   max_retries: 2,
   base_backoff_seconds: 5,
+  stale_running_seconds: 1800,
 };
 
 function isDemoCapture(capture: Capture): boolean {

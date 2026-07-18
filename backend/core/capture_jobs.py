@@ -943,11 +943,33 @@ class CaptureJobStore:
             ).fetchall()
             return [self._row_to_job(row) for row in fresh_rows]
 
-    def has_running(self) -> bool:
+    def has_running(self, *, stale_after_seconds: float | None = None) -> bool:
+        """Whether any job is actively running.
+
+        With ``stale_after_seconds``, ``running`` rows whose liveness is
+        older than the cutoff do not count: their executor is gone and the
+        stale-reclaim path will finalize them, so they must not pin a vault
+        switch (issue #22 follow-up). Without a cutoff the check is exact.
+        """
         with self._connect() as connection:
-            row = connection.execute(
-                "SELECT 1 FROM capture_jobs WHERE status = 'running' LIMIT 1"
-            ).fetchone()
+            if stale_after_seconds is None:
+                row = connection.execute(
+                    "SELECT 1 FROM capture_jobs WHERE status = 'running' LIMIT 1"
+                ).fetchone()
+            else:
+                cutoff = _iso(_now() - timedelta(seconds=stale_after_seconds))
+                row = connection.execute(
+                    """
+                    SELECT 1 FROM capture_jobs
+                     WHERE status = 'running'
+                       AND CASE
+                           WHEN started_at != '' THEN started_at
+                           ELSE updated_at
+                       END >= ?
+                     LIMIT 1
+                    """,
+                    (cutoff,),
+                ).fetchone()
         return row is not None
 
 
@@ -1448,7 +1470,12 @@ class CaptureJobService:
                 return self._worker
             if self._worker is not None:
                 await self._worker.pause_claims()
-                if await asyncio.to_thread(self._worker.store.has_running):
+                # A stale running row has no live executor — the stale-reclaim
+                # path finalizes it, so it must not pin the switch.
+                if await asyncio.to_thread(
+                    self._worker.store.has_running,
+                    stale_after_seconds=self._worker.policy.stale_running_seconds,
+                ):
                     self._worker.resume_claims()
                     raise CaptureJobsBusyError(
                         "A capture is currently processing; wait before switching vaults"
@@ -1498,14 +1525,23 @@ class CaptureJobService:
             if self._worker is None:
                 if self._bound_root is not None:
                     store = CaptureJobStore(self._bound_root)
-                    if await asyncio.to_thread(store.has_running):
+                    # No worker is bound, so no live policy either — use the
+                    # default cutoff; a stale row here is reclaimed by the
+                    # next worker start or the lazy jobs-list sweep.
+                    if await asyncio.to_thread(
+                        store.has_running,
+                        stale_after_seconds=CaptureProcessingConfig().stale_running_seconds,
+                    ):
                         raise CaptureJobsBusyError(
                             "A capture is currently processing; wait before switching vaults"
                         )
                 self._switching = True
                 return
             await self._worker.pause_claims()
-            if await asyncio.to_thread(self._worker.store.has_running):
+            if await asyncio.to_thread(
+                self._worker.store.has_running,
+                stale_after_seconds=self._worker.policy.stale_running_seconds,
+            ):
                 self._worker.resume_claims()
                 raise CaptureJobsBusyError(
                     "A capture is currently processing; wait before switching vaults"

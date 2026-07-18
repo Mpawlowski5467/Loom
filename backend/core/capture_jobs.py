@@ -65,6 +65,29 @@ def _iso(value: datetime | None = None) -> str:
     return (value or _now()).isoformat()
 
 
+def _interrupted_transition(
+    row: sqlite3.Row, now_iso: str
+) -> tuple[CaptureJobStatus, CaptureJobOutcome | None, int, int, str]:
+    """Crash-accounting for one interrupted ``running`` row.
+
+    The claim that left the row ``running`` already consumed one attempt, so
+    no counter is incremented here. Rows with budget left are requeued; rows
+    at their bound are granted exactly one idempotent reconciliation claim —
+    Loom may have died after archiving the capture but before finalizing the
+    row, and the worker can infer that filed result from the missing source.
+    The extension is persisted via ``recovery_extensions`` so repeated
+    interruptions stay bounded; anything beyond it is a terminal failure.
+    """
+    attempts = int(row["attempts"])
+    max_attempts = int(row["max_attempts"])
+    extensions = int(row["recovery_extensions"])
+    if attempts < max_attempts:
+        return "retrying", None, max_attempts, extensions, ""
+    if extensions == 0:
+        return "retrying", None, attempts + 1, 1, ""
+    return "failed", "failed", max_attempts, extensions, now_iso
+
+
 class CaptureJob(BaseModel):
     """Public representation of one persisted capture-processing job."""
 
@@ -518,20 +541,57 @@ class CaptureJobStore:
                 )
             return self._row_to_job(row)
 
-    def cancel(self, job_id: str) -> CaptureJob:
-        """Cancel work that has not started; running pipelines are immutable."""
-        now = _iso()
+    def cancel(
+        self,
+        job_id: str,
+        *,
+        stale_after_seconds: float | None = None,
+        now: datetime | None = None,
+    ) -> CaptureJob:
+        """Cancel work that has not started; running pipelines are immutable.
+
+        The single exception is a ``running`` row that is provably stale:
+        when ``stale_after_seconds`` is given, a row with no liveness past
+        that cutoff has lost its executor and may be cancelled like pending
+        work. Fresh running rows keep their conflict — a live worker owns
+        them.
+        """
+        now_dt = now or _now()
+        now_iso = _iso(now_dt)
         with self._connect() as connection:
-            cursor = connection.execute(
-                """
-                UPDATE capture_jobs
-                   SET status = 'cancelled', outcome = NULL,
-                       error = 'Cancelled by user', updated_at = ?,
-                       finished_at = ?, next_attempt_at = ?
-                 WHERE id = ? AND status IN ('queued', 'retrying')
-                """,
-                (now, now, now, job_id),
-            )
+            if stale_after_seconds is None:
+                cursor = connection.execute(
+                    """
+                    UPDATE capture_jobs
+                       SET status = 'cancelled', outcome = NULL,
+                           error = 'Cancelled by user', updated_at = ?,
+                           finished_at = ?, next_attempt_at = ?
+                     WHERE id = ? AND status IN ('queued', 'retrying')
+                    """,
+                    (now_iso, now_iso, now_iso, job_id),
+                )
+            else:
+                cutoff = _iso(now_dt - timedelta(seconds=stale_after_seconds))
+                cursor = connection.execute(
+                    """
+                    UPDATE capture_jobs
+                       SET status = 'cancelled', outcome = NULL,
+                           error = 'Cancelled by user', updated_at = ?,
+                           finished_at = ?, next_attempt_at = ?
+                     WHERE id = ?
+                       AND (
+                           status IN ('queued', 'retrying')
+                           OR (
+                               status = 'running'
+                               AND CASE
+                                   WHEN started_at != '' THEN started_at
+                                   ELSE updated_at
+                               END < ?
+                           )
+                       )
+                    """,
+                    (now_iso, now_iso, now_iso, job_id, cutoff),
+                )
             row = connection.execute(
                 "SELECT * FROM capture_jobs WHERE id = ?", (job_id,)
             ).fetchone()
@@ -778,28 +838,9 @@ class CaptureJobStore:
             ).fetchall()
             recovered_ids: list[str] = []
             for row in running:
-                attempts = int(row["attempts"])
-                max_attempts = int(row["max_attempts"])
-                extensions = int(row["recovery_extensions"])
-                if attempts < max_attempts:
-                    status: CaptureJobStatus = "retrying"
-                    outcome: CaptureJobOutcome | None = None
-                    finished_at = ""
-                elif extensions == 0:
-                    # Grant exactly one idempotent reconciliation claim beyond
-                    # the normal budget. Loom may have crashed after archiving
-                    # the capture but before finalizing this row; the worker can
-                    # infer that filed result from the missing source. Persist
-                    # the extension so repeated restarts remain bounded.
-                    status = "retrying"
-                    outcome = None
-                    max_attempts = attempts + 1
-                    extensions = 1
-                    finished_at = ""
-                else:
-                    status = "failed"
-                    outcome = "failed"
-                    finished_at = now
+                status, outcome, max_attempts, extensions, finished_at = _interrupted_transition(
+                    row, now
+                )
                 connection.execute(
                     """
                     UPDATE capture_jobs
@@ -829,6 +870,78 @@ class CaptureJobStore:
                 recovered_ids,
             ).fetchall()
             return [self._row_to_job(row) for row in rows]
+
+    def reclaim_stale_running(
+        self,
+        *,
+        stale_after_seconds: float,
+        now: datetime | None = None,
+    ) -> list[CaptureJob]:
+        """Requeue or fail ``running`` rows whose executor is provably gone.
+
+        A ``running`` row is stale when its liveness timestamp — the claim's
+        ``started_at``, falling back to ``updated_at`` — is older than the
+        cutoff. Rows are transitioned with the same attempt accounting a
+        crash gets in :meth:`recover_interrupted`: requeued while budget
+        remains, granted one bounded reconciliation claim at the bound, and
+        failed beyond it. The compare-and-swap guard lets a live worker that
+        finishes the same row concurrently win; queued, retrying, and
+        terminal rows are never touched.
+        """
+        now_dt = now or _now()
+        now_iso = _iso(now_dt)
+        cutoff = _iso(now_dt - timedelta(seconds=stale_after_seconds))
+        error = f"Stale running job reclaimed (no liveness for {int(stale_after_seconds)}s)"
+        with self._connect() as connection:
+            connection.execute("BEGIN IMMEDIATE")
+            running = connection.execute(
+                """
+                SELECT * FROM capture_jobs
+                 WHERE status = 'running'
+                   AND CASE
+                       WHEN started_at != '' THEN started_at
+                       ELSE updated_at
+                   END < ?
+                """,
+                (cutoff,),
+            ).fetchall()
+            reclaimed_ids: list[str] = []
+            for row in running:
+                status, outcome, max_attempts, extensions, finished_at = _interrupted_transition(
+                    row, now_iso
+                )
+                cursor = connection.execute(
+                    """
+                    UPDATE capture_jobs
+                       SET status = ?, outcome = ?, max_attempts = ?,
+                           recovery_extensions = ?, error = ?,
+                           next_attempt_at = ?, updated_at = ?, finished_at = ?
+                     WHERE id = ? AND status = 'running'
+                    """,
+                    (
+                        status,
+                        outcome,
+                        max_attempts,
+                        extensions,
+                        error,
+                        now_iso,
+                        now_iso,
+                        finished_at,
+                        row["id"],
+                    ),
+                )
+                if cursor.rowcount != 1:
+                    # A live executor finalized the row first; its outcome wins.
+                    continue
+                reclaimed_ids.append(str(row["id"]))
+            if not reclaimed_ids:
+                return []
+            placeholders = ",".join("?" for _ in reclaimed_ids)
+            fresh_rows = connection.execute(
+                f"SELECT * FROM capture_jobs WHERE id IN ({placeholders})",
+                reclaimed_ids,
+            ).fetchall()
+            return [self._row_to_job(row) for row in fresh_rows]
 
     def has_running(self) -> bool:
         with self._connect() as connection:
@@ -996,7 +1109,14 @@ class CaptureJobWorker:
             self._stop.clear()
             self._accepting = True
             recovered = await asyncio.to_thread(self.store.recover_interrupted)
-            if recovered:
+            # Safety net alongside crash recovery: rows that stranded long
+            # enough ago are reclaimed even if a future recovery path ever
+            # leaves them running.
+            reclaimed = await asyncio.to_thread(
+                self.store.reclaim_stale_running,
+                stale_after_seconds=self.policy.stale_running_seconds,
+            )
+            if recovered or reclaimed:
                 self._publish_change()
             await self.reconcile()
             self._tasks = {

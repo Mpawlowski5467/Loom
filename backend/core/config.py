@@ -278,6 +278,11 @@ class CaptureProcessingConfig(BaseModel):
     concurrency: int = Field(default=1, ge=1, le=8)
     max_retries: int = Field(default=2, ge=0, le=10)
     base_backoff_seconds: float = Field(default=2.0, ge=0.1, le=3600.0)
+    # A ``running`` job with no liveness past this cutoff has lost its
+    # executor (crashed request, dead worker) and is reclaimed. Must exceed
+    # the worst-case capture-pipeline duration so a live, slow run is never
+    # reclaimed from under its worker.
+    stale_running_seconds: float = Field(default=1800.0, ge=60.0, le=86400.0)
 
     @classmethod
     def _normalized_sources(cls, values: list[str]) -> list[str]:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import sqlite3
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -12,6 +13,7 @@ from pathlib import Path
 import pytest
 
 from core.capture_jobs import (
+    CaptureJob,
     CaptureJobConflictError,
     CaptureJobsBusyError,
     CaptureJobService,
@@ -71,6 +73,16 @@ def _completed(path: Path) -> JobExecutionResult:
         note_type="topic",
         target_path=str(path.parent.parent / "topics" / "filed.md"),
     )
+
+
+def _make_stale(store: CaptureJobStore, job_id: str, *, seconds: float = 7200.0) -> None:
+    """Backdate a running row's liveness timestamps past any stale cutoff."""
+    aged = (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat()
+    with sqlite3.connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE capture_jobs SET started_at = ?, updated_at = ? WHERE id = ?",
+            (aged, aged, job_id),
+        )
 
 
 def test_store_is_persistent_and_enqueue_is_idempotent(tmp_path: Path) -> None:
@@ -631,3 +643,205 @@ async def test_service_refuses_vault_switch_while_job_is_running(
     assert service.worker is worker
     worker.store.finish(job.id, _completed(capture))
     await service.aclose()
+
+
+def test_reclaim_stale_running_requeues_with_remaining_budget(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    queued = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=2)).job
+    claimed = store.claim_next()
+    assert claimed is not None
+    assert claimed.attempts == 1
+    _make_stale(store, queued.id)
+
+    reclaimed = store.reclaim_stale_running(stale_after_seconds=1800.0)
+
+    assert [job.id for job in reclaimed] == [queued.id]
+    stale = reclaimed[0]
+    assert stale.status == "retrying"
+    assert stale.outcome is None
+    # The stranded claim already consumed this attempt; reclaiming adds none.
+    assert stale.attempts == 1
+    assert stale.max_attempts == 3
+    assert stale.error == "Stale running job reclaimed (no liveness for 1800s)"
+    assert stale.finished_at == ""
+
+    # The row is fresh again, and the requeue keeps its remaining budget.
+    assert store.reclaim_stale_running(stale_after_seconds=1800.0) == []
+    reclaimed_claim = store.claim_next()
+    assert reclaimed_claim is not None
+    assert reclaimed_claim.attempts == 2
+    finished = store.finish(queued.id, _completed(capture))
+    assert finished.status == "completed"
+
+
+def test_reclaim_stale_running_grants_one_extension_then_fails(tmp_path: Path) -> None:
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    store = CaptureJobStore(root)
+    job = store.enqueue(capture, "thr_cap1", "manual", _policy(max_retries=0)).job
+    assert store.claim_next() is not None
+    _make_stale(store, job.id)
+
+    first = store.reclaim_stale_running(stale_after_seconds=1800.0)[0]
+    assert first.status == "retrying"
+    assert first.attempts == 1
+    assert first.max_attempts == 2  # one bounded reconciliation claim granted
+
+    reclaimed_claim = store.claim_next()
+    assert reclaimed_claim is not None
+    assert reclaimed_claim.attempts == 2
+    _make_stale(store, job.id)
+
+    second = store.reclaim_stale_running(stale_after_seconds=1800.0)[0]
+    assert second.status == "failed"
+    assert second.outcome == "failed"
+    assert second.finished_at != ""
+    assert "no liveness" in second.error
+    assert store.claim_next() is None
+    assert store.get(job.id) == second
+
+
+def test_reclaim_stale_running_leaves_fresh_and_non_running_rows_untouched(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    store = CaptureJobStore(root)
+
+    running_capture = _write_capture(root, "thr_running")
+    running = store.enqueue(running_capture, "thr_running", "manual", _policy()).job
+    assert store.claim_next() is not None
+
+    failed_capture = _write_capture(root, "thr_failed")
+    failed = store.enqueue(failed_capture, "thr_failed", "manual", _policy()).job
+    assert store.claim_next() is not None
+    store.fail_or_retry(
+        failed.id,
+        error="boom",
+        transient=False,
+        base_backoff_seconds=0.1,
+    )
+
+    queued_capture = _write_capture(root, "thr_queued")
+    queued = store.enqueue(queued_capture, "thr_queued", "manual", _policy()).job
+
+    # Real "now" keeps every liveness timestamp younger than the cutoff.
+    assert store.reclaim_stale_running(stale_after_seconds=1800.0) == []
+    assert store.get(running.id).status == "running"  # type: ignore[union-attr]
+    assert store.get(queued.id).status == "queued"  # type: ignore[union-attr]
+    assert store.get(failed.id).status == "failed"  # type: ignore[union-attr]
+
+
+def test_reclaim_stale_running_never_clobbers_a_concurrent_finish(
+    tmp_path: Path,
+) -> None:
+    root = _vault(tmp_path)
+    store = CaptureJobStore(root)
+
+    for index in range(12):
+        capture_id = f"thr_race{index}"
+        capture = _write_capture(root, capture_id)
+        queued = store.enqueue(capture, capture_id, "manual", _policy()).job
+        claimed = store.claim_next()
+        assert claimed is not None
+        _make_stale(store, claimed.id)
+        barrier = threading.Barrier(2)
+
+        def finish(
+            sync: threading.Barrier = barrier,
+            job_id: str = claimed.id,
+            path: Path = capture,
+        ) -> CaptureJob | CaptureJobConflictError:
+            sync.wait()
+            try:
+                return store.finish(job_id, _completed(path))
+            except CaptureJobConflictError as exc:
+                return exc
+
+        def reclaim(sync: threading.Barrier = barrier) -> list[CaptureJob]:
+            sync.wait()
+            return store.reclaim_stale_running(stale_after_seconds=1800.0)
+
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            finished = pool.submit(finish)
+            reclaimed = pool.submit(reclaim)
+            finish_result = finished.result()
+            reclaim_result = reclaimed.result()
+
+        final = store.get(queued.id)
+        assert final is not None
+        if final.status == "completed":
+            # The live executor won; the stale sweep observed its outcome.
+            assert reclaim_result == []
+        else:
+            # The sweep committed first; the late finish must not clobber it.
+            assert final.status == "retrying"
+            assert [job.id for job in reclaim_result] == [queued.id]
+            assert isinstance(finish_result, CaptureJobConflictError)
+            assert store.claim_next() is not None
+            store.finish(queued.id, _completed(capture))
+
+
+@pytest.mark.asyncio
+async def test_worker_start_invokes_stale_reclaim_with_policy_cutoff(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    root = _vault(tmp_path)
+    calls: list[float] = []
+    original = CaptureJobStore.reclaim_stale_running
+
+    def spy(
+        self: CaptureJobStore,
+        *,
+        stale_after_seconds: float,
+        now: datetime | None = None,
+    ) -> list[CaptureJob]:
+        calls.append(stale_after_seconds)
+        return original(self, stale_after_seconds=stale_after_seconds, now=now)
+
+    monkeypatch.setattr(CaptureJobStore, "reclaim_stale_running", spy)
+    worker = CaptureJobWorker(root, _policy(mode="manual", stale_running_seconds=120.0))
+    await worker.start()
+    try:
+        assert calls == [120.0]
+    finally:
+        await worker.aclose()
+
+
+@pytest.mark.asyncio
+async def test_worker_start_recovers_previous_process_running_row_in_manual_mode(
+    tmp_path: Path,
+) -> None:
+    """A running row orphaned by a previous process advances after boot.
+
+    Manual mode disables discovery only: startup recovery plus the live
+    worker still drain durable work, so the row must not spin forever.
+    """
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_cap1")
+    policy = _policy(mode="manual")
+    stranded = CaptureJobStore(root).reserve_external(capture, "thr_cap1", "manual", policy)
+    assert stranded.status == "running"
+
+    async def processor(path: Path) -> JobExecutionResult:
+        return _completed(path)
+
+    worker = CaptureJobWorker(root, policy, processor=processor)
+    await worker.start()
+    try:
+        for _ in range(100):
+            current = worker.store.get(stranded.id)
+            if current is not None and current.status == "completed":
+                break
+            await asyncio.sleep(0.01)
+        else:
+            pytest.fail("previous-process running row was not recovered on startup")
+    finally:
+        await worker.aclose()
+
+    final = worker.store.get(stranded.id)
+    assert final is not None
+    assert final.status == "completed"
+    assert final.outcome == "filed"

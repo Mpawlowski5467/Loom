@@ -1,7 +1,9 @@
 """API contract tests for durable Inbox processing jobs and policy."""
 
 import asyncio
+import sqlite3
 import threading
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch
 
@@ -44,6 +46,7 @@ def test_processing_policy_defaults_to_manual(client: TestClient, empty_job_vaul
         "concurrency": 1,
         "max_retries": 2,
         "base_backoff_seconds": 2.0,
+        "stale_running_seconds": 1800.0,
     }
 
 
@@ -369,3 +372,88 @@ def test_legacy_process_all_rejects_any_running_job_before_mutation(
     untouched = capture_job_store(empty_job_vault).get(jobs[1]["id"])
     assert untouched is not None
     assert untouched.status == "queued"
+
+
+def _age_job_row(vault_root: Path, job_id: str, *, seconds: float) -> None:
+    """Backdate a job row's liveness timestamps, simulating a lost executor."""
+    store = capture_job_store(vault_root)
+    aged = (datetime.now(UTC) - timedelta(seconds=seconds)).isoformat()
+    with sqlite3.connect(store.db_path) as connection:
+        connection.execute(
+            "UPDATE capture_jobs SET started_at = ?, updated_at = ? WHERE id = ?",
+            (aged, aged, job_id),
+        )
+
+
+def test_processing_policy_patch_accepts_stale_running_seconds(
+    client: TestClient, empty_job_vault: Path, vault_manager
+) -> None:
+    response = client.patch(
+        "/api/captures/processing-policy",
+        json={"stale_running_seconds": 900},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["stale_running_seconds"] == 900.0
+    persisted = GlobalConfig.load(vault_manager.config_path()).capture_processing
+    assert persisted.stale_running_seconds == 900.0
+
+
+def test_cancel_allows_provably_stale_running_job(
+    client: TestClient, empty_job_vault: Path
+) -> None:
+    capture = _create_capture(client)["capture"]
+    job = client.post(
+        "/api/captures/jobs/enqueue", json={"capture_path": capture["file_path"]}
+    ).json()
+    store = capture_job_store(empty_job_vault)
+    assert store.claim_next() is not None
+    before = store.get(job["id"])
+    assert before is not None
+    assert before.status == "running"
+    _age_job_row(empty_job_vault, job["id"], seconds=7200)
+
+    response = client.post(f"/api/captures/jobs/{job['id']}/cancel")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "cancelled"
+    assert response.json()["error"] == "Cancelled by user"
+    # The stale cancellation stays compatible with the snapshot machinery.
+    restored = store.restore_cancelled(before)
+    assert restored.status == "running"
+    assert store.get(job["id"]) == before
+
+
+def test_jobs_list_reclaims_stale_running_and_process_can_reserve_again(
+    client: TestClient, empty_job_vault: Path
+) -> None:
+    capture = _create_capture(client)["capture"]
+    job = client.post(
+        "/api/captures/jobs/enqueue", json={"capture_path": capture["file_path"]}
+    ).json()
+    store = capture_job_store(empty_job_vault)
+    assert store.claim_next() is not None
+    _age_job_row(empty_job_vault, job["id"], seconds=7200)
+
+    jobs = client.get("/api/captures/jobs").json()
+
+    assert [item["id"] for item in jobs] == [job["id"]]
+    assert jobs[0]["status"] == "retrying"
+    assert "no liveness" in jobs[0]["error"]
+
+    # The same capture no longer conflicts: /process reserves and finalizes it.
+    with (
+        patch("agents.loom.weaver.get_weaver", return_value=object()),
+        patch(
+            "agents.runner.AgentRunner.run_pipeline",
+            side_effect=RuntimeError("pipeline exploded"),
+        ),
+    ):
+        response = client.post("/api/captures/process", json={"capture_path": capture["file_path"]})
+
+    assert response.status_code == 200
+    assert response.json()["outcome"] == "failed"
+    assert "pipeline exploded" in response.json()["error"]
+    final = store.get(job["id"])
+    assert final is not None
+    assert final.status == "failed"

@@ -162,6 +162,7 @@ class CaptureProcessingPatch(BaseModel):
     concurrency: int | None = Field(default=None, ge=1, le=8)
     max_retries: int | None = Field(default=None, ge=0, le=10)
     base_backoff_seconds: float | None = Field(default=None, ge=0.1, le=3600.0)
+    stale_running_seconds: float | None = Field(default=None, ge=60.0, le=86400.0)
 
 
 class SkipCaptureRequest(BaseModel):
@@ -813,8 +814,19 @@ def list_capture_jobs(
     limit: int = Query(default=200, ge=1, le=1000),
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> list[CaptureJob]:
-    """Return active jobs first, then recent terminal outcomes."""
-    return capture_job_store(vm.active_vault_dir()).list_jobs(status=status, limit=limit)
+    """Return active jobs first, then recent terminal outcomes.
+
+    This read doubles as the Inbox's self-healing sweep: a ``running`` row
+    with no liveness past the configured cutoff has lost its executor
+    (crashed request, dead worker), so it is reclaimed before listing
+    instead of spinning in the UI forever. One cheap guarded UPDATE.
+    """
+    vault_root = vm.active_vault_dir()
+    store = capture_job_store(vault_root)
+    policy = _capture_processing_policy(vm)
+    if store.reclaim_stale_running(stale_after_seconds=policy.stale_running_seconds):
+        publish_job_change()
+    return store.list_jobs(status=status, limit=limit)
 
 
 @router.post("/jobs/enqueue")
@@ -950,13 +962,24 @@ async def cancel_capture_job(
     job_id: str,
     vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
 ) -> CaptureJob:
-    """Cancel a queued/retrying job without touching its Inbox capture."""
+    """Cancel a queued/retrying job without touching its Inbox capture.
+
+    A ``running`` job can also be cancelled once it is provably stale (no
+    liveness past the configured cutoff): its executor is gone, so the
+    cancellation goes through the same terminal transition as pending work.
+    Fresh running jobs keep their 409 — a live worker owns them.
+    """
     vault_root = vm.active_vault_dir().resolve()
+    policy = _capture_processing_policy(vm)
     service = get_capture_job_service()
     try:
         async with service.operation_guard(vault_root):
             store = capture_job_store(vault_root)
-            job = await asyncio.to_thread(store.cancel, job_id)
+            job = await asyncio.to_thread(
+                store.cancel,
+                job_id,
+                stale_after_seconds=policy.stale_running_seconds,
+            )
     except CaptureJobNotFoundError as exc:
         raise HTTPException(status_code=404, detail=f"Capture job not found: {job_id}") from exc
     except (CaptureJobConflictError, CaptureJobsBusyError) as exc:
@@ -1175,7 +1198,11 @@ async def process_capture(
         response,
         capture_metadata_changed=capture_metadata_changed,
     )
-    await _finish_reserved_job(reservation, _job_execution_from_process_result(response))
+    # Shield the final durable write: a client disconnect delivered at this
+    # await must not tear down the finish and strand the reservation.
+    await asyncio.shield(
+        _finish_reserved_job(reservation, _job_execution_from_process_result(response))
+    )
     return response
 
 
@@ -1472,7 +1499,8 @@ async def commit_capture(
     )
     publish_capture_change()
     publish_note_change()
-    await _finish_reserved_job(reservation, job_result)
+    # Shield the final durable write so a disconnect cannot strand the row.
+    await asyncio.shield(_finish_reserved_job(reservation, job_result))
     return response
 
 
@@ -1598,7 +1626,10 @@ async def process_all_captures(
             response,
             capture_metadata_changed=capture_metadata_changed,
         )
-        await _finish_reserved_job(reservation, _job_execution_from_process_result(response))
+        # Shield the final durable write so a disconnect cannot strand the row.
+        await asyncio.shield(
+            _finish_reserved_job(reservation, _job_execution_from_process_result(response))
+        )
         results.append(response)
 
     outcome_counts = {

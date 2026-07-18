@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pytest
 
-from core.config import GlobalConfig, ProviderConfig, VaultConfig
+from core.config import CaptureProcessingConfig, GlobalConfig, ProviderConfig, VaultConfig
 
 
 class TestSchemaVersion:
@@ -135,3 +135,22 @@ def test_provider_config_unaffected_by_expansion_when_no_markers() -> None:
     """A ProviderConfig built directly is unchanged (sanity check)."""
     provider = ProviderConfig(api_key="direct", chat_model="gpt-4o")
     assert provider.api_key == "direct"
+
+
+class TestCaptureProcessingStaleTimeout:
+    """``stale_running_seconds`` defaults to 1800 and loads from config.yaml."""
+
+    def test_default(self) -> None:
+        assert CaptureProcessingConfig().stale_running_seconds == 1800.0
+
+    def test_default_when_absent_from_yaml(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.yaml"
+        path.write_text("capture_processing:\n  mode: trusted\n")
+        cfg = GlobalConfig.load(path)
+        assert cfg.capture_processing.stale_running_seconds == 1800.0
+
+    def test_yaml_override(self, tmp_path: Path) -> None:
+        path = tmp_path / "config.yaml"
+        path.write_text("capture_processing:\n  stale_running_seconds: 900\n")
+        cfg = GlobalConfig.load(path)
+        assert cfg.capture_processing.stale_running_seconds == 900.0

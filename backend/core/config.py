@@ -27,7 +27,7 @@ from pathlib import Path
 from typing import Any, Literal, Self
 
 import yaml
-from pydantic import BaseModel, Field, field_validator
+from pydantic import AliasChoices, BaseModel, Field, field_validator
 from pydantic_settings import BaseSettings
 
 from core.hardware import HardwareProfile
@@ -95,6 +95,11 @@ class LoomSettings(BaseSettings):
 
     loom_home: Path = Field(
         default=Path.home() / ".loom",
+        # The class env_prefix would derive LOOM_LOOM_HOME; every deployment
+        # doc and the Docker image set LOOM_HOME, so name it explicitly.
+        # LOOM_LOOM_HOME stays accepted for anyone who discovered the derived
+        # name in the wild.
+        validation_alias=AliasChoices("LOOM_HOME", "LOOM_LOOM_HOME"),
         description="Root directory for all Loom data",
     )
     active_vault: str = Field(
@@ -176,7 +181,7 @@ class LoomSettings(BaseSettings):
         """Path to the global config.yaml."""
         return self.loom_home / "config.yaml"
 
-    model_config = {"env_prefix": "LOOM_"}
+    model_config = {"env_prefix": "LOOM_", "populate_by_name": True}
 
 
 settings = LoomSettings()

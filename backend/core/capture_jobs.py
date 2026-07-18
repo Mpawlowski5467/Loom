@@ -640,6 +640,14 @@ class CaptureJobStore:
         The durable ``running`` row makes worker claims, retries, and active
         vault switches observe the in-flight operation just like background
         work. A crash is recovered by the normal startup recovery path.
+
+        ``attempts`` deliberately counts worker claims only — it is the
+        background retry budget that :meth:`fail_or_retry` and
+        :meth:`recover_interrupted` compare against ``max_attempts``. A
+        synchronous reservation must not consume that budget: each manual
+        ``/process`` call would otherwise inflate the counter and a later
+        background retry could go terminal on its first transient failure
+        with zero backoff retries.
         """
         stored_path = self._stored_path(capture_path)
         now = _iso()
@@ -656,7 +664,7 @@ class CaptureJobStore:
                         id, capture_id, capture_path, source, status, attempts,
                         max_attempts, next_attempt_at, created_at, updated_at,
                         started_at
-                    ) VALUES (?, ?, ?, ?, 'running', 1, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, 'running', 0, ?, ?, ?, ?, ?)
                     """,
                     (
                         job_id,
@@ -681,8 +689,8 @@ class CaptureJobStore:
                 """
                 UPDATE capture_jobs
                    SET capture_path = ?, source = ?, status = 'running',
-                       outcome = NULL, attempts = attempts + 1,
-                       max_attempts = ?, recovery_extensions = 0,
+                       outcome = NULL, max_attempts = ?,
+                       recovery_extensions = 0,
                        next_attempt_at = ?, error = '',
                        note_id = '', note_title = '', note_type = '',
                        target_path = '', updated_at = ?, started_at = ?,

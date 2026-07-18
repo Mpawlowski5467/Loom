@@ -44,10 +44,17 @@ ENV PYTHONUNBUFFERED=1 \
     # baked in below.
     LOOM_DEMO_VAULT_DIR=/app/examples/demo-vault
 
-# Install the backend. Copy the package config first for layer caching.
-COPY backend/pyproject.toml ./
+# Install the pinned third-party dependencies first: requirements.lock changes
+# far less often than the source tree, so this expensive layer actually stays
+# cached across code-only edits. The lock is regenerated from a venv where the
+# full test suite passes (see backend/pyproject.toml).
+COPY backend/requirements.lock ./
+RUN pip install --upgrade pip && pip install -r requirements.lock
+
+# Then install the project itself without re-resolving dependencies — the
+# locked pins above are the single source of truth for its runtime deps.
 COPY backend/ ./
-RUN pip install --upgrade pip && pip install .
+RUN pip install --no-deps .
 
 # Drop the built SPA where the backend looks for it (api/main.py → ../static).
 COPY --from=frontend /app/frontend/dist ./static
@@ -64,8 +71,12 @@ USER loom
 
 EXPOSE 8000
 
-# Container-level healthcheck hits the readiness probe.
+# Container-level healthcheck hits the readiness probe (not liveness): it
+# reports unhealthy until the app is genuinely ready to serve real work —
+# i.e. after first-run onboarding scaffolds a vault and the index/agents/
+# watcher come up. A fresh, pre-onboarding container correctly reads
+# "unhealthy"; nothing restarts on that signal (restart policy is exit-based).
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health').status==200 else 1)" || exit 1
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/ready').status==200 else 1)" || exit 1
 
 CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]

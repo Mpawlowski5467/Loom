@@ -348,6 +348,13 @@ Your notes persist in the `loom-data` Docker volume across restarts and
 rebuilds. To keep them as plain Markdown files on your machine instead, swap the
 volume for a bind mount (see the commented line in `docker-compose.yml`).
 
+`docker compose up` starts only the app container. The optional Redis
+(response cache) and Postgres (trace mirror) services are opt-in: run
+`docker compose --profile full up` and set `LOOM_REDIS_URL` /
+`LOOM_DATABASE_URL` in `.env` (ready-made values are commented in
+`.env.example`). Unset, both stay disabled and Loom is byte-identical without
+them.
+
 > **Note:** Provider API keys are encrypted at rest in `config.yaml` (Fernet, under
 > a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth against
 > casual disclosure of the config file, not a substitute for auth, and with no

@@ -99,13 +99,21 @@ jobs:
         run: |
           docker run -d --name loom-ci -p 8000:8000 loom:ci
           # Wait for the app to start serving (lifespan init can take a moment).
+          # Poll the READINESS probe, not liveness: a cold, keyless CI container
+          # answers 503 (the indexer needs an embed provider; watcher/chat come
+          # up with an onboarded vault). That is the correct cold-start signal,
+          # so the loop waits for any HTTP answer rather than a 200.
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/api/health >/dev/null 2>&1; then
-              echo "API is up"; break
+            if curl -sS -o /dev/null http://localhost:8000/api/ready 2>/dev/null; then
+              echo "Readiness probe is answering"; break
             fi
             sleep 2
           done
-          curl -fsS http://localhost:8000/api/health
+          # The probe must return its structured readiness report — an "ok"
+          # verdict plus per-component states. What must never happen is no
+          # answer at all or a non-JSON error page.
+          curl -sS http://localhost:8000/api/ready | tee /tmp/ready.json | grep -q '"ok"'
+          grep -q '"components"' /tmp/ready.json
           # The SPA shell must be served at the root.
           curl -fsS http://localhost:8000/ | grep -q '<div id="root">'
           docker rm -f loom-ci

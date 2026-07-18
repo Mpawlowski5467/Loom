@@ -175,6 +175,7 @@ export interface CaptureProcessingPolicy {
   concurrency: number;
   max_retries: number;
   base_backoff_seconds: number;
+  stale_running_seconds: number;
 }
 
 export interface CaptureProcessingPolicyUpdate {
@@ -183,6 +184,7 @@ export interface CaptureProcessingPolicyUpdate {
   concurrency?: number;
   max_retries?: number;
   base_backoff_seconds?: number;
+  stale_running_seconds?: number;
 }
 
 export function getCaptureProcessingPolicy(

@@ -337,6 +337,7 @@ describe("capture processing jobs", () => {
       concurrency: 2,
       max_retries: 3,
       base_backoff_seconds: 5,
+      stale_running_seconds: 1800,
     };
     const getSpy = vi.spyOn(apiClient, "get").mockResolvedValue(policy);
     const patchSpy = vi.spyOn(apiClient, "patch").mockResolvedValue(policy);

@@ -7,12 +7,14 @@ Generates ~80 interconnected notes with dense wikilinks so the graph
 looks realistic at scale.
 """
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from random import randint
 
-LOOM_HOME = Path.home() / ".loom"
+# Vault root: $LOOM_HOME when set (mirrors the backend setting), else ~/.loom.
+LOOM_HOME = Path(os.environ.get("LOOM_HOME", Path.home() / ".loom"))
 NOW = datetime.now()
 
 

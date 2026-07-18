@@ -7,12 +7,14 @@ Defaults to the 'default' vault. Creates ~25 interconnected notes
 across all note types with realistic wikilinks.
 """
 
+import os
 import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from random import randint
 
-LOOM_HOME = Path.home() / ".loom"
+# Vault root: $LOOM_HOME when set (mirrors the backend setting), else ~/.loom.
+LOOM_HOME = Path(os.environ.get("LOOM_HOME", Path.home() / ".loom"))
 
 
 def vault_dir(name: str) -> Path:

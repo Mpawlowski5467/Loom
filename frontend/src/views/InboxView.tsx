@@ -23,6 +23,7 @@ import {
 } from "../api/captures";
 import { backendNoteToFrontend, titleMapFromNotes } from "../api/notes";
 import { ApiError } from "../api/client";
+import { readDemoMode } from "../data/demoMode";
 import type { Capture, CaptureOutcome } from "../data/types";
 
 const DEFAULT_PROCESSING_POLICY: CaptureProcessingPolicy = {
@@ -35,24 +36,6 @@ const DEFAULT_PROCESSING_POLICY: CaptureProcessingPolicy = {
 
 function isDemoCapture(capture: Capture): boolean {
   return !capture.filePath && Boolean(capture.suggestion);
-}
-
-function readDemoMode(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const queryValue = new URLSearchParams(window.location.search).get("demo");
-    if (queryValue === "1") {
-      window.localStorage.setItem("loom.demoMode", "1");
-      return true;
-    }
-    if (queryValue === "0") {
-      window.localStorage.removeItem("loom.demoMode");
-      return false;
-    }
-    return window.localStorage.getItem("loom.demoMode") === "1";
-  } catch {
-    return false;
-  }
 }
 
 function outcomeOf(result: ProcessResult | CommitResult): CaptureOutcome {
@@ -191,8 +174,10 @@ export function InboxView(): ReactNode {
     );
   }, [captures, search]);
 
-  const selected =
-    captures.find((c) => c.id === selectedCaptureId) ?? captures[0];
+  // No fallback to captures[0]: a cleared/absent selection renders the
+  // detail-less state rather than force-selecting (and previewing) a capture
+  // the user never picked.
+  const selected = captures.find((c) => c.id === selectedCaptureId);
   const selectedJob = selected ? jobForCapture(selected) : undefined;
   const selectedDraftNoteId = selected
     ? (draftNoteIds[selected.id] ??

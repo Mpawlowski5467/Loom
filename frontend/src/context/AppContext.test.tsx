@@ -1,7 +1,8 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { streamCouncilMessage } from "../api/chat";
 import type { AppContextValue } from "./app-ctx";
 import type { UseLoomConfigResult } from "./useLoomConfig";
 import { AppProvider } from "./AppContext";
@@ -48,6 +49,7 @@ vi.mock("../api/chat", () => ({
 }));
 vi.mock("../api/events", () => ({
   subscribeVaultEvents: vi.fn(() => () => {}),
+  subscribeEventDomains: vi.fn(() => () => {}),
 }));
 vi.mock("../api/agentsRegistry", () => ({
   listAgentRegistry: vi.fn(() => Promise.resolve([])),
@@ -170,5 +172,100 @@ describe("AppContext", () => {
     // The value reference must change when a real dependency (tab) changes,
     // otherwise the memo would be stale.
     expect(seen[0]).not.toBe(seen[seen.length - 1]);
+  });
+});
+
+describe("AppContext — persistence", () => {
+  it("debounces graphDisplay writes to localStorage instead of writing per input event", () => {
+    // Synchronous body + fireEvent: fake timers and userEvent's async delays
+    // don't mix. The finally always runs, so real timers can't leak.
+    vi.useFakeTimers();
+    const setSpy = vi.spyOn(Storage.prototype, "setItem");
+    try {
+      function Probe(): ReactNode {
+        const { setGraphDisplay } = useApp();
+        return (
+          <button onClick={() => setGraphDisplay({ labelSize: 13 })}>
+            slide
+          </button>
+        );
+      }
+      render(
+        <AppProvider>
+          <Probe />
+        </AppProvider>,
+      );
+      const displayWrites = () =>
+        setSpy.mock.calls.filter((c) => c[0] === "loom.graphDisplay").length;
+
+      fireEvent.click(screen.getByRole("button", { name: "slide" }));
+
+      // Nothing persisted synchronously on the input event…
+      expect(displayWrites()).toBe(0);
+      // …the settled state is written once the burst quiets down.
+      act(() => {
+        vi.advanceTimersByTime(300);
+      });
+      expect(displayWrites()).toBe(1);
+    } finally {
+      setSpy.mockRestore();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe("AppContext — council streams", () => {
+  it("clears the pending bubble owned by an aborted (superseded) stream", async () => {
+    // Every stream hangs until its AbortController fires, then rejects with
+    // the AbortError a cancelled SSE fetch would raise.
+    vi.mocked(streamCouncilMessage).mockImplementation(
+      (_message, options) =>
+        new Promise<void>((_resolve, reject) => {
+          options.signal?.addEventListener("abort", () =>
+            reject(new DOMException("The operation was aborted.", "AbortError")),
+          );
+        }),
+    );
+
+    function Probe(): ReactNode {
+      const { council, postCouncilMessage } = useApp();
+      return (
+        <>
+          <div data-testid="bubbles">
+            {council
+              .map((m) => `${m.who}:${m.pending ? "pending" : "settled"}:${m.body}`)
+              .join("|")}
+          </div>
+          <button onClick={() => void postCouncilMessage("hi")}>send</button>
+        </>
+      );
+    }
+
+    const user = userEvent.setup();
+    render(
+      <AppProvider>
+        <Probe />
+      </AppProvider>,
+    );
+
+    // First send: one pending reply bubble appears.
+    await user.click(screen.getByRole("button", { name: "send" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("bubbles").textContent).toContain(
+        "agent:council:pending:",
+      ),
+    );
+
+    // Second send supersedes: it aborts the first stream. The aborted
+    // stream's bubble must not stay pending forever.
+    await user.click(screen.getByRole("button", { name: "send" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("bubbles").textContent).toContain("⚠ Cancelled"),
+    );
+
+    // Exactly one pending bubble remains — the live stream's. The ghost is gone.
+    const text = screen.getByTestId("bubbles").textContent ?? "";
+    expect(text.match(/pending/g)).toHaveLength(1);
+    expect(text).toContain("agent:council:settled:⚠ Cancelled");
   });
 });

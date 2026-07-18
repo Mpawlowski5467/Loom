@@ -22,6 +22,7 @@ import {
   type GraphFixtureSize,
 } from "../data/graphFixtures";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
+import { readDemoMode } from "../data/demoMode";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
 import {
@@ -37,6 +38,11 @@ import { useVaultContent } from "./useVaultContent";
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
 const TREE_VISIBLE_KEY = "loom.treeVisible";
+/** Display sliders / filter toggles stream changes; persist the settled value
+ * rather than stringifying + writing on every input event. A trailing write
+ * pending at unmount is dropped — the previous settled value is already
+ * persisted, so at worst the last few hundred ms of movement is lost. */
+const PERSIST_DEBOUNCE_MS = 300;
 
 function loadTreeVisible(): boolean {
   if (typeof window === "undefined") return true;
@@ -62,35 +68,9 @@ function loadGraphFilters(): Set<NodeType> {
   }
 }
 
-/**
- * Demo data toggle — OFF by default so a fresh visit shows the new-user UI.
- * Enable for screenshots / dev by appending ``?demo=1`` to the URL; the
- * preference is persisted to ``localStorage["loom.demoMode"]`` so it
- * survives reloads until the user opts out with ``?demo=0``.
- */
-const DEMO_LS_KEY = "loom.demoMode";
-
 function readGraphFixture(): GraphFixtureSize | null {
   if (!import.meta.env.DEV || typeof window === "undefined") return null;
   return parseGraphFixture(window.location.search);
-}
-
-function readDemoMode(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    const qs = new URLSearchParams(window.location.search).get("demo");
-    if (qs === "1") {
-      window.localStorage.setItem(DEMO_LS_KEY, "1");
-      return true;
-    }
-    if (qs === "0") {
-      window.localStorage.removeItem(DEMO_LS_KEY);
-      return false;
-    }
-    return window.localStorage.getItem(DEMO_LS_KEY) === "1";
-  } catch {
-    return false;
-  }
 }
 
 function clamp(value: number, min: number, max: number): number {
@@ -238,14 +218,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
   useEffect(() => {
     if (graphFixture !== null || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        GRAPH_FILTERS_KEY,
-        JSON.stringify([...graphFilters]),
-      );
-    } catch {
-      // ignore quota / serialization failures
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          GRAPH_FILTERS_KEY,
+          JSON.stringify([...graphFilters]),
+        );
+      } catch {
+        // ignore quota / serialization failures
+      }
+    }, PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
   }, [graphFilters, graphFixture]);
 
   const [graphDisplay, setGraphDisplayState] = useState<GraphDisplay>(() =>
@@ -308,14 +291,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
   useEffect(() => {
     if (graphFixture !== null || typeof window === "undefined") return;
-    try {
-      window.localStorage.setItem(
-        GRAPH_DISPLAY_KEY,
-        JSON.stringify(graphDisplay),
-      );
-    } catch {
-      // ignore quota / serialization failures
-    }
+    const timer = window.setTimeout(() => {
+      try {
+        window.localStorage.setItem(
+          GRAPH_DISPLAY_KEY,
+          JSON.stringify(graphDisplay),
+        );
+      } catch {
+        // ignore quota / serialization failures
+      }
+    }, PERSIST_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
   }, [graphDisplay, graphFixture]);
 
   const [primaryOpen, setPrimaryOpen] = useState(true);
@@ -592,9 +578,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       // ``done`` event (e.g. network drop mid-response).
       updateReply((m) => (m.pending ? { pending: false } : {}));
     } catch (err) {
-      // An abort is a deliberate supersede/unmount, not a failure — leave the
-      // bubble as-is (the newer send owns the UI now).
-      if ((err as DOMException)?.name === "AbortError") return;
+      // An abort is a deliberate supersede/unmount, not a failure. The aborted
+      // stream still owns its reply bubble (the newer send has its own id), so
+      // clear the spinner here — otherwise the bubble stays pending forever.
+      if ((err as DOMException)?.name === "AbortError") {
+        updateReply((m) =>
+          m.body.trim().length > 0
+            ? { pending: false }
+            : { pending: false, body: "⚠ Cancelled" },
+        );
+        return;
+      }
       updateReply({
         body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
         pending: false,

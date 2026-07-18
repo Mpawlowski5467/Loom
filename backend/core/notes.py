@@ -3,6 +3,7 @@
 import os
 import re
 import secrets
+import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -10,7 +11,10 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, Field
 
-_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---\s*\n", re.DOTALL)
+# The closing fence tolerates end-of-string: a note whose final byte is the
+# closing ``---`` (no trailing newline) must still parse its frontmatter —
+# otherwise the note silently gets empty meta (id="" → invisible to NoteIndex).
+_FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---(?:\s*\n|\s*$)", re.DOTALL)
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
 
@@ -183,17 +187,33 @@ def atomic_write_text(
 ) -> None:
     """Write ``content`` to ``path`` atomically.
 
-    Writes to a temp file in the same directory then ``os.replace``s it onto
-    ``path``. This prevents readers (e.g. the file watcher's indexer) from
-    observing partially-written content during concurrent edits.
+    Writes to a uniquely-named temp file in the same directory (``mkstemp``,
+    so concurrent same-path writers can never interleave on a shared staging
+    name), fsyncs it, then ``os.replace``s it onto ``path``. This prevents
+    readers (e.g. the file watcher's indexer) from observing partially-written
+    content during concurrent edits. The staged file is always cleaned up on
+    failure.
 
     If ``mark_graph_dirty`` is True (default) and the path is inside a Loom
     vault (recognised by the presence of a ``.loom`` directory above it),
     the graph dirty-flag is set so the next graph read rebuilds.
     """
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(content, encoding=encoding)
-    os.replace(tmp, path)
+    fd, raw_tmp = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f".{path.name}.",
+        suffix=".tmp",
+    )
+    tmp = Path(raw_tmp)
+    try:
+        with os.fdopen(fd, "w", encoding=encoding) as handle:
+            handle.write(content)
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.replace(tmp, path)
+    finally:
+        # On success the rename already consumed the temp path; on failure make
+        # sure the staged file doesn't linger next to the destination.
+        tmp.unlink(missing_ok=True)
 
     if mark_graph_dirty:
         loom_dir = _find_loom_dir(path)

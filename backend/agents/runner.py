@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from typing import TYPE_CHECKING, Any
 
 from agents.loom.archivist import get_archivist
@@ -22,6 +23,14 @@ if TYPE_CHECKING:
     from core.notes import Note
 
 logger = logging.getLogger(__name__)
+
+# Custom-agent ids flow straight into filesystem paths (``agents/<id>/``,
+# ``.loom/changelog/<id>/``, capture filename prefixes), so only the slug
+# shape the registry itself generates (``api/routers/agents_registry.py``:
+# lowercase alnum runs joined by single hyphens) is accepted. Anything else —
+# notably ``..`` or path separators from a hand-edited ``agents.yaml`` — is
+# refused before it can traverse outside the vault.
+_CUSTOM_AGENT_ID_RE = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 
 
 class PipelineResult:
@@ -366,6 +375,12 @@ class AgentRunner:
     def _lookup_custom_record(self, agent_name: str) -> dict[str, Any] | None:
         """Find a custom agent by id in ``agents.yaml`` next to vault.yaml."""
         import yaml
+
+        if not _CUSTOM_AGENT_ID_RE.fullmatch(agent_name):
+            # An id that isn't the registry's slug shape would become a path
+            # outside the vault (agents/<id>/, changelog, capture prefixes).
+            logger.warning("Refusing custom-agent lookup with unsafe id %r", agent_name)
+            return None
 
         agents_file = self._vault_root / "agents.yaml"
         if not agents_file.exists():

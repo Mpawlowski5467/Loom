@@ -370,10 +370,10 @@ Configurable per agent with the read chain as the non-negotiable baseline:
 ### 4.9 Coordination
 
 Agents coordinate through two mechanisms:
-- **Pipelines** for complex workflows: capture arrives → Weaver creates note → Spider links it → Scribe updates index → Sentinel validates
+- **Pipelines** for complex workflows: capture arrives → Weaver creates note → Sentinel validates → Spider links it → Scribe updates index → enforce
 - **Event-driven** for real-time reactions: file modified → re-index, new capture detected → trigger Weaver
 
-The pipeline is implemented as a **LangGraph `StateGraph`** (`agents/loom/pipeline_graph.py`): `weaver → spider → scribe → sentinel → enforce`, with conditional edges that short-circuit an empty capture and loop back to Weaver once on a `failed` Sentinel verdict before enforcing. `AgentRunner.run_pipeline` drives the graph and `POST /api/captures/process` calls it. The Shuttle agents (Researcher, Standup) are graphs too. Nodes wrap the existing agent methods and call Loom's own provider layer — LangGraph orchestrates; no LangChain models are used. Each run is recorded step-by-step for the **Runs** observability view (§ Tracing).
+The pipeline is implemented as a **LangGraph `StateGraph`** (`agents/loom/pipeline_graph.py`): `weaver → sentinel → spider → scribe → enforce`, with conditional edges that short-circuit an empty capture and loop back to Weaver once on a `failed` Sentinel verdict before enforcing. Spider and Scribe run only on a `passed`/`warning` verdict; a terminal `failed`/`unavailable` verdict routes straight to `enforce`. `AgentRunner.run_pipeline` drives the graph and `POST /api/captures/process` calls it. The Shuttle agents (Researcher, Standup) are graphs too. Nodes wrap the existing agent methods and call Loom's own provider layer — LangGraph orchestrates; no LangChain models are used. Each run is recorded step-by-step for the **Runs** observability view (§ Tracing).
 
 ### 4.10 Custom Agents
 

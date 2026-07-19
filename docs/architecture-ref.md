@@ -82,7 +82,7 @@ retry/cancel, and safe terminal-row retention.
 
 Multi-step agent work runs as **LangGraph `StateGraph`s**, not imperative call chains:
 
-- **Capture pipeline** (`agents/loom/pipeline_graph.py`): `weaver → spider → scribe → sentinel → enforce`. Conditional edges short-circuit to `END` on an empty capture and loop back to Weaver once on a `failed` Sentinel verdict (regenerate → re-validate, then enforce regardless). `AgentRunner.run_pipeline` drives it; `POST /api/captures/process` calls that.
+- **Capture pipeline** (`agents/loom/pipeline_graph.py`): `weaver → sentinel → spider → scribe → enforce`. Conditional edges short-circuit to `END` on an empty capture and loop back to Weaver once on a `failed` Sentinel verdict (regenerate → re-validate, then enforce regardless). Spider/Scribe run only on a `passed`/`warning` verdict; a terminal `failed`/`unavailable` verdict goes straight to `enforce`. `AgentRunner.run_pipeline` drives it; `POST /api/captures/process` calls that.
 - **Shuttle graphs** (`agents/shuttle/researcher_graph.py`, `standup_graph.py`): Researcher = `search → synthesize → save`; Standup = `collect → (conditional) → generate/skip → save`.
 - **Standup automation** (`core/standup_scheduler.py`, `bridge/calendar.py`): active-vault daily schedule with durable attempts, local timezone, private encrypted iCalendar feed, recurrence expansion, optional event captures, and Calendar-enriched Standup context.
 

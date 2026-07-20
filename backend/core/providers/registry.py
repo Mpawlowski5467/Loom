@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import logging
 import time
@@ -197,6 +198,29 @@ class ProviderRegistry:
             if hasattr(provider, "close"):
                 await provider.close()
 
+    def retire(self) -> None:
+        """Hand cached providers to a reaper that closes them once idle.
+
+        A settings save must not amputate in-flight work: agents and graph
+        nodes hold provider references across steps, so closing the old httpx
+        clients under a running pipeline kills it mid-request (#28). Retired
+        providers keep serving their existing holders; each is closed only
+        after its calls have drained and it has seen no new call for
+        ``_RETIRE_QUIESCENCE_S``.
+        """
+        for provider in self._providers.values():
+            if isinstance(provider, TracedProvider):
+                _spawn_reaper(provider)
+            elif hasattr(provider, "close"):
+                # Registry providers are always TracedProvider-wrapped; this is
+                # a defensive fallback that preserves the old immediate close.
+                with contextlib.suppress(Exception):
+                    close = provider.close
+                    if asyncio.iscoroutinefunction(close):
+                        _spawn_task(close())
+                    else:
+                        close()
+
     def _default_name(self) -> str:
         return settings.default_provider
 
@@ -206,6 +230,25 @@ class ProviderRegistry:
 # ---------------------------------------------------------------------------
 
 _registry: ProviderRegistry | None = None
+
+# How long a retired provider must go without a call before the reaper closes
+# it. Covers the gaps between a pipeline's steps; runs on a retired provider
+# only continue for the remainder of the current run.
+_RETIRE_QUIESCENCE_S = 60.0
+_REAPER_POLL_S = 1.0
+
+# Strong refs for fire-and-forget reaper tasks so the GC can't collect them.
+_reaper_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _spawn_task(coro: Any) -> None:
+    task = asyncio.create_task(coro)
+    _reaper_tasks.add(task)
+    task.add_done_callback(_reaper_tasks.discard)
+
+
+def _spawn_reaper(provider: TracedProvider) -> None:
+    _spawn_task(provider.retire_when_idle(_RETIRE_QUIESCENCE_S, _REAPER_POLL_S))
 
 
 def get_registry() -> ProviderRegistry:
@@ -220,14 +263,13 @@ def get_registry() -> ProviderRegistry:
 async def reset_registry() -> None:
     """Force re-creation of the registry (useful after config changes).
 
-    Closes any provider clients first so we don't leak httpx connections.
-    Best-effort: any close failure is swallowed so the registry slot
-    is always cleared.
+    The old registry's providers are retired, not closed outright: in-flight
+    pipelines keep working against them and a reaper closes each client once
+    it drains (#28). New calls build fresh providers from the new config.
     """
     global _registry
     if _registry is not None:
-        with contextlib.suppress(Exception):
-            await _registry.close()
+        _registry.retire()
     _registry = None
 
 
@@ -280,6 +322,41 @@ class TracedProvider(BaseProvider):
     def __init__(self, inner: BaseProvider, provider_name: str = "") -> None:
         self._inner = inner
         self._provider_name = provider_name or getattr(inner, "name", inner.__class__.__name__)
+        # In-flight bookkeeping for retire(): a registry reset must not close
+        # this provider's httpx client while a call is running, or while a
+        # pipeline might still issue its next step's call (#28).
+        self._inflight = 0
+        self._last_call_end = time.monotonic()
+
+    def _call_start(self) -> None:
+        self._inflight += 1
+
+    def _call_end(self) -> None:
+        self._inflight -= 1
+        self._last_call_end = time.monotonic()
+
+    async def retire_when_idle(self, quiescence_s: float, poll_s: float = 1.0) -> None:
+        """Close the wrapped provider after its calls drain and it stays idle.
+
+        Waits until no call is in flight AND no call has completed within
+        ``quiescence_s`` (covering the gap between a pipeline's steps), then
+        forwards ``close`` to the inner provider if it has one. Best-effort:
+        close failures are swallowed — retirement must never raise.
+        """
+        while True:
+            if self._inflight <= 0:
+                idle_for = time.monotonic() - self._last_call_end
+                if idle_for >= quiescence_s:
+                    break
+                await asyncio.sleep(min(quiescence_s - idle_for, poll_s))
+            else:
+                await asyncio.sleep(poll_s)
+        close = getattr(self._inner, "close", None)
+        if close is not None:
+            with contextlib.suppress(Exception):
+                result = close()
+                if asyncio.iscoroutine(result):
+                    await result
 
     def _should_retry(self) -> bool:
         """Whether this provider's transient failures should be retried here.
@@ -305,6 +382,7 @@ class TracedProvider(BaseProvider):
         pulsing = _agents_for_caller(caller)
         for a in pulsing:
             activity.begin(a)
+        self._call_start()
         try:
             if self._should_retry():
                 response_text = await with_retry(
@@ -317,6 +395,7 @@ class TracedProvider(BaseProvider):
             error_text = str(exc)
             raise
         finally:
+            self._call_end()
             for a in pulsing:
                 activity.end(a)
             self._record_trace(
@@ -346,6 +425,7 @@ class TracedProvider(BaseProvider):
         pulsing = _agents_for_caller(caller)
         for a in pulsing:
             activity.begin(a)
+        self._call_start()
 
         _DONE = object()
 
@@ -379,6 +459,7 @@ class TracedProvider(BaseProvider):
             error_text = str(exc)
             raise
         finally:
+            self._call_end()
             for a in pulsing:
                 activity.end(a)
             self._record_trace(
@@ -391,9 +472,13 @@ class TracedProvider(BaseProvider):
             )
 
     async def embed(self, text: str) -> list[float]:
-        if self._should_retry():
-            return await with_retry(lambda: self._inner.embed(text))
-        return await self._inner.embed(text)
+        self._call_start()
+        try:
+            if self._should_retry():
+                return await with_retry(lambda: self._inner.embed(text))
+            return await self._inner.embed(text)
+        finally:
+            self._call_end()
 
     # Pass-through -----------------------------------------------------------
 

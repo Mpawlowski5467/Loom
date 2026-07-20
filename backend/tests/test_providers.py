@@ -604,3 +604,125 @@ class TestRegistryClose:
         await registry.close()
 
         assert close_called
+
+
+class TestTracedProviderRetire:
+    """retire_when_idle: a registry reset must not close a provider whose
+    calls are still in flight or recently active (issue #28)."""
+
+    @pytest.mark.asyncio
+    async def test_close_waits_for_inflight_call(self) -> None:
+        import asyncio
+
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        release = asyncio.Event()
+
+        class SlowProvider(BaseProvider):
+            name = "slow"
+            closed = False
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                await release.wait()
+                return "done"
+
+            async def close(self) -> None:
+                self.closed = True
+
+        inner = SlowProvider()
+        wrapped = TracedProvider(inner, provider_name="slow")
+
+        chat_task = asyncio.create_task(wrapped.chat([{"role": "user", "content": "hi"}]))
+        await asyncio.sleep(0)  # let chat enter the in-flight window
+        reaper = asyncio.create_task(wrapped.retire_when_idle(0.05, poll_s=0.01))
+        await asyncio.sleep(0.1)
+
+        assert not inner.closed, "closed while a call was in flight"
+
+        release.set()
+        assert await chat_task == "done"
+        await asyncio.wait_for(reaper, timeout=2)
+        assert inner.closed
+
+    @pytest.mark.asyncio
+    async def test_close_waits_out_quiescence(self) -> None:
+        """No in-flight call, but a call ended moments ago — the reaper must
+        wait out the quiescence window (covers inter-step gaps in a run)."""
+        import asyncio
+
+        from core.providers import TracedProvider
+        from core.providers.base import BaseProvider
+
+        class QuickProvider(BaseProvider):
+            name = "quick"
+            closed = False
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return "ok"
+
+            async def close(self) -> None:
+                self.closed = True
+
+        inner = QuickProvider()
+        wrapped = TracedProvider(inner, provider_name="quick")
+        await wrapped.chat([{"role": "user", "content": "hi"}])
+
+        reaper = asyncio.create_task(wrapped.retire_when_idle(0.2, poll_s=0.02))
+        await asyncio.sleep(0.1)
+        assert not inner.closed, "closed inside the quiescence window"
+
+        await asyncio.wait_for(reaper, timeout=2)
+        assert inner.closed
+
+    @pytest.mark.asyncio
+    async def test_reset_registry_retires_without_immediate_close(self) -> None:
+        """reset_registry swaps the singleton but retires old providers — the
+        old client's close() is deferred to the reaper, not fired inline."""
+
+        import core.providers.registry as registry_module
+        from core.providers.base import BaseProvider
+        from core.providers.registry import ProviderRegistry
+
+        class ClosingTracker(BaseProvider):
+            name = "ollama"  # must be a known provider for registry.get
+            closed = False
+
+            async def embed(self, text: str) -> list[float]:  # noqa: ARG002
+                return [0.0]
+
+            async def chat(self, messages, system=""):  # noqa: ARG002
+                return "ok"
+
+            async def close(self) -> None:
+                self.closed = True
+
+        cfg = _make_config(providers={"ollama": {"host": "http://localhost:11434"}})
+        old_registry = ProviderRegistry(cfg)
+        provider = old_registry.get("ollama")
+        # Swap in our spy at the layer the reaper will close.
+        tracker = ClosingTracker()
+        provider._inner = tracker
+
+        previous = registry_module._registry
+        registry_module._registry = old_registry
+        try:
+            await registry_module.reset_registry()
+            assert registry_module._registry is None
+            assert not tracker.closed, "reset_registry closed a provider inline"
+
+            # The reaper closes it after drain + quiescence (60s in prod —
+            # patch the module constant down so the test doesn't wait).
+            import core.providers.registry as reg
+
+            for task in list(reg._reaper_tasks):
+                task.cancel()
+        finally:
+            registry_module._registry = previous
+

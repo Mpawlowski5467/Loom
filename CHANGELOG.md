@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-19
+
+Loom 1.1 — the automation-and-reliability release. Captures process through a
+durable, restart-safe job queue with a review lane; Standups run on a
+timezone-aware schedule enriched by a read-only iCalendar Bridge; vaults
+export/import with atomic rollback. A full live verification pass (real
+server, real local models) then hardened the seams it found: stalled-provider
+runs can no longer wedge a capture job, provider settings saves no longer kill
+in-flight pipelines, and Ollama chat streams internally so slow-but-steady
+local models — including reasoning models like deepseek-r1 — complete instead
+of timing out.
+
 ### Added
 - **Durable Inbox processing** — captures are processed through a per-vault
   SQLite job queue (`core/capture_jobs.py`) with bounded exponential-backoff
@@ -65,6 +77,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `LOOM_HOME` set by the Dockerfile and compose; the container wrote vaults to
   `~/.loom` instead of the mounted `/data` volume. The field now names
   `LOOM_HOME` explicitly (the derived name stays accepted).
+- **Stalled providers can no longer wedge a capture job** (#25, #26) — the
+  synchronous `/api/captures/process` now bounds the pipeline server-side
+  (900s); on timeout the durable job is finalized `failed` with a
+  retry-in-background hint instead of sitting in `running` until a restart.
+  Root cause: uvicorn does not cancel the request handler on client
+  disconnect, so an unbounded parked pipeline was unrecoverable in-process.
+- **Ollama chat streams internally** (#25) — with `stream=false` the whole
+  generation had to fit the 120s httpx read window, so slow local models
+  timed out mid-generation and reasoning models (deepseek-r1, thinking-mode
+  Qwen) never survived a pipeline. `chat()` now consumes the streaming
+  endpoint and assembles the answer (reasoning `thinking` chunks excluded);
+  the read timeout is a between-chunks stall detector again. Verified live:
+  deepseek-r1:32b completes a full capture pipeline.
+- **Provider settings saves no longer kill in-flight runs** (#28) —
+  `reset_registry()` retires instead of closing: a reaper closes each old
+  provider's httpx client only after its calls drain plus a 60s quiescence,
+  so an unrelated settings edit can't amputate a running pipeline with
+  "client has been closed".
+- **Watcher/Spider tolerate archived-mid-flight files** (#27) — a capture
+  enforce-archived between an fs event and the index attempt (or a stale
+  title-map entry mid-scan) is skipped quietly instead of logging a
+  `FileNotFoundError` and polluting the drift counter.
 
 ## [1.0.0] - 2026-06-21
 
@@ -242,7 +276,8 @@ layer — safe on localhost, do not expose the port as-is).
   in-app and in the README; OS-keychain support is not yet implemented.
 - No authentication on the API. Intended for local use only.
 
-[Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/Mpawlowski5467/Loom/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.4.0

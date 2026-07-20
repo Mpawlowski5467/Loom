@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "loom-backend"
-version = "1.0.0"
+version = "1.1.0"
 description = "Loom — local-first AI memory system"
 requires-python = ">=3.11"
 # Runtime ranges below express compatibility intent. The pinned set actually

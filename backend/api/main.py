@@ -185,7 +185,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         logger.warning("Provider registry close failed", exc_info=True)
 
 
-app = FastAPI(title="Loom", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Loom", version="1.1.0", lifespan=lifespan)
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)

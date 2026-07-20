@@ -653,6 +653,46 @@ class TestProcessCapture:
         assert item["validation"] == "failed"
         assert item["validation_reasons"] == ["Summary is missing"]
 
+    def test_process_capture_pipeline_timeout_finalizes_job(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """A stalled pipeline is bounded server-side (issue #26).
+
+        Uvicorn does not cancel the handler on client disconnect, so without
+        the timeout a parked pipeline leaves the durable job in `running`
+        indefinitely. With it, the job must be finalized as failed with a
+        clear error.
+        """
+        import asyncio
+
+        mock_runner = MagicMock()
+
+        async def _stall(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(60)
+
+        mock_runner.run_pipeline = _stall
+
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=MagicMock()),
+            patch("agents.runner.AgentRunner", return_value=mock_runner),
+            patch("api.routers.captures._PROCESS_PIPELINE_TIMEOUT_S", 0.05),
+        ):
+            resp = client.post(
+                "/api/captures/process",
+                json={"capture_path": "captures/raw-idea.md"},
+            )
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["processed"] is False
+        assert data["outcome"] == "failed"
+        assert "timed out" in data["error"]
+
+        jobs = client.get("/api/captures/jobs").json()
+        job = next(j for j in jobs if j["capture_path"].endswith("raw-idea.md"))
+        assert job["status"] == "failed"
+        assert "timed out" in job["error"]
+
 
 # ---------------------------------------------------------------------------
 # POST /api/captures/process-all

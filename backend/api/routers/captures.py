@@ -39,6 +39,15 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/captures", tags=["captures"])
 
+# Server-side bound on one synchronous pipeline run. Uvicorn does NOT cancel
+# the request handler when the client disconnects mid-run, so without this a
+# stalled provider (e.g. a local model timing out repeatedly) leaves the
+# durable job in `running` until restart recovery or the 30-min stale
+# reclaimer fires (#25/#26). 15 minutes is generous for slow local models —
+# the worst observed legit run was ~4 min — and a timeout cancels safely:
+# partial work is reconciled idempotently on the next attempt.
+_PROCESS_PIPELINE_TIMEOUT_S = 900.0
+
 CaptureOutcome = Literal["filed", "needs_review", "skipped", "failed"]
 
 
@@ -1164,7 +1173,12 @@ async def process_capture(
         # Drive the LangGraph capture pipeline (Weaver → Spider → Scribe →
         # Sentinel with a Sentinel-retry loop). Passing index.refresh_file keeps
         # the search index hot after each write, matching the old inline path.
-        result = await runner.run_pipeline(capture_path, refresh_index=index.refresh_file)
+        # Bounded: the client may already be gone (see the constant above);
+        # without a cap the job can sit in `running` indefinitely.
+        result = await asyncio.wait_for(
+            runner.run_pipeline(capture_path, refresh_index=index.refresh_file),
+            timeout=_PROCESS_PIPELINE_TIMEOUT_S,
+        )
         response = _pipeline_result_to_process_result(result)
         if response.outcome == "failed":
             capture_metadata_changed = await asyncio.to_thread(
@@ -1173,6 +1187,20 @@ async def process_capture(
                 capture_path,
                 response.error,
             )
+    except TimeoutError:
+        error = (
+            f"Processing timed out after {int(_PROCESS_PIPELINE_TIMEOUT_S)}s — "
+            "the provider is likely stalled (slow local model?); "
+            "retry processing in the background"
+        )
+        logger.warning("Capture processing timed out: %s", capture_path)
+        capture_metadata_changed = await asyncio.to_thread(
+            _persist_failed_attempt,
+            vm.active_vault_dir(),
+            capture_path,
+            error,
+        )
+        response = ProcessResult(processed=False, outcome="failed", error=error)
     except asyncio.CancelledError:
         await asyncio.shield(
             _finish_reserved_job(

@@ -726,3 +726,70 @@ class TestTracedProviderRetire:
         finally:
             registry_module._registry = previous
 
+
+class TestOllamaChatStreaming:
+    """chat() consumes the streaming endpoint so a slow local model keeps the
+    httpx read window as a between-chunks stall detector instead of a
+    whole-generation budget (issue #25)."""
+
+    @staticmethod
+    def _provider_with_transport(handler) -> OllamaProvider:
+        import httpx as _httpx
+
+        from core.providers.base import OllamaProviderConfig
+
+        provider = OllamaProvider(OllamaProviderConfig(host="http://localhost:11434"))
+        provider._client = _httpx.AsyncClient(
+            base_url="http://localhost:11434",
+            transport=_httpx.MockTransport(handler),
+        )
+        return provider
+
+    @pytest.mark.asyncio
+    async def test_chat_assembles_streamed_chunks(self) -> None:
+        import httpx as _httpx
+
+        def handler(request: _httpx.Request) -> _httpx.Response:
+            assert request.url.path == "/api/chat"
+            assert b'"stream": true' in request.read() or b'"stream":true' in request.read()
+            lines = (
+                '{"message": {"content": "Hello"}, "done": false}\n'
+                '{"message": {"content": ", world"}, "done": false}\n'
+                '{"message": {"content": "!"}, "done": true}\n'
+            )
+            return _httpx.Response(200, text=lines)
+
+        provider = self._provider_with_transport(handler)
+        result = await provider.chat([{"role": "user", "content": "hi"}])
+        assert result == "Hello, world!"
+
+    @pytest.mark.asyncio
+    async def test_chat_skips_reasoning_chunks(self) -> None:
+        """Reasoning models stream chain-of-thought in `thinking` — it must
+        not pollute the assembled answer."""
+        import httpx as _httpx
+
+        def handler(request: _httpx.Request) -> _httpx.Response:
+            lines = (
+                '{"message": {"thinking": "let me ponder this at great length"}, "done": false}\n'
+                '{"message": {"content": "The answer is 4."}, "done": false}\n'
+                '{"message": {"content": ""}, "done": true}\n'
+            )
+            return _httpx.Response(200, text=lines)
+
+        provider = self._provider_with_transport(handler)
+        result = await provider.chat([{"role": "user", "content": "2+2?"}])
+        assert result == "The answer is 4."
+
+    @pytest.mark.asyncio
+    async def test_chat_http_error_raises_provider_error(self) -> None:
+        import httpx as _httpx
+
+        from core.exceptions import ProviderError
+
+        def handler(request: _httpx.Request) -> _httpx.Response:
+            return _httpx.Response(500, text="boom")
+
+        provider = self._provider_with_transport(handler)
+        with pytest.raises(ProviderError):
+            await provider.chat([{"role": "user", "content": "hi"}])

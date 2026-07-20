@@ -49,25 +49,20 @@ class OllamaProvider(BaseProvider):
             raise ProviderError("ollama", str(exc)) from exc
 
     async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:
-        """Generate a chat completion via the Ollama API."""
-        full_messages: list[dict[str, Any]] = []
-        if system:
-            full_messages.append({"role": "system", "content": system})
-        full_messages.extend(messages)
-        try:
-            resp = await self._client.post(
-                "/api/chat",
-                json={
-                    "model": self._chat_model,
-                    "messages": full_messages,
-                    "stream": False,
-                },
-            )
-            resp.raise_for_status()
-            content: str = resp.json()["message"]["content"]
-            return content
-        except httpx.HTTPError as exc:
-            raise ProviderError("ollama", str(exc)) from exc
+        """Generate a chat completion via the Ollama API.
+
+        Implemented over the *streaming* endpoint: with ``stream=false``
+        Ollama sends nothing until the whole generation completes, so a slow
+        local model can blow the 120s httpx read window while generating
+        perfectly fine — and reasoning models (long chain-of-thought) always
+        blew it (#25). Streaming keeps bytes flowing, so the read timeout
+        goes back to being a between-chunks stall detector. Reasoning chunks
+        (``thinking`` field) are excluded from the assembled answer.
+        """
+        parts: list[str] = []
+        async for chunk in self.chat_stream(messages, system=system):
+            parts.append(chunk)
+        return "".join(parts)
 
     async def chat_stream(
         self,
@@ -102,6 +97,9 @@ class OllamaProvider(BaseProvider):
                     except json.JSONDecodeError:
                         continue
                     msg = obj.get("message") or {}
+                    if msg.get("thinking"):
+                        # Reasoning-model chain-of-thought — not answer text.
+                        continue
                     chunk = msg.get("content") or ""
                     if chunk:
                         yield chunk

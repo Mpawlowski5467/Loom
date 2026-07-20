@@ -107,6 +107,7 @@ Style guide: @docs/style-guide.md
 **Known gaps**
 - Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
 - No auth layer on the API (safe on localhost; do not expose the port as-is). `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
+- Local models: prefer `devstral`/`phi4` for agent work (verified); `gpt-oss:20b`/`gemma4:26b` are slower but pass; reasoning models (`deepseek-r1`, thinking Qwen) complete but are slow and often land in review. Chat streams internally, so steady generation no longer hits the 120s read window.
 - AppContext remains the compatibility shell; high-churn vault/capture loading, agent/health polling, config, and typed SSE refresh are split into domain hooks
 - Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested
 

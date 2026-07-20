@@ -159,6 +159,12 @@ class _VaultEventHandler(FileSystemEventHandler):
         future = asyncio.run_coroutine_threadsafe(coro, self._loop)
         try:
             future.result(timeout=_INDEX_TIMEOUT_SECONDS)
+        except FileNotFoundError:
+            # The file vanished between the fs event and the index attempt —
+            # almost always an archive/rename, whose move/delete handlers
+            # maintain the vector store. Benign, not drift.
+            logger.debug("File vanished before indexing (likely archived): %s", coro)
+            return True
         except Exception:
             logger.warning("Async operation failed", exc_info=True)
             return False
@@ -169,6 +175,12 @@ class _VaultEventHandler(FileSystemEventHandler):
 
         indexer = get_indexer()
         if indexer is None:
+            return
+        if not path.exists():
+            # Gone before we got to it (archived/renamed). Not a failure —
+            # and it must not pollute the drift counter.
+            with self._failed_lock:
+                self._failed_paths.discard(path)
             return
         ok = self._run_async(indexer.index_note(path))
         with self._failed_lock:

@@ -46,6 +46,10 @@ async def apply_links(
         target_path = title_map.get(title.lower())
         if target_path is None or target_path == source_path:
             continue
+        if not target_path.exists():
+            # Stale index entry — the note was archived or renamed after the
+            # title-map was built (e.g. a capture enforce-archived mid-scan).
+            continue
 
         wrote_forward = await _add_link_to_note(
             vault_root,
@@ -97,7 +101,12 @@ async def _add_link_to_note(
     Goes through ``vault_io.write_note`` so path safety is enforced.
     """
     async with path_lock(path):
-        note = parse_note(path)
+        try:
+            note = parse_note(path)
+        except FileNotFoundError:
+            # Vanished between the title-map lookup and the lock — archived
+            # or renamed mid-scan. Skip rather than fail the whole scan.
+            return False
 
         # Build a richer lookup that accepts both titles and filename slugs.
         # ``title_map`` from the note index keys by lowercased title only,

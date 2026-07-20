@@ -1,5 +1,6 @@
 """Tests for the file watcher in core/watcher.py."""
 
+import asyncio
 import threading
 import time
 from pathlib import Path
@@ -467,3 +468,36 @@ class TestReconcileLifecycle:
                 assert watcher._reconcile_timer is not None
         finally:
             watcher.stop_watcher()
+
+
+class TestVanishedFileIndexing:
+    """Files archived/renamed between the fs event and the index attempt are
+    benign — no failure log, no drift-marker pollution (issue #27)."""
+
+    def test_missing_file_is_not_marked_failed(self, tmp_path: Path) -> None:
+        handler = _make_handler(tmp_path)
+        missing = tmp_path / "threads" / "captures" / "archived-away.md"
+        handler._failed_paths.add(missing)  # pre-seed a stale marker
+
+        with patch("index.indexer.get_indexer", return_value=MagicMock()):
+            handler._do_vector_index(missing)
+
+        assert handler.failed_count() == 0
+
+    def test_run_async_treats_vanished_file_as_benign(self, tmp_path: Path) -> None:
+        """The residual race: file exists at the pre-check, gone by read time."""
+        handler = _make_handler(tmp_path)
+        loop = asyncio.new_event_loop()
+        thread = threading.Thread(target=loop.run_forever, daemon=True)
+        thread.start()
+        handler._loop = loop
+
+        async def _gone() -> None:
+            raise FileNotFoundError("archived mid-index")
+
+        try:
+            assert handler._run_async(_gone()) is True
+        finally:
+            loop.call_soon_threadsafe(loop.stop)
+            thread.join(timeout=2)
+            loop.close()

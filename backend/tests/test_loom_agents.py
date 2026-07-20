@@ -248,6 +248,35 @@ class TestSpider:
             "Backlink was duplicated:\n" + parse_note(alpha_path).body
         )
 
+    @pytest.mark.asyncio
+    async def test_skips_target_archived_mid_scan(self, tmp_path: Path):
+        """Regression: a title-map entry whose file was archived/renamed after
+        the map was built must be skipped, not crash the scan (issue #27 —
+        enforce-archived captures showed up as stale NoteIndex entries and
+        Spider died with FileNotFoundError mid-pipeline).
+        """
+        from unittest.mock import patch
+
+        from agents.loom.spider_linker import _add_link_to_note, apply_links
+
+        root = _setup_vault(tmp_path)
+        source_path = root / "threads" / "topics" / "beta-topic.md"
+        source_note = parse_note(source_path)
+        ghost = root / "threads" / "captures" / "ghost-capture.md"  # never existed
+        alpha = root / "threads" / "topics" / "alpha-topic.md"
+
+        stale_map = {"ghost capture": ghost, "alpha topic": alpha}
+        with patch("agents.loom.spider_linker.build_title_map", return_value=stale_map):
+            linked = await apply_links(root, source_path, source_note, ["Ghost Capture"])
+
+        assert linked == []  # ghost skipped, no exception
+
+        # The residual race: path gone between the map lookup and the lock.
+        wrote = await _add_link_to_note(
+            root, ghost, source_path, "Beta Topic", now_iso(), "test", stale_map
+        )
+        assert wrote is False
+
 
 # =============================================================================
 # Archivist tests

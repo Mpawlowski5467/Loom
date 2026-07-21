@@ -303,7 +303,7 @@ layer — safe on localhost, do not expose the port as-is).
 - No authentication on the API. Intended for local use only.
 
 [Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/Mpawlowski5467/Loom/compare/v1.0.0...v1.1.0
+[1.1.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.5.0
 [0.4.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.4.0

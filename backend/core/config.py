@@ -476,6 +476,83 @@ class GitHubBridgeConfigPublic(BaseModel):
     include_pull_requests: bool
 
 
+class EmailBridgeConfig(BaseModel):
+    """Email (IMAP) connection: poll a mailbox for new mail → Inbox captures.
+
+    Read-only by default: fetches use ``BODY.PEEK`` so messages are never
+    marked seen. ``password`` is an app password (Gmail/iCloud) or account
+    password, Fernet-encrypted at rest like provider API keys.
+    """
+
+    enabled: bool = False
+    host: str = ""
+    port: int = Field(default=993, ge=1, le=65535)
+    use_ssl: bool = True
+    username: str = ""
+    password: str | None = None
+    folder: str = "INBOX"
+    interval_minutes: int = Field(default=15, ge=5, le=1440)
+    lookback_hours: int = Field(default=24, ge=1, le=720)
+    max_messages_per_poll: int = Field(default=25, ge=1, le=100)
+
+    @field_validator("host")
+    @classmethod
+    def _normalize_host(cls, value: str) -> str:
+        value = value.strip()
+        if any(char.isspace() for char in value) or "/" in value:
+            raise ValueError("IMAP host must be a plain hostname (no spaces or slashes)")
+        return value
+
+    @field_validator("password")
+    @classmethod
+    def _normalize_password(cls, value: str | None) -> str | None:
+        if value is None or value == "":
+            return None
+        if value.startswith("enc:v1:"):
+            return value
+        return value
+
+    @field_validator("folder")
+    @classmethod
+    def _normalize_folder(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("IMAP folder must not be blank")
+        if len(value) > 200 or any(ord(char) < 32 or ord(char) == 127 for char in value):
+            raise ValueError("IMAP folder name is invalid")
+        return value
+
+    def to_public(self) -> EmailBridgeConfigPublic:
+        """Return the redacted view safe for the API."""
+        return EmailBridgeConfigPublic(
+            enabled=self.enabled,
+            host=self.host,
+            port=self.port,
+            use_ssl=self.use_ssl,
+            username=self.username,
+            password_set=bool(self.password),
+            folder=self.folder,
+            interval_minutes=self.interval_minutes,
+            lookback_hours=self.lookback_hours,
+            max_messages_per_poll=self.max_messages_per_poll,
+        )
+
+
+class EmailBridgeConfigPublic(BaseModel):
+    """Email connection state without its private password."""
+
+    enabled: bool
+    host: str
+    port: int
+    use_ssl: bool
+    username: str
+    password_set: bool
+    folder: str
+    interval_minutes: int
+    lookback_hours: int
+    max_messages_per_poll: int
+
+
 class UIState(BaseModel):
     """Persisted UI preferences."""
 
@@ -521,6 +598,7 @@ class GlobalConfig(BaseModel):
     standup_schedule: StandupScheduleConfig = Field(default_factory=StandupScheduleConfig)
     calendar: CalendarBridgeConfig = Field(default_factory=CalendarBridgeConfig)
     github: GitHubBridgeConfig = Field(default_factory=GitHubBridgeConfig)
+    email: EmailBridgeConfig = Field(default_factory=EmailBridgeConfig)
     ui: UIState = Field(default_factory=UIState)
     onboarding: OnboardingState = Field(default_factory=OnboardingState)
     agent_models: dict[str, AgentModelOverride] = Field(default_factory=dict)
@@ -595,6 +673,8 @@ class GlobalConfig(BaseModel):
                 self.calendar.feed_url = None
         if self.github.token:
             self.github.token = decrypt(self.github.token) or None
+        if self.email.password:
+            self.email.password = decrypt(self.email.password) or None
 
     def _encrypt_keys(self) -> None:
         """Encrypt provider keys and private connection URLs in place."""
@@ -607,6 +687,8 @@ class GlobalConfig(BaseModel):
             self.calendar.feed_url = encrypt(self.calendar.feed_url)
         if self.github.token:
             self.github.token = encrypt(self.github.token)
+        if self.email.password:
+            self.email.password = encrypt(self.email.password)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""
@@ -618,6 +700,7 @@ class GlobalConfig(BaseModel):
             standup_schedule=self.standup_schedule,
             calendar=self.calendar.to_public(),
             github=self.github.to_public(),
+            email=self.email.to_public(),
             ui=self.ui,
             onboarding=self.onboarding,
         )
@@ -633,6 +716,7 @@ class GlobalConfigPublic(BaseModel):
     standup_schedule: StandupScheduleConfig
     calendar: CalendarBridgeConfigPublic
     github: GitHubBridgeConfigPublic
+    email: EmailBridgeConfigPublic
     ui: UIState
     onboarding: OnboardingState
 

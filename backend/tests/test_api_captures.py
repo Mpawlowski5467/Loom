@@ -764,6 +764,31 @@ class TestProcessAllCaptures:
         assert all(r["outcome"] == "filed" for r in data["results"])
         assert mock_runner.run_pipeline.await_count == 2
 
+    def test_process_all_stalled_capture_fails_but_batch_continues(
+        self, client: TestClient, seeded_captures: Path
+    ) -> None:
+        """A stalled pipeline is bounded per capture, not per batch (#26 parity)."""
+        import asyncio
+
+        mock_runner = MagicMock()
+
+        async def _stall(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(60)
+
+        mock_runner.run_pipeline = _stall
+
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=MagicMock()),
+            patch("agents.runner.AgentRunner", return_value=mock_runner),
+            patch("api.routers.captures._PROCESS_PIPELINE_TIMEOUT_S", 0.05),
+        ):
+            resp = client.post("/api/captures/process-all")
+
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["failed"] == data["total"]
+        assert all("timed out" in r["error"] for r in data["results"])
+
     def test_process_all_counts_review_outcome_separately(
         self, client: TestClient, seeded_captures: Path
     ) -> None:

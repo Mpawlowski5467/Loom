@@ -1613,7 +1613,12 @@ async def process_all_captures(
         capture_metadata_changed = False
         try:
             _resolve_inbox_capture(vm, str(capture_path))
-            result = await runner.run_pipeline(capture_path, refresh_index=index.refresh_file)
+            # Same server-side bound as /process: one stalled capture must not
+            # hold the whole batch (or its durable job) hostage (#26).
+            result = await asyncio.wait_for(
+                runner.run_pipeline(capture_path, refresh_index=index.refresh_file),
+                timeout=_PROCESS_PIPELINE_TIMEOUT_S,
+            )
             response = _pipeline_result_to_process_result(result)
             if response.outcome == "failed":
                 capture_metadata_changed = await asyncio.to_thread(
@@ -1622,6 +1627,19 @@ async def process_all_captures(
                     capture_path,
                     response.error,
                 )
+        except TimeoutError:
+            error = (
+                f"Processing timed out after {int(_PROCESS_PIPELINE_TIMEOUT_S)}s — "
+                "the provider is likely stalled; retry processing in the background"
+            )
+            logger.warning("Bulk capture processing timed out: %s", capture_path)
+            capture_metadata_changed = await asyncio.to_thread(
+                _persist_failed_attempt,
+                vm.active_vault_dir(),
+                capture_path,
+                error,
+            )
+            response = ProcessResult(processed=False, outcome="failed", error=error)
         except asyncio.CancelledError:
             await asyncio.shield(
                 asyncio.gather(

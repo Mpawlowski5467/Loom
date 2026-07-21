@@ -146,6 +146,61 @@ export interface GitHubSyncResult {
   errors: number;
 }
 
+export interface EmailBridgeConfig {
+  enabled: boolean;
+  host: string;
+  port: number;
+  use_ssl: boolean;
+  username: string;
+  password_set: boolean;
+  folder: string;
+  interval_minutes: number;
+  lookback_hours: number;
+  max_messages_per_poll: number;
+}
+
+export interface EmailBridgeStatus {
+  running: boolean;
+  last_run: string;
+  last_error: string;
+  last_created: number;
+}
+
+export interface EmailAutomation {
+  email: EmailBridgeConfig;
+  status: EmailBridgeStatus;
+}
+
+export interface EmailAutomationUpdate {
+  enabled?: boolean;
+  host?: string;
+  port?: number;
+  use_ssl?: boolean;
+  username?: string;
+  password?: string;
+  clear_password?: boolean;
+  folder?: string;
+  interval_minutes?: number;
+  lookback_hours?: number;
+  max_messages_per_poll?: number;
+}
+
+export interface EmailTestResult {
+  ok: boolean;
+  folder: string;
+  messages: number;
+  error: string;
+}
+
+export interface EmailSyncResult {
+  synced_at: string;
+  folder: string;
+  fetched: number;
+  created: number;
+  deduplicated: number;
+  capture_ids: string[];
+}
+
 export function getStandupAutomation(
   signal?: AbortSignal,
 ): Promise<StandupAutomation> {
@@ -218,6 +273,36 @@ export function testGitHub(signal?: AbortSignal): Promise<GitHubTestResult> {
 export function syncGitHub(signal?: AbortSignal): Promise<GitHubSyncResult> {
   return apiClient.post<GitHubSyncResult>(
     "/api/automations/github/sync",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function getEmailAutomation(
+  signal?: AbortSignal,
+): Promise<EmailAutomation> {
+  return apiClient.get<EmailAutomation>("/api/automations/email", signal);
+}
+
+export function updateEmailAutomation(
+  update: EmailAutomationUpdate,
+): Promise<EmailAutomation> {
+  return apiClient.patch<EmailAutomation>("/api/automations/email", update);
+}
+
+export function testEmail(signal?: AbortSignal): Promise<EmailTestResult> {
+  return apiClient.post<EmailTestResult>(
+    "/api/automations/email/test",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function syncEmail(signal?: AbortSignal): Promise<EmailSyncResult> {
+  return apiClient.post<EmailSyncResult>(
+    "/api/automations/email/sync",
     {},
     signal,
     AUTOMATION_RUN_TIMEOUT_MS,

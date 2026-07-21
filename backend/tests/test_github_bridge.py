@@ -130,8 +130,8 @@ class TestGitHubAdapter:
         }
         for status, needle in cases.items():
 
-            def handler(request: httpx.Request) -> httpx.Response:
-                return httpx.Response(status, text="nope")
+            def handler(request: httpx.Request, _status: int = status) -> httpx.Response:
+                return httpx.Response(_status, text="nope")
 
             client = _make_client(handler)
             with pytest.raises(GitHubError, match=needle):
@@ -220,9 +220,7 @@ def _github_vault(tmp_path: Path, monkeypatch) -> VaultManager:
         trusted_sources=["bridge:github"],
     )
     config.save(manager.config_path())
-    monkeypatch.setattr(
-        "bridge.github_service._cursor_path", lambda: tmp_path / "github-sync.json"
-    )
+    monkeypatch.setattr("bridge.github_service._cursor_path", lambda: tmp_path / "github-sync.json")
     return manager
 
 
@@ -368,9 +366,7 @@ class TestGitHubPoller:
             calls.append("tick")
             return {"synced_at": "", "created": 0, "errors": 0}
 
-        monkeypatch.setattr(
-            GlobalConfig, "load", classmethod(lambda cls, path: GlobalConfig())
-        )
+        monkeypatch.setattr(GlobalConfig, "load", classmethod(lambda cls, path: GlobalConfig()))
         monkeypatch.setattr("bridge.github_service.sync_github", _fake_sync)
 
         service = GitHubSyncService()
@@ -426,9 +422,7 @@ class TestGitHubApi:
         loaded = GlobalConfig.load(vault_manager.config_path())
         assert loaded.github.token == "ghp_secret"
 
-    def test_patch_rejects_enabled_without_repos(
-        self, client: TestClient, vault_manager
-    ) -> None:
+    def test_patch_rejects_enabled_without_repos(self, client: TestClient, vault_manager) -> None:
         _init(vault_manager)
         response = client.patch("/api/automations/github", json={"enabled": True})
         assert response.status_code == 422

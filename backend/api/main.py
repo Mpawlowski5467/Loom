@@ -32,6 +32,7 @@ from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
 from api.routers.diagnostics import router as diagnostics_router
+from api.routers.email_bridge import router as email_bridge_router
 from api.routers.events import router as events_router
 from api.routers.github_bridge import router as github_bridge_router
 from api.routers.graph import router as graph_router
@@ -155,6 +156,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_github_sync_service().start()
     except Exception:
         logger.warning("GitHub sync service initialization failed", exc_info=True)
+    try:
+        from bridge.email_service import get_email_sync_service
+
+        await get_email_sync_service().start()
+    except Exception:
+        logger.warning("Email sync service initialization failed", exc_info=True)
     # Mirror traces to disk so they survive restarts and we can page back
     # beyond the 500-item in-memory ring buffer. The vault label tags rows in
     # the (install-wide) Postgres mirror so its reads scope per vault too.
@@ -187,6 +194,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_github_sync_service().aclose()
     except Exception:
         logger.warning("GitHub sync service shutdown failed", exc_info=True)
+    try:
+        from bridge.email_service import get_email_sync_service
+
+        await get_email_sync_service().aclose()
+    except Exception:
+        logger.warning("Email sync service shutdown failed", exc_info=True)
     stop_watcher()
     await retention.aclose()
     await shutdown_optional_services()
@@ -292,6 +305,7 @@ app.include_router(notes_router)
 app.include_router(archive_router)
 app.include_router(automations_router)
 app.include_router(github_bridge_router)
+app.include_router(email_bridge_router)
 app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)

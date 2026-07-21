@@ -2,12 +2,16 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
   generateStandup,
+  getEmailAutomation,
   getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncEmail,
   syncGitHub,
   testCalendar,
+  testEmail,
   testGitHub,
+  updateEmailAutomation,
   updateGitHubAutomation,
   updateStandupAutomation,
 } from "./automations";
@@ -101,6 +105,49 @@ describe("automation API", () => {
     expect(apiClient.post).toHaveBeenNthCalledWith(
       2,
       "/api/automations/github/sync",
+      {},
+      controller.signal,
+      120_000,
+    );
+  });
+
+  it("loads and updates Email automation", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({});
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    await getEmailAutomation();
+    await updateEmailAutomation({
+      enabled: true,
+      host: "imap.example.com",
+      port: 993,
+      username: "you@example.com",
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/automations/email",
+      undefined,
+    );
+    expect(apiClient.patch).toHaveBeenCalledWith("/api/automations/email", {
+      enabled: true,
+      host: "imap.example.com",
+      port: 993,
+      username: "you@example.com",
+    });
+  });
+
+  it("tests and syncs the Email bridge with the run timeout", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({});
+    const controller = new AbortController();
+    await testEmail(controller.signal);
+    await syncEmail(controller.signal);
+    expect(apiClient.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automations/email/test",
+      {},
+      controller.signal,
+      120_000,
+    );
+    expect(apiClient.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automations/email/sync",
       {},
       controller.signal,
       120_000,

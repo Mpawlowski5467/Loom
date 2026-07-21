@@ -474,6 +474,8 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
 | `GET` `PATCH` | `/api/automations/github` | Redacted GitHub connection state (repos, interval, poller status) |
 | `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
+| `GET` `PATCH` | `/api/automations/email` | Redacted IMAP connection state (host, folder, poller status) |
+| `POST` | `/api/automations/email/test` / `/sync` | Test the mailbox login/folder or poll new mail into Inbox |
 | `GET` | `/api/agents` | Agent status + action counts |
 | `GET` | `/api/agents/activity` | Live per-agent activity (polled by the Pulse view) |
 | `GET` `POST` `PATCH` `DELETE` | `/api/agents/registry` | List / create / edit / remove custom agents |
@@ -522,6 +524,7 @@ What works today:
 - Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
 - Scheduled Standup workspace plus encrypted read-only iCalendar connection
 - GitHub Bridge — poll repos for commits/issues/PRs into the Inbox (token encrypted at rest, per-repo cursors, interval poller)
+- Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen)
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection

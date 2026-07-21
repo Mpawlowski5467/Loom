@@ -1,16 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Github, Link2Off, RefreshCw } from "lucide-react";
+import { CalendarDays, Github, Link2Off, Mail, RefreshCw } from "lucide-react";
 import {
+  getEmailAutomation,
   getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncEmail,
   syncGitHub,
   testCalendar,
+  testEmail,
   testGitHub,
+  updateEmailAutomation,
   updateGitHubAutomation,
   updateStandupAutomation,
   type CalendarTestResult,
+  type EmailAutomation,
+  type EmailTestResult,
   type GitHubAutomation,
   type GitHubSyncResult,
   type GitHubTestResult,
@@ -68,6 +74,25 @@ export function ConnectionsSection(): ReactNode {
   >(null);
   const [ghError, setGhError] = useState<string | null>(null);
   const ghActionAbort = useRef<AbortController | null>(null);
+  const [email, setEmail] = useState<EmailAutomation | null>(null);
+  const [emEnabled, setEmEnabled] = useState(false);
+  const [emHost, setEmHost] = useState("");
+  const [emPort, setEmPort] = useState("993");
+  const [emUseSsl, setEmUseSsl] = useState(true);
+  const [emUsername, setEmUsername] = useState("");
+  const [emPassword, setEmPassword] = useState("");
+  const [emFolder, setEmFolder] = useState("INBOX");
+  const [emInterval, setEmInterval] = useState("15");
+  const [emLookback, setEmLookback] = useState("24");
+  const [emMaxMessages, setEmMaxMessages] = useState("25");
+  const [emTestResult, setEmTestResult] = useState<EmailTestResult | null>(
+    null,
+  );
+  const [emBusy, setEmBusy] = useState<
+    "save" | "test" | "sync" | "disconnect" | null
+  >(null);
+  const [emError, setEmError] = useState<string | null>(null);
+  const emActionAbort = useRef<AbortController | null>(null);
 
   const apply = useCallback((next: StandupAutomation) => {
     setAutomation(next);
@@ -95,6 +120,19 @@ export function ConnectionsSection(): ReactNode {
     setGhIncludePRs(next.github.include_pull_requests);
   }, []);
 
+  const applyEmail = useCallback((next: EmailAutomation) => {
+    setEmail(next);
+    setEmEnabled(next.email.enabled);
+    setEmHost(next.email.host);
+    setEmPort(String(next.email.port));
+    setEmUseSsl(next.email.use_ssl);
+    setEmUsername(next.email.username);
+    setEmFolder(next.email.folder);
+    setEmInterval(String(next.email.interval_minutes));
+    setEmLookback(String(next.email.lookback_hours));
+    setEmMaxMessages(String(next.email.max_messages_per_poll));
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     getStandupAutomation(controller.signal)
@@ -117,14 +155,26 @@ export function ConnectionsSection(): ReactNode {
             : "GitHub connection could not be loaded",
         );
       });
+    getEmailAutomation(controller.signal)
+      .then(applyEmail)
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setEmError(
+          err instanceof Error
+            ? err.message
+            : "Email connection could not be loaded",
+        );
+      });
     return () => {
       controller.abort();
       actionAbort.current?.abort();
       actionAbort.current = null;
       ghActionAbort.current?.abort();
       ghActionAbort.current = null;
+      emActionAbort.current?.abort();
+      emActionAbort.current = null;
     };
-  }, [apply, applyGitHub]);
+  }, [apply, applyGitHub, applyEmail]);
 
   const persist = useCallback(
     async (signal?: AbortSignal): Promise<StandupAutomation> => {
@@ -383,11 +433,147 @@ export function ConnectionsSection(): ReactNode {
     }
   };
 
+  const persistEmail = useCallback(
+    async (signal?: AbortSignal): Promise<EmailAutomation> => {
+      const next = await updateEmailAutomation({
+        enabled: emEnabled,
+        host: emHost.trim(),
+        port: Math.round(Number(emPort)) || 993,
+        use_ssl: emUseSsl,
+        username: emUsername.trim(),
+        folder: emFolder.trim() || "INBOX",
+        interval_minutes: Math.round(Number(emInterval)) || 15,
+        lookback_hours: Math.round(Number(emLookback)) || 24,
+        max_messages_per_poll: Math.round(Number(emMaxMessages)) || 25,
+        ...(emPassword.trim() ? { password: emPassword.trim() } : {}),
+      });
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      setEmPassword("");
+      applyEmail(next);
+      return next;
+    },
+    [
+      applyEmail,
+      emEnabled,
+      emFolder,
+      emHost,
+      emInterval,
+      emLookback,
+      emMaxMessages,
+      emPassword,
+      emPort,
+      emUseSsl,
+      emUsername,
+    ],
+  );
+
+  const saveEmail = async () => {
+    setEmBusy("save");
+    setEmError(null);
+    try {
+      await persistEmail();
+      pushToast({
+        icon: "✓",
+        agent: "email",
+        body: "Email bridge saved",
+      });
+    } catch (err) {
+      setEmError(
+        err instanceof Error ? err.message : "Could not save connection",
+      );
+    } finally {
+      setEmBusy(null);
+    }
+  };
+
+  const testEmailConnection = async () => {
+    emActionAbort.current?.abort();
+    const controller = new AbortController();
+    emActionAbort.current = controller;
+    setEmBusy("test");
+    setEmError(null);
+    try {
+      await persistEmail(controller.signal);
+      if (controller.signal.aborted) return;
+      const result = await testEmail(controller.signal);
+      setEmTestResult(result);
+      if (result.ok) {
+        pushToast({
+          icon: "◫",
+          agent: "email",
+          body: `Email connected — ${result.folder} has ${result.messages} message${result.messages === 1 ? "" : "s"}`,
+        });
+      }
+    } catch (err) {
+      if ((err as DOMException)?.name !== "AbortError") {
+        setEmError(err instanceof Error ? err.message : "Email test failed");
+      }
+    } finally {
+      if (emActionAbort.current === controller) {
+        emActionAbort.current = null;
+        setEmBusy(null);
+      }
+    }
+  };
+
+  const syncEmailNow = async () => {
+    emActionAbort.current?.abort();
+    const controller = new AbortController();
+    emActionAbort.current = controller;
+    setEmBusy("sync");
+    setEmError(null);
+    try {
+      await persistEmail(controller.signal);
+      if (controller.signal.aborted) return;
+      const result = await syncEmail(controller.signal);
+      pushToast({
+        icon: "↷",
+        agent: "email",
+        body: `Email sync: ${result.created} new capture${result.created === 1 ? "" : "s"}, ${result.deduplicated} already in Inbox`,
+      });
+    } catch (err) {
+      if ((err as DOMException)?.name !== "AbortError") {
+        setEmError(err instanceof Error ? err.message : "Email sync failed");
+      }
+    } finally {
+      if (emActionAbort.current === controller) {
+        emActionAbort.current = null;
+        setEmBusy(null);
+      }
+    }
+  };
+
+  const disconnectEmail = async () => {
+    setEmBusy("disconnect");
+    setEmError(null);
+    try {
+      const next = await updateEmailAutomation({
+        enabled: false,
+        clear_password: true,
+      });
+      applyEmail(next);
+      setEmPassword("");
+      setEmTestResult(null);
+    } catch (err) {
+      setEmError(
+        err instanceof Error ? err.message : "Could not disconnect email",
+      );
+    } finally {
+      setEmBusy(null);
+    }
+  };
+
   const connected = automation?.calendar.feed_url_set ?? false;
   const status = automation?.status;
   const ghConnected = github?.github.token_set ?? false;
   const ghStatus = github?.status;
   const ghSyncErrors = ghSyncResult?.repos.filter((repo) => repo.error) ?? [];
+  const emConnected = email?.email.password_set ?? false;
+  const emStatus = email?.status;
+  const emReady =
+    emHost.trim() !== "" &&
+    emUsername.trim() !== "" &&
+    (emConnected || emPassword.trim() !== "");
 
   return (
     <div className="settings-panel">
@@ -822,6 +1008,217 @@ export function ConnectionsSection(): ReactNode {
         {ghStatus?.last_error && (
           <p className="settings-test-result fail" role="alert">
             Last run: {ghStatus.last_error}
+          </p>
+        )}
+      </section>
+
+      <section
+        className="settings-connection-card"
+        aria-labelledby="email-connection-title"
+      >
+        <div className="settings-connection-head">
+          <div>
+            <h2 id="email-connection-title">
+              <Mail size={17} aria-hidden="true" /> Email bridge
+            </h2>
+            <p>
+              Poll an IMAP mailbox for new mail — messages land in the Inbox
+              for triage. Read-only: Loom never marks mail as seen.
+            </p>
+          </div>
+          <label className="settings-switch">
+            <input
+              type="checkbox"
+              aria-label="Enable email connection"
+              checked={emEnabled}
+              onChange={(event) => setEmEnabled(event.target.checked)}
+              disabled={!email || emBusy !== null || (!emEnabled && !emReady)}
+            />
+            <span>{emEnabled ? "Enabled" : "Off"}</span>
+          </label>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-field">
+            <span className="settings-field-label">IMAP host</span>
+            <input
+              className="input"
+              value={emHost}
+              onChange={(event) => setEmHost(event.target.value)}
+              placeholder="imap.example.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Port</span>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={65535}
+              value={emPort}
+              onChange={(event) => setEmPort(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-field">
+            <span className="settings-field-label">Username</span>
+            <input
+              className="input"
+              value={emUsername}
+              onChange={(event) => setEmUsername(event.target.value)}
+              placeholder="you@example.com"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">
+              Password {emConnected && <em>password saved</em>}
+            </span>
+            <input
+              className="input"
+              type="password"
+              value={emPassword}
+              onChange={(event) => setEmPassword(event.target.value)}
+              placeholder={
+                emConnected ? "Leave blank to keep current" : "App password"
+              }
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-field">
+            <span className="settings-field-label">Folder</span>
+            <input
+              className="input"
+              value={emFolder}
+              onChange={(event) => setEmFolder(event.target.value)}
+              placeholder="INBOX"
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Max messages per poll</span>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={100}
+              value={emMaxMessages}
+              onChange={(event) => setEmMaxMessages(event.target.value)}
+            />
+          </label>
+        </div>
+        <div className="settings-field-row">
+          <label className="settings-field">
+            <span className="settings-field-label">Poll interval (minutes)</span>
+            <input
+              className="input"
+              type="number"
+              min={5}
+              max={1440}
+              value={emInterval}
+              onChange={(event) => setEmInterval(event.target.value)}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Lookback (hours)</span>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={720}
+              value={emLookback}
+              onChange={(event) => setEmLookback(event.target.value)}
+            />
+          </label>
+        </div>
+        <label className="settings-toggle-row">
+          <input
+            type="checkbox"
+            checked={emUseSsl}
+            onChange={(event) => setEmUseSsl(event.target.checked)}
+          />
+          <span>
+            <span className="settings-toggle-label">Use SSL</span>
+            <span className="settings-toggle-hint">
+              Standard for port 993; disable only for plaintext IMAP.
+            </span>
+          </span>
+        </label>
+
+        <div className="settings-actions">
+          <button
+            className="btn btn-md btn-active"
+            type="button"
+            aria-label="Save email settings"
+            onClick={() => void saveEmail()}
+            disabled={!email || emBusy !== null}
+          >
+            {emBusy === "save" ? "Saving…" : "Save"}
+          </button>
+          <button
+            className="btn btn-md"
+            type="button"
+            aria-label="Test email connection"
+            onClick={() => void testEmailConnection()}
+            disabled={!email || emBusy !== null || !emReady}
+          >
+            {emBusy === "test" ? "Testing…" : "Test connection"}
+          </button>
+          <button
+            className="btn btn-md"
+            type="button"
+            aria-label="Sync email now"
+            onClick={() => void syncEmailNow()}
+            disabled={!email || emBusy !== null || !emReady}
+          >
+            <RefreshCw size={13} aria-hidden="true" />
+            {emBusy === "sync" ? "Syncing…" : "Sync now"}
+          </button>
+          {emConnected && (
+            <button
+              className="btn btn-md"
+              type="button"
+              aria-label="Disconnect email"
+              onClick={() => void disconnectEmail()}
+              disabled={emBusy !== null}
+            >
+              <Link2Off size={13} aria-hidden="true" /> Disconnect
+            </button>
+          )}
+        </div>
+
+        {emError && (
+          <p className="settings-test-result fail" role="alert">
+            {emError}
+          </p>
+        )}
+        {emTestResult && (
+          <p
+            className={`settings-test-result ${emTestResult.ok ? "ok" : "fail"}`}
+            role="status"
+          >
+            {emTestResult.ok
+              ? `Connected — ${emTestResult.folder} has ${emTestResult.messages} message${emTestResult.messages === 1 ? "" : "s"}`
+              : emTestResult.error}
+          </p>
+        )}
+        {emStatus?.last_run && (
+          <p className="settings-connection-status">
+            Last polled {new Date(emStatus.last_run).toLocaleString()} —{" "}
+            {emStatus.last_created} new capture
+            {emStatus.last_created === 1 ? "" : "s"}
+          </p>
+        )}
+        {emStatus?.last_error && (
+          <p className="settings-test-result fail" role="alert">
+            Last run: {emStatus.last_error}
           </p>
         )}
       </section>

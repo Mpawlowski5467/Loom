@@ -17,14 +17,14 @@ These sections were moved verbatim out of the architecture document so that docu
 
 ## Layer 6: The Bridge
 
-> 🌓 **Partially shipped.** The connector contract is still evolving, but two
+> 🌓 **Partially shipped.** The connector contract is still evolving, but three
 > adapters now live in `backend/bridge/`: a bounded, read-only iCalendar
-> adapter with recurrence/timezone support, encrypted private URL, Standup
-> context, and idempotent Inbox sync; and a read-only GitHub adapter that
-> polls configured repos for commits/issues/PRs into the Inbox with
-> external-ID idempotency, per-repo cursors, and an interval poller. Email,
-> provider-specific Calendar OAuth, GitHub webhooks, and community plugins
-> remain design targets.
+> adapter (recurrence/timezone support, encrypted private URL, Standup
+> context, idempotent Inbox sync); a read-only GitHub adapter (token polling
+> of commits/issues/PRs, external-ID idempotency, per-repo cursors, interval
+> poller); and a read-only Email adapter (IMAP polling with UID cursors,
+> `BODY.PEEK` fetches so mail is never marked seen). Calendar OAuth,
+> GitHub webhooks, and community plugins remain design targets.
 
 The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
 
@@ -37,7 +37,7 @@ The Bridge is how Loom connects to the outside world. All integrations follow th
 
 **GitHub**: shipped as token-based polling (Loom is localhost-first, so no webhooks). Configured repos are polled on an interval for commits, issues, and PRs; activity lands in the Inbox as idempotent captures (`github:<repo>:<kind>:<id>`) with metadata (repo, author, labels, timestamp). Weaver files them under the right project. Webhook delivery and a plugin contract remain planned.
 
-**Email**: local IMAP listener or forwarding address. Receives emails, parses them into markdown captures with sender, subject, date, and body.
+**Email**: shipped as read-only IMAP polling. A configured mailbox is polled on an interval; new messages become markdown captures with sender, subject, date, and body (text/plain preferred, stripped HTML fallback). The mailbox is opened read-only with `BODY.PEEK` fetches so Loom never marks mail as seen; the app password is encrypted at rest; Message-ID/UID external IDs make re-polls idempotent.
 
 **Calendar**: private iCalendar feeds are shipped. They pull a selected day's
 expanded occurrences into Standup context and optionally create Inbox captures
@@ -289,7 +289,7 @@ These milestones extend the shipped MVP and v1 roadmap (see [ARCHITECTURE.md §1
 
 - GitHub integration (commits, issues, PRs → captures) — shipped as token-based polling; webhooks remain
 - Calendar integration (read-only iCalendar → Standup/Inbox shipped; OAuth adapters remain)
-- Email integration (IMAP/forwarding → captures)
+- Email integration (IMAP → captures) — shipped as read-only polling with app passwords; a forwarding-address mode and OAuth (Gmail) remain possible follow-ups
 - Plugin architecture for community integrations
 - Custom Shuttle agents (user-defined via config folders)
 - Example vaults with demo data

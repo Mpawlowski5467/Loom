@@ -2,14 +2,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getEmailAutomation,
   getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncEmail,
   syncGitHub,
   testCalendar,
+  testEmail,
   testGitHub,
+  updateEmailAutomation,
   updateGitHubAutomation,
   updateStandupAutomation,
+  type EmailAutomation,
   type GitHubAutomation,
   type StandupAutomation,
 } from "../../api/automations";
@@ -25,6 +30,10 @@ vi.mock("../../api/automations", () => ({
   updateGitHubAutomation: vi.fn(),
   testGitHub: vi.fn(),
   syncGitHub: vi.fn(),
+  getEmailAutomation: vi.fn(),
+  updateEmailAutomation: vi.fn(),
+  testEmail: vi.fn(),
+  syncEmail: vi.fn(),
 }));
 
 const automation: StandupAutomation = {
@@ -63,6 +72,27 @@ const githubAutomation: GitHubAutomation = {
     include_commits: true,
     include_issues: true,
     include_pull_requests: true,
+  },
+  status: {
+    running: false,
+    last_run: "",
+    last_error: "",
+    last_created: 0,
+  },
+};
+
+const emailAutomation: EmailAutomation = {
+  email: {
+    enabled: false,
+    host: "imap.example.com",
+    port: 993,
+    use_ssl: true,
+    username: "you@example.com",
+    password_set: false,
+    folder: "INBOX",
+    interval_minutes: 15,
+    lookback_hours: 24,
+    max_messages_per_poll: 25,
   },
   status: {
     running: false,
@@ -115,6 +145,22 @@ describe("ConnectionsSection", () => {
       created: 0,
       deduplicated: 0,
       errors: 0,
+    });
+    vi.mocked(getEmailAutomation).mockResolvedValue(emailAutomation);
+    vi.mocked(updateEmailAutomation).mockResolvedValue(emailAutomation);
+    vi.mocked(testEmail).mockResolvedValue({
+      ok: true,
+      folder: "INBOX",
+      messages: 12,
+      error: "",
+    });
+    vi.mocked(syncEmail).mockResolvedValue({
+      synced_at: "2026-07-14T10:00:00Z",
+      folder: "INBOX",
+      fetched: 0,
+      created: 0,
+      deduplicated: 0,
+      capture_ids: [],
     });
   });
 
@@ -334,6 +380,141 @@ describe("ConnectionsSection", () => {
     expect(
       await screen.findByText(
         "At least one repository is required when enabled",
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the Email card with a redacted saved password", async () => {
+    vi.mocked(getEmailAutomation).mockResolvedValue({
+      ...emailAutomation,
+      email: { ...emailAutomation.email, password_set: true },
+    });
+    renderSection();
+    expect(
+      await screen.findByRole("heading", { name: "Email bridge" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("password saved")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("Leave blank to keep current"),
+    ).toHaveValue("");
+  });
+
+  it("saves Email settings with the typed password", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByDisplayValue("imap.example.com");
+    await user.type(screen.getByPlaceholderText("App password"), "s3cret");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Enable email connection" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save email settings" }),
+    );
+    await waitFor(() =>
+      expect(updateEmailAutomation).toHaveBeenCalledWith({
+        enabled: true,
+        host: "imap.example.com",
+        port: 993,
+        use_ssl: true,
+        username: "you@example.com",
+        folder: "INBOX",
+        interval_minutes: 15,
+        lookback_hours: 24,
+        max_messages_per_poll: 25,
+        password: "s3cret",
+      }),
+    );
+  });
+
+  it("tests the Email connection and renders the inline result", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    await screen.findByDisplayValue("imap.example.com");
+    await user.type(screen.getByPlaceholderText("App password"), "s3cret");
+    await user.click(
+      screen.getByRole("button", { name: "Test email connection" }),
+    );
+    expect(
+      await screen.findByText("Connected — INBOX has 12 messages"),
+    ).toBeInTheDocument();
+    expect(testEmail).toHaveBeenCalledWith(expect.any(AbortSignal));
+  });
+
+  it("renders a failed Email test inline without a success toast", async () => {
+    const user = userEvent.setup();
+    const pushToast = vi.fn();
+    vi.mocked(testEmail).mockResolvedValue({
+      ok: false,
+      folder: "",
+      messages: 0,
+      error: "authentication failed",
+    });
+    renderSection(pushToast);
+    await screen.findByDisplayValue("imap.example.com");
+    await user.type(screen.getByPlaceholderText("App password"), "wrong");
+    await user.click(
+      screen.getByRole("button", { name: "Test email connection" }),
+    );
+    expect(
+      await screen.findByText("authentication failed"),
+    ).toBeInTheDocument();
+    expect(pushToast).not.toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("Email connected"),
+      }),
+    );
+  });
+
+  it("syncs Email and toasts the created count", async () => {
+    const user = userEvent.setup();
+    const pushToast = vi.fn();
+    vi.mocked(syncEmail).mockResolvedValue({
+      synced_at: "2026-07-14T10:00:00Z",
+      folder: "INBOX",
+      fetched: 6,
+      created: 4,
+      deduplicated: 1,
+      capture_ids: ["thr_a", "thr_b", "thr_c", "thr_d"],
+    });
+    renderSection(pushToast);
+    await screen.findByDisplayValue("imap.example.com");
+    await user.type(screen.getByPlaceholderText("App password"), "s3cret");
+    await user.click(screen.getByRole("button", { name: "Sync email now" }));
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: "Email sync: 4 new captures, 1 already in Inbox",
+        }),
+      ),
+    );
+  });
+
+  it("surfaces the enable-incomplete 422 as an inline error", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getEmailAutomation).mockResolvedValue({
+      ...emailAutomation,
+      email: {
+        ...emailAutomation.email,
+        enabled: true,
+        host: "",
+        username: "",
+      },
+    });
+    vi.mocked(updateEmailAutomation).mockRejectedValue(
+      new Error("IMAP host, username, and password are required when enabled"),
+    );
+    renderSection();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save email settings" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save email settings" }),
+    );
+    expect(
+      await screen.findByText(
+        "IMAP host, username, and password are required when enabled",
       ),
     ).toBeInTheDocument();
   });

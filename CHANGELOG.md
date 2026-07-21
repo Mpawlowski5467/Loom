@@ -19,6 +19,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   a per-repo connection test, and a manual sync; a Connections settings card
   drives it all. Token-based polling only — no webhooks (Loom is
   localhost-first); one repo's failure never sinks the sync.
+- **Email Bridge adapter** — a configured IMAP mailbox is polled on an
+  interval for new mail (`backend/bridge/email*.py`). Messages land in the
+  Inbox with Message-ID/UID external-ID idempotency; the mailbox is opened
+  read-only and fetched with `BODY.PEEK`, so Loom never marks mail as seen.
+  The app password is Fernet-encrypted at rest; a UID cursor
+  (`email-sync.json`) bounds each poll; a background poller mirrors the
+  GitHub one. `/api/automations/email/*` plus a Connections settings card.
+
+### Fixed
+- **`/process-all` timeout parity** — bulk processing now bounds each
+  pipeline run with the same server-side cap as single `/process` (900s),
+  so one stalled capture can't hold the whole batch (or its durable jobs)
+  hostage.
 
 ## [1.1.0] - 2026-07-19
 

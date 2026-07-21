@@ -86,6 +86,7 @@ Style guide: @docs/style-guide.md
 - Durable Inbox processing: per-vault SQLite jobs, retry/backoff/cancel/review, Active/Review/History UI, retention controls, and typed SSE refresh domains
 - Scheduled Standup workspace with timezone-aware durable scheduling and an encrypted, read-only iCalendar Bridge that can enrich recaps and create event captures
 - GitHub Bridge adapter (`backend/bridge/github*.py`): polling sync of commits/issues/PRs from configured repos into the Inbox via unified ingress (external-ID idempotency), per-repo cursors in `github-sync.json`, an interval poller with `notify()` on settings save, `/api/automations/github/*` (redacted config, per-repo test, manual sync), and a Connections settings card
+- Email Bridge adapter (`backend/bridge/email*.py`): read-only IMAP polling (mailbox opened read-only, `BODY.PEEK` fetches) with UID cursors in `email-sync.json`, Message-ID/UID external IDs, encrypted app-password, interval poller, `/api/automations/email/*`, and a Connections settings card
 - LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Sentinel→Spider→Scribe→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict; Spider/Scribe run only on a `passed`/`warning` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
 - 4 views: GraphView (Sigma.js — constellation + orbit with 5 selectable scenes, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
@@ -103,7 +104,7 @@ Style guide: @docs/style-guide.md
 **In flight**
 - Scribe daily-log generation works; summary phrasing is still being tuned
 - Sentinel AI-assisted validation works (LLM path with deterministic fallback); broadening rule coverage
-- Google/Outlook OAuth and Email Bridge adapters are not yet implemented; Calendar currently uses private iCalendar feeds; GitHub ships as token-based polling (no webhooks — Loom is localhost-first)
+- Google/Outlook Calendar OAuth adapters are not yet implemented (need OAuth app registrations only the user can create); Calendar currently uses private iCalendar feeds. GitHub ships as token-based polling, Email as read-only IMAP polling — no webhooks (Loom is localhost-first)
 
 **Known gaps**
 - Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet

@@ -17,11 +17,14 @@ These sections were moved verbatim out of the architecture document so that docu
 
 ## Layer 6: The Bridge
 
-> 🌓 **Partially shipped.** The connector contract is still evolving, but the
-> first vertical slice now lives in `backend/bridge/`: a bounded, read-only
-> iCalendar adapter with recurrence/timezone support, encrypted private URL,
-> Standup context, and idempotent Inbox sync. GitHub, Email, provider-specific
-> Calendar OAuth, and community plugins remain design targets.
+> 🌓 **Partially shipped.** The connector contract is still evolving, but two
+> adapters now live in `backend/bridge/`: a bounded, read-only iCalendar
+> adapter with recurrence/timezone support, encrypted private URL, Standup
+> context, and idempotent Inbox sync; and a read-only GitHub adapter that
+> polls configured repos for commits/issues/PRs into the Inbox with
+> external-ID idempotency, per-repo cursors, and an interval poller. Email,
+> provider-specific Calendar OAuth, GitHub webhooks, and community plugins
+> remain design targets.
 
 The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
 
@@ -32,7 +35,7 @@ The Bridge is how Loom connects to the outside world. All integrations follow th
 
 ### 7.2 v1 Integrations
 
-**GitHub**: polls repos or uses webhooks. Pulls commits, issues, and PRs as capture notes with metadata (repo, author, labels, timestamp). Weaver files them under the right project.
+**GitHub**: shipped as token-based polling (Loom is localhost-first, so no webhooks). Configured repos are polled on an interval for commits, issues, and PRs; activity lands in the Inbox as idempotent captures (`github:<repo>:<kind>:<id>`) with metadata (repo, author, labels, timestamp). Weaver files them under the right project. Webhook delivery and a plugin contract remain planned.
 
 **Email**: local IMAP listener or forwarding address. Receives emails, parses them into markdown captures with sender, subject, date, and body.
 
@@ -284,7 +287,7 @@ These milestones extend the shipped MVP and v1 roadmap (see [ARCHITECTURE.md §1
 
 ### v2 — "Connect and Grow"
 
-- GitHub integration (commits, issues, PRs → captures)
+- GitHub integration (commits, issues, PRs → captures) — shipped as token-based polling; webhooks remain
 - Calendar integration (read-only iCalendar → Standup/Inbox shipped; OAuth adapters remain)
 - Email integration (IMAP/forwarding → captures)
 - Plugin architecture for community integrations

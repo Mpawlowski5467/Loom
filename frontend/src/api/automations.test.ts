@@ -2,9 +2,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "./client";
 import {
   generateStandup,
+  getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncGitHub,
   testCalendar,
+  testGitHub,
+  updateGitHubAutomation,
   updateStandupAutomation,
 } from "./automations";
 
@@ -57,6 +61,47 @@ describe("automation API", () => {
       3,
       "/api/agents/standup/generate",
       { date: "2026-07-14" },
+      controller.signal,
+      120_000,
+    );
+  });
+
+  it("loads and updates GitHub automation", async () => {
+    vi.mocked(apiClient.get).mockResolvedValue({});
+    vi.mocked(apiClient.patch).mockResolvedValue({});
+    await getGitHubAutomation();
+    await updateGitHubAutomation({
+      enabled: true,
+      repos: ["octocat/hello-world"],
+      interval_minutes: 30,
+    });
+    expect(apiClient.get).toHaveBeenCalledWith(
+      "/api/automations/github",
+      undefined,
+    );
+    expect(apiClient.patch).toHaveBeenCalledWith("/api/automations/github", {
+      enabled: true,
+      repos: ["octocat/hello-world"],
+      interval_minutes: 30,
+    });
+  });
+
+  it("tests and syncs the GitHub bridge with the run timeout", async () => {
+    vi.mocked(apiClient.post).mockResolvedValue({});
+    const controller = new AbortController();
+    await testGitHub(controller.signal);
+    await syncGitHub(controller.signal);
+    expect(apiClient.post).toHaveBeenNthCalledWith(
+      1,
+      "/api/automations/github/test",
+      {},
+      controller.signal,
+      120_000,
+    );
+    expect(apiClient.post).toHaveBeenNthCalledWith(
+      2,
+      "/api/automations/github/sync",
+      {},
       controller.signal,
       120_000,
     );

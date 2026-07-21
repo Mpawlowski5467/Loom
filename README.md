@@ -472,6 +472,8 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `POST` `DELETE` | `/api/captures/jobs` | Durable Inbox jobs, retry/cancel, and terminal-history retention |
 | `GET` `PATCH` | `/api/automations/standup` | Daily Standup schedule and redacted Calendar connection state |
 | `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
+| `GET` `PATCH` | `/api/automations/github` | Redacted GitHub connection state (repos, interval, poller status) |
+| `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
 | `GET` | `/api/agents` | Agent status + action counts |
 | `GET` | `/api/agents/activity` | Live per-agent activity (polled by the Pulse view) |
 | `GET` `POST` `PATCH` `DELETE` | `/api/agents/registry` | List / create / edit / remove custom agents |
@@ -519,6 +521,7 @@ What works today:
 - Graph, Board, Inbox, and Thread views
 - Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
 - Scheduled Standup workspace plus encrypted read-only iCalendar connection
+- GitHub Bridge — poll repos for commits/issues/PRs into the Inbox (token encrypted at rest, per-repo cursors, interval poller)
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection

@@ -1,12 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Link2Off, RefreshCw } from "lucide-react";
+import { CalendarDays, Github, Link2Off, RefreshCw } from "lucide-react";
 import {
+  getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncGitHub,
   testCalendar,
+  testGitHub,
+  updateGitHubAutomation,
   updateStandupAutomation,
   type CalendarTestResult,
+  type GitHubAutomation,
+  type GitHubSyncResult,
+  type GitHubTestResult,
   type StandupAutomation,
 } from "../../api/automations";
 import { useApp } from "../../context/app-ctx";
@@ -41,6 +48,26 @@ export function ConnectionsSection(): ReactNode {
   >(null);
   const [error, setError] = useState<string | null>(null);
   const actionAbort = useRef<AbortController | null>(null);
+  const [github, setGithub] = useState<GitHubAutomation | null>(null);
+  const [ghEnabled, setGhEnabled] = useState(false);
+  const [ghToken, setGhToken] = useState("");
+  const [ghRepos, setGhRepos] = useState("");
+  const [ghInterval, setGhInterval] = useState("15");
+  const [ghLookback, setGhLookback] = useState("24");
+  const [ghIncludeCommits, setGhIncludeCommits] = useState(true);
+  const [ghIncludeIssues, setGhIncludeIssues] = useState(true);
+  const [ghIncludePRs, setGhIncludePRs] = useState(true);
+  const [ghTestResult, setGhTestResult] = useState<GitHubTestResult | null>(
+    null,
+  );
+  const [ghSyncResult, setGhSyncResult] = useState<GitHubSyncResult | null>(
+    null,
+  );
+  const [ghBusy, setGhBusy] = useState<
+    "save" | "test" | "sync" | "disconnect" | null
+  >(null);
+  const [ghError, setGhError] = useState<string | null>(null);
+  const ghActionAbort = useRef<AbortController | null>(null);
 
   const apply = useCallback((next: StandupAutomation) => {
     setAutomation(next);
@@ -57,6 +84,17 @@ export function ConnectionsSection(): ReactNode {
     setCreateCaptures(next.calendar.create_captures);
   }, []);
 
+  const applyGitHub = useCallback((next: GitHubAutomation) => {
+    setGithub(next);
+    setGhEnabled(next.github.enabled);
+    setGhRepos(next.github.repos.join("\n"));
+    setGhInterval(String(next.github.interval_minutes));
+    setGhLookback(String(next.github.lookback_hours));
+    setGhIncludeCommits(next.github.include_commits);
+    setGhIncludeIssues(next.github.include_issues);
+    setGhIncludePRs(next.github.include_pull_requests);
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     getStandupAutomation(controller.signal)
@@ -69,12 +107,24 @@ export function ConnectionsSection(): ReactNode {
             : "Connections could not be loaded",
         );
       });
+    getGitHubAutomation(controller.signal)
+      .then(applyGitHub)
+      .catch((err: unknown) => {
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        setGhError(
+          err instanceof Error
+            ? err.message
+            : "GitHub connection could not be loaded",
+        );
+      });
     return () => {
       controller.abort();
       actionAbort.current?.abort();
       actionAbort.current = null;
+      ghActionAbort.current?.abort();
+      ghActionAbort.current = null;
     };
-  }, [apply]);
+  }, [apply, applyGitHub]);
 
   const persist = useCallback(
     async (signal?: AbortSignal): Promise<StandupAutomation> => {
@@ -203,8 +253,141 @@ export function ConnectionsSection(): ReactNode {
     }
   };
 
+  const persistGitHub = useCallback(
+    async (signal?: AbortSignal): Promise<GitHubAutomation> => {
+      const next = await updateGitHubAutomation({
+        enabled: ghEnabled,
+        repos: ghRepos
+          .split("\n")
+          .map((line) => line.trim())
+          .filter(Boolean),
+        interval_minutes: Math.round(Number(ghInterval)) || 15,
+        lookback_hours: Math.round(Number(ghLookback)) || 24,
+        include_commits: ghIncludeCommits,
+        include_issues: ghIncludeIssues,
+        include_pull_requests: ghIncludePRs,
+        ...(ghToken.trim() ? { token: ghToken.trim() } : {}),
+      });
+      if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
+      setGhToken("");
+      applyGitHub(next);
+      return next;
+    },
+    [
+      applyGitHub,
+      ghEnabled,
+      ghIncludeCommits,
+      ghIncludeIssues,
+      ghIncludePRs,
+      ghInterval,
+      ghLookback,
+      ghRepos,
+      ghToken,
+    ],
+  );
+
+  const saveGitHub = async () => {
+    setGhBusy("save");
+    setGhError(null);
+    try {
+      await persistGitHub();
+      pushToast({
+        icon: "✓",
+        agent: "github",
+        body: "GitHub bridge saved",
+      });
+    } catch (err) {
+      setGhError(
+        err instanceof Error ? err.message : "Could not save connection",
+      );
+    } finally {
+      setGhBusy(null);
+    }
+  };
+
+  const testGitHubConnection = async () => {
+    ghActionAbort.current?.abort();
+    const controller = new AbortController();
+    ghActionAbort.current = controller;
+    setGhBusy("test");
+    setGhError(null);
+    try {
+      await persistGitHub(controller.signal);
+      if (controller.signal.aborted) return;
+      const result = await testGitHub(controller.signal);
+      setGhTestResult(result);
+      const reachable = result.repos.filter((repo) => repo.ok).length;
+      pushToast({
+        icon: "◫",
+        agent: "github",
+        body: `GitHub connected — ${reachable} of ${result.repos.length} repos reachable`,
+      });
+    } catch (err) {
+      if ((err as DOMException)?.name !== "AbortError") {
+        setGhError(err instanceof Error ? err.message : "GitHub test failed");
+      }
+    } finally {
+      if (ghActionAbort.current === controller) {
+        ghActionAbort.current = null;
+        setGhBusy(null);
+      }
+    }
+  };
+
+  const syncGitHubNow = async () => {
+    ghActionAbort.current?.abort();
+    const controller = new AbortController();
+    ghActionAbort.current = controller;
+    setGhBusy("sync");
+    setGhError(null);
+    try {
+      await persistGitHub(controller.signal);
+      if (controller.signal.aborted) return;
+      const result = await syncGitHub(controller.signal);
+      setGhSyncResult(result);
+      pushToast({
+        icon: "↷",
+        agent: "github",
+        body: `GitHub sync: ${result.created} new capture${result.created === 1 ? "" : "s"}, ${result.deduplicated} already in Inbox`,
+      });
+    } catch (err) {
+      if ((err as DOMException)?.name !== "AbortError") {
+        setGhError(err instanceof Error ? err.message : "GitHub sync failed");
+      }
+    } finally {
+      if (ghActionAbort.current === controller) {
+        ghActionAbort.current = null;
+        setGhBusy(null);
+      }
+    }
+  };
+
+  const disconnectGitHub = async () => {
+    setGhBusy("disconnect");
+    setGhError(null);
+    try {
+      const next = await updateGitHubAutomation({
+        enabled: false,
+        clear_token: true,
+      });
+      applyGitHub(next);
+      setGhToken("");
+      setGhTestResult(null);
+      setGhSyncResult(null);
+    } catch (err) {
+      setGhError(
+        err instanceof Error ? err.message : "Could not disconnect GitHub",
+      );
+    } finally {
+      setGhBusy(null);
+    }
+  };
+
   const connected = automation?.calendar.feed_url_set ?? false;
   const status = automation?.status;
+  const ghConnected = github?.github.token_set ?? false;
+  const ghStatus = github?.status;
+  const ghSyncErrors = ghSyncResult?.repos.filter((repo) => repo.error) ?? [];
 
   return (
     <div className="settings-panel">
@@ -430,6 +613,216 @@ export function ConnectionsSection(): ReactNode {
               </span>
             ))}
           </div>
+        )}
+      </section>
+
+      <section
+        className="settings-connection-card"
+        aria-labelledby="github-connection-title"
+      >
+        <div className="settings-connection-head">
+          <div>
+            <h2 id="github-connection-title">
+              <Github size={17} aria-hidden="true" /> GitHub bridge
+            </h2>
+            <p>
+              Poll GitHub repos for new commits, issues, and PRs — activity
+              lands in the Inbox for triage.
+            </p>
+          </div>
+          <label className="settings-switch">
+            <input
+              type="checkbox"
+              aria-label="Enable GitHub connection"
+              checked={ghEnabled}
+              onChange={(event) => setGhEnabled(event.target.checked)}
+              disabled={
+                !github || ghBusy !== null || (!ghEnabled && !ghRepos.trim())
+              }
+            />
+            <span>{ghEnabled ? "Enabled" : "Off"}</span>
+          </label>
+        </div>
+        <label className="settings-field">
+          <span className="settings-field-label">
+            Personal access token {ghConnected && <em>token saved</em>}
+          </span>
+          <input
+            className="input"
+            type="password"
+            value={ghToken}
+            onChange={(event) => setGhToken(event.target.value)}
+            placeholder={
+              ghConnected
+                ? "ghp_… (leave blank to keep current)"
+                : "ghp_… or github_pat_…"
+            }
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+        <label className="settings-field">
+          <span className="settings-field-label">
+            Repositories — one owner/name per line
+          </span>
+          <textarea
+            className="input"
+            rows={3}
+            value={ghRepos}
+            onChange={(event) => setGhRepos(event.target.value)}
+            placeholder={"octocat/hello-world\nyour-org/private-repo"}
+            autoComplete="off"
+            spellCheck={false}
+          />
+        </label>
+        <div className="settings-field-row">
+          <label className="settings-field">
+            <span className="settings-field-label">Poll interval (minutes)</span>
+            <input
+              className="input"
+              type="number"
+              min={5}
+              max={1440}
+              value={ghInterval}
+              onChange={(event) => setGhInterval(event.target.value)}
+            />
+          </label>
+          <label className="settings-field">
+            <span className="settings-field-label">Lookback (hours)</span>
+            <input
+              className="input"
+              type="number"
+              min={1}
+              max={720}
+              value={ghLookback}
+              onChange={(event) => setGhLookback(event.target.value)}
+            />
+          </label>
+        </div>
+        <label className="settings-toggle-row">
+          <input
+            type="checkbox"
+            checked={ghIncludeCommits}
+            onChange={(event) => setGhIncludeCommits(event.target.checked)}
+          />
+          <span>
+            <span className="settings-toggle-label">Include commits</span>
+            <span className="settings-toggle-hint">
+              New commits on each repo&apos;s default branch.
+            </span>
+          </span>
+        </label>
+        <label className="settings-toggle-row">
+          <input
+            type="checkbox"
+            checked={ghIncludeIssues}
+            onChange={(event) => setGhIncludeIssues(event.target.checked)}
+          />
+          <span>
+            <span className="settings-toggle-label">Include issues</span>
+            <span className="settings-toggle-hint">
+              Issues opened or updated in the lookback window.
+            </span>
+          </span>
+        </label>
+        <label className="settings-toggle-row">
+          <input
+            type="checkbox"
+            checked={ghIncludePRs}
+            onChange={(event) => setGhIncludePRs(event.target.checked)}
+          />
+          <span>
+            <span className="settings-toggle-label">Include pull requests</span>
+            <span className="settings-toggle-hint">
+              PRs opened or updated in the lookback window.
+            </span>
+          </span>
+        </label>
+
+        <div className="settings-actions">
+          <button
+            className="btn btn-md btn-active"
+            type="button"
+            aria-label="Save GitHub settings"
+            onClick={() => void saveGitHub()}
+            disabled={!github || ghBusy !== null}
+          >
+            {ghBusy === "save" ? "Saving…" : "Save"}
+          </button>
+          <button
+            className="btn btn-md"
+            type="button"
+            aria-label="Test GitHub connection"
+            onClick={() => void testGitHubConnection()}
+            disabled={!github || ghBusy !== null || !ghRepos.trim()}
+          >
+            {ghBusy === "test" ? "Testing…" : "Test connection"}
+          </button>
+          <button
+            className="btn btn-md"
+            type="button"
+            onClick={() => void syncGitHubNow()}
+            disabled={!github || ghBusy !== null || !ghRepos.trim()}
+          >
+            <RefreshCw size={13} aria-hidden="true" />
+            {ghBusy === "sync" ? "Syncing…" : "Sync now"}
+          </button>
+          {ghConnected && (
+            <button
+              className="btn btn-md"
+              type="button"
+              aria-label="Disconnect GitHub"
+              onClick={() => void disconnectGitHub()}
+              disabled={ghBusy !== null}
+            >
+              <Link2Off size={13} aria-hidden="true" /> Disconnect
+            </button>
+          )}
+        </div>
+
+        {ghError && (
+          <p className="settings-test-result fail" role="alert">
+            {ghError}
+          </p>
+        )}
+        {ghTestResult && (
+          <div
+            className="settings-calendar-preview"
+            role="status"
+            aria-live="polite"
+          >
+            <strong>
+              {ghTestResult.repos.filter((repo) => repo.ok).length} of{" "}
+              {ghTestResult.repos.length} repos reachable
+            </strong>
+            {ghTestResult.repos.map((repo) => (
+              <span key={repo.repo}>
+                {repo.ok ? "✓" : "✗"} {repo.repo}
+                {repo.ok
+                  ? repo.description
+                    ? ` — ${repo.description}`
+                    : ""
+                  : ` — ${repo.error}`}
+              </span>
+            ))}
+          </div>
+        )}
+        {ghSyncErrors.map((repo) => (
+          <p key={repo.repo} className="settings-test-result fail" role="alert">
+            {repo.repo}: {repo.error}
+          </p>
+        ))}
+        {ghStatus?.last_run && (
+          <p className="settings-connection-status">
+            Last polled {new Date(ghStatus.last_run).toLocaleString()} —{" "}
+            {ghStatus.last_created} new capture
+            {ghStatus.last_created === 1 ? "" : "s"}
+          </p>
+        )}
+        {ghStatus?.last_error && (
+          <p className="settings-test-result fail" role="alert">
+            Last run: {ghStatus.last_error}
+          </p>
         )}
       </section>
     </div>

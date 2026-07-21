@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GitHub Bridge adapter** — configured repositories are polled on an
+  interval for new commits, issues, and PRs (`backend/bridge/github*.py`).
+  Activity lands in the Inbox through the unified capture ingress with
+  external-ID idempotency (`github:<repo>:<kind>:<id>`), so producer retries
+  never duplicate work. The personal access token is Fernet-encrypted at rest
+  like provider keys; per-repo cursors (`github-sync.json`) bound each poll,
+  and a background poller re-reads config every tick so Settings edits apply
+  live. `/api/automations/github/*` exposes redacted config + poller status,
+  a per-repo connection test, and a manual sync; a Connections settings card
+  drives it all. Token-based polling only — no webhooks (Loom is
+  localhost-first); one repo's failure never sinks the sync.
+
 ## [1.1.0] - 2026-07-19
 
 Loom 1.1 — the automation-and-reliability release. Captures process through a

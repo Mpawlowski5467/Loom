@@ -2,10 +2,15 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  getGitHubAutomation,
   getStandupAutomation,
   syncCalendar,
+  syncGitHub,
   testCalendar,
+  testGitHub,
+  updateGitHubAutomation,
   updateStandupAutomation,
+  type GitHubAutomation,
   type StandupAutomation,
 } from "../../api/automations";
 import { AppCtx, type AppContextValue } from "../../context/app-ctx";
@@ -16,6 +21,10 @@ vi.mock("../../api/automations", () => ({
   updateStandupAutomation: vi.fn(),
   testCalendar: vi.fn(),
   syncCalendar: vi.fn(),
+  getGitHubAutomation: vi.fn(),
+  updateGitHubAutomation: vi.fn(),
+  testGitHub: vi.fn(),
+  syncGitHub: vi.fn(),
 }));
 
 const automation: StandupAutomation = {
@@ -41,6 +50,25 @@ const automation: StandupAutomation = {
       last_capture_id: "",
       last_capture_path: "",
     },
+  },
+};
+
+const githubAutomation: GitHubAutomation = {
+  github: {
+    enabled: false,
+    token_set: false,
+    repos: ["octocat/hello-world"],
+    interval_minutes: 15,
+    lookback_hours: 24,
+    include_commits: true,
+    include_issues: true,
+    include_pull_requests: true,
+  },
+  status: {
+    running: false,
+    last_run: "",
+    last_error: "",
+    last_created: 0,
   },
 };
 
@@ -77,6 +105,16 @@ describe("ConnectionsSection", () => {
       created: 1,
       deduplicated: 0,
       capture_ids: ["thr_one"],
+    });
+    vi.mocked(getGitHubAutomation).mockResolvedValue(githubAutomation);
+    vi.mocked(updateGitHubAutomation).mockResolvedValue(githubAutomation);
+    vi.mocked(testGitHub).mockResolvedValue({ repos: [] });
+    vi.mocked(syncGitHub).mockResolvedValue({
+      synced_at: "2026-07-14T10:00:00Z",
+      repos: [],
+      created: 0,
+      deduplicated: 0,
+      errors: 0,
     });
   });
 
@@ -151,5 +189,152 @@ describe("ConnectionsSection", () => {
     expect(signal?.aborted).toBe(false);
     unmount();
     expect(signal?.aborted).toBe(true);
+  });
+
+  it("renders the GitHub card with a redacted saved token", async () => {
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      github: { ...githubAutomation.github, token_set: true },
+    });
+    renderSection();
+    expect(
+      await screen.findByRole("heading", { name: "GitHub bridge" }),
+    ).toBeInTheDocument();
+    expect(screen.getByText("token saved")).toBeInTheDocument();
+    expect(
+      screen.getByPlaceholderText("ghp_… (leave blank to keep current)"),
+    ).toHaveValue("");
+  });
+
+  it("saves GitHub settings with repos serialized from lines", async () => {
+    const user = userEvent.setup();
+    renderSection();
+    const reposInput = await screen.findByPlaceholderText(
+      /octocat\/hello-world/,
+    );
+    await user.type(reposInput, "{enter}mpawlowski/loom");
+    await user.click(
+      screen.getByRole("checkbox", { name: "Enable GitHub connection" }),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save GitHub settings" }),
+    );
+    await waitFor(() =>
+      expect(updateGitHubAutomation).toHaveBeenCalledWith({
+        enabled: true,
+        repos: ["octocat/hello-world", "mpawlowski/loom"],
+        interval_minutes: 15,
+        lookback_hours: 24,
+        include_commits: true,
+        include_issues: true,
+        include_pull_requests: true,
+      }),
+    );
+  });
+
+  it("tests GitHub repos and renders per-repo results", async () => {
+    const user = userEvent.setup();
+    vi.mocked(testGitHub).mockResolvedValue({
+      repos: [
+        {
+          repo: "octocat/hello-world",
+          ok: true,
+          private: false,
+          description: "Hello World",
+          default_branch: "main",
+          pushed_at: "",
+          error: "",
+        },
+        {
+          repo: "octocat/missing",
+          ok: false,
+          private: false,
+          description: "",
+          default_branch: "",
+          pushed_at: "",
+          error: "Not Found",
+        },
+      ],
+    });
+    renderSection();
+    await screen.findByDisplayValue("octocat/hello-world");
+    await user.click(
+      screen.getByRole("button", { name: "Test GitHub connection" }),
+    );
+    expect(
+      await screen.findByText("1 of 2 repos reachable"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("✓ octocat/hello-world — Hello World"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("✗ octocat/missing — Not Found"),
+    ).toBeInTheDocument();
+    expect(testGitHub).toHaveBeenCalledWith(expect.any(AbortSignal));
+  });
+
+  it("syncs GitHub and reports created captures and repo errors", async () => {
+    const user = userEvent.setup();
+    const pushToast = vi.fn();
+    vi.mocked(syncGitHub).mockResolvedValue({
+      synced_at: "2026-07-14T10:00:00Z",
+      repos: [
+        {
+          repo: "octocat/hello-world",
+          fetched: 5,
+          created: 3,
+          deduplicated: 2,
+          error: "",
+        },
+        {
+          repo: "octocat/private",
+          fetched: 0,
+          created: 0,
+          deduplicated: 0,
+          error: "Not Found",
+        },
+      ],
+      created: 3,
+      deduplicated: 2,
+      errors: 1,
+    });
+    renderSection(pushToast);
+    await screen.findByDisplayValue("octocat/hello-world");
+    await user.click(screen.getByRole("button", { name: "Sync now" }));
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: "GitHub sync: 3 new captures, 2 already in Inbox",
+        }),
+      ),
+    );
+    expect(
+      await screen.findByText("octocat/private: Not Found"),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces the enabled-without-repos 422 as an inline error", async () => {
+    const user = userEvent.setup();
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      github: { ...githubAutomation.github, enabled: true, repos: [] },
+    });
+    vi.mocked(updateGitHubAutomation).mockRejectedValue(
+      new Error("At least one repository is required when enabled"),
+    );
+    renderSection();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save GitHub settings" }),
+      ).toBeEnabled(),
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Save GitHub settings" }),
+    );
+    expect(
+      await screen.findByText(
+        "At least one repository is required when enabled",
+      ),
+    ).toBeInTheDocument();
   });
 });

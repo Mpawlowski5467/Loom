@@ -81,6 +81,71 @@ export interface StandupResult {
   capture_path: string;
 }
 
+export interface GitHubBridgeConfig {
+  enabled: boolean;
+  token_set: boolean;
+  repos: string[];
+  interval_minutes: number;
+  lookback_hours: number;
+  include_commits: boolean;
+  include_issues: boolean;
+  include_pull_requests: boolean;
+}
+
+export interface GitHubBridgeStatus {
+  running: boolean;
+  last_run: string;
+  last_error: string;
+  last_created: number;
+}
+
+export interface GitHubAutomation {
+  github: GitHubBridgeConfig;
+  status: GitHubBridgeStatus;
+}
+
+export interface GitHubAutomationUpdate {
+  enabled?: boolean;
+  token?: string;
+  clear_token?: boolean;
+  repos?: string[];
+  interval_minutes?: number;
+  lookback_hours?: number;
+  include_commits?: boolean;
+  include_issues?: boolean;
+  include_pull_requests?: boolean;
+}
+
+export interface GitHubRepoTestResult {
+  repo: string;
+  ok: boolean;
+  private: boolean;
+  description: string;
+  default_branch: string;
+  pushed_at: string;
+  error: string;
+}
+
+export interface GitHubTestResult {
+  repos: GitHubRepoTestResult[];
+}
+
+export interface GitHubRepoSyncResult {
+  repo: string;
+  fetched: number;
+  created: number;
+  deduplicated: number;
+  error: string;
+}
+
+export interface GitHubSyncResult {
+  synced_at: string;
+  repos: GitHubRepoSyncResult[];
+  created: number;
+  deduplicated: number;
+  errors: number;
+}
+
 export function getStandupAutomation(
   signal?: AbortSignal,
 ): Promise<StandupAutomation> {
@@ -124,6 +189,36 @@ export function generateStandup(
   return apiClient.post<StandupResult>(
     "/api/agents/standup/generate",
     { date },
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function getGitHubAutomation(
+  signal?: AbortSignal,
+): Promise<GitHubAutomation> {
+  return apiClient.get<GitHubAutomation>("/api/automations/github", signal);
+}
+
+export function updateGitHubAutomation(
+  update: GitHubAutomationUpdate,
+): Promise<GitHubAutomation> {
+  return apiClient.patch<GitHubAutomation>("/api/automations/github", update);
+}
+
+export function testGitHub(signal?: AbortSignal): Promise<GitHubTestResult> {
+  return apiClient.post<GitHubTestResult>(
+    "/api/automations/github/test",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function syncGitHub(signal?: AbortSignal): Promise<GitHubSyncResult> {
+  return apiClient.post<GitHubSyncResult>(
+    "/api/automations/github/sync",
+    {},
     signal,
     AUTOMATION_RUN_TIMEOUT_MS,
   );

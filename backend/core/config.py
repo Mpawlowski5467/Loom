@@ -397,6 +397,85 @@ class CalendarBridgeConfigPublic(BaseModel):
     create_captures: bool
 
 
+_REPO_NAME_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+class GitHubBridgeConfig(BaseModel):
+    """GitHub connection: poll repositories for commits/issues/PRs → Inbox.
+
+    ``token`` is a personal access token (read-only scopes suffice); it is
+    Fernet-encrypted at rest like provider API keys. Without a token only
+    public repositories work, at a much lower rate limit.
+    """
+
+    enabled: bool = False
+    token: str | None = None
+    repos: list[str] = Field(default_factory=list)
+    interval_minutes: int = Field(default=15, ge=5, le=1440)
+    lookback_hours: int = Field(default=24, ge=1, le=720)
+    include_commits: bool = True
+    include_issues: bool = True
+    include_pull_requests: bool = True
+
+    @field_validator("token")
+    @classmethod
+    def _normalize_token(cls, value: str | None) -> str | None:
+        if value is None or not value.strip():
+            return None
+        # Persisted private values are decrypted only after the full config is
+        # validated, matching the calendar feed URL handling above.
+        if value.startswith("enc:v1:"):
+            return value
+        return value.strip()
+
+    @field_validator("repos")
+    @classmethod
+    def _validate_repos(cls, value: list[str]) -> list[str]:
+        cleaned: list[str] = []
+        seen: set[str] = set()
+        for entry in value:
+            entry = entry.strip().removesuffix(".git").strip("/")
+            if not entry:
+                continue
+            if not _REPO_NAME_RE.match(entry) or ".." in entry:
+                raise ValueError(f"repository must be 'owner/name', got {entry!r}")
+            # GitHub repo names are case-insensitive — dedupe on lowercase,
+            # keep the first-seen casing for display.
+            key = entry.lower()
+            if key not in seen:
+                seen.add(key)
+                cleaned.append(entry)
+        if len(cleaned) > 50:
+            raise ValueError("at most 50 repositories can be watched")
+        return cleaned
+
+    def to_public(self) -> GitHubBridgeConfigPublic:
+        """Return the redacted view safe for the API."""
+        return GitHubBridgeConfigPublic(
+            enabled=self.enabled,
+            token_set=bool(self.token),
+            repos=list(self.repos),
+            interval_minutes=self.interval_minutes,
+            lookback_hours=self.lookback_hours,
+            include_commits=self.include_commits,
+            include_issues=self.include_issues,
+            include_pull_requests=self.include_pull_requests,
+        )
+
+
+class GitHubBridgeConfigPublic(BaseModel):
+    """GitHub connection state without its private token."""
+
+    enabled: bool
+    token_set: bool
+    repos: list[str]
+    interval_minutes: int
+    lookback_hours: int
+    include_commits: bool
+    include_issues: bool
+    include_pull_requests: bool
+
+
 class UIState(BaseModel):
     """Persisted UI preferences."""
 
@@ -441,6 +520,7 @@ class GlobalConfig(BaseModel):
     capture_processing: CaptureProcessingConfig = Field(default_factory=CaptureProcessingConfig)
     standup_schedule: StandupScheduleConfig = Field(default_factory=StandupScheduleConfig)
     calendar: CalendarBridgeConfig = Field(default_factory=CalendarBridgeConfig)
+    github: GitHubBridgeConfig = Field(default_factory=GitHubBridgeConfig)
     ui: UIState = Field(default_factory=UIState)
     onboarding: OnboardingState = Field(default_factory=OnboardingState)
     agent_models: dict[str, AgentModelOverride] = Field(default_factory=dict)
@@ -513,6 +593,8 @@ class GlobalConfig(BaseModel):
                     self.calendar.feed_url = None
             else:
                 self.calendar.feed_url = None
+        if self.github.token:
+            self.github.token = decrypt(self.github.token) or None
 
     def _encrypt_keys(self) -> None:
         """Encrypt provider keys and private connection URLs in place."""
@@ -523,6 +605,8 @@ class GlobalConfig(BaseModel):
                 provider.api_key = encrypt(provider.api_key)
         if self.calendar.feed_url:
             self.calendar.feed_url = encrypt(self.calendar.feed_url)
+        if self.github.token:
+            self.github.token = encrypt(self.github.token)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""
@@ -533,6 +617,7 @@ class GlobalConfig(BaseModel):
             capture_processing=self.capture_processing,
             standup_schedule=self.standup_schedule,
             calendar=self.calendar.to_public(),
+            github=self.github.to_public(),
             ui=self.ui,
             onboarding=self.onboarding,
         )
@@ -547,6 +632,7 @@ class GlobalConfigPublic(BaseModel):
     capture_processing: CaptureProcessingConfig
     standup_schedule: StandupScheduleConfig
     calendar: CalendarBridgeConfigPublic
+    github: GitHubBridgeConfigPublic
     ui: UIState
     onboarding: OnboardingState
 

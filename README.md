@@ -26,8 +26,19 @@ You write captures; agents do the structuring, linking, summarizing, and validat
 
 ## See Loom
 
-[Watch the 30-second product trailer](docs/trailer/loom-trailer.mp4), or open
-the full-size captures below.
+<p align="center">
+  <a href="https://cdn.jsdelivr.net/gh/Mpawlowski5467/Loom@5e0c104fa46016db0710d550af86aac703e4bfcc/docs/trailer/loom-trailer.mp4">
+    <img src="docs/trailer/title-card.png" alt="Play the 30-second Loom product trailer" width="720">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://cdn.jsdelivr.net/gh/Mpawlowski5467/Loom@5e0c104fa46016db0710d550af86aac703e4bfcc/docs/trailer/loom-trailer.mp4">▶ Play the 30-second trailer</a>
+  ·
+  <a href="docs/trailer/loom-trailer.mp4?raw=1">Download MP4</a>
+</p>
+
+Open the full-size captures below for a closer look at each view.
 
 <table>
   <tr>

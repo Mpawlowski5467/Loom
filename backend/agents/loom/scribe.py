@@ -16,10 +16,12 @@ from agents.loom.scribe_notes import (
     build_notes_referenced,
     normalize_sections,
     summarize_changelog_activity,
+    summarize_changelog_day,
 )
 from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import (
     generate_id,
+    normalize_wikilinks_in_body,
     now_iso,
     parse_note,
     parse_note_meta,
@@ -43,7 +45,8 @@ generate a concise index summary for a folder of notes.
 
 Given a list of notes (title, type, tags, first 200 chars), produce a markdown
 index that:
-1. Opens with a one-paragraph overview of the folder's content
+1. Opens with a one-paragraph overview that names the folder's main notes and
+   themes — no filler ("various topics", "a collection of notes")
 2. Groups notes by theme or category if patterns emerge
 3. Lists each note as a [[wikilink]] with a brief description
 4. Keeps total length under 500 words
@@ -54,15 +57,33 @@ Use [[wikilinks]] for all note references. Return only the markdown body.
 _DAILY_LOG_SYSTEM = """\
 You are the Scribe — a quiet keeper of daily logs. From today's per-agent
 changelog entries, write a short daily entry that a returning user can scan
-in thirty seconds to recall what happened.
+in thirty seconds to recall what actually happened.
+
+Style rules — follow them strictly:
+- Name names. Every claim must reference the concrete notes, projects or
+  captures involved, as [[wikilinks]]. A sentence with no note named in it
+  is almost always filler.
+- Plain past tense, third person. The changelog only records agent actions —
+  never address the reader as "you" and never write "we".
+- Group related actions into one bullet instead of mirroring the changelog
+  entry-for-entry: three "linked" actions on the same note are a single
+  bullet.
+- Use the Details fields for specifics (which capture was processed, what
+  was linked to what) rather than restating the Agent/Action/Target fields.
+- No filler or verdicts: never write "productive day", "busy day",
+  "lots of activity", "various updates", "made progress", "several notes",
+  or similar empty phrases. If a sentence can be deleted without losing a
+  fact, delete it.
+- Skip routine ticks (file-watch refreshes, index regenerations, scans,
+  routine validations) unless something notable surfaced from them.
+- Bounded length: the whole entry stays under 200 words.
 
 Output exactly these sections, in this order:
 
 ## Summary
-Two to three sentences. Frame the day in terms of what the user (and the
-agents acting on their behalf) actually accomplished. Skip the noise — omit
-routine ticks like file-watch refreshes or index regenerations unless
-something notable surfaced from them.
+Two to three sentences saying what was created, linked or changed, naming
+the notes involved. Lead with the most significant event of the day — no
+throat-clearing opener, no assessment of how the day went.
 
 ## Themes
 One to three short bullets naming the recurring topics or active threads of
@@ -71,8 +92,8 @@ this section entirely if no clear theme emerges.
 
 ## Activity
 Five to ten bullets of notable actions. Each bullet starts with the actor
-(you, weaver, spider, scribe, sentinel, archivist, researcher, standup) and
-is past tense. Reference notes as [[wikilinks]].
+(weaver, spider, scribe, sentinel, archivist, researcher, standup), is past
+tense, and names the [[note]] it touched.
 
 ## Notes Referenced
 Every note created or modified today, one per line, as [[wikilinks]].
@@ -106,6 +127,9 @@ class Scribe(BaseAgent):
                 return {"action": "skipped", "details": "No notes in folder", "content": ""}
 
             content = await self._generate_index(folder_path.name, notes_info)
+            # Canonicalize wikilink targets (local models sometimes emit
+            # unicode dash/space variants inside [[...]]).
+            content = normalize_wikilinks_in_body(content)
 
             index_path = folder_path / "_index.md"
             # Hold a lock on _index.md so two concurrent indexings of the
@@ -156,6 +180,10 @@ class Scribe(BaseAgent):
                 self_note=f"{date_str}.md",
             )
             body = normalize_sections(body, notes_section)
+            # Canonicalize wikilink targets in the model-drafted sections
+            # (the deterministic notes section is already canonical; the
+            # helper is idempotent).
+            body = normalize_wikilinks_in_body(body)
 
             # Write or update the daily note. Lock covers the read-modify-write
             # so a concurrent run for the same date can't lose history entries.
@@ -266,15 +294,17 @@ class Scribe(BaseAgent):
 
         return self._fallback_daily_body(date_str, changelog_text)
 
-    @staticmethod
-    def _fallback_daily_body(date_str: str, changelog_text: str) -> str:
+    def _fallback_daily_body(self, date_str: str, changelog_text: str) -> str:
         """Deterministic daily body when no chat provider is available.
 
-        Emits ``## Summary`` and ``## Activity`` from the changelog itself. The
+        Emits ``## Summary`` and ``## Activity`` from the changelog itself:
+        the summary names what actually happened (notable actions and the
+        notes they touched), the activity list skips routine ticks. The
         ``## Notes Referenced`` section is added by :func:`normalize_sections`.
         """
-        activity = summarize_changelog_activity(changelog_text)
-        return f"## Summary\n\nActivity log for {date_str}.\n\n## Activity\n\n{activity}\n"
+        summary = summarize_changelog_day(changelog_text, vault_root=self._vault_root)
+        activity = summarize_changelog_activity(changelog_text, vault_root=self._vault_root)
+        return f"## Summary\n\n{summary}\n\n## Activity\n\n{activity}\n"
 
     def _collect_folder_notes(self, folder_path: Path) -> list[dict[str, Any]]:
         """Collect metadata + preview for all notes in a folder."""

@@ -163,7 +163,10 @@ export function MainShell(): ReactNode {
         </div>
       )}
       <footer className="statusbar">
-        <span>loom · {themeLabel} theme · v0.3.0</span>
+        <span>
+          loom · {themeLabel} theme · v
+          {(import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev"}
+        </span>
         <span style={{ marginLeft: "auto" }}>
           {offline ? "offline" : "local-first"}
         </span>

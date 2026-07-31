@@ -5,12 +5,12 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from agents.loom.weaver_helpers import load_schema, parse_classification
+from agents.loom.schema_sections import expected_sections
+from agents.loom.weaver_helpers import parse_classification
 from agents.loom.weaver_prompts import (
     CLASSIFY_SYSTEM,
     CREATE_SYSTEM,
     FORMAT_SYSTEM,
-    SKELETON_SECTIONS,
 )
 from agents.sanitize import scrub_untrusted
 from core.exceptions import ProviderConfigError, ProviderError
@@ -34,15 +34,12 @@ _BODY_CONTENT_TOKENS = 2000
 def _required_headings(vault_root: Path, note_type: str) -> str:
     """Return required ## headings as a numbered directive list.
 
-    Prefers the on-disk schema (`rules/schemas/<type>.md`) and falls back
-    to the built-in SKELETON_SECTIONS so the LLM is never told "no schema".
+    Section truth comes from ``agents.loom.schema_sections`` — the same
+    source Sentinel enforces and Weaver's skeletons use — so the prompt can
+    never ask for sections the validator doesn't expect. Unknown types yield
+    an empty string (the prompt then carries no heading directive).
     """
-    raw = load_schema(vault_root, note_type) or SKELETON_SECTIONS.get(note_type, "")
-    headings: list[str] = []
-    for line in raw.splitlines():
-        stripped = line.strip()
-        if stripped.startswith("## "):
-            headings.append(stripped[3:].strip())
+    headings = expected_sections(vault_root, note_type)
     if not headings:
         return ""
     return "\n".join(f"{i + 1}. ## {h}" for i, h in enumerate(headings))

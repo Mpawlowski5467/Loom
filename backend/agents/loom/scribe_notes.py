@@ -14,6 +14,7 @@ that is allowed — only *writes* must go through ``core/vault_io``.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterator
 from pathlib import Path
 
 import yaml
@@ -212,7 +213,12 @@ _ENTRY_RE = re.compile(r"^##[ \t]+\S", re.MULTILINE)
 _NOISE_ACTIONS = {"scanned", "audited", "indexed", "validated", "blocked", "error"}
 
 
-def summarize_changelog_activity(changelog_text: str, *, limit: int = 10) -> str:
+def summarize_changelog_activity(
+    changelog_text: str,
+    *,
+    limit: int = 10,
+    vault_root: Path | None = None,
+) -> str:
     """Render changelog entries as a deterministic ``## Activity`` bullet list.
 
     Produces ``- {agent} {action} {note-title}`` lines from each entry's
@@ -223,32 +229,100 @@ def summarize_changelog_activity(changelog_text: str, *, limit: int = 10) -> str
     Args:
         changelog_text: Concatenated per-agent changelog markdown for the day.
         limit: Maximum number of bullets to emit.
+        vault_root: Root of the active vault. When given, entries whose Target
+            is a folder (e.g. weaver's note creation, which targets captures/)
+            resolve the note they touched from the post-arrow path in Details.
 
     Returns:
         A markdown bullet list, or a placeholder when nothing notable remains.
     """
     bullets: list[str] = []
-    for block in _split_entries(changelog_text):
-        agent_m = _AGENT_RE.search(block)
-        action_m = _ACTION_RE.search(block)
-        target_m = _TARGET_RE.search(block)
-        if not (agent_m and action_m):
-            continue
-        action = action_m.group(1).strip()
-        if action in _NOISE_ACTIONS:
-            continue
-        agent = agent_m.group(1).strip()
-        target = _target_label(target_m.group(1)) if target_m else ""
+    for agent, action, label in _notable_entries(changelog_text, vault_root):
         bullet = f"- {agent} {action}"
-        if target:
-            bullet += f" {target}"
-        bullets.append(bullet.rstrip())
+        if label:
+            bullet += f" {label}"
+        bullets.append(bullet)
         if len(bullets) >= limit:
             break
 
     if not bullets:
         return "_No notable activity recorded._"
     return "\n".join(bullets)
+
+
+def summarize_changelog_day(
+    changelog_text: str,
+    *,
+    vault_root: Path | None = None,
+    max_names: int = 3,
+) -> str:
+    """Render a one-sentence deterministic ``## Summary`` for the fallback.
+
+    Leads with what actually happened — how many notable actions and which
+    notes they touched, named as ``[[wikilinks]]`` — rather than parroting
+    the date or verdicts like "productive day".
+
+    Args:
+        changelog_text: Concatenated per-agent changelog markdown for the day.
+        vault_root: Root of the active vault (used to resolve note titles).
+        max_names: Maximum notes to name before collapsing to "and N others".
+
+    Returns:
+        A single-line summary, or an italic placeholder when only routine
+        maintenance was recorded.
+    """
+    entries = list(_notable_entries(changelog_text, vault_root))
+    if not entries:
+        return "_No notable activity recorded — only routine maintenance._"
+
+    names: list[str] = []
+    for _agent, _action, label in entries:
+        if label and label not in names:
+            names.append(label)
+
+    count = f"{len(entries)} notable action{'s' if len(entries) != 1 else ''}"
+    if not names:
+        return f"{count} recorded."
+
+    shown = names[:max_names]
+    extra = len(names) - len(shown)
+    if extra:
+        name_list = ", ".join(shown) + f" and {extra} other{'s' if extra != 1 else ''}"
+    else:
+        name_list = ", ".join(shown[:-1]) + (" and " if len(shown) > 1 else "") + shown[-1]
+    return f"{count} touched {name_list}."
+
+
+def _notable_entries(
+    changelog_text: str,
+    vault_root: Path | None,
+) -> Iterator[tuple[str, str, str]]:
+    """Yield ``(agent, action, label)`` for each non-noise changelog entry.
+
+    ``label`` is a ``[[Title]]`` wikilink for the note the entry touched,
+    resolved from the Target path or — when the Target is a folder and
+    ``vault_root`` is known — from the post-arrow path in Details (weaver
+    records the note it created only there). Empty when no note can be named.
+    """
+    threads_dir = (vault_root / "threads").resolve() if vault_root is not None else None
+    for block in _split_entries(changelog_text):
+        agent_m = _AGENT_RE.search(block)
+        action_m = _ACTION_RE.search(block)
+        if not (agent_m and action_m):
+            continue
+        action = action_m.group(1).strip()
+        if action in _NOISE_ACTIONS:
+            continue
+        target_m = _TARGET_RE.search(block)
+        label = _target_label(target_m.group(1)) if target_m else ""
+        if not label and threads_dir is not None:
+            details_m = _DETAILS_RE.search(block)
+            arrow_m = _ARROW_PATH_RE.search(details_m.group(1)) if details_m else None
+            if arrow_m:
+                candidate = (threads_dir / arrow_m.group(1)).resolve()
+                if _is_real_note(candidate, threads_dir):
+                    label = f"[[{_resolve_title(candidate)}]]"
+        yield agent_m.group(1).strip(), action, label
 
 
 def _split_entries(changelog_text: str) -> list[str]:

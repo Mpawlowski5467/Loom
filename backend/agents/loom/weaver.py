@@ -13,12 +13,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
+from agents.loom.schema_sections import skeleton_body
 from agents.loom.weaver_io import write_note
 from agents.loom.weaver_llm import classify_capture, format_content, generate_note_body
-from agents.loom.weaver_prompts import SKELETON_SECTIONS
 from agents.loom.weaver_tags import snap_tags
 from core.note_index import get_note_index
-from core.notes import Note, parse_note
+from core.notes import Note, normalize_wikilinks_in_body, parse_note
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 
 if TYPE_CHECKING:
@@ -178,7 +178,9 @@ class Weaver(BaseAgent):
             folder=folder,
             title=title,
             tags=tags,
-            body=body,
+            # Canonicalize now so the preview (and Spider's link scan of it)
+            # sees the same targets the eventual write will store.
+            body=normalize_wikilinks_in_body(body),
             raw_capture_id=raw_note.id,
         )
 
@@ -242,7 +244,7 @@ class Weaver(BaseAgent):
             elif content.strip():
                 body = content
             else:
-                body = SKELETON_SECTIONS.get(note_type, "")
+                body = skeleton_body(self._vault_root, note_type)
 
             note = write_note(
                 self._vault_root,

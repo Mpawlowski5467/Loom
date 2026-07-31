@@ -17,14 +17,20 @@ These sections were moved verbatim out of the architecture document so that docu
 
 ## Layer 6: The Bridge
 
-> 🌓 **Partially shipped.** The connector contract is still evolving, but three
+> 🌓 **Partially shipped.** The connector contract is still evolving, but six
 > adapters now live in `backend/bridge/`: a bounded, read-only iCalendar
 > adapter (recurrence/timezone support, encrypted private URL, Standup
 > context, idempotent Inbox sync); a read-only GitHub adapter (token polling
 > of commits/issues/PRs, external-ID idempotency, per-repo cursors, interval
-> poller); and a read-only Email adapter (IMAP polling with UID cursors,
-> `BODY.PEEK` fetches so mail is never marked seen). Calendar OAuth,
-> GitHub webhooks, and community plugins remain design targets.
+> poller); a read-only Email adapter (IMAP polling with UID cursors,
+> `BODY.PEEK` fetches so mail is never marked seen); a Google connector
+> (one union-scope sign-in covering Calendar + Gmail — an OAuth
+> alternative to IMAP for mail); and an Outlook Calendar adapter. The
+> OAuth connectors share one loopback authorization-code flow with
+> encrypted auto-refreshing tokens and incremental cursors — code-complete
+> and mock-verified, pending the user's OAuth app registrations for the
+> first live connect. GitHub webhooks and community plugins remain design
+> targets.
 
 The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
 
@@ -37,12 +43,9 @@ The Bridge is how Loom connects to the outside world. All integrations follow th
 
 **GitHub**: shipped as token-based polling (Loom is localhost-first, so no webhooks). Configured repos are polled on an interval for commits, issues, and PRs; activity lands in the Inbox as idempotent captures (`github:<repo>:<kind>:<id>`) with metadata (repo, author, labels, timestamp). Weaver files them under the right project. Webhook delivery and a plugin contract remain planned.
 
-**Email**: shipped as read-only IMAP polling. A configured mailbox is polled on an interval; new messages become markdown captures with sender, subject, date, and body (text/plain preferred, stripped HTML fallback). The mailbox is opened read-only with `BODY.PEEK` fetches so Loom never marks mail as seen; the app password is encrypted at rest; Message-ID/UID external IDs make re-polls idempotent.
+**Email**: shipped as read-only IMAP polling, with Gmail available through the Google connector as an alternative. IMAP: a configured mailbox is polled on an interval; new messages become markdown captures with sender, subject, date, and body (text/plain preferred, stripped HTML fallback). The mailbox is opened read-only with `BODY.PEEK` fetches so Loom never marks mail as seen; the app password is encrypted at rest; Message-ID/UID external IDs make re-polls idempotent. Gmail via the connector: one union-scope sign-in shared with Google Calendar (encrypted auto-refreshing token, bounded `in:inbox` window poll, `gmail:<message-id>` external IDs, IMAP-parity capture shape) — code-complete and mock-verified, pending the user's OAuth app registration.
 
-**Calendar**: private iCalendar feeds are shipped. They pull a selected day's
-expanded occurrences into Standup context and optionally create Inbox captures
-with stable event provenance. Native Google/Outlook OAuth and multi-calendar
-selection remain planned.
+**Calendar**: private iCalendar feeds are shipped, now joined by OAuth connectors: Google Calendar rides the Google connector (one union-scope sign-in shared with Gmail), and Outlook Calendar has its own Microsoft connector. Both use the loopback connect flow, tokens encrypted at rest with auto-refresh, per-calendar incremental cursors, and multi-calendar selection (up to 20 calendar IDs per service). All paths pull a selected day's expanded occurrences into Standup context and optionally create Inbox captures with stable event provenance. The OAuth connectors are code-complete and mock-verified; the first live connect awaits the user's OAuth app registrations.
 
 ### 7.3 Integration Data Flow
 
@@ -288,8 +291,8 @@ These milestones extend the shipped MVP and v1 roadmap (see [ARCHITECTURE.md §1
 ### v2 — "Connect and Grow"
 
 - GitHub integration (commits, issues, PRs → captures) — shipped as token-based polling; webhooks remain
-- Calendar integration (read-only iCalendar → Standup/Inbox shipped; OAuth adapters remain)
-- Email integration (IMAP → captures) — shipped as read-only polling with app passwords; a forwarding-address mode and OAuth (Gmail) remain possible follow-ups
+- Calendar integration (read-only iCalendar → Standup/Inbox shipped; Google connector and Outlook Calendar connector code-complete and mock-verified, pending first live connect)
+- Email integration (IMAP → captures shipped as read-only polling with app passwords; Gmail rides the Google connector — code-complete and mock-verified, pending first live connect; a forwarding-address mode and Outlook Mail OAuth remain possible follow-ups)
 - Plugin architecture for community integrations
 - Custom Shuttle agents (user-defined via config folders)
 - Example vaults with demo data

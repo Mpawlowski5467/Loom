@@ -17,6 +17,49 @@ from pydantic import BaseModel, Field
 _FRONTMATTER_RE = re.compile(r"^---\s*\n(.*?)\n---(?:\s*\n|\s*$)", re.DOTALL)
 _WIKILINK_RE = re.compile(r"\[\[([^\]]+)\]\]")
 
+# Unicode dash/hyphen and space variants local models sometimes emit inside
+# wikilink targets (observed: gpt-oss writing U+2011 NON-BREAKING HYPHEN for
+# '-' in a kebab-case target). A wikilink target is an identifier, so these
+# variants silently break resolution against the real ASCII note name. Outside
+# [[...]] the same characters are legitimate typography and must survive.
+_WIKILINK_CHAR_MAP = str.maketrans(
+    {
+        "\u2010": "-",  # HYPHEN
+        "\u2011": "-",  # NON-BREAKING HYPHEN
+        "\u2012": "-",  # FIGURE DASH
+        "\u2013": "-",  # EN DASH
+        "\u2014": "-",  # EM DASH
+        "\u2015": "-",  # HORIZONTAL BAR
+        "\u2212": "-",  # MINUS SIGN
+        "\ufe58": "-",  # SMALL EM DASH
+        "\ufe63": "-",  # SMALL HYPHEN-MINUS
+        "\uff0d": "-",  # FULLWIDTH HYPHEN-MINUS
+        "\u00a0": " ",  # NO-BREAK SPACE
+        "\u202f": " ",  # NARROW NO-BREAK SPACE
+        "\u2009": " ",  # THIN SPACE
+    }
+)
+
+
+def normalize_wikilink_target(link_text: str) -> str:
+    """Canonicalize unicode dash/space variants in a wikilink target.
+
+    ``link_text`` is the content between ``[[`` and ``]]``. Only the target
+    (the part before an optional ``|alias``) is normalized — the alias is
+    display text and keeps its original typography.
+    """
+    target, sep, alias = link_text.partition("|")
+    return target.translate(_WIKILINK_CHAR_MAP) + sep + alias
+
+
+def normalize_wikilinks_in_body(body: str) -> str:
+    """Normalize every ``[[...]]`` target in ``body``; prose is never touched.
+
+    Applied on the write path so agent-authored notes are stored with
+    canonical (ASCII) link targets. Idempotent.
+    """
+    return _WIKILINK_RE.sub(lambda m: f"[[{normalize_wikilink_target(m.group(1))}]]", body)
+
 
 class HistoryEntry(BaseModel):
     """A single edit-history record stored in frontmatter."""
@@ -126,7 +169,9 @@ def parse_note(path: Path) -> Note:
         meta = _coerce_meta(loaded) if isinstance(loaded, dict) else {}
         body = text[fm_match.end() :]
 
-    wikilinks = _WIKILINK_RE.findall(body)
+    # Normalize at extraction so wikilinks in notes written before the
+    # write-path fix (unicode dash/space variants in targets) still resolve.
+    wikilinks = [normalize_wikilink_target(w) for w in _WIKILINK_RE.findall(body)]
     known, extra = _split_known_extra(meta)
 
     return Note(

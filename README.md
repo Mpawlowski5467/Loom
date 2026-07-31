@@ -24,6 +24,30 @@ You write captures; agents do the structuring, linking, summarizing, and validat
 
 > **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, the four views, and the capture → note → graph loop.
 
+## See Loom
+
+[Watch the 30-second product trailer](docs/trailer/loom-trailer.mp4), or open
+the full-size captures below.
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/graph-view.png" alt="Loom Graph view showing a connected Markdown vault" width="100%" /></td>
+    <td width="50%"><img src="docs/screenshots/thread-view.png" alt="Loom Thread reader with backlinks and note details" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Graph</b> — explore the vault as a living knowledge network</sub></td>
+    <td align="center"><sub><b>Thread</b> — read notes with history, context, and backlinks</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/inbox-view.png" alt="Loom Inbox review lane with Sentinel feedback" width="100%" /></td>
+    <td><img src="docs/screenshots/board-view.png" alt="Loom Board showing agent cards, recent activity, and Council chat" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Inbox</b> — triage captures and review agent decisions</sub></td>
+    <td align="center"><sub><b>Board</b> — inspect agents, runs, activity, and Council chat</sub></td>
+  </tr>
+</table>
+
 ## Why Loom?
 
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
@@ -308,8 +332,8 @@ flowchart LR
 ### Onboarding wizard
 - First-run multi-step flow: Welcome → Vault Setup → Theme Picker → Provider Config
 - Live previews for the final themes: Paper, Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember
-- Inline "Test connection" against the picked provider — failures don't block save
-- Skip-friendly: provider step is optional, defaults pick safe models
+- Inline "Test connection" against the picked provider — **Finish** requires the selected chat and embedding providers to pass
+- Skip-friendly: a confirmation path completes onboarding without a provider, leaving AI features offline until one is added
 - Onboarding state lives in `~/.loom/config.yaml` under `onboarding.completed`
 
 ## Tech stack
@@ -371,7 +395,7 @@ them.
 
 #### Prerequisites
 - Python ≥ 3.11
-- Node.js ≥ 18 with npm
+- Node.js 22 with npm
 - An API key for at least one provider (or a running Ollama instance)
 
 #### Backend
@@ -388,7 +412,7 @@ npm install
 npm run dev   # serves on http://localhost:5173
 ```
 
-On first run the **onboarding wizard** walks you through vault name, theme, and provider setup. The provider step is optional and can be added later from the in-app **Settings → Providers** panel (or by editing `~/.loom/config.yaml` directly). The backend reads `~/.loom/config.yaml` for global config and scaffolds a vault at `~/.loom/vaults/<name>` when the wizard completes.
+On first run the **onboarding wizard** walks you through vault name, theme, and provider setup. **Finish** is enabled after the selected chat and embedding providers pass their connection tests; **Skip for now** is a confirmed offline path. You can add a provider later from **Settings → Providers**. The backend reads `~/.loom/config.yaml` for global config and scaffolds a vault at `~/.loom/vaults/<name>` when the wizard completes.
 
 ### Seed an example vault
 ```bash
@@ -476,6 +500,10 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
 | `GET` `PATCH` | `/api/automations/email` | Redacted IMAP connection state (host, folder, poller status) |
 | `POST` | `/api/automations/email/test` / `/sync` | Test the mailbox login/folder or poll new mail into Inbox |
+| `GET` `PATCH` | `/api/automations/google` | Redacted Google connector state (client id, connection, per-service poller status) |
+| `POST` `GET` | `/api/automations/google/connect` / `/callback` / `/disconnect` / `/test` / `/sync/calendar` / `/sync/gmail` | One union-scope sign-in, disconnect, per-service validate, or poll into Inbox |
+| `GET` `PATCH` | `/api/automations/calendar/outlook` | Redacted Outlook connector state (client id, interval, poller status) |
+| `POST` `GET` | `/api/automations/calendar/outlook/connect` / `/callback` / `/disconnect` / `/test` / `/sync` | Microsoft sign-in, disconnect, validate, or poll events into Inbox |
 | `GET` | `/api/agents` | Agent status + action counts |
 | `GET` | `/api/agents/activity` | Live per-agent activity (polled by the Pulse view) |
 | `GET` `POST` `PATCH` `DELETE` | `/api/agents/registry` | List / create / edit / remove custom agents |
@@ -496,24 +524,25 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 ```bash
 # Backend
 ruff check backend/
-ruff format backend/
+ruff format --check backend/
 pytest backend/tests/
 
 # Frontend
 cd frontend
 npm run lint
-npm run format
 npm run test:run   # `npm run test` runs vitest in watch mode
+npm run build
 ```
 
 CI runs on push via `.github/workflows/ci.yml`.
 
 ## Status
 
-**1.0.0.** Loom runs end-to-end and is stable for daily local use. 1.0 is the
-resilience-and-honesty milestone: the agent pipeline is observable, failures are
-handled instead of swallowed, and the docs describe only what ships. It stays
-deliberately local-first and unauthenticated by default — not an
+**Current release: 1.1.0 (open beta).** Loom runs end-to-end for daily local
+use. The current worktree also contains the next connector release: Google
+Calendar + Gmail and Outlook Calendar are code-complete and mock-verified, but
+still need first live OAuth connections before release. Loom remains
+deliberately local-first and unauthenticated by default — it is not an
 internet-exposable service without your own reverse proxy (see *Known gaps*).
 What works today:
 
@@ -523,8 +552,9 @@ What works today:
 - Graph, Board, Inbox, and Thread views
 - Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
 - Scheduled Standup workspace plus encrypted read-only iCalendar connection
+- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection; plus an Outlook Calendar connector (Microsoft sign-in)
 - GitHub Bridge — poll repos for commits/issues/PRs into the Inbox (token encrypted at rest, per-repo cursors, interval poller)
-- Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen)
+- Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen), or Gmail via the Google connector's single sign-in
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection
@@ -548,15 +578,17 @@ What works today:
 **Known gaps (deliberate v1 boundaries):**
 - **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
 - **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
-- **Bridge status** — the first production slice is shipped: private iCalendar feeds can enrich scheduled Standups and create idempotent Inbox jobs. Google/Outlook OAuth, GitHub, Email, the general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
+- **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail) and an Outlook Calendar connector (code-complete and mock-verified; first live connect pending your OAuth app registrations — setup steps are inline in the Connections cards), token-based GitHub polling, and read-only IMAP Email polling. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
 - **Local model guidance (Ollama).** Agent work needs a model that follows note/frontmatter instructions reliably. Verified on Apple Silicon: `devstral` and `phi4` are fast and pass validation; `gpt-oss:20b` and `gemma4:26b` work but are slower (gemma4's Weaver step can approach 2 min). Reasoning models (`deepseek-r1`, thinking-mode Qwen) complete but are slow and their drafts often land in the review lane — usable, not recommended for agents. Very small instruct models may fail Sentinel's section checks; the Inbox review lane catches that safely. Chat completions stream internally, so slow-but-steady generation no longer trips the 120s read window.
 - `AppContext` remains the public compatibility shell, while high-churn vault/capture loading and typed SSE refresh logic are being split into domain hooks. `useGraphInstance` remains the main graph-hook test gap.
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/VISION.md`](docs/VISION.md) for the remaining Bridge adapters, Prompt Compiler, attachments, and v2+ roadmap, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/ROADMAP.md`](docs/ROADMAP.md) for the release plan, [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md) for the current audit, [`docs/VISION.md`](docs/VISION.md) for longer-range direction, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 
-## Wireframes
+## Historical wireframes
 
-Early sketches of the visual language and view models. These are *wireframes, not the final UI* — the real product renders in ink-blue + brick-red duotone on warm cream paper, with serif typography from the design language.
+Early sketches of the visual language and view models. These are *historical
+wireframes, not the current UI*; see the current screenshots above for the
+product as it ships.
 
 <p align="center">
   <img src="docs/wireframes/wireframe.png" alt="Visual vocabulary — color split, node types, views overview" width="720" />

@@ -19,6 +19,15 @@ function resolveBaseUrl(): string {
 
 export const API_BASE = resolveBaseUrl();
 
+/** Build an absolute backend URL for user-facing setup instructions. */
+export function apiUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+  const base =
+    API_BASE ||
+    (typeof window !== "undefined" ? window.location.origin : DEFAULT_BASE);
+  return `${base}${normalizedPath}`;
+}
+
 /**
  * Normalised error from the API layer. ``status === 0`` means "could not
  * reach the backend at all" — the offline banner watches for this.

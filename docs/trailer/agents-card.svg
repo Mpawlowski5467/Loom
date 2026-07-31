@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f5f1e8"/>
+  <text x="640" y="148" text-anchor="middle" fill="#8c877d" font-family="Menlo, monospace"
+        font-size="17" letter-spacing="3">WEAVER · SPIDER · ARCHIVIST · SCRIBE · SENTINEL</text>
+  <text x="640" y="286" text-anchor="middle" fill="#1a1815" font-family="New York, Georgia, serif"
+        font-size="76" font-weight="600">Specialists, not a black box.</text>
+  <text x="640" y="354" text-anchor="middle" fill="#5c5851" font-family="Avenir Next, Helvetica, sans-serif"
+        font-size="24">Every action is validated, logged, and available for review.</text>
+  <g transform="translate(340 456)">
+    <circle cx="0" cy="0" r="27" fill="#4a6b3a"/><circle cx="150" cy="0" r="27" fill="#2d4a7c"/>
+    <circle cx="300" cy="0" r="27" fill="#6b3a6b"/><circle cx="450" cy="0" r="27" fill="#a8722a"/>
+    <circle cx="600" cy="0" r="27" fill="#2d6b6b"/>
+    <line x1="27" y1="0" x2="123" y2="0" stroke="#1a1815" stroke-opacity=".16"/>
+    <line x1="177" y1="0" x2="273" y2="0" stroke="#1a1815" stroke-opacity=".16"/>
+    <line x1="327" y1="0" x2="423" y2="0" stroke="#1a1815" stroke-opacity=".16"/>
+    <line x1="477" y1="0" x2="573" y2="0" stroke="#1a1815" stroke-opacity=".16"/>
+  </g>
+</svg>

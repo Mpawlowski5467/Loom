@@ -71,14 +71,24 @@ class _VaultEventHandler(FileSystemEventHandler):
 
     def on_created(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
-            self._index.refresh_file(Path(str(event.src_path)))
-            self._vector_index_file(Path(str(event.src_path)))
+            path = Path(str(event.src_path))
+            if ".archive" in path.parts:
+                # Archived notes stay out of both indexes (build/move_file
+                # enforce the same invariant). Watchdog can surface a move
+                # into .archive as delete+create — the create must not
+                # re-index the archived note.
+                return
+            self._index.refresh_file(path)
+            self._vector_index_file(path)
             self._schedule_rebuild()
 
     def on_modified(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
-            self._index.refresh_file(Path(str(event.src_path)))
-            self._vector_index_file(Path(str(event.src_path)))
+            path = Path(str(event.src_path))
+            if ".archive" in path.parts:
+                return
+            self._index.refresh_file(path)
+            self._vector_index_file(path)
             self._schedule_rebuild()
 
     def on_deleted(self, event: FileSystemEvent) -> None:

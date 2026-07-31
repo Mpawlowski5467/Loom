@@ -553,6 +553,215 @@ class EmailBridgeConfigPublic(BaseModel):
     max_messages_per_poll: int
 
 
+def _clean_client_id(value: str) -> str:
+    value = value.strip()
+    if any(char.isspace() for char in value):
+        raise ValueError("OAuth client ID must not contain whitespace")
+    if len(value) > 300:
+        raise ValueError("OAuth client ID must be at most 300 characters")
+    return value
+
+
+def _clean_client_secret(value: str | None) -> str | None:
+    if value is None or value == "":
+        return None
+    if value.startswith("enc:v1:"):
+        return value
+    return value
+
+
+def _clean_calendar_ids(value: list[str]) -> list[str]:
+    cleaned: list[str] = []
+    seen: set[str] = set()
+    for entry in value:
+        entry = entry.strip()
+        if not entry or entry in seen:
+            continue
+        if len(entry) > 300 or any(ord(char) < 32 or ord(char) == 127 for char in entry):
+            raise ValueError("calendar IDs must be single printable lines")
+        seen.add(entry)
+        cleaned.append(entry)
+    if len(cleaned) > 20:
+        raise ValueError("at most 20 calendars can be watched")
+    return cleaned
+
+
+class OAuthClientConfigBase(BaseModel):
+    """Shared settings for bridges backed by a user-registered OAuth app
+    (currently Outlook Calendar; the Google connector has its own model).
+
+    ``client_id``/``client_secret`` come from the user's own OAuth app
+    registration (localhost redirect); the secret is Fernet-encrypted at rest
+    like provider API keys. OAuth access/refresh tokens do NOT live here — they
+    are managed per adapter in an encrypted JSON store next to ``config.yaml``
+    (see :mod:`bridge.oauth`).
+    """
+
+    enabled: bool = False
+    client_id: str = ""
+    client_secret: str | None = None
+    interval_minutes: int = Field(default=15, ge=5, le=1440)
+    lookback_days: int = Field(default=7, ge=1, le=90)
+
+    @field_validator("client_id")
+    @classmethod
+    def _normalize_client_id(cls, value: str) -> str:
+        return _clean_client_id(value)
+
+    @field_validator("client_secret")
+    @classmethod
+    def _normalize_client_secret(cls, value: str | None) -> str | None:
+        return _clean_client_secret(value)
+
+    def to_public(self) -> OAuthClientConfigPublic:
+        """Return the redacted view safe for the API."""
+        return OAuthClientConfigPublic(
+            enabled=self.enabled,
+            client_id=self.client_id,
+            client_secret_set=bool(self.client_secret),
+            interval_minutes=self.interval_minutes,
+            lookback_days=self.lookback_days,
+        )
+
+
+class OAuthClientConfigPublic(BaseModel):
+    """OAuth bridge connection state without its private client secret."""
+
+    enabled: bool
+    client_id: str
+    client_secret_set: bool
+    interval_minutes: int
+    lookback_days: int
+
+
+class OAuthCalendarConfigBase(OAuthClientConfigBase):
+    """Shared settings for the OAuth calendar bridges (Outlook today).
+
+    ``calendar_ids`` empty means the account's primary/default calendar only.
+    """
+
+    calendar_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("calendar_ids")
+    @classmethod
+    def _validate_calendar_ids(cls, value: list[str]) -> list[str]:
+        return _clean_calendar_ids(value)
+
+    def to_public(self) -> OAuthCalendarConfigPublic:
+        """Return the redacted view safe for the API."""
+        return OAuthCalendarConfigPublic(
+            enabled=self.enabled,
+            client_id=self.client_id,
+            client_secret_set=bool(self.client_secret),
+            interval_minutes=self.interval_minutes,
+            lookback_days=self.lookback_days,
+            calendar_ids=list(self.calendar_ids),
+        )
+
+
+class OutlookCalendarConfig(OAuthCalendarConfigBase):
+    """Outlook Calendar OAuth connection: poll events via Microsoft Graph."""
+
+
+class OAuthCalendarConfigPublic(OAuthClientConfigPublic):
+    """OAuth calendar connection state without its private client secret."""
+
+    calendar_ids: list[str]
+
+
+class GoogleServiceConfig(BaseModel):
+    """Per-service poll settings for one Google connector service."""
+
+    enabled: bool = False
+    interval_minutes: int = Field(default=15, ge=5, le=1440)
+    lookback_days: int = Field(default=7, ge=1, le=90)
+
+    def to_public(self) -> GoogleServiceConfigPublic:
+        """Return the view safe for the API (nothing private at this level)."""
+        return GoogleServiceConfigPublic(
+            enabled=self.enabled,
+            interval_minutes=self.interval_minutes,
+            lookback_days=self.lookback_days,
+        )
+
+
+class GoogleServiceConfigPublic(BaseModel):
+    """Poll settings for one Google connector service."""
+
+    enabled: bool
+    interval_minutes: int
+    lookback_days: int
+
+
+class GoogleCalendarServiceConfig(GoogleServiceConfig):
+    """Calendar service settings; ``calendar_ids`` empty = primary only."""
+
+    calendar_ids: list[str] = Field(default_factory=list)
+
+    @field_validator("calendar_ids")
+    @classmethod
+    def _validate_calendar_ids(cls, value: list[str]) -> list[str]:
+        return _clean_calendar_ids(value)
+
+    def to_public(self) -> GoogleCalendarServiceConfigPublic:
+        return GoogleCalendarServiceConfigPublic(
+            enabled=self.enabled,
+            interval_minutes=self.interval_minutes,
+            lookback_days=self.lookback_days,
+            calendar_ids=list(self.calendar_ids),
+        )
+
+
+class GoogleCalendarServiceConfigPublic(GoogleServiceConfigPublic):
+    """Calendar service settings as served to the frontend."""
+
+    calendar_ids: list[str]
+
+
+class GoogleConnectorConfig(BaseModel):
+    """Google connector: ONE OAuth client + ONE sign-in for Calendar + Gmail.
+
+    Credentials are entered once and the consent flow always requests both
+    scopes together, so each service is just a toggle plus poll settings —
+    enabling a service later never needs re-consent. The shared OAuth token
+    lives in ``google-oauth.json`` (see :mod:`bridge.google`), never here;
+    ``client_secret`` is Fernet-encrypted at rest like provider API keys.
+    """
+
+    client_id: str = ""
+    client_secret: str | None = None
+    calendar: GoogleCalendarServiceConfig = Field(default_factory=GoogleCalendarServiceConfig)
+    gmail: GoogleServiceConfig = Field(default_factory=GoogleServiceConfig)
+
+    @field_validator("client_id")
+    @classmethod
+    def _normalize_client_id(cls, value: str) -> str:
+        return _clean_client_id(value)
+
+    @field_validator("client_secret")
+    @classmethod
+    def _normalize_client_secret(cls, value: str | None) -> str | None:
+        return _clean_client_secret(value)
+
+    def to_public(self) -> GoogleConnectorConfigPublic:
+        """Return the redacted view safe for the API."""
+        return GoogleConnectorConfigPublic(
+            client_id=self.client_id,
+            client_secret_set=bool(self.client_secret),
+            calendar=self.calendar.to_public(),
+            gmail=self.gmail.to_public(),
+        )
+
+
+class GoogleConnectorConfigPublic(BaseModel):
+    """Google connector state without its private client secret."""
+
+    client_id: str
+    client_secret_set: bool
+    calendar: GoogleCalendarServiceConfigPublic
+    gmail: GoogleServiceConfigPublic
+
+
 class UIState(BaseModel):
     """Persisted UI preferences."""
 
@@ -599,6 +808,8 @@ class GlobalConfig(BaseModel):
     calendar: CalendarBridgeConfig = Field(default_factory=CalendarBridgeConfig)
     github: GitHubBridgeConfig = Field(default_factory=GitHubBridgeConfig)
     email: EmailBridgeConfig = Field(default_factory=EmailBridgeConfig)
+    google: GoogleConnectorConfig = Field(default_factory=GoogleConnectorConfig)
+    outlook_calendar: OutlookCalendarConfig = Field(default_factory=OutlookCalendarConfig)
     ui: UIState = Field(default_factory=UIState)
     onboarding: OnboardingState = Field(default_factory=OnboardingState)
     agent_models: dict[str, AgentModelOverride] = Field(default_factory=dict)
@@ -675,6 +886,12 @@ class GlobalConfig(BaseModel):
             self.github.token = decrypt(self.github.token) or None
         if self.email.password:
             self.email.password = decrypt(self.email.password) or None
+        if self.google.client_secret:
+            self.google.client_secret = decrypt(self.google.client_secret) or None
+        if self.outlook_calendar.client_secret:
+            self.outlook_calendar.client_secret = (
+                decrypt(self.outlook_calendar.client_secret) or None
+            )
 
     def _encrypt_keys(self) -> None:
         """Encrypt provider keys and private connection URLs in place."""
@@ -689,6 +906,10 @@ class GlobalConfig(BaseModel):
             self.github.token = encrypt(self.github.token)
         if self.email.password:
             self.email.password = encrypt(self.email.password)
+        if self.google.client_secret:
+            self.google.client_secret = encrypt(self.google.client_secret)
+        if self.outlook_calendar.client_secret:
+            self.outlook_calendar.client_secret = encrypt(self.outlook_calendar.client_secret)
 
     def to_public(self) -> GlobalConfigPublic:
         """Return a serialization-safe view (api keys redacted)."""
@@ -701,6 +922,8 @@ class GlobalConfig(BaseModel):
             calendar=self.calendar.to_public(),
             github=self.github.to_public(),
             email=self.email.to_public(),
+            google=self.google.to_public(),
+            outlook_calendar=self.outlook_calendar.to_public(),
             ui=self.ui,
             onboarding=self.onboarding,
         )
@@ -717,6 +940,8 @@ class GlobalConfigPublic(BaseModel):
     calendar: CalendarBridgeConfigPublic
     github: GitHubBridgeConfigPublic
     email: EmailBridgeConfigPublic
+    google: GoogleConnectorConfigPublic
+    outlook_calendar: OAuthCalendarConfigPublic
     ui: UIState
     onboarding: OnboardingState
 

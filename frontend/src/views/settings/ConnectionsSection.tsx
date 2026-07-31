@@ -2,17 +2,23 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { CalendarDays, Github, Link2Off, Mail, RefreshCw } from "lucide-react";
 import {
+  connectOutlookCalendar,
+  disconnectOutlookCalendar,
   getEmailAutomation,
   getGitHubAutomation,
+  getOutlookCalendarAutomation,
   getStandupAutomation,
   syncCalendar,
   syncEmail,
   syncGitHub,
+  syncOutlookCalendar,
   testCalendar,
   testEmail,
   testGitHub,
+  testOutlookCalendar,
   updateEmailAutomation,
   updateGitHubAutomation,
+  updateOutlookCalendarAutomation,
   updateStandupAutomation,
   type CalendarTestResult,
   type EmailAutomation,
@@ -20,9 +26,56 @@ import {
   type GitHubAutomation,
   type GitHubSyncResult,
   type GitHubTestResult,
+  type OutlookCalendarAutomation,
   type StandupAutomation,
 } from "../../api/automations";
+import { apiUrl } from "../../api/client";
 import { useApp } from "../../context/app-ctx";
+import { GoogleConnectorCard } from "./GoogleConnectorCard";
+import { CopyChip } from "./connector-flow";
+import {
+  OAuthCalendarCard,
+  type OAuthCalendarCardApi,
+  type OAuthCalendarState,
+} from "./OAuthCalendarCard";
+
+const OUTLOOK_STEPS: ReactNode[] = [
+  <>
+    Register an app at{" "}
+    <a href="https://entra.microsoft.com" target="_blank" rel="noreferrer">
+      entra.microsoft.com
+    </a>{" "}
+    → App registrations → New registration.
+  </>,
+  <>
+    Add a &quot;Web&quot; redirect URI:{" "}
+    <CopyChip text={apiUrl("/api/automations/calendar/outlook/callback")} />
+  </>,
+  <>
+    API permissions → Microsoft Graph → delegated <strong>Calendars.Read</strong>,
+    then create a secret under Certificates &amp; secrets.
+  </>,
+  <>Paste the Application (client) ID and secret below and Save.</>,
+];
+
+function normalizeOutlook(next: OutlookCalendarAutomation): OAuthCalendarState {
+  return {
+    config: next.outlook,
+    connection: next.connection,
+    status: next.status,
+  };
+}
+
+const outlookCalendarCardApi: OAuthCalendarCardApi = {
+  get: async (signal) =>
+    normalizeOutlook(await getOutlookCalendarAutomation(signal)),
+  update: async (update) =>
+    normalizeOutlook(await updateOutlookCalendarAutomation(update)),
+  connect: connectOutlookCalendar,
+  disconnect: async () => normalizeOutlook(await disconnectOutlookCalendar()),
+  test: testOutlookCalendar,
+  sync: syncOutlookCalendar,
+};
 
 function browserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -582,7 +635,7 @@ export function ConnectionsSection(): ReactNode {
       <p className="settings-copy">
         Run a daily Standup in your timezone and enrich it from a private,
         read-only iCalendar feed. Calendar events can also become durable Inbox
-        jobs.
+        jobs. Connectors sign in once; bridges use credentials.
       </p>
 
       <section
@@ -645,6 +698,20 @@ export function ConnectionsSection(): ReactNode {
           </p>
         )}
       </section>
+
+      <GoogleConnectorCard />
+
+      <OAuthCalendarCard
+        provider="outlook"
+        title="Outlook Calendar"
+        headingId="outlook-calendar-connection-title"
+        blurb="Poll Outlook / Microsoft 365 calendars over OAuth — events land in the Inbox for triage. Read-only scope (Calendars.Read)."
+        steps={OUTLOOK_STEPS}
+        signInLabel="Sign in with Microsoft"
+        clientIdPlaceholder="Application (client) ID — a GUID"
+        calendarIdsPlaceholder={"primary (default calendar)"}
+        api={outlookCalendarCardApi}
+      />
 
       <section
         className="settings-connection-card"

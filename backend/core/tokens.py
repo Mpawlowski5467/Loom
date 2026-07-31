@@ -26,7 +26,7 @@ _ENCODING_NAME = "cl100k_base"
 
 # Lazily-cached encoding. ``False`` is the "tried and failed" sentinel so we
 # don't re-attempt a load that already raised; ``None`` means "not tried yet".
-_encoding: tiktoken.Encoding | None | bool = None
+_encoding: tiktoken.Encoding | bool | None = None
 
 
 def _get_encoding() -> tiktoken.Encoding | None:

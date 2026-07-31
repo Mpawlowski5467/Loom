@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f5f1e8"/>
+  <circle cx="640" cy="214" r="31" fill="none" stroke="#2d4a7c" stroke-width="2"/>
+  <circle cx="662" cy="214" r="31" fill="none" stroke="#a83a2c" stroke-width="2"/>
+  <line x1="96" y1="76" x2="1184" y2="76" stroke="#1a1815" stroke-opacity=".14"/>
+  <line x1="96" y1="644" x2="1184" y2="644" stroke="#1a1815" stroke-opacity=".14"/>
+  <text x="640" y="346" text-anchor="middle" fill="#1a1815"
+        font-family="New York, Georgia, serif" font-size="92" font-weight="600">Loom</text>
+  <text x="640" y="406" text-anchor="middle" fill="#5c5851"
+        font-family="Avenir Next, Helvetica, sans-serif" font-size="25" letter-spacing="2">
+    YOUR NOTES, WOVEN INTO KNOWLEDGE
+  </text>
+  <text x="640" y="594" text-anchor="middle" fill="#8c877d"
+        font-family="Menlo, monospace" font-size="15" letter-spacing="2">
+    LOCAL-FIRST · PLAIN MARKDOWN · MULTI-AGENT
+  </text>
+</svg>

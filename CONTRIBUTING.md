@@ -22,7 +22,7 @@ distillation.
 cd backend && pip install -e ".[dev]" --break-system-packages
 uvicorn api.main:app --reload --port 8000
 
-# Frontend (Node 18+; CI uses 22)
+# Frontend (Node 22, matching CI and Docker)
 cd frontend && npm install
 npm run dev          # http://localhost:5173
 ```
@@ -98,6 +98,7 @@ issue.
 
 ## Scope & status
 
-Loom is pre-1.0. Check the **Implementation Status** section of
-[`CLAUDE.md`](CLAUDE.md) for what's shipped, in flight, and known-gap before
-proposing large changes, so effort lands where it helps.
+Loom is a **1.x open beta**. Check the **Implementation Status** section of
+[`AGENTS.md`](AGENTS.md), the current [roadmap](docs/ROADMAP.md), and the
+[release-readiness audit](docs/RELEASE-READINESS.md) before proposing large
+changes, so effort lands where it helps.

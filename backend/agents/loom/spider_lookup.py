@@ -24,6 +24,10 @@ def resolve_title(vault_root: Path, note_id: str) -> str:
     if index.size > 0:
         entry = index.get_by_id(note_id)
         if entry is not None:
+            # Watcher create/modify events can index notes living under
+            # .archive/; archived notes are never link targets.
+            if ".archive" in entry.file_path.parts:
+                return ""
             return entry.title
     threads_dir = vault_root / "threads"
     for md in threads_dir.rglob("*.md"):
@@ -53,7 +57,7 @@ def list_vault_notes(threads_dir: Path, exclude_id: str = "") -> list[dict[str, 
         return [
             {"title": e.title, "tags": e.tags, "id": e.id}
             for e in index.all_entries()
-            if e.id != exclude_id
+            if e.id != exclude_id and ".archive" not in e.file_path.parts
         ]
     notes: list[dict[str, Any]] = []
     if not threads_dir.exists():
@@ -74,7 +78,11 @@ def build_title_map(threads_dir: Path) -> dict[str, Path]:
     """Build a lowercase-title → path map, preferring the cached NoteIndex."""
     index = get_note_index()
     if index.size > 0:
-        return index.get_title_map()
+        return {
+            title: path
+            for title, path in index.get_title_map().items()
+            if ".archive" not in path.parts
+        }
     title_map: dict[str, Path] = {}
     for md in threads_dir.rglob("*.md"):
         if ".archive" in md.parts:

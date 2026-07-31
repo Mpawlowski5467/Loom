@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#1a1815"/>
+  <circle cx="640" cy="157" r="26" fill="none" stroke="#8ea5c8" stroke-width="2"/>
+  <circle cx="658" cy="157" r="26" fill="none" stroke="#d87364" stroke-width="2"/>
+  <text x="640" y="284" text-anchor="middle" fill="#f5f1e8" font-family="New York, Georgia, serif"
+        font-size="76" font-weight="600">Make your memory yours.</text>
+  <text x="640" y="354" text-anchor="middle" fill="#c8c1b5" font-family="Avenir Next, Helvetica, sans-serif"
+        font-size="24">Local-first · provider-agnostic · open source</text>
+  <rect x="388" y="431" width="504" height="72" rx="8" fill="#282622" stroke="#f5f1e8" stroke-opacity=".16"/>
+  <text x="640" y="476" text-anchor="middle" fill="#f5f1e8" font-family="Menlo, monospace"
+        font-size="20">docker compose up</text>
+  <text x="640" y="606" text-anchor="middle" fill="#8c877d" font-family="Menlo, monospace"
+        font-size="15" letter-spacing="2">GITHUB.COM/MPAWLOWSKI5467/LOOM</text>
+</svg>

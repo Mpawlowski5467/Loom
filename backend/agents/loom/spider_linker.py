@@ -14,6 +14,7 @@ shows up in that resolved set.
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 
 from agents.file_locks import path_lock
@@ -23,6 +24,8 @@ from core.vault_io import write_note as _vault_write_note
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 async def apply_links(
@@ -45,6 +48,12 @@ async def apply_links(
     for title in target_titles:
         target_path = title_map.get(title.lower())
         if target_path is None or target_path == source_path:
+            continue
+        if ".archive" in target_path.parts:
+            # Archived notes never receive backlinks — vault_io refuses the
+            # write, and the link would be invisible to scans anyway. A stale
+            # title-map entry (note archived mid-scan) must skip, not fail.
+            logger.debug("Skipping link to archived note: %s", target_path)
             continue
         if not target_path.exists():
             # Stale index entry — the note was archived or renamed after the

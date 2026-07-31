@@ -6,11 +6,11 @@ Loom is a local-first, privacy-respecting AI knowledge base that lives on your m
 
 > **Status legend.** This document describes what Loom ships **today**. Sections carry one of two tags — ✅ shipped · 🟡 partial (ships and works, still being refined). The north-star design — work that is planned but not yet built — lives in [docs/VISION.md](VISION.md). Quick map:
 >
-> - ✅ **Shipped**: the Vault, the Index (search + tracing), the Agent Board (all 7 built-in agents, Council + Shuttle workspaces), custom agents, the Rules Engine, the Graph UI, durable Inbox jobs, and the first Bridge slice (read-only iCalendar → Standup/Inbox).
-> - 🟡 **Partial (ships and works, still being refined)**: Scribe daily logs — generation works, summary phrasing is still being tuned; Sentinel AI validation — the LLM-assisted path (with a deterministic fallback) works, rule coverage is being broadened.
-> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: remaining Bridge adapters/OAuth, the Prompt Compiler, and multi-file attachments.
+> - ✅ **Shipped**: the Vault, Index (search + tracing), Agent Board (all 7 built-in agents, Council + Shuttle workspaces), custom agents, Rules Engine, Graph UI, durable Inbox jobs, read-only iCalendar, token-polled GitHub, and read-only IMAP Email.
+> - 🟡 **Partial (ships and works, still being refined)**: Google Calendar + Gmail and Outlook Calendar are code-complete and mock-verified, pending first live OAuth connections; Scribe phrasing and Sentinel's LLM-assisted validation continue to be tuned over deterministic fallbacks and rules.
+> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: a stable community Bridge contract, the Prompt Compiler, and multi-file attachments.
 >
-> Sections 7–9 below are brief stubs that summarize each planned subsystem and link to its full design in VISION.md.
+> Sections 7–9 summarize the shipped Bridge and the two planned subsystems, with links to their longer-form direction in VISION.md.
 
 ---
 
@@ -159,7 +159,9 @@ Every folder can have an `_index.md` — a living, auto-generated summary of wha
 
 Raw information lands here through three paths:
 1. **Manually**: user drops a note or text file in
-2. **Via integrations**: the shipped Calendar Bridge turns read-only iCalendar occurrences into idempotent captures; GitHub and Email remain planned in [VISION.md](VISION.md#layer-6-the-bridge)
+2. **Via integrations**: read-only iCalendar, GitHub, IMAP Email, Google
+   Calendar/Gmail, and Outlook Calendar adapters turn external records into
+   idempotent captures through the same ingress
 3. **From Shuttle agents**: task agents output their work here
 
 All normal producers enter through `core.capture_ingress.ingest_capture`, which
@@ -800,17 +802,26 @@ Default ease for any transition longer than 100ms: `cubic-bezier(.2, .7, .3, 1)`
 
 ## 7. Layer 6: The Bridge
 
-The first Bridge vertical slice is shipped. `backend/bridge/calendar.py` fetches
-bounded read-only HTTP(S)/`webcal` iCalendar feeds, expands recurring events in
-the configured IANA timezone, treats event text as untrusted input, and never
-returns the private URL to the frontend. The URL is Fernet-encrypted in global
-config. A manual or scheduled sync creates one capture per stable occurrence;
-Standup can also use those events directly as recap context. Connections
-settings provide save/test/sync/disconnect controls, while the Board exposes a
-date-aware Standup workspace and durable daily schedule.
+The Bridge is a set of read-only adapters that normalize outside records into
+the durable capture ingress. Every adapter uses stable external IDs for
+idempotency, keeps its own bounded cursor, treats source text as untrusted, and
+exposes redacted configuration through Settings → Connections.
 
-Google/Outlook OAuth, GitHub, Email, and a community adapter contract remain
-planned. **Full direction: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
+- `calendar.py` reads private HTTP(S)/`webcal` iCalendar feeds, expands
+  recurrence in the configured IANA timezone, and supplies Standup context or
+  event captures.
+- `github*.py` polls selected repositories for commits, issues, and pull
+  requests using per-repository cursors.
+- `email*.py` polls IMAP read-only with UID cursors and `BODY.PEEK`.
+- `google.py`, `gcal*.py`, and `gmail*.py` share one union-scope Google consent,
+  encrypted auto-refreshing token, and independent Calendar/Gmail pollers.
+- `outlook_cal*.py` uses Microsoft delegated `Calendars.Read` with the same
+  loopback authorization-code and encrypted-token pattern.
+
+Google and Outlook are code-complete and mock-verified in the current
+development worktree; their first live connections await user-created OAuth app
+registrations. The general community adapter contract remains planned. **Full
+direction: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
 
 ---
 
@@ -881,53 +892,12 @@ loom/
 
 ## 12. Roadmap
 
-### MVP — "See the Web"
+The implementation roadmap now lives in **[ROADMAP.md](ROADMAP.md)**. It starts
+with the current open-beta release candidate and names its concrete gates:
+single-sourced version UI, port-aware OAuth setup, first real Google/Microsoft
+connections, onboarding-safe container health, a frontend formatting baseline,
+and a clean-checkout release matrix.
 
-- Scaffold the monorepo (backend, frontend, docs, examples)
-- `vault.yaml`, `prime.md`, default folder structure and schemas
-- FastAPI server that reads the vault and serves note data as JSON
-- React app with dark theme, two-panel layout, top nav
-- File explorer (left sidebar): browse, click to view, create, rename, drag-to-move, delete, filter
-- Sigma.js graph rendering: nodes from `.md` files, edges from `[[wikilinks]]`
-- Force-directed layout with drag, zoom, pan, hover highlight, pin nodes
-- Color-coded nodes by type, size scaled by connections
-- Live filtering by type, tag, date
-- Click a node → right sidebar with rendered markdown, backlinks, frontmatter
-- Bidirectional sync between file tree and graph
-- Basic keyword search (global + file tree filter)
-- Create note modal (sends request to Weaver pipeline, works manually before agents exist)
-- Rich editor (custom Markdown renderer) in right sidebar with meta fields
-- Toast notifications placeholder
-- Live refresh: graph re-fetches on a `vault-changed` SSE push from the file watcher (not a polling interval)
-- **Goal**: manually write notes, open the UI, see your knowledge graph, browse and edit from the file explorer
-
-### v1 — "Think and Weave"
-
-- Provider-agnostic AI config (OpenAI, Anthropic, xAI, Ollama)
-- LanceDB indexing with smart chunking by `##` headers
-- Hybrid + graph-aware semantic search in the UI
-- File watcher: real-time for small changes, batch on schedule
-- Prompt Compiler: centralized optimization pipeline with per-agent templates
-- Prompt templates for all agent actions (create, link, summarize, audit, validate)
-- Token counting, context pruning, priority ranking, context compression
-- Prompt versioning and logging
-- Read-Before-Write protocol fully implemented and enforced (including memory.md in chain)
-- All five Loom Layer agents: Weaver, Spider, Archivist, Scribe, Sentinel
-- Agent folder structure with per-agent config, state, memory.md, and logs
-- Agent memory: summarized every N actions (default 20, configurable)
-- Hard block on chain failure (soft warning for trusted agents)
-- Edit history tracking in frontmatter (who, when, why)
-- Global changelog: per-agent-per-day markdown logs
-- Board View: agent cards with status, stats, recent actions, activity log
-- Loom Council Chat: transparent multi-agent discussion threads
-- Captures Inbox view: queue with source badges, preview, process/archive actions
-- Researcher and Standup shuttle agents with individual chat interfaces
-- Chat history saved per agent + council shared history
-- Create note modal routes through Weaver agent
-- Toast notifications for agent actions
-- `prime.md` immutability enforced (suggestions via chat only)
-- **Goal**: Loom is alive — agents process captures, link knowledge, maintain the vault, and you interact with them through the UI
-
-### Beyond v1
-
-v2 ("Connect and Grow" — integrations, plugins, and the open-source launch) and the longer-range Future milestones (multi-file attachments, light theme, team vaults, web clipper, mobile, and more) live in **[docs/VISION.md → Roadmap: Beyond v1](VISION.md#roadmap-beyond-v1)**.
+Longer-range product direction—including the Bridge/plugin contract, Prompt
+Compiler, attachments, and possible multi-user expansion—remains in
+**[VISION.md](VISION.md)**.

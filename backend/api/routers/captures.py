@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import shutil
+import traceback
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal
@@ -47,6 +48,44 @@ router = APIRouter(prefix="/api/captures", tags=["captures"])
 # the worst observed legit run was ~4 min — and a timeout cancels safely:
 # partial work is reconciled idempotently on the next attempt.
 _PROCESS_PIPELINE_TIMEOUT_S = 900.0
+# When a pipeline run goes quiet this long, dump asyncio task stacks to the
+# log before the hard cap fires — the ~900s stalls leave no traces otherwise.
+_PIPELINE_STALL_DUMP_S = 420.0
+
+
+async def _stall_watchdog(capture_label: str) -> None:
+    """Log asyncio task stacks once a pipeline run looks stalled."""
+    try:
+        await asyncio.sleep(_PIPELINE_STALL_DUMP_S)
+    except asyncio.CancelledError:
+        return
+    lines = [f"Pipeline stall suspected for {capture_label} — asyncio task stacks follow"]
+    for task in asyncio.all_tasks():
+        if task.done():
+            continue
+        coro = task.get_coro()
+        lines.append(f"--- task {task.get_name()} coro={getattr(coro, '__qualname__', coro)}")
+        for frame in task.get_stack(limit=15):
+            for line in traceback.format_stack(frame, 15):
+                lines.append(f"    {line.rstrip()}")
+    logger.warning("\n".join(lines))
+
+
+async def _run_pipeline_bounded(runner: Any, capture_path: Path, refresh_index: Any) -> Any:
+    """Run the capture pipeline under the server-side cap, with a stall dump.
+
+    The cap alone tells us a run died; the watchdog tells us where it was
+    waiting — slow-step stalls otherwise leave no trace ids and no changelog.
+    """
+    watchdog = asyncio.create_task(_stall_watchdog(str(capture_path)))
+    try:
+        return await asyncio.wait_for(
+            runner.run_pipeline(capture_path, refresh_index=refresh_index),
+            timeout=_PROCESS_PIPELINE_TIMEOUT_S,
+        )
+    finally:
+        watchdog.cancel()
+
 
 CaptureOutcome = Literal["filed", "needs_review", "skipped", "failed"]
 
@@ -1175,10 +1214,7 @@ async def process_capture(
         # the search index hot after each write, matching the old inline path.
         # Bounded: the client may already be gone (see the constant above);
         # without a cap the job can sit in `running` indefinitely.
-        result = await asyncio.wait_for(
-            runner.run_pipeline(capture_path, refresh_index=index.refresh_file),
-            timeout=_PROCESS_PIPELINE_TIMEOUT_S,
-        )
+        result = await _run_pipeline_bounded(runner, capture_path, index.refresh_file)
         response = _pipeline_result_to_process_result(result)
         if response.outcome == "failed":
             capture_metadata_changed = await asyncio.to_thread(
@@ -1615,10 +1651,7 @@ async def process_all_captures(
             _resolve_inbox_capture(vm, str(capture_path))
             # Same server-side bound as /process: one stalled capture must not
             # hold the whole batch (or its durable job) hostage (#26).
-            result = await asyncio.wait_for(
-                runner.run_pipeline(capture_path, refresh_index=index.refresh_file),
-                timeout=_PROCESS_PIPELINE_TIMEOUT_S,
-            )
+            result = await _run_pipeline_bounded(runner, capture_path, index.refresh_file)
             response = _pipeline_result_to_process_result(result)
             if response.outcome == "failed":
                 capture_metadata_changed = await asyncio.to_thread(

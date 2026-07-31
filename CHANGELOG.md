@@ -26,12 +26,81 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   The app password is Fernet-encrypted at rest; a UID cursor
   (`email-sync.json`) bounds each poll; a background poller mirrors the
   GitHub one. `/api/automations/email/*` plus a Connections settings card.
+- **Google connector (Calendar + Gmail)** — one sign-in for both services
+  (`backend/bridge/google.py`, `gcal*.py`, `gmail*.py`, shared `oauth.py`).
+  Client credentials are entered once; a single union-scope consent
+  (`calendar.readonly` + `gmail.readonly`) yields one `enc:v1:`-encrypted
+  token with auto-refresh that both pollers share, so enabling a service
+  later never needs re-consent. Calendar polls `events.list` with
+  per-calendar `syncToken` cursors (410 → one bounded-window retry); Gmail
+  polls a bounded `in:inbox newer_than:<n>d` window with IMAP-parity
+  capture shape (text/plain preferred, stripped-HTML fallback, attachments
+  ignored, never marks mail as seen) plus prompt-injection scrubbing.
+  Everything lands in the Inbox through the unified ingress with
+  external-ID idempotency (`gcal:<calendar>:<event>`,
+  `gmail:<message-id>`), and one failing service never sinks the other.
+  `/api/automations/google/*` exposes redacted config, the loopback
+  connect/callback/disconnect flow, a per-service connection test, and
+  per-service manual syncs; one Connections card carries the setup steps.
+- **Outlook Calendar OAuth adapter** — the same pattern as a Microsoft
+  connector (`backend/bridge/outlook_cal*.py`): loopback
+  authorization-code flow (delegated `Calendars.Read`), `enc:v1:`-encrypted
+  auto-refreshing tokens, bounded `calendarView` window polls,
+  `outlook-cal:<calendar>:<event>` external IDs,
+  `/api/automations/calendar/outlook/*`, and its own Connections card.
+  Both OAuth adapters are code-complete and verified against mocked
+  provider HTTP — the first live connect still needs OAuth app
+  registrations only you can create.
+- **Sentinel deterministic rule coverage** — new warning-level checks
+  before the LLM review: frontmatter value sanity (ISO-8601
+  created/modified with ordering, `status` and `author` formats, `id`
+  charset, tag taxonomy), history-entry shape and chronology,
+  empty/placeholder body or title, and wikilink bracket syntax (code
+  spans excluded). The validation prompt's already-checked trust list was
+  updated to match, so the LLM no longer re-litigates them.
+
+### Changed
+- **Scribe daily-log phrasing** — the daily-log prompt now pins concrete
+  style rules (name notes as `[[wikilinks]]` in every claim, group related
+  actions, plain past tense, deny-listed filler like "productive day",
+  200-word bound), and the deterministic fallback writes an honest summary
+  sentence ("3 notable actions touched [[X]] and [[Y]].") instead of
+  parroting the date. Folder `_index` summaries get the same
+  anti-boilerplate treatment.
+- **Pipeline stall forensics** — capture pipeline runs now carry a
+  watchdog (`_run_pipeline_bounded` in `api/routers/captures.py`): when a
+  run goes quiet past 420s, it dumps all asyncio task stacks to the log
+  before the 900s cap fires. Slow-step stalls previously left no trace
+  ids and no changelog, making them impossible to diagnose after the fact.
 
 ### Fixed
 - **`/process-all` timeout parity** — bulk processing now bounds each
   pipeline run with the same server-side cap as single `/process` (900s),
   so one stalled capture can't hold the whole batch (or its durable jobs)
   hostage.
+- **Archived notes no longer leak into indexes or Spider** — the file
+  watcher ignored `.archive` paths on create/modify events, so archived
+  notes entered the NoteIndex and vector index (polluting search) and
+  Spider then tried to write backlinks into them, erroring once per scan.
+  The watcher and `indexer.index_note` now skip `.archive` like every
+  other entry point, and Spider's lookups + linker filter archived targets
+  as belt-and-braces.
+- **Sentinel section checks follow the vault's own schemas** —
+  `_check_schema_sections` used a hardcoded section map that contradicted
+  `rules/schemas/<type>.md`, so healthy notes in vaults with custom
+  schemas warned on every validation. Expectations now come from a shared
+  `schema_sections` helper (on-disk schema first, legacy map as fallback)
+  used by Sentinel, Weaver's skeleton, and Weaver's LLM prompt.
+- **Weaver's prompt asked for the wrong sections** — `_required_headings`
+  scanned the schema doc's own `## ` lines, so vaults with on-disk schemas
+  told the model to use headings like "Required Frontmatter" — a cause of
+  the missing-section warnings local models kept hitting. It now uses the
+  shared `expected_sections` helper.
+- **Unicode dashes in wikilinks** — models that emit `[[links]]` with
+  non-breaking hyphens (U+2011) or other unicode dash/space variants
+  (observed live from gpt-oss) produced unresolvable links. Wikilink
+  targets are normalized to ASCII on agent write (Weaver, Scribe) and at
+  extraction, so pre-existing notes resolve too; prose is never touched.
 
 ## [1.1.0] - 2026-07-19
 

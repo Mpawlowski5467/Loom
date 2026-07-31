@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+  <rect width="1280" height="720" fill="#f5f1e8"/>
+  <circle cx="180" cy="172" r="26" fill="#2d4a7c" fill-opacity=".88"/>
+  <circle cx="245" cy="128" r="13" fill="#4a6b3a" fill-opacity=".82"/>
+  <circle cx="282" cy="206" r="18" fill="#6b3a6b" fill-opacity=".82"/>
+  <circle cx="130" cy="253" r="11" fill="#a8722a" fill-opacity=".82"/>
+  <line x1="180" y1="172" x2="245" y2="128" stroke="#1a1815" stroke-opacity=".16"/>
+  <line x1="180" y1="172" x2="282" y2="206" stroke="#1a1815" stroke-opacity=".16"/>
+  <line x1="180" y1="172" x2="130" y2="253" stroke="#1a1815" stroke-opacity=".16"/>
+  <text x="420" y="290" fill="#1a1815" font-family="New York, Georgia, serif"
+        font-size="70" font-weight="600">See the shape</text>
+  <text x="420" y="370" fill="#1a1815" font-family="New York, Georgia, serif"
+        font-size="70" font-weight="600">of what you know.</text>
+  <text x="424" y="432" fill="#5c5851" font-family="Avenir Next, Helvetica, sans-serif"
+        font-size="23" letter-spacing="1">A living graph built from [[wikilinks]].</text>
+  <line x1="420" y1="490" x2="1080" y2="490" stroke="#1a1815" stroke-opacity=".14"/>
+</svg>

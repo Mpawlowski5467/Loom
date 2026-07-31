@@ -105,6 +105,8 @@ Loom has four main views, switched from the top nav: **Graph**, **Board**, and
 An interactive map of your vault. Nodes are notes (colored by type: project,
 topic, people, daily, capture, custom); edges are `[[wikilinks]]`.
 
+![Graph view showing a connected vault](screenshots/graph-view.png)
+
 - **Pan** by dragging, **zoom** by scrolling, **hover** to highlight a node and
   its neighbors, **click** a node to open it in the Thread reader.
 - Two layouts: **constellation** (force-directed, everything in view) and
@@ -121,6 +123,8 @@ weaving."*
 
 Where raw captures become notes.
 
+![Inbox review lane with Sentinel feedback](screenshots/inbox-view.png)
+
 - The left panel lists pending captures with a search box and bulk
   **Process** / **Skip** actions.
 - Select a capture to see its content and **Weaver's suggestion** on the right:
@@ -132,6 +136,8 @@ Where raw captures become notes.
 ### Board — watch (and run) the agents
 
 A live view of Loom's agent activity.
+
+![Agent Board with activity and Council chat](screenshots/board-view.png)
 
 - **Loom Layer** cards (Weaver, Spider, Archivist, Scribe, Sentinel) manage your
   vault. Each card shows run counts and its last action; **Run** triggers it.
@@ -147,6 +153,8 @@ A live view of Loom's agent activity.
 ### Thread — read and edit a note
 
 Opens when you click a note in the graph, the file tree, or search.
+
+![Thread reader with note details and backlinks](screenshots/thread-view.png)
 
 - Read rendered Markdown with clickable `[[wikilinks]]`.
 - Click **✎ edit** for a split source/preview editor; **Cmd/Ctrl+S** saves.
@@ -190,7 +198,30 @@ For one-on-one work, the Shuttle agents (Researcher, Standup) have their own
 
 ---
 
-## 8. Where your data lives
+## 8. Connecting read-only sources
+
+Open **Settings → Connections** to bring external context into the same durable
+Inbox pipeline. Connections are opt-in and read-only:
+
+![Connections settings with Google and Outlook setup](screenshots/connections-settings.png)
+
+- **Calendar feed** reads a private iCalendar URL for Standup context and
+  idempotent event captures.
+- **GitHub** polls selected repositories for commits, issues, and pull requests.
+- **Email** polls an IMAP mailbox read-only with `BODY.PEEK`, so Loom does not
+  mark messages as seen.
+- **Google** uses one consent for read-only Calendar + Gmail and one encrypted,
+  auto-refreshing token.
+- **Outlook Calendar** uses delegated, read-only Microsoft Calendar access.
+
+The Google and Outlook connectors are code-complete and mock-verified in the
+current development worktree. Their first real connection requires app
+registrations in Google Cloud and Microsoft Entra; follow the callback URL and
+steps shown in the card for the instance you are running.
+
+---
+
+## 9. Where your data lives
 
 Everything is plain files under `~/.loom/`:
 

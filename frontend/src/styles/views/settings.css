@@ -983,6 +983,79 @@
   color: var(--ink);
 }
 
+/* Guided connector flow (Google / Microsoft sign-in cards) */
+
+.connector-checklist {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding-left: 18px;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ink-2);
+}
+
+.connector-checklist a {
+  color: var(--agent);
+}
+
+.connector-checklist code {
+  font-family: var(--mono);
+  font-size: 10.5px;
+}
+
+.connector-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 1px 7px;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-md);
+  background: var(--bg-surface);
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.connector-chip:hover {
+  border-color: var(--ink-3);
+}
+
+.connector-chip span {
+  font-family: var(--sans);
+  font-size: 10px;
+  color: var(--ink-3);
+}
+
+.connector-creds-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.connector-edit {
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--agent);
+  font: inherit;
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.connector-signin {
+  align-items: center;
+}
+
+.connector-service {
+  display: grid;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--rule);
+}
+
 @media (max-width: 760px) {
   .settings-provider-connect-note {
     grid-template-columns: minmax(0, 1fr);

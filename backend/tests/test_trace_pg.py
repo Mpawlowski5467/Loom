@@ -15,6 +15,7 @@ from starlette.testclient import TestClient
 from api.main import app
 from core.trace_pg import _QUEUE_MAX, PgTraceMirror
 from core.traces import TraceRecord, TraceStore, get_trace_store
+from core.vault import get_vault_manager
 
 # ---------------------------------------------------------------------------
 # Test doubles
@@ -333,11 +334,15 @@ class StubMirror:
 
 
 @pytest.fixture()
-def trace_client(tmp_path) -> TestClient:
+def trace_client(tmp_path, vault_manager) -> TestClient:
     store = get_trace_store()
     store.set_disk_dir(tmp_path / "traces")
     store._items.clear()  # test-only reset of the ring buffer
+    # The /disk endpoints page traces via the vault manager — pin it to a temp
+    # LOOM_HOME so a real ~/.loom vault can't leak traces into these tests.
+    app.dependency_overrides[get_vault_manager] = lambda: vault_manager
     yield TestClient(app)
+    app.dependency_overrides.clear()
     store.set_disk_dir(None)
     store.set_pg_mirror(None)
     store._items.clear()

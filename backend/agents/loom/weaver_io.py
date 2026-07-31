@@ -12,6 +12,7 @@ from core.note_index import get_note_index
 from core.notes import (
     Note,
     generate_id,
+    normalize_wikilinks_in_body,
     now_iso,
     parse_note,
 )
@@ -109,7 +110,9 @@ def write_note(
         file_path = target_dir / f"{stem}-{note_id}.md"
 
     meta = build_meta(note_id, title, note_type, tags, source, author)
-    _vault_write_note(vault_root, file_path, meta, body)
+    # Store canonical wikilink targets: local models sometimes emit unicode
+    # dash/space variants inside [[...]] that silently break link resolution.
+    _vault_write_note(vault_root, file_path, meta, normalize_wikilinks_in_body(body))
 
     logger.info("Weaver created note: %s → %s", title, file_path)
     return parse_note(file_path)

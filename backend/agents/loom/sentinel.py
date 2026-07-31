@@ -9,13 +9,18 @@ from __future__ import annotations
 
 import contextlib
 import logging
+import re
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from itertools import pairwise
 from typing import TYPE_CHECKING, Any
 
 import yaml
 from pydantic import ValidationError
 
 from agents.base import BaseAgent
+from agents.loom.schema_sections import expected_sections
+from agents.loom.weaver_tags import normalise_tag
 from agents.sanitize import scrub_untrusted
 from core.exceptions import ProviderConfigError, ProviderError
 from core.notes import Note, parse_note
@@ -36,6 +41,53 @@ logger = logging.getLogger(__name__)
 
 REQUIRED_META_FIELDS = ["id", "title", "type", "tags", "created", "modified", "author", "status"]
 
+# Allowed ``status`` values, as declared in the seeded note schemas
+# (core/defaults.py: ``status: active|archived``).
+KNOWN_NOTE_STATUSES = ("active", "archived")
+
+# Ids double as link anchors and collision-suffixes in file stems.
+_ID_SAFE_RE = re.compile(r"^[A-Za-z0-9._-]+$")
+
+# Author convention from the seeded schemas: ``user`` or ``agent:<name>``.
+_AUTHOR_RE = re.compile(r"^(user|agent:\S.*)$")
+
+# Tag taxonomy cap (prime.md preference, mirrored by weaver_tags.snap_tags).
+_MAX_TAGS = 5
+
+# Placeholder text a finished note should never carry. TODO/TBD/FIXME are
+# matched uppercase-only so prose like "todo list" doesn't trip the check.
+_PLACEHOLDER_MARKER_RE = re.compile(r"\b(?:TODO|TBD|FIXME)\b")
+_LOREM_RE = re.compile(r"lorem ipsum", re.IGNORECASE)
+
+# Titles that mean "no one named this note".
+_PLACEHOLDER_TITLES = {"untitled", "todo", "tbd", "placeholder", "lorem ipsum"}
+
+# Code spans are stripped before wikilink-bracket checks so documentation
+# *about* `[[wikilinks]]` doesn't read as malformed links.
+_FENCED_CODE_RE = re.compile(r"```.*?```", re.DOTALL)
+_INLINE_CODE_RE = re.compile(r"`[^`\n]*`")
+_EMPTY_LINK_RE = re.compile(r"\[\[\s*\]\]")
+_WELL_FORMED_LINK_RE = re.compile(r"\[\[[^\]]*\]\]")
+
+
+def _parse_iso_dt(value: str) -> datetime | None:
+    """Parse an ISO-8601 timestamp; return None when unparseable."""
+    try:
+        return datetime.fromisoformat(value.strip())
+    except ValueError:
+        return None
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Return ``dt`` comparable: naive timestamps are treated as UTC.
+
+    YAML auto-typing can strip the offset from a timestamp (``...Z`` loads as
+    an aware datetime, but a hand-written offset-less value stays naive), so a
+    naive/aware mix must never crash an ordering check.
+    """
+    return dt if dt.tzinfo is not None else dt.replace(tzinfo=UTC)
+
+
 _VALIDATE_SYSTEM = """\
 You are the Sentinel agent in a knowledge management system. Your job is to
 judge whether a note's CONTENT complies with vault principles in prime.md.
@@ -43,8 +95,12 @@ judge whether a note's CONTENT complies with vault principles in prime.md.
 CONTEXT YOU CAN TRUST (do NOT re-litigate these):
 - The agent's read-before-write chain has already been verified to have run.
   Do NOT flag "read chain not completed" — that is checked separately.
-- The note's frontmatter fields and schema sections are checked separately.
-  Do NOT flag missing sections or missing required fields.
+- The note's frontmatter is checked separately: required fields, field
+  values (timestamp formats and ordering, id/status/author format, tag
+  taxonomy), and schema sections. Do NOT flag missing or malformed fields,
+  and do NOT flag missing sections.
+- History-entry structure and chronology, empty or placeholder body/title
+  text, and wikilink bracket syntax are checked separately. Do NOT flag them.
 - The folder/type pairing is checked separately. Do NOT flag directory issues.
 
 WHAT YOU SHOULD JUDGE (and only these):
@@ -199,27 +255,136 @@ class Sentinel(BaseAgent):
             if not val or (isinstance(val, str) and not val.strip()):
                 issues.append(f"Missing required field: {field_name}")
 
-        # History tracking (prime.md rule 5)
+        # Frontmatter value sanity (beyond presence)
+        issues.extend(self._check_meta_values(note))
+
+        # History tracking (prime.md rule 5): presence, then entry sanity
         if not note.history:
             issues.append("No history entries — rule 5 requires logging every action")
+        else:
+            issues.extend(self._check_history_entries(note))
 
         # Schema section check
         schema_issues = self._check_schema_sections(note)
         issues.extend(schema_issues)
 
+        # Body / title / wikilink syntax sanity
+        issues.extend(self._check_body_sanity(note))
+        issues.extend(self._check_wikilink_syntax(note))
+
+        return issues
+
+    def _check_meta_values(self, note: Note) -> list[str]:
+        """Value-level sanity for frontmatter fields, beyond mere presence.
+
+        Fields already flagged as missing are skipped here so a blank value
+        yields one issue, not two.
+        """
+        issues: list[str] = []
+
+        if note.id and not _ID_SAFE_RE.match(note.id):
+            issues.append(f"id {note.id!r} contains characters unsafe for filenames or links")
+
+        created = self._checked_dt(note.created, "created", issues)
+        modified = self._checked_dt(note.modified, "modified", issues)
+        if created is not None and modified is not None and _as_utc(modified) < _as_utc(created):
+            issues.append("modified timestamp predates created timestamp")
+
+        if note.status.strip() and note.status not in KNOWN_NOTE_STATUSES:
+            allowed = ", ".join(KNOWN_NOTE_STATUSES)
+            issues.append(f"Unknown status {note.status!r} (expected one of: {allowed})")
+
+        if note.author.strip() and not _AUTHOR_RE.match(note.author):
+            issues.append(f"Unexpected author {note.author!r} (expected 'user' or 'agent:<name>')")
+
+        # Tag taxonomy (prime.md): lowercase-hyphenated, no blanks, max 5.
+        if len(note.tags) > _MAX_TAGS:
+            issues.append(
+                f"Too many tags ({len(note.tags)}) — prime.md caps the taxonomy at {_MAX_TAGS}"
+            )
+        if any(not tag.strip() for tag in note.tags):
+            issues.append("Blank tag in tags list")
+        sloppy = [tag for tag in note.tags if tag.strip() and normalise_tag(tag) != tag]
+        if sloppy:
+            issues.append(f"Tag(s) not lowercase-hyphenated: {', '.join(sloppy)}")
+
+        return issues
+
+    @staticmethod
+    def _checked_dt(value: str, field_name: str, issues: list[str]) -> datetime | None:
+        """Parse a timestamp field, appending an issue when non-blank but invalid."""
+        if not value.strip():
+            return None
+        dt = _parse_iso_dt(value)
+        if dt is None:
+            issues.append(f"{field_name} is not a valid ISO-8601 timestamp: {value!r}")
+        return dt
+
+    def _check_history_entries(self, note: Note) -> list[str]:
+        """Well-formedness and chronology of the note's edit history (rule 5).
+
+        ``reason`` is optional in the HistoryEntry model, so only the
+        model-required fields (action/by/at) are checked for blankness.
+        """
+        issues: list[str] = []
+        dated: list[tuple[int, datetime]] = []
+        for idx, entry in enumerate(note.history, start=1):
+            blank = [key for key in ("action", "by", "at") if not getattr(entry, key).strip()]
+            if blank:
+                issues.append(f"History entry {idx} has blank field(s): {', '.join(blank)}")
+            if entry.at.strip():
+                dt = _parse_iso_dt(entry.at)
+                if dt is None:
+                    issues.append(f"History entry {idx} has unparseable timestamp: {entry.at!r}")
+                else:
+                    dated.append((idx, dt))
+        for (prev_idx, prev_dt), (idx, dt) in pairwise(dated):
+            if _as_utc(dt) < _as_utc(prev_dt):
+                issues.append(
+                    f"History entries out of chronological order: entry {idx} predates entry {prev_idx}"
+                )
+                break
+        return issues
+
+    def _check_body_sanity(self, note: Note) -> list[str]:
+        """Empty / placeholder content checks for the body and title."""
+        issues: list[str] = []
+        body = note.body.strip()
+        if not body:
+            issues.append("Empty note body")
+        else:
+            markers = sorted(set(_PLACEHOLDER_MARKER_RE.findall(body)))
+            if _LOREM_RE.search(body):
+                markers.append("lorem ipsum")
+            if markers:
+                issues.append(f"Placeholder text in body: {', '.join(markers)}")
+        title = note.title.strip()
+        if title and title.lower() in _PLACEHOLDER_TITLES:
+            issues.append(f"Placeholder title: {title!r}")
+        return issues
+
+    def _check_wikilink_syntax(self, note: Note) -> list[str]:
+        """Bracket-level wikilink syntax. Target existence is Spider's domain."""
+        issues: list[str] = []
+        stripped = _FENCED_CODE_RE.sub("", note.body)
+        stripped = _INLINE_CODE_RE.sub("", stripped)
+        if _EMPTY_LINK_RE.search(stripped):
+            issues.append("Empty wikilink target(s) ([[]]) in body")
+        stripped = _WELL_FORMED_LINK_RE.sub("", stripped)
+        if "[[" in stripped:
+            issues.append("Unclosed '[[' wikilink bracket in body")
+        if "]]" in stripped:
+            issues.append("Stray ']]' bracket in body")
         return issues
 
     def _check_schema_sections(self, note: Note) -> list[str]:
-        """Check if note has expected sections for its type."""
-        expected_sections: dict[str, list[str]] = {
-            "project": ["Overview", "Goals", "Status", "Related"],
-            "topic": ["Summary", "Details", "References"],
-            "person": ["Context", "Notes", "Related"],
-            "daily": ["Log", "Tasks", "Links"],
-            "capture": ["Content", "Context"],
-        }
+        """Check the note carries the sections its type's schema expects.
 
-        sections = expected_sections.get(note.type, [])
+        Expectations come from the vault's on-disk schema
+        (``rules/schemas/<type>.md``) when present, falling back to the
+        built-in defaults — see ``agents.loom.schema_sections``.
+        """
+        sections = expected_sections(self._vault_root, note.type)
         if not sections:
             return []
 

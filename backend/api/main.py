@@ -28,6 +28,7 @@ from api.routers.agents import router as agents_router
 from api.routers.agents_registry import router as agents_registry_router
 from api.routers.archive import router as archive_router
 from api.routers.automations import router as automations_router
+from api.routers.calendar_outlook import router as calendar_outlook_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
@@ -35,6 +36,7 @@ from api.routers.diagnostics import router as diagnostics_router
 from api.routers.email_bridge import router as email_bridge_router
 from api.routers.events import router as events_router
 from api.routers.github_bridge import router as github_bridge_router
+from api.routers.google_bridge import router as google_bridge_router
 from api.routers.graph import router as graph_router
 from api.routers.hardware import router as hardware_router
 from api.routers.index import router as index_router
@@ -83,6 +85,20 @@ _TOKEN_GATE_OPEN_PATHS = frozenset(
         # optional API-token header. The callback remains protected by a
         # short-lived, one-time PKCE flow state.
         "/api/providers/openrouter/oauth/callback",
+        # Google/Microsoft redirect the browser to these OAuth callbacks too;
+        # each remains protected by a short-lived, one-time state nonce.
+        "/api/automations/google/callback",
+        "/api/automations/calendar/outlook/callback",
+    }
+)
+
+# OAuth callback paths whose one-time authorization codes must stay out of
+# Uvicorn access logs (see redact_provider_oauth_query below).
+_OAUTH_CALLBACK_PATHS = frozenset(
+    {
+        "/api/providers/openrouter/oauth/callback",
+        "/api/automations/google/callback",
+        "/api/automations/calendar/outlook/callback",
     }
 )
 
@@ -162,6 +178,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_email_sync_service().start()
     except Exception:
         logger.warning("Email sync service initialization failed", exc_info=True)
+    try:
+        from bridge.gcal_service import get_google_calendar_sync_service
+
+        await get_google_calendar_sync_service().start()
+    except Exception:
+        logger.warning("Google Calendar sync service initialization failed", exc_info=True)
+    try:
+        from bridge.outlook_cal_service import get_outlook_calendar_sync_service
+
+        await get_outlook_calendar_sync_service().start()
+    except Exception:
+        logger.warning("Outlook Calendar sync service initialization failed", exc_info=True)
+    try:
+        from bridge.gmail_service import get_gmail_sync_service
+
+        await get_gmail_sync_service().start()
+    except Exception:
+        logger.warning("Gmail sync service initialization failed", exc_info=True)
     # Mirror traces to disk so they survive restarts and we can page back
     # beyond the 500-item in-memory ring buffer. The vault label tags rows in
     # the (install-wide) Postgres mirror so its reads scope per vault too.
@@ -200,6 +234,24 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         await get_email_sync_service().aclose()
     except Exception:
         logger.warning("Email sync service shutdown failed", exc_info=True)
+    try:
+        from bridge.gcal_service import get_google_calendar_sync_service
+
+        await get_google_calendar_sync_service().aclose()
+    except Exception:
+        logger.warning("Google Calendar sync service shutdown failed", exc_info=True)
+    try:
+        from bridge.outlook_cal_service import get_outlook_calendar_sync_service
+
+        await get_outlook_calendar_sync_service().aclose()
+    except Exception:
+        logger.warning("Outlook Calendar sync service shutdown failed", exc_info=True)
+    try:
+        from bridge.gmail_service import get_gmail_sync_service
+
+        await get_gmail_sync_service().aclose()
+    except Exception:
+        logger.warning("Gmail sync service shutdown failed", exc_info=True)
     stop_watcher()
     await retention.aclose()
     await shutdown_optional_services()
@@ -251,7 +303,7 @@ async def redact_provider_oauth_query(
     server writes/logs that response.
     """
     response = await call_next(request)
-    if request.url.path == "/api/providers/openrouter/oauth/callback":
+    if request.url.path in _OAUTH_CALLBACK_PATHS:
         request.scope["query_string"] = b""
     return response
 
@@ -306,6 +358,8 @@ app.include_router(archive_router)
 app.include_router(automations_router)
 app.include_router(github_bridge_router)
 app.include_router(email_bridge_router)
+app.include_router(calendar_outlook_router)
+app.include_router(google_bridge_router)
 app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)

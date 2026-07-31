@@ -308,3 +308,242 @@ export function syncEmail(signal?: AbortSignal): Promise<EmailSyncResult> {
     AUTOMATION_RUN_TIMEOUT_MS,
   );
 }
+
+export interface OAuthCalendarConfig {
+  enabled: boolean;
+  client_id: string;
+  client_secret_set: boolean;
+  interval_minutes: number;
+  lookback_days: number;
+  calendar_ids: string[];
+}
+
+export interface OAuthCalendarConnection {
+  connected: boolean;
+  account: string;
+}
+
+export interface OAuthCalendarStatus {
+  running: boolean;
+  last_run: string;
+  last_error: string;
+  last_created: number;
+}
+
+export interface GoogleServiceConfig {
+  enabled: boolean;
+  interval_minutes: number;
+  lookback_days: number;
+}
+
+export interface GoogleCalendarServiceConfig extends GoogleServiceConfig {
+  calendar_ids: string[];
+}
+
+export interface GoogleConnectorConfig {
+  client_id: string;
+  client_secret_set: boolean;
+  calendar: GoogleCalendarServiceConfig;
+  gmail: GoogleServiceConfig;
+}
+
+export interface GoogleConnectorAutomation {
+  google: GoogleConnectorConfig;
+  connection: OAuthCalendarConnection;
+  services: {
+    calendar: OAuthCalendarStatus;
+    gmail: OAuthCalendarStatus;
+  };
+}
+
+export interface GoogleServiceUpdate {
+  enabled?: boolean;
+  interval_minutes?: number;
+  lookback_days?: number;
+}
+
+export interface GoogleCalendarServiceUpdate extends GoogleServiceUpdate {
+  calendar_ids?: string[];
+}
+
+export interface GoogleConnectorUpdate {
+  client_id?: string;
+  client_secret?: string;
+  clear_client_secret?: boolean;
+  calendar?: GoogleCalendarServiceUpdate;
+  gmail?: GoogleServiceUpdate;
+}
+
+export interface GoogleServiceTestResult {
+  ok: boolean;
+  account: string;
+  error: string;
+}
+
+export interface GoogleTestResult {
+  calendar: GoogleServiceTestResult;
+  gmail: GoogleServiceTestResult;
+}
+
+export interface OutlookCalendarAutomation {
+  outlook: OAuthCalendarConfig;
+  connection: OAuthCalendarConnection;
+  status: OAuthCalendarStatus;
+}
+
+export interface OAuthCalendarUpdate {
+  enabled?: boolean;
+  client_id?: string;
+  client_secret?: string;
+  clear_client_secret?: boolean;
+  interval_minutes?: number;
+  lookback_days?: number;
+  calendar_ids?: string[];
+}
+
+export interface OAuthCalendarConnectResult {
+  authorization_url: string;
+  expires_in: number;
+}
+
+export interface OAuthCalendarTestResult {
+  ok: boolean;
+  account: string;
+  error: string;
+}
+
+export interface OAuthCalendarSliceResult {
+  calendar: string;
+  fetched: number;
+  created: number;
+  deduplicated: number;
+  error: string;
+}
+
+export interface OAuthCalendarSyncResult {
+  synced_at: string;
+  calendars: OAuthCalendarSliceResult[];
+  created: number;
+  deduplicated: number;
+  errors: number;
+}
+
+export interface GmailSyncResult {
+  synced_at: string;
+  fetched: number;
+  created: number;
+  deduplicated: number;
+  errors: number;
+  capture_ids: string[];
+}
+
+export function getGoogleConnector(
+  signal?: AbortSignal,
+): Promise<GoogleConnectorAutomation> {
+  return apiClient.get<GoogleConnectorAutomation>(
+    "/api/automations/google",
+    signal,
+  );
+}
+
+export function updateGoogleConnector(
+  update: GoogleConnectorUpdate,
+): Promise<GoogleConnectorAutomation> {
+  return apiClient.patch<GoogleConnectorAutomation>(
+    "/api/automations/google",
+    update,
+  );
+}
+
+export function connectGoogle(): Promise<OAuthCalendarConnectResult> {
+  return apiClient.post<OAuthCalendarConnectResult>(
+    "/api/automations/google/connect",
+  );
+}
+
+export function disconnectGoogle(): Promise<GoogleConnectorAutomation> {
+  return apiClient.post<GoogleConnectorAutomation>(
+    "/api/automations/google/disconnect",
+  );
+}
+
+export function testGoogle(signal?: AbortSignal): Promise<GoogleTestResult> {
+  return apiClient.post<GoogleTestResult>(
+    "/api/automations/google/test",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function syncGoogleCalendar(
+  signal?: AbortSignal,
+): Promise<OAuthCalendarSyncResult> {
+  return apiClient.post<OAuthCalendarSyncResult>(
+    "/api/automations/google/sync/calendar",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function syncGmail(signal?: AbortSignal): Promise<GmailSyncResult> {
+  return apiClient.post<GmailSyncResult>(
+    "/api/automations/google/sync/gmail",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function getOutlookCalendarAutomation(
+  signal?: AbortSignal,
+): Promise<OutlookCalendarAutomation> {
+  return apiClient.get<OutlookCalendarAutomation>(
+    "/api/automations/calendar/outlook",
+    signal,
+  );
+}
+
+export function updateOutlookCalendarAutomation(
+  update: OAuthCalendarUpdate,
+): Promise<OutlookCalendarAutomation> {
+  return apiClient.patch<OutlookCalendarAutomation>(
+    "/api/automations/calendar/outlook",
+    update,
+  );
+}
+
+export function connectOutlookCalendar(): Promise<OAuthCalendarConnectResult> {
+  return apiClient.post<OAuthCalendarConnectResult>(
+    "/api/automations/calendar/outlook/connect",
+  );
+}
+
+export function disconnectOutlookCalendar(): Promise<OutlookCalendarAutomation> {
+  return apiClient.post<OutlookCalendarAutomation>(
+    "/api/automations/calendar/outlook/disconnect",
+  );
+}
+
+export function testOutlookCalendar(
+  signal?: AbortSignal,
+): Promise<OAuthCalendarTestResult> {
+  return apiClient.post<OAuthCalendarTestResult>(
+    "/api/automations/calendar/outlook/test",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}
+
+export function syncOutlookCalendar(
+  signal?: AbortSignal,
+): Promise<OAuthCalendarSyncResult> {
+  return apiClient.post<OAuthCalendarSyncResult>(
+    "/api/automations/calendar/outlook/sync",
+    {},
+    signal,
+    AUTOMATION_RUN_TIMEOUT_MS,
+  );
+}

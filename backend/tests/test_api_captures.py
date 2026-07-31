@@ -2,6 +2,7 @@
 
 import asyncio
 import inspect
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -692,6 +693,35 @@ class TestProcessCapture:
         job = next(j for j in jobs if j["capture_path"].endswith("raw-idea.md"))
         assert job["status"] == "failed"
         assert "timed out" in job["error"]
+
+    def test_stalled_pipeline_logs_task_stacks(
+        self, client: TestClient, seeded_captures: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A pipeline that goes quiet past the watchdog window dumps asyncio
+        task stacks to the log before the hard cap fires — stall forensics."""
+        mock_runner = MagicMock()
+
+        async def _stall(*args: object, **kwargs: object) -> None:
+            await asyncio.sleep(60)
+
+        mock_runner.run_pipeline = _stall
+
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=MagicMock()),
+            patch("agents.runner.AgentRunner", return_value=mock_runner),
+            patch("api.routers.captures._PROCESS_PIPELINE_TIMEOUT_S", 0.2),
+            patch("api.routers.captures._PIPELINE_STALL_DUMP_S", 0.05),
+            caplog.at_level(logging.WARNING, logger="api.routers.captures"),
+        ):
+            resp = client.post(
+                "/api/captures/process",
+                json={"capture_path": "captures/raw-idea.md"},
+            )
+
+        assert resp.json()["outcome"] == "failed"
+        assert "timed out" in resp.json()["error"]
+        assert any("Pipeline stall suspected" in r.message for r in caplog.records)
+        assert any("task stacks follow" in r.message for r in caplog.records)
 
 
 # ---------------------------------------------------------------------------

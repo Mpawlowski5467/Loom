@@ -112,6 +112,13 @@ class VectorIndexer:
 
     async def index_note(self, note_path: Path) -> int:
         """Parse, chunk, embed, and upsert a single note. Returns chunk count."""
+        if ".archive" in note_path.parts:
+            # Same filter reindex_vault/reconcile_vault apply: archived notes
+            # never enter the vector store. Single-file callers (e.g. the
+            # watcher's create/modify queue) can hand us an .archive path
+            # when a move into the archive surfaces as delete+create.
+            logger.debug("Skipping vector index of archived note: %s", note_path)
+            return 0
         chunks = chunk_file(note_path)
         if not chunks:
             return 0

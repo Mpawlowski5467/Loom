@@ -1,0 +1,120 @@
+version: 1
+cases:
+  - id: distributed-systems-topic
+    capture:
+      title: Raft notes
+      body: >-
+        Raft elects a leader and replicates a log across a distributed system.
+        Compare it with Paxos when documenting our consensus choices.
+    expected:
+      type: topic
+      folder: topics
+      title: Raft Consensus
+      tags: [distributed, consensus]
+      headings: [Summary, Details, References]
+      links: [Paxos]
+      sentinel: [passed, warning]
+    fixture_responses:
+      - |-
+        type: topic
+        folder: topics
+        title: Raft Consensus
+        tags: distributed, consensus
+      - |-
+        ## Summary
+
+        Raft is a leader-based consensus algorithm for replicated logs.
+
+        ## Details
+
+        It elects a leader and coordinates replication across peers. Compare its tradeoffs with [[Paxos]].
+
+        ## References
+
+        - [[Paxos]]
+      - |-
+        status: passed
+        reasons:
+        - Content is atomic and grounded in the capture
+
+  - id: delivery-project
+    capture:
+      title: Search launch plan
+      body: >-
+        Project Atlas milestone: ship hybrid search by September. The next
+        sprint needs ranking evaluation, a migration dry run, and an owner for
+        the release checklist.
+    expected:
+      type: project
+      folder: projects
+      title: Atlas Search Launch
+      tags: [atlas, search]
+      headings: [Overview, Goals, Status, Related]
+      links: [Hybrid Search]
+      sentinel: [passed, warning]
+    fixture_responses:
+      - |-
+        type: project
+        folder: projects
+        title: Atlas Search Launch
+        tags: atlas, search
+      - |-
+        ## Overview
+
+        Atlas will deliver hybrid search by September.
+
+        ## Goals
+
+        - Evaluate ranking quality.
+        - Complete a migration dry run.
+        - Assign an owner to the release checklist.
+
+        ## Status
+
+        Planning the next sprint.
+
+        ## Related
+
+        - [[Hybrid Search]]
+      - |-
+        status: passed
+        reasons:
+        - Content is a focused project note grounded in the capture
+
+  - id: person-conversation
+    capture:
+      title: Conversation with Maya
+      body: >-
+        Spoke to Maya Chen about the Atlas launch. She owns the migration dry
+        run and prefers status updates on Tuesday afternoons.
+    expected:
+      type: person
+      folder: people
+      title: Maya Chen
+      tags: [person, atlas]
+      headings: [About, Context, Notes]
+      links: [Atlas Search Launch]
+      sentinel: [passed, warning]
+    fixture_responses:
+      - |-
+        type: person
+        folder: people
+        title: Maya Chen
+        tags: person, atlas
+      - |-
+        ## About
+
+        Maya Chen owns the Atlas migration dry run.
+
+        ## Context
+
+        Maya is involved in [[Atlas Search Launch]].
+
+        ## Notes
+
+        She prefers status updates on Tuesday afternoons.
+      - |-
+        status: passed
+        reasons:
+        - Content is grounded and appropriately scoped
+

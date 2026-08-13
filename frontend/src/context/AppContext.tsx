@@ -1,9 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 import type {
   Agent,
-  CouncilMessage,
-  CouncilWho,
   NoteId,
   NodeType,
   SettingsSection,
@@ -21,8 +19,6 @@ import {
   parseGraphFixture,
   type GraphFixtureSize,
 } from "../data/graphFixtures";
-import { loadChatHistory, streamCouncilMessage } from "../api/chat";
-import { listAgentRegistry } from "../api/agentsRegistry";
 import { readDemoMode } from "../data/demoMode";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
@@ -35,6 +31,8 @@ import { useLoomConfig } from "./useLoomConfig";
 import { useAgentPolling } from "./useAgentPolling";
 import { useHealthPolling } from "./useHealthPolling";
 import { useVaultContent } from "./useVaultContent";
+import { useCouncil } from "./useCouncil";
+import { useCustomAgents } from "./useCustomAgents";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
 const GRAPH_FILTERS_KEY = "loom.graphFilters";
@@ -423,182 +421,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     !demo && loomConfig.onboardingComplete && !loomConfig.offline,
   );
 
-  const [customAgents, setCustomAgents] = useState<Agent[]>([]);
-  const refreshCustomAgents = useCallback(async () => {
-    try {
-      const list = await listAgentRegistry();
-      const custom: Agent[] = list
-        .filter((a) => !a.system)
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          layer: a.layer,
-          role: a.role,
-          icon: a.icon,
-          state: "idle",
-          stats: { runs: 0, lastRun: "—" },
-          lastAction: "",
-        }));
-      setCustomAgents(custom);
-    } catch {
-      // Backend unreachable — leave the list as-is.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (graphFixture !== null) return;
-    void refreshCustomAgents();
-  }, [graphFixture, refreshCustomAgents]);
-
-  const [council, setCouncil] = useState<CouncilMessage[]>(
-    demo ? councilSeed : [],
+  const { customAgents, refreshCustomAgents } = useCustomAgents(
+    graphFixture === null,
   );
-  // Tracks the in-flight Council SSE stream so a new send (or unmount) can
-  // cancel it — a Council turn costs ~6 provider calls, so a leaked/duplicated
-  // stream wastes a tight per-account budget.
-  const councilAbortRef = useRef<AbortController | null>(null);
-  useEffect(
-    () => () => {
-      councilAbortRef.current?.abort();
-    },
-    [],
-  );
-  // Load persisted council history once on mount so a page refresh doesn't
-  // wipe the conversation. Skip in demo mode where seed messages are intentional.
-  useEffect(() => {
-    if (demo) return;
-    let cancelled = false;
-    void loadChatHistory("_council", 50)
-      .then((res) => {
-        if (cancelled || res.messages.length === 0) return;
-        setCouncil(
-          res.messages.map((m, i) => ({
-            id: `cm_hist_${i}_${m.timestamp}`,
-            who: m.role === "user" ? "you" : ("agent:council" as CouncilWho),
-            body: m.content,
-            at: m.timestamp,
-          })),
-        );
-      })
-      .catch(() => {
-        // best-effort; empty council is the safe default
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [demo]);
-
-  const postCouncilMessage = useCallback(async (body: string) => {
-    if (!body.trim()) return;
-    // Cancel any stream still in flight before starting another, so a rapid
-    // double-send doesn't run two uncancelled SSE fetches concurrently.
-    councilAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    councilAbortRef.current = ctrl;
-    const now = Date.now();
-    const youMsg: CouncilMessage = {
-      id: `cm_${now}`,
-      who: "you",
-      body,
-      at: new Date().toISOString(),
-    };
-    const replyId = `cm_${now}_reply`;
-    const replyMsg: CouncilMessage = {
-      id: replyId,
-      who: "agent:council" as CouncilWho,
-      body: "",
-      at: new Date().toISOString(),
-      pending: true,
-    };
-    setCouncil((prev) => [...prev, youMsg, replyMsg]);
-
-    const updateReply = (
-      patch:
-        | Partial<CouncilMessage>
-        | ((m: CouncilMessage) => Partial<CouncilMessage>),
-    ) => {
-      setCouncil((prev) =>
-        prev.map((m) =>
-          m.id === replyId
-            ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) }
-            : m,
-        ),
-      );
-    };
-
-    try {
-      await streamCouncilMessage(body, {
-        signal: ctrl.signal,
-        onEvent: (event) => {
-          if (event.kind === "contributions") {
-            // Per-agent sub-bubbles arrive once fan-out completes; drop any
-            // that are simultaneously silent and not-errored.
-            const contribs = event.contributions
-              .filter((c) => c.content.trim().length > 0 || c.error)
-              .map((c) => ({
-                agent: c.agent,
-                body: c.content,
-                traceId: c.trace_id || undefined,
-                error: c.error || undefined,
-              }));
-            updateReply({
-              contributions: contribs.length > 0 ? contribs : undefined,
-            });
-          } else if (event.kind === "token") {
-            // Append the streamed chunk to the assistant bubble. ``pending``
-            // stays true until ``done`` so the spinner-style affordance only
-            // turns off once the aggregator has finished.
-            updateReply((m) => ({ body: m.body + event.chunk }));
-          } else if (event.kind === "done") {
-            const finalContribs = event.contributions
-              .filter((c) => c.content.trim().length > 0 || c.error)
-              .map((c) => ({
-                agent: c.agent,
-                body: c.content,
-                traceId: c.trace_id || undefined,
-                error: c.error || undefined,
-              }));
-            updateReply({
-              body: event.assistantText,
-              traceId: event.traceId || undefined,
-              contributions:
-                finalContribs.length > 0 ? finalContribs : undefined,
-              pending: false,
-              at: new Date().toISOString(),
-            });
-          } else if (event.kind === "error") {
-            updateReply({
-              body: `⚠ ${event.message}`,
-              pending: false,
-            });
-          }
-        },
-      });
-      // Ensure pending is cleared even if the stream closed without a
-      // ``done`` event (e.g. network drop mid-response).
-      updateReply((m) => (m.pending ? { pending: false } : {}));
-    } catch (err) {
-      // An abort is a deliberate supersede/unmount, not a failure. The aborted
-      // stream still owns its reply bubble (the newer send has its own id), so
-      // clear the spinner here — otherwise the bubble stays pending forever.
-      if ((err as DOMException)?.name === "AbortError") {
-        updateReply((m) =>
-          m.body.trim().length > 0
-            ? { pending: false }
-            : { pending: false, body: "⚠ Cancelled" },
-        );
-        return;
-      }
-      updateReply({
-        body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
-        pending: false,
-      });
-    } finally {
-      // Only clear the ref if this call still owns it — a superseding send may
-      // have already swapped in its own controller.
-      if (councilAbortRef.current === ctrl) councilAbortRef.current = null;
-    }
-  }, []);
+  const { council, postCouncilMessage } = useCouncil(demo, councilSeed);
 
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);

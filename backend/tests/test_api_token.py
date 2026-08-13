@@ -118,6 +118,11 @@ def test_health_stays_open_with_token_configured(with_token: str) -> None:
     assert client.get("/api/health").status_code == 200
 
 
+def test_live_stays_open_with_token_configured(with_token: str) -> None:
+    client = TestClient(app)
+    assert client.get("/api/live").status_code == 200
+
+
 def test_ready_stays_open_with_token_configured(with_token: str) -> None:
     """Readiness is exempt — it may be 200 or 503, but never 401."""
     client = TestClient(app)

@@ -201,7 +201,9 @@ export function ProviderConfig({
         default for embeddings — they can be different providers.
       </p>
       <p className="onb-sub onb-sub-muted">
-        Keys are stored unencrypted in <code>config.yaml</code> on this machine.
+        Keys are encrypted before they are stored in <code>config.yaml</code> on
+        this machine. The machine-local encryption key remains in your Loom home
+        directory.
       </p>
 
       <div className="onb-providers" role="group" aria-label="Provider">

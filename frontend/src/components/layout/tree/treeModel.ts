@@ -79,9 +79,12 @@ export interface TreeExpanded {
   toggle: (folder: string) => void;
 }
 
-/** Per-folder expand/collapse state, persisted to localStorage. Folders default
- * to open. */
-export function useTreeExpanded(): TreeExpanded {
+/** Per-folder expand/collapse state, persisted to localStorage.
+ *
+ * ``defaultExpanded`` is false for large vaults so their first paint only
+ * creates folder headers. Explicit user choices always win and remain stored.
+ */
+export function useTreeExpanded(defaultExpanded = true): TreeExpanded {
   const [expanded, setExpanded] =
     useState<Record<string, boolean>>(loadExpanded);
 
@@ -94,7 +97,7 @@ export function useTreeExpanded(): TreeExpanded {
   }, [expanded]);
 
   const isExpanded = (folder: string) =>
-    expanded[folder] !== undefined ? expanded[folder]! : true;
+    expanded[folder] !== undefined ? expanded[folder]! : defaultExpanded;
 
   return {
     isExpanded,

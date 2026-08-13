@@ -522,13 +522,14 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `POST` | `/api/chat/send` | Talk to a Shuttle agent or the Council |
 | `POST` | `/api/chat/send/stream` | Streamed Council reply (Server-Sent Events) |
 | `GET` `POST` `PUT` | `/api/vaults` | Multi-vault management |
+| `GET` | `/api/vaults/{name}/backup-status` | Last successful export and 30-day reminder state |
 | `GET` `POST` | `/api/settings/providers` | Provider config (keys masked on read) |
 | `GET` `PATCH` | `/api/config` | Global config (theme, active vault, default provider — redacted) |
 | `GET` `POST` | `/api/onboarding/status` / `/complete` | First-run wizard gate |
 | `POST` | `/api/providers/{name}/test` | Test provider credentials without saving |
 | `GET` | `/api/traces` | Recent LLM traces (`/api/traces/disk` pages older ones by date) |
 | `GET` | `/api/traces/runs` | Multi-step agent runs, newest first (`/api/traces/runs/{id}` for one run's step timeline + per-step traces) |
-| `GET` | `/api/health` / `/api/ready` | Health + readiness probes |
+| `GET` | `/api/live` / `/api/health` / `/api/ready` | Process liveness plus structured operational readiness |
 
 ## Development
 
@@ -537,15 +538,23 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 ruff check backend/
 ruff format --check backend/
 pytest backend/tests/
+cd backend && python -m evals.runner --mode fixture --threshold 0.9
+cd backend && python scripts/restore_drill.py
+cd backend && python scripts/benchmark_vault.py --sizes 1000 5000 10000
 
 # Frontend
 cd frontend
 npm run lint
 npm run test:run   # `npm run test` runs vitest in watch mode
+npm run test:browser:smoke
 npm run build
 ```
 
-CI runs on push via `.github/workflows/ci.yml`.
+CI runs on push via `.github/workflows/ci.yml`. A scheduled/manual release
+matrix repeats the suite on Linux, macOS, and Windows. Real OAuth accounts are
+validated separately with
+[`backend/scripts/validate_oauth_connectors.py`](backend/scripts/validate_oauth_connectors.py)
+and the [OAuth release runbook](docs/OAUTH-RELEASE-VALIDATION.md).
 
 ## Status
 
@@ -572,7 +581,7 @@ What works today:
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
 - Provider system (OpenAI, Anthropic, xAI, OpenRouter, Ollama)
-- File watcher, rate limiting, health/readiness probes
+- File watcher, rate limiting, separate liveness/readiness probes
 - One-command Docker run (single container serves UI + API)
 
 **Resilience & correctness** (the focus of recent work):
@@ -584,6 +593,8 @@ What works today:
 - Note archival shares the edit lock, supports optimistic version checks, and restores the exact original on a failed move
 - Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
 - End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
+- A versioned semantic capture-quality evaluator, critical-path Playwright + accessibility smoke test, provider-free restore drill, and 1k/5k/10k vault benchmark
+- Large vaults initially collapse unseen file-tree folders to avoid creating thousands of DOM rows; major views are split into independently loaded production chunks
 - Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
 
 **Known gaps (deliberate v1 boundaries):**
@@ -591,7 +602,7 @@ What works today:
 - **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
 - **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail) and an Outlook Calendar connector (code-complete and mock-verified; first live connect pending your OAuth app registrations — setup steps are inline in the Connections cards), token-based GitHub polling, and read-only IMAP Email polling. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
 - **Local model guidance (Ollama).** Agent work needs a model that follows note/frontmatter instructions reliably. Verified on Apple Silicon: `devstral` and `phi4` are fast and pass validation; `gpt-oss:20b` and `gemma4:26b` work but are slower (gemma4's Weaver step can approach 2 min). Reasoning models (`deepseek-r1`, thinking-mode Qwen) complete but are slow and their drafts often land in the review lane — usable, not recommended for agents. Very small instruct models may fail Sentinel's section checks; the Inbox review lane catches that safely. Chat completions stream internally, so slow-but-steady generation no longer trips the 120s read window.
-- `AppContext` remains the public compatibility shell, while high-churn vault/capture loading and typed SSE refresh logic are being split into domain hooks. `useGraphInstance` remains the main graph-hook test gap.
+- `AppContext` remains the public compatibility shell, while vault/capture loading, typed SSE refresh, custom-agent registry state, and Council streaming/history live in focused domain hooks. Graph display/navigation remains the largest state slice still owned by the shell.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/ROADMAP.md`](docs/ROADMAP.md) for the release plan, [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md) for the current audit, [`docs/VISION.md`](docs/VISION.md) for longer-range direction, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

@@ -1,81 +1,88 @@
 # Release Readiness Audit
 
-Audit date: **2026-07-30**  
-Baseline: current worktree at commit `9dff41c`, including uncommitted connector
-and agent-correctness work.
+Audit date: **2026-08-14**
+Baseline: local worktree based on commit `ba680f6` plus the changes described in
+this audit.
 
 ## Executive assessment
 
-Loom is a credible open beta with unusually broad automated coverage. The
-backend, frontend, type checker, production build, dependency audit, and Docker
-image build all pass. It should not be tagged as the next release yet: the new
-OAuth connectors have only mocked provider validation, the clean container's
-readiness check conflicts with first-run onboarding, and frontend formatting is
-not at a stable baseline. The audit fixed the stale UI version and fixed-port
-OAuth callback instructions it found.
+Loom's automated release posture is substantially stronger and locally green.
+The capture pipeline now has a versioned semantic quality gate; CI covers a
+critical browser path and accessibility; Docker liveness is correct before
+onboarding; backup, large-vault, security-posture, and cross-platform release
+checks are repeatable rather than prose-only.
+
+The release should not be tagged yet. Two evidence gates cannot be completed in
+this local run: real Google/Microsoft OAuth requires user-owned app registrations
+and consent, and the hosted Linux/macOS/Windows workflow has not yet run. The
+local Dockerfile build also awaits a running Docker daemon; Compose validation
+passes.
 
 ## Verification results
 
 | Check | Result |
 |---|---|
 | `ruff check backend/` | Pass |
-| `ruff format --check backend/` | Pass |
-| `pytest -q` | Pass — 1,232 tests |
-| `mypy api agents bridge core index` | Pass — 132 source files |
+| `ruff format --check backend/` | Pass — 233 files |
+| `mypy .` | Pass — 142 source files |
+| `pytest -q` | Pass — 1,247 tests |
+| deterministic semantic evaluation | Pass — 1.0 score, 0.9 gate |
+| temporary multi-vault restore drill | Pass — SHA-256 integrity verified |
+| 1k/5k/10k metadata + graph benchmark | Pass — 0.60s / 3.02s / 6.08s locally |
+| `python -m pip check` | Pass |
 | `npm run lint` | Pass |
-| `npm run test:run` | Pass — 837 tests across 98 files |
-| `npm run build` | Pass, with bundle-size and dynamic-import warnings |
-| `npm audit --omit=dev --audit-level=high` | Pass — 0 vulnerabilities |
-| `python3 -m pip check` | Pass |
+| `npm run format:check` | Pass |
+| `npm run test:run` | Pass — 845 tests across 100 files |
+| `npm run build` | Pass — route chunks, no bundle warning |
+| critical Playwright + axe smoke | Pass |
+| full and production-only npm audit | Pass — 0 vulnerabilities |
 | `docker compose config --quiet` | Pass |
-| `docker build -t loom:release-audit .` | Pass |
-| Clean image root page | Pass — HTTP 200 |
-| Clean image `/api/ready` | 503 before onboarding |
-| `npm run format:check` | Fail — 81 frontend files reported |
+| local Docker image build | Not run — Docker/OrbStack daemon unavailable |
 
-The Python run emitted deprecation warnings from Starlette/httpx TestClient and
-SlowAPI's use of `asyncio.iscoroutinefunction` under the local Python 3.14
-runtime. They do not fail the supported Python 3.11+ application today, but
-should be removed before they become upgrade blockers.
+The Python suite emits one Starlette deprecation warning: its TestClient/httpx
+compatibility shim should move to `httpx2` before a future dependency upgrade
+makes that warning an error.
 
-## Release blockers
+## Remaining release gates
 
-1. Live-test Google and Microsoft OAuth end to end, including refresh,
-   disconnect/reconnect, incremental cursors, and duplicate suppression.
-2. Make Docker health represent process liveness during first-run onboarding;
-   keep component readiness available separately for diagnostics.
-3. Land a dedicated frontend formatting baseline and enforce it in CI.
+1. Follow [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md) with real
+   Google and Microsoft test accounts. Archive the live-probe and duplicate-
+   suppression evidence.
+2. Trigger `.github/workflows/release-matrix.yml` and record green Linux,
+   macOS, Windows, and Linux-container jobs. Decide separately whether WSL is a
+   supported surface and, if so, run its manual smoke pass.
+3. Start Docker locally (or use the hosted matrix), build the image, and repeat
+   the clean-volume product release drill.
+4. Confirm the release version, changelog, screenshots/trailer, tag, and release
+   notes only after those gates pass.
 
-## Fixed during this audit
+## Hardening completed in this audit
 
-- Splash and footer versions now come from `VITE_APP_VERSION`, matching the
-  package and Settings → About.
-- Google and Outlook callback instructions now follow the configured API origin,
-  so alternate source-build ports display the registration URI users need.
-- Current screenshots and the trailer were recaptured after those fixes.
+- `/api/live` is the container probe; `/api/ready` remains honest operational
+  diagnostics.
+- A versioned real-pipeline capture evaluator scores type, folder, title, tags,
+  headings, wikilinks, and Sentinel verdict.
+- Playwright covers onboarding, Inbox review, filing, Thread navigation, and an
+  axe serious/critical scan.
+- Failed capture jobs expose recovery categories and recommended actions.
+- Successful vault exports update a visible last-backup/reminder signal; a real
+  temporary export/restore drill gates CI.
+- Major frontend surfaces are code-split, custom-agent/Council state moved into
+  tested hooks, and large vaults avoid eagerly rendering every note row.
+- Settings diagnostics report allowed hosts, local/custom network scope,
+  API-token state, encrypted secret-storage mode, and exposure warnings.
+- Patched frontend tooling resolves the advisories discovered during this run.
+- A manual/monthly three-OS workflow and a live OAuth validation CLI/runbook
+  make external release evidence reproducible.
 
-## Important follow-up work
+## Deliberate boundaries
 
-- Split the 1.05 MB minified frontend bundle; fix the ineffective
-  `agentsRegistry` dynamic import.
-- Expand Playwright beyond graph-focused coverage to the critical product loop.
-- Add direct tests for the remaining graph hooks and Board child components.
-- Exercise large vaults and virtualize the file tree before growth makes the
-  left rail the primary interaction bottleneck.
-- Decide whether the open-source support promise is macOS/Linux only or includes
-  a regularly tested Windows/WSL path, then publish that matrix.
-- Add an OS-keychain option for provider and connector secrets.
+- Secrets remain Fernet-encrypted with a machine-local key (or an externally
+  supplied `LOOM_SECRET_KEY`). This is defense-in-depth, not OS-keychain storage.
+- The API is a single-user localhost service. `LOOM_API_TOKEN` is a shared-token
+  speed bump, not multi-user authentication; network exposure requires an
+  authenticated TLS reverse proxy.
+- Real-account OAuth, hosted OS runners, and Docker daemon execution are
+  operational evidence, not conditions that can be mocked into completion.
 
-## What is already strong
-
-- The capture path has durable SQLite jobs, retry/backoff/cancel/review,
-  external-ID idempotency, and typed refresh events.
-- Agent writes enforce read-before-write and route through traceable LangGraph
-  runs without pulling in a second provider abstraction.
-- Export/import and archival are bounded, locked, rollback-aware operations.
-- The API remains loopback-oriented, documents its no-auth boundary, encrypts
-  configured secrets at rest, and blocks DNS rebinding by default.
-- The test volume is substantial on both sides of the stack, and the Docker
-  production build is reproducible from the current worktree.
-
-The prioritized plan is in [ROADMAP.md](ROADMAP.md).
+The prioritized follow-up is in [ROADMAP.md](ROADMAP.md).

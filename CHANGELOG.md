@@ -8,6 +8,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Release-quality gates** — CI now runs a versioned semantic capture-quality
+  evaluator, a real export/restore integrity drill, and a Playwright onboarding
+  → Inbox → filed-note smoke path with serious/critical accessibility scanning.
+  A manual/monthly workflow repeats backend and frontend verification across
+  Linux, macOS, and Windows; a live OAuth probe plus evidence runbook covers the
+  Google/Microsoft checks that CI cannot consent to.
+- **Operational diagnostics** — `/api/live` reports process liveness separately
+  from `/api/ready`; Settings → About now shows allowed hosts, API-token state,
+  secret-storage mode, and a warning for unsafe network exposure. Vault settings
+  record the last successful export and surface a 30-day backup reminder.
+- **Large-vault tooling** — a provider-free 1k/5k/10k metadata-index + graph
+  benchmark and a 1,000-note regression test. Large vaults start with unseen
+  file-tree folders collapsed so initial render does not create thousands of
+  rows.
 - **GitHub Bridge adapter** — configured repositories are polled on an
   interval for new commits, issues, and PRs (`backend/bridge/github*.py`).
   Activity lands in the Inbox through the unified capture ingress with
@@ -60,6 +74,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   updated to match, so the LLM no longer re-litigates them.
 
 ### Changed
+- **Frontend delivery and ownership** — Graph, Thread, Inbox, Board, Settings,
+  palette, and note modal load as independent chunks. Custom-agent registry
+  state and Council history/streaming moved out of `AppContext` into directly
+  tested hooks. The audited frontend toolchain was updated to patched versions.
+- **Inbox recovery guidance** — failed jobs are classified as transient provider,
+  provider configuration, schema review, stalled, missing source, or unknown;
+  History and detail views show the recommended next action.
 - **Scribe daily-log phrasing** — the daily-log prompt now pins concrete
   style rules (name notes as `[[wikilinks]]` in every claim, group related
   actions, plain past tense, deny-listed filler like "productive day",

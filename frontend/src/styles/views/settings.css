@@ -571,6 +571,17 @@
   word-break: break-all;
 }
 
+.settings-vault-backup {
+  margin-top: 7px;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+.settings-vault-backup.due {
+  color: var(--you);
+}
+
 .settings-vault-actions {
   display: flex;
   align-items: center;
@@ -611,6 +622,17 @@
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
+}
+
+.settings-security-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--r-md);
+  color: var(--warning);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .settings-about-card {

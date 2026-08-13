@@ -12,6 +12,7 @@ const {
   setActiveVault,
   renameVault,
   archiveVault,
+  getVaultBackupStatus,
   revealVault,
   vaultExportUrl,
 } = vi.hoisted(() => ({
@@ -20,6 +21,7 @@ const {
   setActiveVault: vi.fn(),
   renameVault: vi.fn(),
   archiveVault: vi.fn(),
+  getVaultBackupStatus: vi.fn(),
   revealVault: vi.fn(),
   vaultExportUrl: vi.fn(() => "http://x/export"),
 }));
@@ -30,6 +32,7 @@ vi.mock("../../api/vault", () => ({
   setActiveVault,
   renameVault,
   archiveVault,
+  getVaultBackupStatus,
   revealVault,
   vaultExportUrl,
 }));
@@ -60,6 +63,7 @@ beforeEach(() => {
     setActiveVault,
     renameVault,
     archiveVault,
+    getVaultBackupStatus,
     revealVault,
   ])
     fn.mockReset();
@@ -68,6 +72,12 @@ beforeEach(() => {
   createVault.mockResolvedValue({});
   renameVault.mockResolvedValue({});
   archiveVault.mockResolvedValue({});
+  getVaultBackupStatus.mockImplementation(async (name: string) => ({
+    vault: name,
+    last_exported_at: null,
+    last_export_size: null,
+    reminder_due: true,
+  }));
 });
 
 afterEach(() => {
@@ -82,6 +92,7 @@ describe("VaultSection — listing", () => {
     // The active vault's switch button reads "Active" and is disabled.
     const active = screen.getByRole("button", { name: "Active" });
     expect(active).toBeDisabled();
+    expect(screen.getAllByText(/backup recommended/)).toHaveLength(2);
   });
 });
 

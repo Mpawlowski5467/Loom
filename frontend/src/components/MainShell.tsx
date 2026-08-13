@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import type { Tab } from "../data/types";
@@ -6,17 +6,44 @@ import { backendNoteToFrontend, titleMapFromNotes } from "../api/notes";
 import { Nav } from "./layout/Nav";
 import { Tree } from "./layout/Tree";
 import { Splash } from "../views/Splash";
-import { GraphView } from "../views/GraphView";
-import { ThreadView } from "../views/ThreadView";
-import { InboxView } from "../views/InboxView";
-import { BoardView } from "../views/BoardView";
-import { SettingsView } from "../views/SettingsView";
-import { NewNoteModal } from "../views/NewNoteModal";
-import { Palette } from "../views/Palette";
 import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
 import { UnindexedBanner } from "./UnindexedBanner";
 import { ErrorBoundary } from "./ErrorBoundary";
+
+const GraphView = lazy(() =>
+  import("../views/GraphView").then((module) => ({
+    default: module.GraphView,
+  })),
+);
+const ThreadView = lazy(() =>
+  import("../views/ThreadView").then((module) => ({
+    default: module.ThreadView,
+  })),
+);
+const InboxView = lazy(() =>
+  import("../views/InboxView").then((module) => ({
+    default: module.InboxView,
+  })),
+);
+const BoardView = lazy(() =>
+  import("../views/BoardView").then((module) => ({
+    default: module.BoardView,
+  })),
+);
+const SettingsView = lazy(() =>
+  import("../views/SettingsView").then((module) => ({
+    default: module.SettingsView,
+  })),
+);
+const NewNoteModal = lazy(() =>
+  import("../views/NewNoteModal").then((module) => ({
+    default: module.NewNoteModal,
+  })),
+);
+const Palette = lazy(() =>
+  import("../views/Palette").then((module) => ({ default: module.Palette })),
+);
 
 const SPLASH_KEY = "loom.splash.seen";
 
@@ -135,7 +162,9 @@ export function MainShell(): ReactNode {
       {tab === "settings" ? (
         <div className="app-main">
           <ErrorBoundary label="settings" resetKey={tab}>
-            <SettingsView />
+            <Suspense fallback={<ViewLoading />}>
+              <SettingsView />
+            </Suspense>
           </ErrorBoundary>
         </div>
       ) : (
@@ -153,10 +182,12 @@ export function MainShell(): ReactNode {
               {/* Keyed by tab so a view that throws is contained and switching
                   tabs recovers it without a full page reload. */}
               <ErrorBoundary label="this view" resetKey={tab}>
-                {tab === "graph" && <GraphView />}
-                {tab === "thread" && <ThreadView />}
-                {tab === "inbox" && <InboxView />}
-                {tab === "board" && <BoardView />}
+                <Suspense fallback={<ViewLoading />}>
+                  {tab === "graph" && <GraphView />}
+                  {tab === "thread" && <ThreadView />}
+                  {tab === "inbox" && <InboxView />}
+                  {tab === "board" && <BoardView />}
+                </Suspense>
               </ErrorBoundary>
             </div>
           </div>
@@ -173,41 +204,53 @@ export function MainShell(): ReactNode {
       </footer>
       {paletteOpen && (
         <ErrorBoundary label="the command palette" resetKey={paletteOpen}>
-          <Palette />
+          <Suspense fallback={null}>
+            <Palette />
+          </Suspense>
         </ErrorBoundary>
       )}
       {newNoteOpen && (
-        <NewNoteModal
-          initialTitle={newNoteTitle ?? ""}
-          onClose={() => {
-            setNewNoteOpen(false);
-            setNewNoteTitle(null);
-          }}
-          onCreated={(record) => {
-            const note = backendNoteToFrontend(
-              record,
-              titleMapFromNotes(notes),
-            );
-            appendNote(note);
-            openNote(note.id);
-            // Drop straight into the editor — a fresh note is empty, so land
-            // ready to type rather than on a blank read view.
-            setEditing(true);
-            setNewNoteTitle(null);
-            pushToast({
-              icon: "✎",
-              agent: "weaver",
-              body: `Created [[${record.title}]] in ${
-                record.file_path.split("/threads/")[1] ?? record.file_path
-              }`,
-            });
-          }}
-        />
+        <Suspense fallback={null}>
+          <NewNoteModal
+            initialTitle={newNoteTitle ?? ""}
+            onClose={() => {
+              setNewNoteOpen(false);
+              setNewNoteTitle(null);
+            }}
+            onCreated={(record) => {
+              const note = backendNoteToFrontend(
+                record,
+                titleMapFromNotes(notes),
+              );
+              appendNote(note);
+              openNote(note.id);
+              // Drop straight into the editor — a fresh note is empty, so land
+              // ready to type rather than on a blank read view.
+              setEditing(true);
+              setNewNoteTitle(null);
+              pushToast({
+                icon: "✎",
+                agent: "weaver",
+                body: `Created [[${record.title}]] in ${
+                  record.file_path.split("/threads/")[1] ?? record.file_path
+                }`,
+              });
+            }}
+          />
+        </Suspense>
       )}
       <ErrorBoundary label="notifications">
         <Toasts />
       </ErrorBoundary>
       <LoomRibbon />
+    </div>
+  );
+}
+
+function ViewLoading(): ReactNode {
+  return (
+    <div className="view-loading" role="status" aria-live="polite">
+      Loading view…
     </div>
   );
 }

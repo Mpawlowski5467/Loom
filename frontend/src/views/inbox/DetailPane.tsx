@@ -253,6 +253,11 @@ export function DetailPane({
               {job?.error || capture.lastError}
             </p>
           )}
+          {job?.recommended_action && (
+            <p className="inbox-review-guidance">
+              <strong>Next:</strong> {job.recommended_action}
+            </p>
+          )}
           <div className="inbox-suggest-actions">
             <Button
               variant="amber"

@@ -47,6 +47,12 @@ jobs:
       - name: Run tests
         run: cd backend && pytest
 
+      - name: Run deterministic agent-quality evaluation
+        run: cd backend && python -m evals.runner --mode fixture --threshold 0.9
+
+      - name: Run vault export/restore drill
+        run: cd backend && python scripts/restore_drill.py
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest
@@ -67,11 +73,20 @@ jobs:
       - name: Lint
         run: cd frontend && npm run lint
 
+      - name: Check formatting
+        run: cd frontend && npm run format:check
+
       - name: Test
         run: cd frontend && npm run test:run
 
       - name: Build
         run: cd frontend && npm run build
+
+      - name: Install smoke-test browser
+        run: cd frontend && npx playwright install --with-deps chromium
+
+      - name: Run critical-path browser smoke test
+        run: cd frontend && npm run test:browser:smoke
 
   docker:
     name: Docker image
@@ -99,16 +114,15 @@ jobs:
         run: |
           docker run -d --name loom-ci -p 8000:8000 loom:ci
           # Wait for the app to start serving (lifespan init can take a moment).
-          # Poll the READINESS probe, not liveness: a cold, keyless CI container
-          # answers 503 (the indexer needs an embed provider; watcher/chat come
-          # up with an onboarded vault). That is the correct cold-start signal,
-          # so the loop waits for any HTTP answer rather than a 200.
+          # A clean, pre-onboarding container must still be healthy. Readiness
+          # remains a separate structured diagnostic and may legitimately 503.
           for i in $(seq 1 30); do
-            if curl -sS -o /dev/null http://localhost:8000/api/ready 2>/dev/null; then
-              echo "Readiness probe is answering"; break
+            if curl -fsS -o /dev/null http://localhost:8000/api/live 2>/dev/null; then
+              echo "Liveness probe is answering"; break
             fi
             sleep 2
           done
+          curl -fsS http://localhost:8000/api/live | grep -q '"live":true'
           # The probe must return its structured readiness report — an "ok"
           # verdict plus per-component states. What must never happen is no
           # answer at all or a non-JSON error page.

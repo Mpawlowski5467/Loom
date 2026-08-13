@@ -93,6 +93,23 @@ export function vaultExportUrl(name: string): string {
   return `${API_BASE}/api/vaults/${encodeURIComponent(name)}/export`;
 }
 
+export interface VaultBackupStatus {
+  vault: string;
+  last_exported_at: string | null;
+  last_export_size: number | null;
+  reminder_due: boolean;
+}
+
+export function getVaultBackupStatus(
+  name: string,
+  signal?: AbortSignal,
+): Promise<VaultBackupStatus> {
+  return apiClient.get<VaultBackupStatus>(
+    `/api/vaults/${encodeURIComponent(name)}/backup-status`,
+    signal,
+  );
+}
+
 /**
  * Restore a vault from an exported ``.tar.gz`` backup. The archive is sent as
  * the raw request body (the backend reads it directly, no multipart). Pass

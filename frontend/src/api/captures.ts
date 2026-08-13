@@ -99,6 +99,15 @@ export interface CaptureJob {
   updated_at: string;
   started_at?: string | null;
   finished_at?: string | null;
+  failure_kind?:
+    | "none"
+    | "provider_transient"
+    | "provider_configuration"
+    | "schema_review"
+    | "stalled"
+    | "source_missing"
+    | "unknown";
+  recommended_action?: string;
 }
 
 type CaptureJobsResponse = CaptureJob[] | { jobs: CaptureJob[] };

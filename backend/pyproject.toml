@@ -55,8 +55,11 @@ dev = [
     "types-PyYAML>=6.0",
 ]
 
+[project.scripts]
+loom-eval = "evals.runner:main"
+
 [tool.hatch.build.targets.wheel]
-packages = ["api", "agents", "bridge", "index", "core"]
+packages = ["api", "agents", "bridge", "index", "core", "evals"]
 
 [tool.mypy]
 strict = true

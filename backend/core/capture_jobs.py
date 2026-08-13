@@ -26,7 +26,7 @@ from typing import Literal, cast
 from uuid import uuid4
 
 import yaml
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError, computed_field
 
 from core.config import CaptureProcessingConfig
 from core.events import (
@@ -48,6 +48,15 @@ CaptureJobStatus = Literal[
     "cancelled",
 ]
 CaptureJobOutcome = Literal["filed", "needs_review", "failed"]
+CaptureFailureKind = Literal[
+    "none",
+    "provider_transient",
+    "provider_configuration",
+    "schema_review",
+    "stalled",
+    "source_missing",
+    "unknown",
+]
 
 _ACTIVE_STATUSES = ("queued", "running", "retrying")
 _RETRYABLE_STATUSES = ("failed", "needs_review", "cancelled")
@@ -109,6 +118,67 @@ class CaptureJob(BaseModel):
     updated_at: str
     started_at: str = ""
     finished_at: str = ""
+
+    @computed_field  # type: ignore[prop-decorator]  # pydantic property wrapper
+    @property
+    def failure_kind(self) -> CaptureFailureKind:
+        """Stable UI-facing category derived from persisted failure evidence."""
+        return classify_capture_failure(self.status, self.error)
+
+    @computed_field  # type: ignore[prop-decorator]  # pydantic property wrapper
+    @property
+    def recommended_action(self) -> str:
+        """Concrete recovery guidance without exposing worker internals."""
+        return capture_failure_guidance(self.failure_kind)
+
+
+def classify_capture_failure(status: CaptureJobStatus, error: str) -> CaptureFailureKind:
+    if status not in {"failed", "needs_review", "retrying"}:
+        return "none"
+    lowered = error.lower()
+    if status == "needs_review" or any(
+        marker in lowered
+        for marker in ("sentinel", "schema", "missing expected section", "read chain")
+    ):
+        return "schema_review"
+    if any(marker in lowered for marker in ("stale running", "interrupted by process restart")):
+        return "stalled"
+    if any(
+        marker in lowered for marker in ("no longer present", "source capture", "capture not found")
+    ):
+        return "source_missing"
+    if any(
+        marker in lowered
+        for marker in ("invalid api key", "unauthorized", "forbidden", "not configured")
+    ):
+        return "provider_configuration"
+    if any(
+        marker in lowered
+        for marker in (
+            "provider",
+            "timeout",
+            "timed out",
+            "rate limit",
+            "429",
+            "connection",
+            "network",
+            "service unavailable",
+        )
+    ):
+        return "provider_transient"
+    return "unknown"
+
+
+def capture_failure_guidance(kind: CaptureFailureKind) -> str:
+    return {
+        "none": "No action is required.",
+        "provider_transient": "Check provider availability, then retry; the capture remains safe in the Inbox.",
+        "provider_configuration": "Fix the provider credentials or model in Settings, then retry.",
+        "schema_review": "Open the draft, review Sentinel's reasons, then retry or edit and file manually.",
+        "stalled": "Loom recovered an interrupted step. Retry is idempotent and will reconcile existing work.",
+        "source_missing": "The source capture is no longer active; inspect the filed note or history instead of retrying.",
+        "unknown": "Review the error below. Retry is safe while the source capture remains in the Inbox.",
+    }[kind]
 
 
 @dataclass(slots=True)

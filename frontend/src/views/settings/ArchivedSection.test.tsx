@@ -14,7 +14,9 @@ vi.mock("../../api/archive", () => ({
   restoreArchivedNote,
 }));
 
-function record(overrides: Partial<ArchivedNoteRecord> = {}): ArchivedNoteRecord {
+function record(
+  overrides: Partial<ArchivedNoteRecord> = {},
+): ArchivedNoteRecord {
   return {
     id: "thr_aaa111",
     title: "Python",
@@ -58,7 +60,10 @@ describe("ArchivedSection", () => {
     listArchivedNotes
       .mockResolvedValueOnce({ notes: [record()] })
       .mockResolvedValueOnce({ notes: [] });
-    restoreArchivedNote.mockResolvedValue({ id: "thr_aaa111", status: "active" });
+    restoreArchivedNote.mockResolvedValue({
+      id: "thr_aaa111",
+      status: "active",
+    });
 
     render(<ArchivedSection />);
     await user.click(await screen.findByRole("button", { name: /Restore/ }));

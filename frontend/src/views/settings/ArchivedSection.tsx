@@ -29,7 +29,9 @@ export function ArchivedSection(): ReactNode {
   useEffect(() => {
     void load()
       .catch((err) => {
-        setMessage(err instanceof Error ? err.message : "Failed to load archive");
+        setMessage(
+          err instanceof Error ? err.message : "Failed to load archive",
+        );
       })
       .finally(() => setLoaded(true));
   }, []);

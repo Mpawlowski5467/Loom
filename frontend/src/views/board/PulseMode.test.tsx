@@ -55,15 +55,21 @@ describe("PulseMode", () => {
   it("renders the empty state when there are no agents", () => {
     renderPulse([]);
 
-    expect(
-      screen.getByText(/No agents to chart\./i),
-    ).toBeInTheDocument();
+    expect(screen.getByText(/No agents to chart\./i)).toBeInTheDocument();
   });
 
   it("renders a pulse row per agent with name, status label, and run count", () => {
     renderPulse([
-      mkAgent({ id: "agt_scout", name: "Scout", stats: { runs: 3, lastRun: "never" } }),
-      mkAgent({ id: "agt_weaver", name: "Weaver", stats: { runs: 9, lastRun: "never" } }),
+      mkAgent({
+        id: "agt_scout",
+        name: "Scout",
+        stats: { runs: 3, lastRun: "never" },
+      }),
+      mkAgent({
+        id: "agt_weaver",
+        name: "Weaver",
+        stats: { runs: 9, lastRun: "never" },
+      }),
     ]);
 
     expect(screen.getByText("Scout")).toBeInTheDocument();

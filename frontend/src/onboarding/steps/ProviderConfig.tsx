@@ -24,12 +24,7 @@ interface Props {
   submitError: string | null;
 }
 
-type ProviderName =
-  | "openai"
-  | "anthropic"
-  | "xai"
-  | "openrouter"
-  | "ollama";
+type ProviderName = "openai" | "anthropic" | "xai" | "openrouter" | "ollama";
 
 interface ProviderOption {
   name: ProviderName;
@@ -122,12 +117,11 @@ export function ProviderConfig({
     if (exists) {
       const next = providers.filter((p) => p.name !== opt.name);
       const patch: DraftPatch = { providers: next };
-      if (chatProvider === opt.name)
-        patch.chatProvider = next[0]?.name ?? null;
+      if (chatProvider === opt.name) patch.chatProvider = next[0]?.name ?? null;
       if (embedProvider === opt.name)
         patch.embedProvider =
-          next.find((p) =>
-            META_BY_NAME.get(p.name as ProviderName)?.defaultEmbed,
+          next.find(
+            (p) => META_BY_NAME.get(p.name as ProviderName)?.defaultEmbed,
           )?.name ??
           next[0]?.name ??
           null;
@@ -235,9 +229,10 @@ export function ProviderConfig({
             linking.
           </p>
           <p className="onb-providers-empty-sub">
-            <strong>Chat</strong> powers the agents and Council; <strong>embed</strong>{" "}
-            powers semantic search and link suggestions. They can be different
-            providers — or Skip to stay fully local for now.
+            <strong>Chat</strong> powers the agents and Council;{" "}
+            <strong>embed</strong> powers semantic search and link suggestions.
+            They can be different providers — or Skip to stay fully local for
+            now.
           </p>
         </div>
       )}

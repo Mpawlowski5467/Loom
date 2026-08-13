@@ -86,9 +86,7 @@ export function OnboardingFlow(): ReactNode {
           {STEP_ORDER.map((s, idx) => (
             <span
               key={s}
-              className={`onb-progress-dot ${
-                idx <= stepIndex ? "active" : ""
-              }`}
+              className={`onb-progress-dot ${idx <= stepIndex ? "active" : ""}`}
               aria-hidden="true"
             />
           ))}
@@ -105,13 +103,17 @@ export function OnboardingFlow(): ReactNode {
             onChange={(patch) =>
               updateDraft({
                 vaultName:
-                  patch.vaultName !== undefined ? patch.vaultName : draft.vaultName,
+                  patch.vaultName !== undefined
+                    ? patch.vaultName
+                    : draft.vaultName,
                 overwriteExistingVault:
                   patch.overwriteExisting !== undefined
                     ? patch.overwriteExisting
                     : draft.overwriteExistingVault,
                 seedDemo:
-                  patch.seedDemo !== undefined ? patch.seedDemo : draft.seedDemo,
+                  patch.seedDemo !== undefined
+                    ? patch.seedDemo
+                    : draft.seedDemo,
               })
             }
             onNext={next}

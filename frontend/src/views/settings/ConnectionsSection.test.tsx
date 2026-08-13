@@ -373,9 +373,8 @@ describe("ConnectionsSection", () => {
   it("saves GitHub settings with repos serialized from lines", async () => {
     const user = userEvent.setup();
     renderSection();
-    const reposInput = await screen.findByPlaceholderText(
-      /octocat\/hello-world/,
-    );
+    const reposInput =
+      await screen.findByPlaceholderText(/octocat\/hello-world/);
     await user.type(reposInput, "{enter}mpawlowski/loom");
     await user.click(
       screen.getByRole("checkbox", { name: "Enable GitHub connection" }),
@@ -639,9 +638,9 @@ describe("ConnectionsSection", () => {
 
   it("state 1: checklist, credential form, and a disabled sign-in with a hint", async () => {
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     // Numbered checklist with console deep-links and the copy-able redirect URI.
     expect(
       within(card).getByRole("link", { name: "Google Cloud console" }),
@@ -656,7 +655,9 @@ describe("ConnectionsSection", () => {
     ).toBeInTheDocument();
     // Credential form is visible; sign-in is disabled and explains why.
     expect(
-      await within(card).findByDisplayValue("client-id.apps.googleusercontent.com"),
+      await within(card).findByDisplayValue(
+        "client-id.apps.googleusercontent.com",
+      ),
     ).toBeInTheDocument();
     const signIn = within(card).getByRole("button", {
       name: "Sign in with Google",
@@ -676,9 +677,9 @@ describe("ConnectionsSection", () => {
       configurable: true,
     });
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     await user.click(within(card).getByRole("button", { name: /Copy/ }));
     expect(writeText).toHaveBeenCalledWith(
       "http://localhost:8000/api/automations/google/callback",
@@ -694,14 +695,16 @@ describe("ConnectionsSection", () => {
     };
     vi.mocked(updateGoogleConnector).mockResolvedValue(saved);
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     await user.type(
       within(card).getByPlaceholderText("OAuth client secret"),
       "goc-spx-secret",
     );
-    await user.click(within(card).getByRole("button", { name: "Save credentials" }));
+    await user.click(
+      within(card).getByRole("button", { name: "Save credentials" }),
+    );
     await waitFor(() =>
       expect(updateGoogleConnector).toHaveBeenCalledWith({
         client_id: "client-id.apps.googleusercontent.com",
@@ -709,7 +712,9 @@ describe("ConnectionsSection", () => {
       }),
     );
     // State 2: credentials collapse to one muted line; sign-in is the action.
-    expect(await within(card).findByText(/Client ID .+ saved/)).toBeInTheDocument();
+    expect(
+      await within(card).findByText(/Client ID .+ saved/),
+    ).toBeInTheDocument();
     expect(
       within(card).queryByPlaceholderText("OAuth client secret"),
     ).not.toBeInTheDocument();
@@ -725,20 +730,24 @@ describe("ConnectionsSection", () => {
       google: { ...googleConnector.google, client_secret_set: true },
     });
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     await within(card).findByText(/Client ID .+ saved/);
     await user.click(within(card).getByRole("button", { name: "Edit" }));
     // Prefilled with the saved client ID; the secret stays empty-as-no-change.
     expect(
-      await within(card).findByDisplayValue("client-id.apps.googleusercontent.com"),
+      await within(card).findByDisplayValue(
+        "client-id.apps.googleusercontent.com",
+      ),
     ).toBeInTheDocument();
     expect(
       within(card).getByPlaceholderText("Leave blank to keep current"),
     ).toHaveValue("");
     await user.click(within(card).getByRole("button", { name: "Cancel" }));
-    expect(await within(card).findByText(/Client ID .+ saved/)).toBeInTheDocument();
+    expect(
+      await within(card).findByText(/Client ID .+ saved/),
+    ).toBeInTheDocument();
     expect(
       within(card).queryByPlaceholderText("Leave blank to keep current"),
     ).not.toBeInTheDocument();
@@ -752,9 +761,9 @@ describe("ConnectionsSection", () => {
       google: { ...googleConnector.google, client_secret_set: true },
     });
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     await within(card).findByText(/Client ID .+ saved/);
     await user.click(
       within(card).getByRole("button", { name: "Sign in with Google" }),
@@ -783,9 +792,9 @@ describe("ConnectionsSection", () => {
       connection: { connected: false, account: "" },
     });
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     expect(
       await within(card).findByText("Connected as ada@gmail.com"),
     ).toBeInTheDocument();
@@ -798,10 +807,14 @@ describe("ConnectionsSection", () => {
     expect(
       within(card).getByPlaceholderText(/team@group\.calendar\.google\.com/),
     ).toBeInTheDocument();
-    await user.click(within(card).getByRole("button", { name: "Disconnect Google" }));
+    await user.click(
+      within(card).getByRole("button", { name: "Disconnect Google" }),
+    );
     await waitFor(() => expect(disconnectGoogle).toHaveBeenCalled());
     // State 2 again: collapsed credentials + sign-in available.
-    expect(await within(card).findByText(/Client ID .+ saved/)).toBeInTheDocument();
+    expect(
+      await within(card).findByText(/Client ID .+ saved/),
+    ).toBeInTheDocument();
     expect(
       within(card).queryByText("Connected as ada@gmail.com"),
     ).not.toBeInTheDocument();
@@ -820,9 +833,9 @@ describe("ConnectionsSection", () => {
     vi.mocked(getGoogleConnector).mockResolvedValue(connectedAutomation);
     vi.mocked(updateGoogleConnector).mockResolvedValue(connectedAutomation);
     renderSection();
-    const card = (await screen.findByRole("heading", { name: "Google" })).closest(
-      "section",
-    ) as HTMLElement;
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
     await within(card).findByText("Connected as ada@gmail.com");
     await user.click(
       within(card).getByRole("checkbox", { name: "Enable Google Calendar" }),
@@ -832,7 +845,9 @@ describe("ConnectionsSection", () => {
       "primary{enter}team@group.calendar.google.com",
     );
     await user.click(
-      within(card).getByRole("button", { name: "Save Google Calendar settings" }),
+      within(card).getByRole("button", {
+        name: "Save Google Calendar settings",
+      }),
     );
     await waitFor(() =>
       expect(updateGoogleConnector).toHaveBeenCalledWith({
@@ -960,7 +975,10 @@ describe("ConnectionsSection", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
     vi.mocked(getOutlookCalendarAutomation).mockResolvedValue({
       ...outlookCalendarAutomation,
-      outlook: { ...outlookCalendarAutomation.outlook, client_secret_set: true },
+      outlook: {
+        ...outlookCalendarAutomation.outlook,
+        client_secret_set: true,
+      },
     });
     renderSection();
     const card = (
@@ -983,7 +1001,10 @@ describe("ConnectionsSection", () => {
     const user = userEvent.setup();
     vi.mocked(getOutlookCalendarAutomation).mockResolvedValue({
       ...outlookCalendarAutomation,
-      outlook: { ...outlookCalendarAutomation.outlook, client_secret_set: true },
+      outlook: {
+        ...outlookCalendarAutomation.outlook,
+        client_secret_set: true,
+      },
       connection: { connected: true, account: "ada@outlook.com" },
     });
     renderSection();
@@ -1009,7 +1030,8 @@ describe("ConnectionsSection", () => {
     const imap = screen.getByRole("heading", { name: "Email bridge" });
     for (const later of [outlook, github, imap]) {
       expect(
-        google.compareDocumentPosition(later) & Node.DOCUMENT_POSITION_FOLLOWING,
+        google.compareDocumentPosition(later) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
   });

@@ -26,10 +26,20 @@ interface TypeOption {
 
 const TYPE_OPTIONS: TypeOption[] = [
   { value: "topic", label: "Topic", defaultFolder: "topics", dot: "topic" },
-  { value: "project", label: "Project", defaultFolder: "projects", dot: "project" },
+  {
+    value: "project",
+    label: "Project",
+    defaultFolder: "projects",
+    dot: "project",
+  },
   { value: "person", label: "Person", defaultFolder: "people", dot: "people" },
   { value: "daily", label: "Daily", defaultFolder: "daily", dot: "daily" },
-  { value: "capture", label: "Capture", defaultFolder: "captures", dot: "capture" },
+  {
+    value: "capture",
+    label: "Capture",
+    defaultFolder: "captures",
+    dot: "capture",
+  },
 ];
 
 // Sentinel value for "no override — use the type's default folder".

@@ -17,7 +17,9 @@ function mockResponse(opts: {
   } as Response;
 }
 
-function stubFetch(impl: (url: string, init: RequestInit) => Promise<Response>) {
+function stubFetch(
+  impl: (url: string, init: RequestInit) => Promise<Response>,
+) {
   const fn = vi.fn(impl);
   vi.stubGlobal("fetch", fn);
   return fn;
@@ -43,7 +45,10 @@ describe("apiClient", () => {
   it("prefixes a leading slash when the path lacks one", async () => {
     const fetchFn = stubFetch(async () => mockResponse({ body: "{}" }));
     await apiClient.get("health");
-    expect(fetchFn).toHaveBeenCalledWith(`${API_BASE}/health`, expect.anything());
+    expect(fetchFn).toHaveBeenCalledWith(
+      `${API_BASE}/health`,
+      expect.anything(),
+    );
   });
 
   it("serializes the body and sets the JSON content-type on POST", async () => {
@@ -178,7 +183,9 @@ describe("apiClient", () => {
     });
     const controller = new AbortController();
     controller.abort();
-    const err = await apiClient.get("/health", controller.signal).catch((e) => e);
+    const err = await apiClient
+      .get("/health", controller.signal)
+      .catch((e) => e);
     expect(seenAborted).toBe(true);
     // A caller abort surfaces as a raw AbortError, not a wrapped ApiError.
     expect((err as DOMException).name).toBe("AbortError");

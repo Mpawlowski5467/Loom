@@ -58,7 +58,10 @@ export async function streamCouncilMessage(
 ): Promise<void> {
   const resp = await fetch(`${API_BASE}/api/chat/send/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "text/event-stream",
+    },
     body: JSON.stringify({ message, agent: "_council" }),
     signal,
   });
@@ -118,7 +121,10 @@ function parseSseFrame(frame: string): CouncilStreamEvent | null {
         const parsed = JSON.parse(data) as {
           agent_contributions: AgentContribution[];
         };
-        return { kind: "contributions", contributions: parsed.agent_contributions };
+        return {
+          kind: "contributions",
+          contributions: parsed.agent_contributions,
+        };
       } catch {
         return null;
       }
@@ -128,7 +134,10 @@ function parseSseFrame(frame: string): CouncilStreamEvent | null {
       // if the server ever omits the JSON quotes.
       try {
         const parsed = JSON.parse(data);
-        return { kind: "token", chunk: typeof parsed === "string" ? parsed : String(parsed) };
+        return {
+          kind: "token",
+          chunk: typeof parsed === "string" ? parsed : String(parsed),
+        };
       } catch {
         return { kind: "token", chunk: data };
       }

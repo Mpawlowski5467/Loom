@@ -2,11 +2,7 @@ import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
 import { FolderSection } from "./tree/FolderSection";
-import {
-  useFolderTree,
-  useLinkCount,
-  useTreeExpanded,
-} from "./tree/treeModel";
+import { useFolderTree, useLinkCount, useTreeExpanded } from "./tree/treeModel";
 import { useTreeActions } from "./tree/useTreeActions";
 
 export function Tree(): ReactNode {
@@ -61,8 +57,10 @@ export function Tree(): ReactNode {
     e.preventDefault();
     const idx = rows.indexOf(document.activeElement as HTMLElement);
     let next: HTMLElement | undefined;
-    if (idx === -1) next = e.key === "ArrowDown" ? rows[0] : rows[rows.length - 1];
-    else if (e.key === "ArrowDown") next = rows[Math.min(rows.length - 1, idx + 1)];
+    if (idx === -1)
+      next = e.key === "ArrowDown" ? rows[0] : rows[rows.length - 1];
+    else if (e.key === "ArrowDown")
+      next = rows[Math.min(rows.length - 1, idx + 1)];
     else next = rows[Math.max(0, idx - 1)];
     next?.focus();
   };
@@ -116,7 +114,11 @@ export function Tree(): ReactNode {
             aria-describedby={error ? "tree-new-folder-error" : undefined}
           />
           {error && (
-            <div id="tree-new-folder-error" className="tree-new-folder-error" role="alert">
+            <div
+              id="tree-new-folder-error"
+              className="tree-new-folder-error"
+              role="alert"
+            >
               {error}
             </div>
           )}
@@ -157,11 +159,18 @@ export function Tree(): ReactNode {
           onContextMenu={(e, target) => {
             e.preventDefault();
             e.stopPropagation();
-            setInteraction({ kind: "menu", x: e.clientX, y: e.clientY, ...target });
+            setInteraction({
+              kind: "menu",
+              x: e.clientX,
+              y: e.clientY,
+              ...target,
+            });
           }}
           onRenameChange={(d) =>
             setInteraction((prev) =>
-              prev?.kind === "rename" ? { ...prev, draft: d, error: null } : prev,
+              prev?.kind === "rename"
+                ? { ...prev, draft: d, error: null }
+                : prev,
             )
           }
           onRenameSubmit={() => void submitRename()}
@@ -182,7 +191,11 @@ export function Tree(): ReactNode {
           onClick={(e) => e.stopPropagation()}
         >
           <li>
-            <button type="button" role="menuitem" onClick={() => beginRename(interaction.path)}>
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => beginRename(interaction.path)}
+            >
               Rename
             </button>
           </li>
@@ -191,7 +204,9 @@ export function Tree(): ReactNode {
               type="button"
               role="menuitem"
               className="danger"
-              onClick={() => void performDelete(interaction.path, interaction.noteId)}
+              onClick={() =>
+                void performDelete(interaction.path, interaction.noteId)
+              }
             >
               {interaction.target === "folder" ? "Archive folder" : "Archive"}
             </button>

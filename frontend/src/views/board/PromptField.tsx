@@ -32,7 +32,11 @@ export function PromptField({
   return (
     <div className="settings-field">
       <span className="settings-field-label">Instructions</span>
-      <div className="prompt-templates" role="group" aria-label="Starter templates">
+      <div
+        className="prompt-templates"
+        role="group"
+        aria-label="Starter templates"
+      >
         {PROMPT_TEMPLATES.map((t) => (
           <button
             key={t.name}
@@ -46,7 +50,9 @@ export function PromptField({
       </div>
       {pending && (
         <div className="prompt-overwrite" role="status">
-          <span>Replace the current instructions with the {pending.name} template?</span>
+          <span>
+            Replace the current instructions with the {pending.name} template?
+          </span>
           <button
             type="button"
             className="btn btn-md"

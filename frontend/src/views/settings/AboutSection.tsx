@@ -162,8 +162,8 @@ export function AboutSection(): ReactNode {
       <h1 className="settings-title">Vector index</h1>
       {indexStats && !indexStats.ready ? (
         <p className="settings-copy settings-copy-tight">
-          No vector index yet. Configure an embed provider and reindex
-          (Settings → Providers) so semantic search has data.
+          No vector index yet. Configure an embed provider and reindex (Settings
+          → Providers) so semantic search has data.
           {indexStats.unindexed_count > 0 &&
             ` ${indexStats.unindexed_count} note(s) await indexing.`}
         </p>
@@ -187,31 +187,27 @@ export function AboutSection(): ReactNode {
               value={indexStats?.avg_chunks_per_note.toFixed(1) ?? "…"}
             />
           </div>
-          {indexStats &&
-            Object.keys(indexStats.type_breakdown).length > 0 && (
-              <div className="settings-about-card">
-                <div>
-                  <div className="settings-field-label">Chunks by type</div>
-                  <ul className="settings-health-components">
-                    {Object.entries(indexStats.type_breakdown)
-                      .sort((a, b) => b[1] - a[1])
-                      .map(([type, count]) => (
-                        <li
-                          key={type}
-                          className="settings-health-component"
-                        >
-                          <span className="settings-health-component-name">
-                            {type}
-                          </span>
-                          <span className="settings-health-component-detail">
-                            {count}
-                          </span>
-                        </li>
-                      ))}
-                  </ul>
-                </div>
+          {indexStats && Object.keys(indexStats.type_breakdown).length > 0 && (
+            <div className="settings-about-card">
+              <div>
+                <div className="settings-field-label">Chunks by type</div>
+                <ul className="settings-health-components">
+                  {Object.entries(indexStats.type_breakdown)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([type, count]) => (
+                      <li key={type} className="settings-health-component">
+                        <span className="settings-health-component-name">
+                          {type}
+                        </span>
+                        <span className="settings-health-component-detail">
+                          {count}
+                        </span>
+                      </li>
+                    ))}
+                </ul>
               </div>
-            )}
+            </div>
+          )}
         </>
       )}
       <div className="settings-link-row">

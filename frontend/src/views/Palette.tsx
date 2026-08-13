@@ -60,8 +60,7 @@ export function Palette(): ReactNode {
     };
   }, [trimmed]);
 
-  const currentOutcome =
-    outcome && outcome.query === trimmed ? outcome : null;
+  const currentOutcome = outcome && outcome.query === trimmed ? outcome : null;
   const isLoading = Boolean(trimmed) && currentOutcome === null;
 
   const results: SearchResult[] = !trimmed

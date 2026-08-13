@@ -10,8 +10,7 @@ import { useTreeActions } from "./useTreeActions";
 // Mock only the network calls — keep the real path helpers (notePathOf) so the
 // path → note resolution is exercised exactly as it runs in production.
 vi.mock("../../../api/notes", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("../../../api/notes")>();
+  const actual = await importOriginal<typeof import("../../../api/notes")>();
   return {
     ...actual,
     archiveTreePath: vi.fn().mockResolvedValue({ status: "ok", path: "x" }),
@@ -119,9 +118,7 @@ describe("useTreeActions.performDelete", () => {
     await result.current.performDelete("projects");
 
     const removedIds = harness.removeNote.mock.calls.map((c) => c[0]);
-    expect(new Set(removedIds)).toEqual(
-      new Set(["thr_a", "thr_b", "thr_c"]),
-    );
+    expect(new Set(removedIds)).toEqual(new Set(["thr_a", "thr_b", "thr_c"]));
     expect(removedIds).not.toContain("thr_x");
   });
 

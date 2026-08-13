@@ -52,8 +52,9 @@ const OUTLOOK_STEPS: ReactNode[] = [
     <CopyChip text={apiUrl("/api/automations/calendar/outlook/callback")} />
   </>,
   <>
-    API permissions → Microsoft Graph → delegated <strong>Calendars.Read</strong>,
-    then create a secret under Certificates &amp; secrets.
+    API permissions → Microsoft Graph → delegated{" "}
+    <strong>Calendars.Read</strong>, then create a secret under Certificates
+    &amp; secrets.
   </>,
   <>Paste the Application (client) ID and secret below and Save.</>,
 ];
@@ -930,7 +931,9 @@ export function ConnectionsSection(): ReactNode {
         </label>
         <div className="settings-field-row">
           <label className="settings-field">
-            <span className="settings-field-label">Poll interval (minutes)</span>
+            <span className="settings-field-label">
+              Poll interval (minutes)
+            </span>
             <input
               className="input"
               type="number"
@@ -1089,8 +1092,8 @@ export function ConnectionsSection(): ReactNode {
               <Mail size={17} aria-hidden="true" /> Email bridge
             </h2>
             <p>
-              Poll an IMAP mailbox for new mail — messages land in the Inbox
-              for triage. Read-only: Loom never marks mail as seen.
+              Poll an IMAP mailbox for new mail — messages land in the Inbox for
+              triage. Read-only: Loom never marks mail as seen.
             </p>
           </div>
           <label className="settings-switch">
@@ -1183,7 +1186,9 @@ export function ConnectionsSection(): ReactNode {
         </div>
         <div className="settings-field-row">
           <label className="settings-field">
-            <span className="settings-field-label">Poll interval (minutes)</span>
+            <span className="settings-field-label">
+              Poll interval (minutes)
+            </span>
             <input
               className="input"
               type="number"

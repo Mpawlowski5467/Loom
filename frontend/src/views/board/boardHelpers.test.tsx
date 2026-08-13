@@ -96,7 +96,9 @@ describe("renderTarget", () => {
   });
 
   it("styles an explicit wikilink and keeps surrounding text", () => {
-    const { container } = render(<>{renderTarget("linked [[Embeddings]] note")}</>);
+    const { container } = render(
+      <>{renderTarget("linked [[Embeddings]] note")}</>,
+    );
     expect(container.querySelector(".board-wikilink")?.textContent).toBe(
       "Embeddings",
     );
@@ -105,7 +107,9 @@ describe("renderTarget", () => {
   });
 
   it("shows only the display side of an aliased wikilink", () => {
-    const { container } = render(<>{renderTarget("[[note-id|Display Name]]")}</>);
+    const { container } = render(
+      <>{renderTarget("[[note-id|Display Name]]")}</>,
+    );
     expect(container.querySelector(".board-wikilink")?.textContent).toBe(
       "note-id",
     );
@@ -119,9 +123,9 @@ describe("renderTarget", () => {
 
 describe("liveAgentState", () => {
   it("prefers a live running activity over the static state", () => {
-    expect(liveAgentState(mkAgent("idle"), mkActivity({ state: "running" }))).toBe(
-      "running",
-    );
+    expect(
+      liveAgentState(mkAgent("idle"), mkActivity({ state: "running" })),
+    ).toBe("running");
   });
 
   it("falls back to the agent's own state otherwise", () => {
@@ -134,9 +138,9 @@ describe("liveAgentState", () => {
 
 describe("boardStatus", () => {
   it("reports running when the agent is live", () => {
-    expect(boardStatus(mkAgent("idle"), mkActivity({ state: "running" }))).toEqual(
-      { state: "running", label: "running" },
-    );
+    expect(
+      boardStatus(mkAgent("idle"), mkActivity({ state: "running" })),
+    ).toEqual({ state: "running", label: "running" });
   });
 
   it("labels a recently-active idle agent as settling (idle dot)", () => {

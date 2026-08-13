@@ -8,7 +8,9 @@ interface ChipProps {
 }
 
 export function Chip({ type, children, className }: ChipProps): ReactNode {
-  const classes = ["chip", type && "chip-type", className].filter(Boolean).join(" ");
+  const classes = ["chip", type && "chip-type", className]
+    .filter(Boolean)
+    .join(" ");
   return (
     <span className={classes} data-type={type}>
       {children}

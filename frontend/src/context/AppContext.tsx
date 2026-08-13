@@ -22,6 +22,7 @@ import {
   type GraphFixtureSize,
 } from "../data/graphFixtures";
 import { loadChatHistory, streamCouncilMessage } from "../api/chat";
+import { listAgentRegistry } from "../api/agentsRegistry";
 import { readDemoMode } from "../data/demoMode";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue, GraphDisplay } from "./app-ctx";
@@ -425,7 +426,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [customAgents, setCustomAgents] = useState<Agent[]>([]);
   const refreshCustomAgents = useCallback(async () => {
     try {
-      const { listAgentRegistry } = await import("../api/agentsRegistry");
       const list = await listAgentRegistry();
       const custom: Agent[] = list
         .filter((a) => !a.system)

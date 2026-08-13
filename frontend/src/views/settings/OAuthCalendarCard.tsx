@@ -155,10 +155,7 @@ export function OAuthCalendarCard({
   const connected = automation?.connection.connected ?? false;
 
   return (
-    <section
-      className="settings-connection-card"
-      aria-labelledby={headingId}
-    >
+    <section className="settings-connection-card" aria-labelledby={headingId}>
       <ConnectorFlowShell
         title={title}
         headingId={headingId}
@@ -185,7 +182,9 @@ export function OAuthCalendarCard({
             savedEnabled={automation.config.enabled}
             savedIntervalMinutes={automation.config.interval_minutes}
             savedLookbackDays={automation.config.lookback_days}
-            savedCalendarIdsText={automation.config.calendar_ids?.join("\n") ?? ""}
+            savedCalendarIdsText={
+              automation.config.calendar_ids?.join("\n") ?? ""
+            }
             status={automation.status}
             calendarIdsPlaceholder={calendarIdsPlaceholder}
             disabled={false}

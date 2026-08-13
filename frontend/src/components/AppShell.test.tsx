@@ -2,7 +2,13 @@
 Frontend testing conventions: render, assert visible output; prefer getByRole.
 Mock heavy children (MainShell pulls Sigma/WebGL) so we can test phase logic.
 */
-import { act, fireEvent, render, renderHook, screen } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decidePhase, useBootTimeout, BOOT_TIMEOUT_MS } from "./useBootTimeout";
 

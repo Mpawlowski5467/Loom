@@ -57,7 +57,15 @@ export function useConnectPoll<T>({
       }, CONNECT_POLL_INTERVAL_MS);
     };
     tick(CONNECT_POLL_ATTEMPTS);
-  }, [account, apply, cancelPolling, isConnected, pushToast, reload, toastLabel]);
+  }, [
+    account,
+    apply,
+    cancelPolling,
+    isConnected,
+    pushToast,
+    reload,
+    toastLabel,
+  ]);
 
   return { startPolling, cancelPolling };
 }

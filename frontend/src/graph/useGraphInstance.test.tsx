@@ -250,7 +250,11 @@ function ref<T>(current: T): { current: T } {
   return { current };
 }
 
-function note(id: string, links: string[] = [], overrides: Partial<Note> = {}): Note {
+function note(
+  id: string,
+  links: string[] = [],
+  overrides: Partial<Note> = {},
+): Note {
   return {
     id: id as NoteId,
     title: id,
@@ -384,7 +388,10 @@ describe("useGraphInstance — Sigma lifecycle", () => {
 
     // Renderer killed exactly once; camera + node listeners are gone.
     expect(inst.kill).toHaveBeenCalledTimes(1);
-    expect(inst.camera.off).toHaveBeenCalledWith("updated", expect.any(Function));
+    expect(inst.camera.off).toHaveBeenCalledWith(
+      "updated",
+      expect.any(Function),
+    );
     expect(inst.camera.listenerCount("updated")).toBe(0);
     expect(inst.listenerCount("clickNode")).toBe(0);
 
@@ -394,7 +401,9 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     expect(travelers.destroy).toHaveBeenCalledTimes(1);
     expect(lens.destroy).toHaveBeenCalledTimes(1);
     expect(debug.uninstall).toHaveBeenCalledTimes(1);
-    expect(ResizeObserverStub.instances[0]!.disconnect).toHaveBeenCalledTimes(1);
+    expect(ResizeObserverStub.instances[0]!.disconnect).toHaveBeenCalledTimes(
+      1,
+    );
     expect(result.current.sigmaRef.current).toBeNull();
     expect(result.current.graphRef.current).toBeNull();
     expect(result.current.frameLoopRef.current).toBeNull();

@@ -25,7 +25,13 @@ const RUN: RunSummary = {
   duration_ms: 12,
   steps: [
     { name: "search", status: "ok", duration_ms: 3, trace_ids: [], error: "" },
-    { name: "synthesize", status: "ok", duration_ms: 9, trace_ids: ["trc_1"], error: "" },
+    {
+      name: "synthesize",
+      status: "ok",
+      duration_ms: 9,
+      trace_ids: ["trc_1"],
+      error: "",
+    },
   ],
 };
 
@@ -74,7 +80,9 @@ describe("RunFeed", () => {
     expect(fetchSpy).toHaveBeenCalledWith("run_1");
 
     // The step timeline renders both step names.
-    const timeline = await screen.findByRole("list", { name: /researcher run/ });
+    const timeline = await screen.findByRole("list", {
+      name: /researcher run/,
+    });
     expect(timeline).toHaveTextContent("search");
     expect(timeline).toHaveTextContent("synthesize");
 

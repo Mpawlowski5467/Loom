@@ -194,16 +194,13 @@ export function VaultSection(): ReactNode {
                       autoFocus
                       onChange={(e) => setRenameDraft(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === "Enter")
-                          void submitRename(vault.name);
+                        if (e.key === "Enter") void submitRename(vault.name);
                         if (e.key === "Escape") setRenaming(null);
                       }}
                       aria-invalid={renameError !== null}
                     />
                     {renameError && (
-                      <div className="tree-new-folder-error">
-                        {renameError}
-                      </div>
+                      <div className="tree-new-folder-error">{renameError}</div>
                     )}
                   </div>
                 ) : (

@@ -94,7 +94,9 @@ describe("VaultSection — create", () => {
     await user.type(screen.getByPlaceholderText("new-vault"), "research");
     await user.click(screen.getByRole("button", { name: /Create/ }));
 
-    await waitFor(() => expect(createVault).toHaveBeenCalledWith({ name: "research" }));
+    await waitFor(() =>
+      expect(createVault).toHaveBeenCalledWith({ name: "research" }),
+    );
     expect(setActiveVault).toHaveBeenCalledWith("research");
     expect(refreshConfig).toHaveBeenCalled();
   });
@@ -127,7 +129,9 @@ describe("VaultSection — rename", () => {
     await user.clear(input);
     await user.type(input, "-bad name{Enter}"); // starts with dash, has space
 
-    expect(await screen.findByText(/Start with a letter or digit/)).toBeInTheDocument();
+    expect(
+      await screen.findByText(/Start with a letter or digit/),
+    ).toBeInTheDocument();
     expect(renameVault).not.toHaveBeenCalled();
   });
 
@@ -141,7 +145,9 @@ describe("VaultSection — rename", () => {
     await user.clear(input);
     await user.type(input, "main-2{Enter}");
 
-    await waitFor(() => expect(renameVault).toHaveBeenCalledWith("main", "main-2"));
+    await waitFor(() =>
+      expect(renameVault).toHaveBeenCalledWith("main", "main-2"),
+    );
   });
 });
 
@@ -167,9 +173,7 @@ describe("VaultSection — delete", () => {
     const deletes = screen.getAllByRole("button", { name: /Delete/ });
     await user.click(deletes[deletes.length - 1]!);
     expect(archiveVault).not.toHaveBeenCalled();
-    expect(
-      await screen.findByText(/did not match/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/did not match/)).toBeInTheDocument();
   });
 
   it("disables delete for the active vault", async () => {

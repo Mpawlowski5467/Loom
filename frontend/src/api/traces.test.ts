@@ -45,6 +45,8 @@ describe("listTraces", () => {
   it("passes the caller filter when given", async () => {
     const spy = vi.spyOn(apiClient, "get").mockResolvedValue([]);
     await listTraces(10, "manual:scout");
-    expect(spy).toHaveBeenCalledWith("/api/traces?limit=10&caller=manual%3Ascout");
+    expect(spy).toHaveBeenCalledWith(
+      "/api/traces?limit=10&caller=manual%3Ascout",
+    );
   });
 });

@@ -169,9 +169,7 @@ describe("AboutSection", () => {
   it("shows a not-indexed hint when the index is empty", async () => {
     getIndexStats.mockResolvedValue(INDEX_EMPTY);
     renderSection();
-    expect(
-      await screen.findByText(/No vector index yet/),
-    ).toBeInTheDocument();
+    expect(await screen.findByText(/No vector index yet/)).toBeInTheDocument();
     expect(screen.getByText(/4 note\(s\) await indexing/)).toBeInTheDocument();
   });
 });

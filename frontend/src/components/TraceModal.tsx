@@ -46,10 +46,7 @@ export function TraceModal({ traceId, onClose }: Props): ReactNode {
   const dialogRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
 
   return (
-    <div
-      onClick={onClose}
-      className="trace-modal-overlay"
-    >
+    <div onClick={onClose} className="trace-modal-overlay">
       <div
         ref={dialogRef}
         role="dialog"

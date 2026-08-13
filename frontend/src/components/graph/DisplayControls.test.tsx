@@ -36,7 +36,14 @@ describe("DisplayControls — layout picker", () => {
     renderControls({ layout: "galaxy" });
     const group = screen.getByRole("radiogroup", { name: "Layout" });
     expect(group).toBeInTheDocument();
-    for (const label of ["Force", "Rings", "Spiral", "Arms", "Galaxy", "Wave"]) {
+    for (const label of [
+      "Force",
+      "Rings",
+      "Spiral",
+      "Arms",
+      "Galaxy",
+      "Wave",
+    ]) {
       expect(screen.getByRole("radio", { name: label })).toBeInTheDocument();
     }
     expect(screen.getByRole("radio", { name: "Galaxy" })).toBeChecked();

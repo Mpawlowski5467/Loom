@@ -54,8 +54,12 @@ describe("ModelCombobox", () => {
     render(<Controlled />);
     await user.type(screen.getByPlaceholderText("model name"), "mini");
     // Only the matching option remains visible.
-    expect(screen.getByRole("button", { name: "gpt-4o-mini" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "gpt-4.1" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "gpt-4o-mini" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "gpt-4.1" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows only matching options for the current query", async () => {
@@ -63,8 +67,12 @@ describe("ModelCombobox", () => {
     // value is controlled by the parent; render with a query value directly.
     setup({ value: "mini" });
     await user.click(screen.getByDisplayValue("mini"));
-    expect(screen.getByRole("button", { name: "gpt-4o-mini" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "gpt-4.1" })).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "gpt-4o-mini" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "gpt-4.1" }),
+    ).not.toBeInTheDocument();
   });
 
   it("selecting an option reports it and closes the list", async () => {
@@ -73,7 +81,9 @@ describe("ModelCombobox", () => {
     await user.click(screen.getByPlaceholderText("model name"));
     await user.click(screen.getByRole("button", { name: "gpt-4o" }));
     expect(onChange).toHaveBeenCalledWith("gpt-4o");
-    expect(screen.queryByRole("button", { name: "gpt-4o-mini" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "gpt-4o-mini" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the whole list (not filtered) when the value is a complete option", async () => {
@@ -81,7 +91,9 @@ describe("ModelCombobox", () => {
     setup({ value: "gpt-4o" });
     await user.click(screen.getByDisplayValue("gpt-4o"));
     // Even though "gpt-4o" is typed, every option stays visible.
-    expect(screen.getByRole("button", { name: "gpt-4o-mini" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "gpt-4o-mini" }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "gpt-4.1" })).toBeInTheDocument();
   });
 
@@ -96,13 +108,20 @@ describe("ModelCombobox", () => {
     const user = userEvent.setup();
     render(
       <div>
-        <ModelCombobox label="Chat model" value="" options={OPTIONS} onChange={vi.fn()} />
+        <ModelCombobox
+          label="Chat model"
+          value=""
+          options={OPTIONS}
+          onChange={vi.fn()}
+        />
         <button>outside</button>
       </div>,
     );
     await user.click(screen.getByPlaceholderText("model name"));
     expect(screen.getByRole("button", { name: "gpt-4o" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "outside" }));
-    expect(screen.queryByRole("button", { name: "gpt-4o" })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "gpt-4o" }),
+    ).not.toBeInTheDocument();
   });
 });

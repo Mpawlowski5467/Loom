@@ -33,7 +33,11 @@ describe("VaultImport", () => {
   it("imports the file and refreshes the list on success", async () => {
     const user = userEvent.setup();
     const onImported = vi.fn();
-    importVault.mockResolvedValue({ name: "demo", path: "/v/demo", is_active: false });
+    importVault.mockResolvedValue({
+      name: "demo",
+      path: "/v/demo",
+      is_active: false,
+    });
     render(<VaultImport onImported={onImported} />);
 
     const file = mkFile();
@@ -50,7 +54,11 @@ describe("VaultImport", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     importVault
       .mockRejectedValueOnce(new ApiError("exists", 409))
-      .mockResolvedValueOnce({ name: "demo", path: "/v/demo", is_active: false });
+      .mockResolvedValueOnce({
+        name: "demo",
+        path: "/v/demo",
+        is_active: false,
+      });
     render(<VaultImport onImported={vi.fn()} />);
 
     const file = mkFile();
@@ -80,7 +88,9 @@ describe("VaultImport", () => {
 
   it("surfaces a non-conflict error without retrying", async () => {
     const user = userEvent.setup();
-    importVault.mockRejectedValueOnce(new ApiError("Invalid tarball: bad gzip", 400));
+    importVault.mockRejectedValueOnce(
+      new ApiError("Invalid tarball: bad gzip", 400),
+    );
     render(<VaultImport onImported={vi.fn()} />);
 
     await user.upload(screen.getByLabelText(/choose file/i), mkFile());

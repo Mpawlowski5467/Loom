@@ -115,9 +115,7 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
           style={indentStyle(depth)}
           draggable={folderEditable}
           onDragStart={
-            folderEditable
-              ? (e) => props.onDragStart(e, node.path)
-              : undefined
+            folderEditable ? (e) => props.onDragStart(e, node.path) : undefined
           }
           onDragEnd={props.onDragEnd}
           onContextMenu={(e) =>

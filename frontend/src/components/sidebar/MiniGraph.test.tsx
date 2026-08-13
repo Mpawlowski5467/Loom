@@ -26,7 +26,11 @@ function mkNote(over: Partial<Note> = {}): Note {
 }
 
 function renderMiniGraph() {
-  const focus = mkNote({ id: "thr_focus", title: "Caching", links: ["thr_nb"] });
+  const focus = mkNote({
+    id: "thr_focus",
+    title: "Caching",
+    links: ["thr_nb"],
+  });
   const neighbor = mkNote({ id: "thr_nb", title: "Embeddings" });
   const byId: Record<string, Note> = { thr_focus: focus, thr_nb: neighbor };
   const openNote = vi.fn();

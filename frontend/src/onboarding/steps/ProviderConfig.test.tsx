@@ -42,9 +42,7 @@ describe("ProviderConfig", () => {
   it("renders all provider options", () => {
     renderProviderConfig();
 
-    expect(
-      screen.getByRole("button", { name: /OpenAI/ }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /OpenAI/ })).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Anthropic/ }),
     ).toBeInTheDocument();

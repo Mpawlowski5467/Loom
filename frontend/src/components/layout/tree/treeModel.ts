@@ -12,8 +12,21 @@ export interface FolderTreeNode {
 
 /** A right-click menu OR an inline rename — never both at once. */
 export type TreeInteraction =
-  | { kind: "menu"; x: number; y: number; target: "file" | "folder"; path: string; noteId?: string }
-  | { kind: "rename"; path: string; initial: string; draft: string; error: string | null }
+  | {
+      kind: "menu";
+      x: number;
+      y: number;
+      target: "file" | "folder";
+      path: string;
+      noteId?: string;
+    }
+  | {
+      kind: "rename";
+      path: string;
+      initial: string;
+      draft: string;
+      error: string | null;
+    }
   | null;
 
 export const FOLDER_ORDER: { folder: string; type: NodeType }[] = [
@@ -69,7 +82,8 @@ export interface TreeExpanded {
 /** Per-folder expand/collapse state, persisted to localStorage. Folders default
  * to open. */
 export function useTreeExpanded(): TreeExpanded {
-  const [expanded, setExpanded] = useState<Record<string, boolean>>(loadExpanded);
+  const [expanded, setExpanded] =
+    useState<Record<string, boolean>>(loadExpanded);
 
   useEffect(() => {
     try {

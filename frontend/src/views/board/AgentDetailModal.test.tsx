@@ -42,7 +42,13 @@ function mkRun(overrides: Partial<RunSummary> = {}): RunSummary {
     ended: "2026-07-05T10:00:01Z",
     duration_ms: 12,
     steps: [
-      { name: "generate", status: "ok", duration_ms: 9, trace_ids: [], error: "" },
+      {
+        name: "generate",
+        status: "ok",
+        duration_ms: 9,
+        trace_ids: [],
+        error: "",
+      },
     ],
     ...overrides,
   };
@@ -62,7 +68,9 @@ function mkTrace(overrides: Partial<TraceSummary> = {}): TraceSummary {
   };
 }
 
-function renderModal(over: Partial<Parameters<typeof AgentDetailModal>[0]> = {}) {
+function renderModal(
+  over: Partial<Parameters<typeof AgentDetailModal>[0]> = {},
+) {
   const onRun = vi.fn();
   const onEdit = vi.fn();
   const onDelete = vi.fn();
@@ -105,7 +113,9 @@ describe("AgentDetailModal", () => {
   it("fetches and shows the agent's instructions and model override", async () => {
     renderModal();
 
-    expect(await screen.findByText("You are My Agent, a careful scout.")).toBeInTheDocument();
+    expect(
+      await screen.findByText("You are My Agent, a careful scout."),
+    ).toBeInTheDocument();
     expect(getAgentRegistry).toHaveBeenCalledWith("my-agent");
     expect(screen.getByText("Instructions")).toBeInTheDocument();
     expect(screen.getByText(/model: openai · gpt-4o-mini/)).toBeInTheDocument();
@@ -141,12 +151,18 @@ describe("AgentDetailModal", () => {
     ]);
     renderModal();
 
-    const runsSection = await screen.findByRole("region", { name: "Recent runs" });
+    const runsSection = await screen.findByRole("region", {
+      name: "Recent runs",
+    });
     await waitFor(() => expect(runsSection).toHaveTextContent("my-agent"));
     expect(runsSection).not.toHaveTextContent("researcher");
 
-    const callsSection = screen.getByRole("region", { name: "Recent LLM calls" });
-    await waitFor(() => expect(callsSection).toHaveTextContent("manual:my-agent"));
+    const callsSection = screen.getByRole("region", {
+      name: "Recent LLM calls",
+    });
+    await waitFor(() =>
+      expect(callsSection).toHaveTextContent("manual:my-agent"),
+    );
     expect(callsSection).not.toHaveTextContent("other-model");
   });
 

@@ -28,7 +28,9 @@ function installRaf() {
 
 /** A Sigma stand-in exposing only what the tween touches. */
 function fakeSigma() {
-  return { refresh: vi.fn() } as unknown as Sigma & { refresh: ReturnType<typeof vi.fn> };
+  return { refresh: vi.fn() } as unknown as Sigma & {
+    refresh: ReturnType<typeof vi.fn>;
+  };
 }
 
 function mkGraph(positions: Record<string, XY>): Graph {

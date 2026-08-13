@@ -75,9 +75,8 @@ const GOOGLE_STEPS: ReactNode[] = [
 
 export function GoogleConnectorCard(): ReactNode {
   const { pushToast } = useApp();
-  const [automation, setAutomation] = useState<GoogleConnectorAutomation | null>(
-    null,
-  );
+  const [automation, setAutomation] =
+    useState<GoogleConnectorAutomation | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const apply = useCallback((next: GoogleConnectorAutomation) => {
@@ -214,9 +213,7 @@ export function GoogleConnectorCard(): ReactNode {
                 "\n",
               )}
               status={automation.services.calendar}
-              calendarIdsPlaceholder={
-                "primary\nteam@group.calendar.google.com"
-              }
+              calendarIdsPlaceholder={"primary\nteam@group.calendar.google.com"}
               disabled={false}
               onSave={saveService("calendar")}
               onTest={testService("calendar")}

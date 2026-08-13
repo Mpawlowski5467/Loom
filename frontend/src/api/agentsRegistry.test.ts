@@ -13,7 +13,9 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function mkRecord(overrides: Partial<AgentRegistryRecord> = {}): AgentRegistryRecord {
+function mkRecord(
+  overrides: Partial<AgentRegistryRecord> = {},
+): AgentRegistryRecord {
   return {
     id: "scout",
     name: "Scout",
@@ -41,7 +43,9 @@ describe("getAgentRegistry", () => {
   it("fetches one record including the system prompt and model override", async () => {
     const spy = vi
       .spyOn(apiClient, "get")
-      .mockResolvedValue(mkRecord({ provider: "openai", chat_model: "gpt-4o" }));
+      .mockResolvedValue(
+        mkRecord({ provider: "openai", chat_model: "gpt-4o" }),
+      );
     const record = await getAgentRegistry("scout");
     expect(spy).toHaveBeenCalledWith("/api/agents/registry/scout");
     expect(record.system_prompt).toBe("You are Scout.");

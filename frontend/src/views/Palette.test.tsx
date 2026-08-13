@@ -99,7 +99,9 @@ beforeEach(() => {
 describe("Palette — recent (empty query)", () => {
   it("shows the recent notes and the `recent` foot label with an empty query", () => {
     renderPalette();
-    expect(screen.getByRole("option", { name: /Recent Note/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: /Recent Note/ }),
+    ).toBeInTheDocument();
     expect(screen.getByText("recent")).toBeInTheDocument();
     // No backend call for the empty query.
     expect(searchNotesRemote).not.toHaveBeenCalled();
@@ -125,7 +127,9 @@ describe("Palette — remote search", () => {
     );
 
     // Result title + score become visible.
-    const option = await screen.findByRole("option", { name: /Caching Strategy/ });
+    const option = await screen.findByRole("option", {
+      name: /Caching Strategy/,
+    });
     expect(option).toBeInTheDocument();
     expect(within(option).getByText("0.91")).toBeInTheDocument();
     expect(screen.getByText("backend search")).toBeInTheDocument();

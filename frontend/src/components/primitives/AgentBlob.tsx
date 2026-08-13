@@ -116,7 +116,14 @@ export function AgentBlob({
           />
         </path>
         {state === "running" && (
-          <circle cx="50" cy="50" r="44" fill="none" stroke={color} strokeWidth="1.4">
+          <circle
+            cx="50"
+            cy="50"
+            r="44"
+            fill="none"
+            stroke={color}
+            strokeWidth="1.4"
+          >
             <animate
               attributeName="r"
               from="44"

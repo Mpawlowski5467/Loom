@@ -37,7 +37,9 @@ describe("TypedConfirmModal", () => {
     const user = userEvent.setup();
     const { onConfirm, onClose } = setup();
     await user.type(screen.getByRole("textbox"), "DELETE main");
-    await user.click(screen.getByRole("button", { name: "Permanently delete" }));
+    await user.click(
+      screen.getByRole("button", { name: "Permanently delete" }),
+    );
     await waitFor(() => expect(onConfirm).toHaveBeenCalled());
     expect(onClose).toHaveBeenCalled();
   });
@@ -54,9 +56,13 @@ describe("TypedConfirmModal", () => {
     const onConfirm = vi.fn().mockRejectedValue(new Error("server said no"));
     const { onClose } = setup({ onConfirm });
     await user.type(screen.getByRole("textbox"), "DELETE main");
-    await user.click(screen.getByRole("button", { name: "Permanently delete" }));
+    await user.click(
+      screen.getByRole("button", { name: "Permanently delete" }),
+    );
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("server said no");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "server said no",
+    );
     expect(onClose).not.toHaveBeenCalled();
     // The button relabels to Retry and the typed phrase is preserved.
     expect(screen.getByRole("button", { name: "Retry" })).toBeEnabled();

@@ -122,9 +122,9 @@ describe("extractHeadings ↔ rendered heading ids", () => {
   ].join("\n");
 
   function renderedHeadingIds(container: HTMLElement): string[] {
-    return Array.from(
-      container.querySelectorAll("h1, h2, h3, h4, h5, h6"),
-    ).map((el) => el.id);
+    return Array.from(container.querySelectorAll("h1, h2, h3, h4, h5, h6")).map(
+      (el) => el.id,
+    );
   }
 
   it("maps each outline entry 1:1 to the rendered heading with the same id", () => {
@@ -181,8 +181,8 @@ describe("extractHeadings ↔ rendered heading ids", () => {
   it("returns an empty outline for prose with no headings", () => {
     const { container } = renderMarkdownWithContext("Just a paragraph.");
     expect(extractHeadings("Just a paragraph.")).toEqual([]);
-    expect(
-      container.querySelectorAll("h1, h2, h3, h4, h5, h6"),
-    ).toHaveLength(0);
+    expect(container.querySelectorAll("h1, h2, h3, h4, h5, h6")).toHaveLength(
+      0,
+    );
   });
 });

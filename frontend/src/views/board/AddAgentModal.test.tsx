@@ -52,8 +52,12 @@ describe("AddAgentModal create flow", () => {
     // Template chip inserts a starter prompt into the empty textarea.
     await user.click(screen.getByRole("button", { name: "Summarizer" }));
     const summarizer = PROMPT_TEMPLATES.find((t) => t.name === "Summarizer")!;
-    expect(screen.getByLabelText("Instructions")).toHaveValue(summarizer.prompt);
-    expect(screen.getByText(`${summarizer.prompt.length} chars`)).toBeInTheDocument();
+    expect(screen.getByLabelText("Instructions")).toHaveValue(
+      summarizer.prompt,
+    );
+    expect(
+      screen.getByText(`${summarizer.prompt.length} chars`),
+    ).toBeInTheDocument();
 
     // Icon picker: pick a suggested glyph.
     const glyph = screen.getByRole("button", { name: "Icon ⚡" });
@@ -90,7 +94,9 @@ describe("AddAgentModal create flow", () => {
 
     // Nothing replaced yet — an inline confirm appears.
     expect(screen.getByLabelText("Instructions")).toHaveValue("hand-written");
-    expect(screen.getByText(/Replace the current instructions/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Replace the current instructions/),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Replace" }));
     const critic = PROMPT_TEMPLATES.find((t) => t.name === "Critic")!;
@@ -135,7 +141,9 @@ describe("AddAgentModal edit flow", () => {
     expect(screen.getByLabelText("Name")).toHaveValue("My Agent");
     expect(screen.getByLabelText(/Role/)).toHaveValue("Finds things");
     expect(screen.getByLabelText("Custom icon")).toHaveValue("⚡");
-    expect(screen.getByLabelText("Instructions")).toHaveValue("You are My Agent.");
+    expect(screen.getByLabelText("Instructions")).toHaveValue(
+      "You are My Agent.",
+    );
     // A saved override renders the Model row already expanded and prefilled.
     expect(screen.getByLabelText("Provider")).toHaveValue("anthropic");
     expect(screen.getByPlaceholderText("model name")).toHaveValue(

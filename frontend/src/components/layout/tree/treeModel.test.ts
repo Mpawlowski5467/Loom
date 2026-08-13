@@ -52,7 +52,12 @@ describe("buildFolderTree", () => {
     );
     // daily (rank 0) and topics (rank 2) lead; unranked custom folders follow
     // alphabetically.
-    expect(tree.map((n) => n.name)).toEqual(["daily", "topics", "alpha", "zeta"]);
+    expect(tree.map((n) => n.name)).toEqual([
+      "daily",
+      "topics",
+      "alpha",
+      "zeta",
+    ]);
   });
 
   it("sorts nested subfolders alphabetically", () => {

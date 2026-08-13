@@ -61,11 +61,7 @@ export function Council(): ReactNode {
       <div className="council-log" ref={logRef}>
         {council.map((m) => {
           const cls =
-            m.who === "you"
-              ? "you"
-              : m.who === "summary"
-                ? "summary"
-                : "agent";
+            m.who === "you" ? "you" : m.who === "summary" ? "summary" : "agent";
           const label =
             m.who === "you"
               ? "you"
@@ -115,11 +111,13 @@ export function Council(): ReactNode {
                       </div>
                       <div
                         className="contrib-body"
-                        style={c.error ? { color: "var(--you)", fontStyle: "italic" } : undefined}
+                        style={
+                          c.error
+                            ? { color: "var(--you)", fontStyle: "italic" }
+                            : undefined
+                        }
                       >
-                        {c.error
-                          ? `⚠ ${c.error}`
-                          : renderInline(c.body)}
+                        {c.error ? `⚠ ${c.error}` : renderInline(c.body)}
                       </div>
                     </div>
                   ))}
@@ -127,7 +125,9 @@ export function Council(): ReactNode {
               )}
               <div
                 className="bubble"
-                style={m.pending ? { opacity: 0.6, fontStyle: "italic" } : undefined}
+                style={
+                  m.pending ? { opacity: 0.6, fontStyle: "italic" } : undefined
+                }
               >
                 {renderInline(m.body)}
               </div>
@@ -138,7 +138,9 @@ export function Council(): ReactNode {
       <div className="council-input">
         <input
           className="input"
-          placeholder={streaming ? "council is responding…" : "ask the council…"}
+          placeholder={
+            streaming ? "council is responding…" : "ask the council…"
+          }
           aria-label="Ask the Loom Council"
           value={text}
           disabled={streaming}

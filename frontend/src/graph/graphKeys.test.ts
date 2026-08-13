@@ -2,7 +2,11 @@ import { describe, it, expect } from "vitest";
 import { structuralKey, contentKey } from "./graphKeys";
 import type { Note } from "../data/types";
 
-function mkNote(id: string, links: string[] = [], over: Partial<Note> = {}): Note {
+function mkNote(
+  id: string,
+  links: string[] = [],
+  over: Partial<Note> = {},
+): Note {
   return {
     id,
     title: id,

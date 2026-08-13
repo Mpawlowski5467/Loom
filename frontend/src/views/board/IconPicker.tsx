@@ -28,7 +28,11 @@ interface IconPickerProps {
 export function IconPicker({ value, onChange }: IconPickerProps): ReactNode {
   return (
     <div className="icon-picker">
-      <div className="icon-picker-grid" role="group" aria-label="Suggested icons">
+      <div
+        className="icon-picker-grid"
+        role="group"
+        aria-label="Suggested icons"
+      >
         {GLYPHS.map((glyph) => (
           <button
             key={glyph}

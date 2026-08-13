@@ -12,8 +12,14 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 
 export function Nav(): ReactNode {
-  const { tab, setTab, setPaletteOpen, setNewNoteOpen, treeVisible, setTreeVisible } =
-    useApp();
+  const {
+    tab,
+    setTab,
+    setPaletteOpen,
+    setNewNoteOpen,
+    treeVisible,
+    setTreeVisible,
+  } = useApp();
   const treeAvailable = tab === "graph" || tab === "board";
 
   return (

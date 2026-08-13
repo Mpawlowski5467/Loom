@@ -104,7 +104,9 @@ function ModelRow(props: {
       <span className={`settings-rating-chip ${model.rating}`}>
         {model.rating}
       </span>
-      {model.installed && <span className="settings-model-badge">installed</span>}
+      {model.installed && (
+        <span className="settings-model-badge">installed</span>
+      )}
       {model.recommended_for.length > 0 && (
         <span className="settings-model-badge is-recommended">
           recommended · {model.recommended_for.join(", ")}
@@ -112,9 +114,7 @@ function ModelRow(props: {
       )}
       <div className="settings-model-actions">
         {result && (
-          <span
-            className={`settings-test-result ${result.ok ? "ok" : "fail"}`}
-          >
+          <span className={`settings-test-result ${result.ok ? "ok" : "fail"}`}>
             {result.ok
               ? `${result.latency_ms} ms · ${result.chars_per_sec} chars/s`
               : (result.error ?? "failed")}

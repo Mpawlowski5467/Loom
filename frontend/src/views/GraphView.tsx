@@ -507,9 +507,7 @@ export function GraphView(): ReactNode {
         )}
         {loadFailed && (
           <div className="graph-empty graph-load-error" role="alert">
-            <span className="graph-empty-title">
-              Couldn’t load your vault
-            </span>
+            <span className="graph-empty-title">Couldn’t load your vault</span>
             <span className="graph-empty-hint">
               {notesError}. Check the backend and reload.
             </span>
@@ -528,12 +526,16 @@ export function GraphView(): ReactNode {
             </button>
           </div>
         )}
-        {!empty && !loadFailed && !filteredEmpty && !loadingNotes && building && (
-          <div className="graph-loading" role="status">
-            <span className="graph-loading-orbit" aria-hidden />
-            arranging {stats.nodes} nodes…
-          </div>
-        )}
+        {!empty &&
+          !loadFailed &&
+          !filteredEmpty &&
+          !loadingNotes &&
+          building && (
+            <div className="graph-loading" role="status">
+              <span className="graph-loading-orbit" aria-hidden />
+              arranging {stats.nodes} nodes…
+            </div>
+          )}
         {!empty && !loadFailed && !filteredEmpty && layout !== "force" && (
           <div className="graph-scene-caption" key={stagedScene}>
             <span className="graph-scene-kicker">Layout</span>

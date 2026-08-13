@@ -1,4 +1,10 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState, type ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
@@ -222,7 +228,9 @@ describe("AppContext — council streams", () => {
       (_message, options) =>
         new Promise<void>((_resolve, reject) => {
           options.signal?.addEventListener("abort", () =>
-            reject(new DOMException("The operation was aborted.", "AbortError")),
+            reject(
+              new DOMException("The operation was aborted.", "AbortError"),
+            ),
           );
         }),
     );
@@ -233,7 +241,10 @@ describe("AppContext — council streams", () => {
         <>
           <div data-testid="bubbles">
             {council
-              .map((m) => `${m.who}:${m.pending ? "pending" : "settled"}:${m.body}`)
+              .map(
+                (m) =>
+                  `${m.who}:${m.pending ? "pending" : "settled"}:${m.body}`,
+              )
               .join("|")}
           </div>
           <button onClick={() => void postCouncilMessage("hi")}>send</button>
@@ -260,7 +271,9 @@ describe("AppContext — council streams", () => {
     // stream's bubble must not stay pending forever.
     await user.click(screen.getByRole("button", { name: "send" }));
     await waitFor(() =>
-      expect(screen.getByTestId("bubbles").textContent).toContain("⚠ Cancelled"),
+      expect(screen.getByTestId("bubbles").textContent).toContain(
+        "⚠ Cancelled",
+      ),
     );
 
     // Exactly one pending bubble remains — the live stream's. The ghost is gone.

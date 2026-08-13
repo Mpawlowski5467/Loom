@@ -70,7 +70,9 @@ describe("DangerZoneSection", () => {
     );
     const input = await screen.findByRole("textbox");
     await user.type(input, "main"); // delete phrase is the vault name
-    await user.click(screen.getByRole("button", { name: "Permanently delete" }));
+    await user.click(
+      screen.getByRole("button", { name: "Permanently delete" }),
+    );
 
     await waitFor(() => expect(hardDeleteVault).toHaveBeenCalledWith("main"));
   });
@@ -87,7 +89,9 @@ describe("DangerZoneSection", () => {
     await user.type(input, "ARCHIVE main");
     await user.click(screen.getByRole("button", { name: "Archive vault" }));
 
-    expect(await screen.findByRole("alert")).toHaveTextContent("archive failed");
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "archive failed",
+    );
   });
 
   it("disables vault actions when no vault is loaded", () => {

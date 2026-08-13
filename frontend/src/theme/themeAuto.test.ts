@@ -29,7 +29,8 @@ function stubMatchMedia(dark: boolean) {
     /** Fire a preference change to all listeners. */
     flip(toDark: boolean) {
       mql.matches = toDark;
-      for (const cb of listeners) cb({ matches: toDark } as MediaQueryListEvent);
+      for (const cb of listeners)
+        cb({ matches: toDark } as MediaQueryListEvent);
     },
     get listenerCount() {
       return listeners.size;

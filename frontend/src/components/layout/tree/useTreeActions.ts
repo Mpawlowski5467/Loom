@@ -119,12 +119,19 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
     try {
       await createFolder(name);
       addFolder(name);
-      pushToast({ icon: "📁", agent: "archivist", body: `Created folder ${name}/` });
+      pushToast({
+        icon: "📁",
+        agent: "archivist",
+        body: `Created folder ${name}/`,
+      });
       cancelCreate();
     } catch (err) {
       if (err instanceof ApiError && err.status === 409)
         setError("Folder already exists");
-      else setError(err instanceof Error ? err.message : "Failed to create folder");
+      else
+        setError(
+          err instanceof Error ? err.message : "Failed to create folder",
+        );
     } finally {
       setBusy(false);
     }
@@ -166,7 +173,11 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
       await moveTreePath(from, `${folder}/${fromName}`);
       const moved = notes.find((n) => notePathOf(n) === from);
       if (moved) updateNote({ ...moved, folder });
-      pushToast({ icon: "→", agent: "archivist", body: `Moved ${fromName} → ${folder}/` });
+      pushToast({
+        icon: "→",
+        agent: "archivist",
+        body: `Moved ${fromName} → ${folder}/`,
+      });
     } catch (err) {
       const msg =
         err instanceof ApiError && err.status === 409
@@ -182,16 +193,27 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
   const beginRename = (path: string) => {
     const last = path.split("/").pop() ?? "";
     const initial = last.endsWith(".md") ? last.slice(0, -3) : last;
-    setInteraction({ kind: "rename", path, initial, draft: initial, error: null });
+    setInteraction({
+      kind: "rename",
+      path,
+      initial,
+      draft: initial,
+      error: null,
+    });
   };
 
   const submitRename = async () => {
     if (interaction?.kind !== "rename") return;
-    const { path, initial, draft: name } = {
+    const {
+      path,
+      initial,
+      draft: name,
+    } = {
       ...interaction,
       draft: interaction.draft.trim(),
     };
-    if (!name) return setInteraction({ ...interaction, error: "Name required" });
+    if (!name)
+      return setInteraction({ ...interaction, error: "Name required" });
     if (!SAFE_NAME_RE.test(name)) {
       return setInteraction({
         ...interaction,

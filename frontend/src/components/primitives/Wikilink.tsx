@@ -9,8 +9,13 @@ interface Props {
 }
 
 export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
-  const { resolveWikilink, openNote, noteById, setNewNoteOpen, setNewNoteTitle } =
-    useApp();
+  const {
+    resolveWikilink,
+    openNote,
+    noteById,
+    setNewNoteOpen,
+    setNewNoteTitle,
+  } = useApp();
   const id = resolveWikilink(target);
   const note = id ? noteById(id) : undefined;
   const text = label ?? target;

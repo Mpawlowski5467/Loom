@@ -18,7 +18,11 @@ vi.mock("../api/notes", async (importOriginal) => {
 
 /** A tree with a NESTED folder so full paths surface in the dropdown. */
 function mkTree(): TreeNode {
-  const dir = (name: string, path: string, children: TreeNode[] = []): TreeNode => ({
+  const dir = (
+    name: string,
+    path: string,
+    children: TreeNode[] = [],
+  ): TreeNode => ({
     name,
     path,
     is_dir: true,
@@ -165,9 +169,7 @@ describe("NewNoteModal", () => {
     expect(screen.getByText("#infra")).toBeInTheDocument();
 
     // × removes a specific chip.
-    await user.click(
-      screen.getByRole("button", { name: "Remove tag infra" }),
-    );
+    await user.click(screen.getByRole("button", { name: "Remove tag infra" }));
     expect(screen.queryByText("#infra")).not.toBeInTheDocument();
   });
 

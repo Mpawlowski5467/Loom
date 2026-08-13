@@ -15,8 +15,20 @@ function mkRun(overrides: Partial<RunSummary> = {}): RunSummary {
     ended: "2026-06-06T10:00:01Z",
     duration_ms: 12,
     steps: [
-      { name: "search", status: "ok", duration_ms: 3, trace_ids: [], error: "" },
-      { name: "synthesize", status: "ok", duration_ms: 9, trace_ids: ["trc_1"], error: "" },
+      {
+        name: "search",
+        status: "ok",
+        duration_ms: 3,
+        trace_ids: [],
+        error: "",
+      },
+      {
+        name: "synthesize",
+        status: "ok",
+        duration_ms: 9,
+        trace_ids: ["trc_1"],
+        error: "",
+      },
     ],
     ...overrides,
   };

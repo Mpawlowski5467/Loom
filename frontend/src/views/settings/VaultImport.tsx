@@ -125,9 +125,7 @@ export function VaultImport({ onImported }: VaultImportProps): ReactNode {
           Import
         </button>
       </div>
-      {file && (
-        <div className="settings-vault-path">Selected: {file.name}</div>
-      )}
+      {file && <div className="settings-vault-path">Selected: {file.name}</div>}
       {message && <div className="settings-inline-status">{message}</div>}
     </div>
   );

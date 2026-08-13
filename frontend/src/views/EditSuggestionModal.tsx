@@ -130,97 +130,97 @@ export function EditSuggestionModal({
 
   return (
     <>
-    <div
-      className="settings-modal-backdrop"
-      role="presentation"
-      onClick={requestClose}
-    >
       <div
-        ref={dialogRef}
-        className="settings-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="edit-suggestion-title"
-        onClick={(e) => e.stopPropagation()}
+        className="settings-modal-backdrop"
+        role="presentation"
+        onClick={requestClose}
       >
-        <div className="settings-kicker">Capture</div>
-        <h2 id="edit-suggestion-title" className="settings-modal-title">
-          Edit suggestion
-        </h2>
-        <p className="settings-copy">
-          Override Weaver's classification before filing this capture. Weaver
-          regenerates the note body for your chosen type. ⌘↵ to submit.
-        </p>
+        <div
+          ref={dialogRef}
+          className="settings-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="edit-suggestion-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="settings-kicker">Capture</div>
+          <h2 id="edit-suggestion-title" className="settings-modal-title">
+            Edit suggestion
+          </h2>
+          <p className="settings-copy">
+            Override Weaver's classification before filing this capture. Weaver
+            regenerates the note body for your chosen type. ⌘↵ to submit.
+          </p>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Title</span>
-          <input
-            className="input"
-            value={title}
-            autoFocus
-            onChange={(e) => setTitle(e.target.value)}
-            onKeyDown={onKey}
-          />
-        </label>
-
-        <div className="settings-field-row">
           <label className="settings-field">
-            <span className="settings-field-label">Type</span>
-            <select
-              className="input mono"
-              value={type}
-              onChange={(e) => setType(e.target.value)}
-            >
-              {TYPE_OPTIONS.map((opt) => (
-                <option key={opt.value} value={opt.value}>
-                  {opt.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="settings-field">
-            <span className="settings-field-label">Folder</span>
+            <span className="settings-field-label">Title</span>
             <input
-              className="input mono"
-              value={folder}
-              onChange={(e) => setFolder(e.target.value)}
+              className="input"
+              value={title}
+              autoFocus
+              onChange={(e) => setTitle(e.target.value)}
               onKeyDown={onKey}
             />
           </label>
-        </div>
 
-        <label className="settings-field">
-          <span className="settings-field-label">Tags</span>
-          <input
-            className="input mono"
-            value={tagsInput}
-            placeholder="comma-separated, e.g. infra, perf"
-            onChange={(e) => setTagsInput(e.target.value)}
-            onKeyDown={onKey}
-          />
-        </label>
-
-        {error && (
-          <div className="settings-test-result fail" role="status">
-            {error}
+          <div className="settings-field-row">
+            <label className="settings-field">
+              <span className="settings-field-label">Type</span>
+              <select
+                className="input mono"
+                value={type}
+                onChange={(e) => setType(e.target.value)}
+              >
+                {TYPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="settings-field">
+              <span className="settings-field-label">Folder</span>
+              <input
+                className="input mono"
+                value={folder}
+                onChange={(e) => setFolder(e.target.value)}
+                onKeyDown={onKey}
+              />
+            </label>
           </div>
-        )}
 
-        <div className="settings-actions">
-          <button className="btn btn-md" type="button" onClick={requestClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-md btn-active"
-            type="button"
-            disabled={!canSubmit}
-            onClick={() => void submit()}
-          >
-            {busy ? "Filing…" : "Accept & file"}
-          </button>
+          <label className="settings-field">
+            <span className="settings-field-label">Tags</span>
+            <input
+              className="input mono"
+              value={tagsInput}
+              placeholder="comma-separated, e.g. infra, perf"
+              onChange={(e) => setTagsInput(e.target.value)}
+              onKeyDown={onKey}
+            />
+          </label>
+
+          {error && (
+            <div className="settings-test-result fail" role="status">
+              {error}
+            </div>
+          )}
+
+          <div className="settings-actions">
+            <button className="btn btn-md" type="button" onClick={requestClose}>
+              Cancel
+            </button>
+            <button
+              className="btn btn-md btn-active"
+              type="button"
+              disabled={!canSubmit}
+              onClick={() => void submit()}
+            >
+              {busy ? "Filing…" : "Accept & file"}
+            </button>
+          </div>
         </div>
       </div>
-    </div>
 
       {confirmDiscard && (
         <ConfirmModal

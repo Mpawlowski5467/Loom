@@ -129,7 +129,7 @@ export function CardsMode(): ReactNode {
           ? () => setResearcherOpen(true)
           : a.id === "standup" && !customIds.has(a.id)
             ? () => setStandupOpen(true)
-          : undefined
+            : undefined
       }
       workspaceLabel={a.id === "standup" ? "open" : "ask"}
       onOpen={() => setDetailId(a.id)}

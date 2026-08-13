@@ -184,7 +184,10 @@ export function MainShell(): ReactNode {
             setNewNoteTitle(null);
           }}
           onCreated={(record) => {
-            const note = backendNoteToFrontend(record, titleMapFromNotes(notes));
+            const note = backendNoteToFrontend(
+              record,
+              titleMapFromNotes(notes),
+            );
             appendNote(note);
             openNote(note.id);
             // Drop straight into the editor — a fresh note is empty, so land

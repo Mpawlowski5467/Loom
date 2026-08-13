@@ -13,8 +13,8 @@ export function Welcome({ onNext }: Props): ReactNode {
       </div>
       <h1 className="onb-h1">Welcome to Loom</h1>
       <p className="onb-lede">
-        A local-first memory system. Your notes live as plain markdown on
-        disk — Loom's agents read and link them on your behalf.
+        A local-first memory system. Your notes live as plain markdown on disk —
+        Loom's agents read and link them on your behalf.
       </p>
       <ul className="onb-points">
         <li>

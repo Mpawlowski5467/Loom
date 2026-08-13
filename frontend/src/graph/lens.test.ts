@@ -142,7 +142,10 @@ describe("createLens", () => {
       graph: makeGraph(),
       sigma: stubSigma(0.5), // ratio 0.5 → zoomOpenness 0.5
       host: document.createElement("div"),
-      noteMap: new Map([["a", note("a")], ["b", note("b")]]),
+      noteMap: new Map([
+        ["a", note("a")],
+        ["b", note("b")],
+      ]),
       tuning: makeTuning(),
       openNote: vi.fn(),
     });

@@ -72,7 +72,10 @@ export function useAgentPolling(
         }
       }
       if (!cancelled) {
-        changelogTimer = window.setTimeout(pollChangelog, CHANGELOG_INTERVAL_MS);
+        changelogTimer = window.setTimeout(
+          pollChangelog,
+          CHANGELOG_INTERVAL_MS,
+        );
       }
     };
 

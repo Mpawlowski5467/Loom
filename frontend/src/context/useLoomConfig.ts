@@ -46,9 +46,7 @@ export function useLoomConfig(pushToast: PushToast): UseLoomConfigResult {
   const [theme, setThemeState] = useState<ThemeName>(() => {
     const stored = readInitialTheme();
     // When following the OS, the OS preference is the source of truth on boot.
-    return readFollowOsTheme()
-      ? themeForOsMode(osThemeMode(), stored)
-      : stored;
+    return readFollowOsTheme() ? themeForOsMode(osThemeMode(), stored) : stored;
   });
   const [config, setConfig] = useState<LoomConfigPublic | null>(null);
   const [configLoading, setConfigLoading] = useState<boolean>(true);

@@ -97,12 +97,30 @@ export function createTravelers(opts: {
     op: string,
     sw: string,
   ): void => {
-    if (cache.x1 !== x1) { el.setAttribute("x1", x1); cache.x1 = x1; }
-    if (cache.y1 !== y1) { el.setAttribute("y1", y1); cache.y1 = y1; }
-    if (cache.x2 !== x2) { el.setAttribute("x2", x2); cache.x2 = x2; }
-    if (cache.y2 !== y2) { el.setAttribute("y2", y2); cache.y2 = y2; }
-    if (cache.op !== op) { el.setAttribute("opacity", op); cache.op = op; }
-    if (cache.sw !== sw) { el.setAttribute("stroke-width", sw); cache.sw = sw; }
+    if (cache.x1 !== x1) {
+      el.setAttribute("x1", x1);
+      cache.x1 = x1;
+    }
+    if (cache.y1 !== y1) {
+      el.setAttribute("y1", y1);
+      cache.y1 = y1;
+    }
+    if (cache.x2 !== x2) {
+      el.setAttribute("x2", x2);
+      cache.x2 = x2;
+    }
+    if (cache.y2 !== y2) {
+      el.setAttribute("y2", y2);
+      cache.y2 = y2;
+    }
+    if (cache.op !== op) {
+      el.setAttribute("opacity", op);
+      cache.op = op;
+    }
+    if (cache.sw !== sw) {
+      el.setAttribute("stroke-width", sw);
+      cache.sw = sw;
+    }
   };
 
   const hideLine = (el: SVGLineElement, cache: LineCache): void => {
@@ -264,8 +282,7 @@ export function createTravelers(opts: {
         }
         return;
       }
-      const z =
-        id === hovered ? 0 : ((attr["z"] as number | undefined) ?? 0);
+      const z = id === hovered ? 0 : ((attr["z"] as number | undefined) ?? 0);
       const p = sigma.graphToViewport({
         x: attr["x"] as number,
         y: attr["y"] as number,
@@ -276,9 +293,18 @@ export function createTravelers(opts: {
       const cx = String(p.x);
       const cy = String(p.y);
       const rs = String(r);
-      if (mc.cx !== cx) { c.setAttribute("cx", cx); mc.cx = cx; }
-      if (mc.cy !== cy) { c.setAttribute("cy", cy); mc.cy = cy; }
-      if (mc.r !== rs) { c.setAttribute("r", rs); mc.r = rs; }
+      if (mc.cx !== cx) {
+        c.setAttribute("cx", cx);
+        mc.cx = cx;
+      }
+      if (mc.cy !== cy) {
+        c.setAttribute("cy", cy);
+        mc.cy = cy;
+      }
+      if (mc.r !== rs) {
+        c.setAttribute("r", rs);
+        mc.r = rs;
+      }
     });
 
     return false;

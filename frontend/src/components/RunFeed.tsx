@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { fetchRun, listRuns, type RunDetail, type RunSummary } from "../api/runs";
+import {
+  fetchRun,
+  listRuns,
+  type RunDetail,
+  type RunSummary,
+} from "../api/runs";
 import { TraceModal } from "./TraceModal";
 
 interface Props {
@@ -15,7 +20,11 @@ interface Props {
  * timeline; each step that made LLM calls can be drilled into the existing
  * raw-call inspector (TraceModal).
  */
-export function RunFeed({ agent, limit = 20, pollMs = 3000 }: Props): ReactNode {
+export function RunFeed({
+  agent,
+  limit = 20,
+  pollMs = 3000,
+}: Props): ReactNode {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [detail, setDetail] = useState<RunDetail | null>(null);
@@ -89,7 +98,9 @@ export function RunFeed({ agent, limit = 20, pollMs = 3000 }: Props): ReactNode 
             aria-expanded={expanded === run.run_id}
             className="trace-item"
           >
-            <div className={`trace-item-meta${run.status === "error" ? " error" : ""}`}>
+            <div
+              className={`trace-item-meta${run.status === "error" ? " error" : ""}`}
+            >
               <span>{new Date(run.started).toLocaleTimeString()}</span>
               <span>·</span>
               <span className="trace-item-caller">{run.agent}</span>
@@ -107,11 +118,15 @@ export function RunFeed({ agent, limit = 20, pollMs = 3000 }: Props): ReactNode 
                 const calls = detail?.traces?.[step.name] ?? [];
                 return (
                   <li key={step.name} className="run-step">
-                    <div className={`run-step-row${step.status === "error" ? " error" : ""}`}>
+                    <div
+                      className={`run-step-row${step.status === "error" ? " error" : ""}`}
+                    >
                       <span className="run-step-name">{step.name}</span>
                       <span className="run-step-dur">{step.duration_ms}ms</span>
                     </div>
-                    {step.error && <div className="run-step-error">⚠ {step.error}</div>}
+                    {step.error && (
+                      <div className="run-step-error">⚠ {step.error}</div>
+                    )}
                     {calls.map((call) => (
                       <button
                         key={call.id}

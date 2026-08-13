@@ -31,7 +31,9 @@ export function HardwareScanCard(): ReactNode {
       setData({ profile: data.profile, saved: res.saved });
       setStatus("Profile saved.");
     } catch (err) {
-      setStatus(err instanceof Error ? err.message : "Saving the profile failed");
+      setStatus(
+        err instanceof Error ? err.message : "Saving the profile failed",
+      );
     } finally {
       setBusy(null);
     }
@@ -80,13 +82,16 @@ export function HardwareScanCard(): ReactNode {
               label="RAM"
               value={profile.ram_gb > 0 ? `${profile.ram_gb} GB` : "Unknown"}
             />
-            <InfoRow label="GPU" value={gpuLabel(profile.gpu_name, profile.vram_gb)} />
+            <InfoRow
+              label="GPU"
+              value={gpuLabel(profile.gpu_name, profile.vram_gb)}
+            />
             <InfoRow label="OS" value={profile.os || "Unknown"} />
           </div>
           {profile.unified_memory && (
             <p className="settings-field-hint">
-              Unified memory: the GPU shares system RAM, so models draw from
-              the full {profile.ram_gb} GB.
+              Unified memory: the GPU shares system RAM, so models draw from the
+              full {profile.ram_gb} GB.
             </p>
           )}
         </>

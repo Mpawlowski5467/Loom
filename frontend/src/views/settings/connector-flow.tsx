@@ -288,7 +288,12 @@ export function ServiceSection({
     setIntervalMinutes(String(savedIntervalMinutes));
     setLookbackDays(String(savedLookbackDays));
     setCalendarIds(savedCalendarIdsText);
-  }, [savedEnabled, savedIntervalMinutes, savedLookbackDays, savedCalendarIdsText]);
+  }, [
+    savedEnabled,
+    savedIntervalMinutes,
+    savedLookbackDays,
+    savedCalendarIdsText,
+  ]);
 
   useEffect(
     () => () => {
@@ -308,9 +313,7 @@ export function ServiceSection({
       .filter(Boolean),
   });
 
-  const begin = (
-    action: "save" | "test" | "sync",
-  ): AbortController => {
+  const begin = (action: "save" | "test" | "sync"): AbortController => {
     actionAbort.current?.abort();
     const controller = new AbortController();
     actionAbort.current = controller;
@@ -330,7 +333,11 @@ export function ServiceSection({
     begin("save");
     try {
       await onSave(draft());
-      pushToast({ icon: "✓", agent: "connector", body: `${serviceLabel} saved` });
+      pushToast({
+        icon: "✓",
+        agent: "connector",
+        body: `${serviceLabel} saved`,
+      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save settings");
     } finally {
@@ -356,7 +363,9 @@ export function ServiceSection({
       }
     } catch (err) {
       if ((err as DOMException)?.name !== "AbortError") {
-        setError(err instanceof Error ? err.message : `${serviceLabel} test failed`);
+        setError(
+          err instanceof Error ? err.message : `${serviceLabel} test failed`,
+        );
       }
     } finally {
       end(controller);
@@ -377,7 +386,9 @@ export function ServiceSection({
       });
     } catch (err) {
       if ((err as DOMException)?.name !== "AbortError") {
-        setError(err instanceof Error ? err.message : `${serviceLabel} sync failed`);
+        setError(
+          err instanceof Error ? err.message : `${serviceLabel} sync failed`,
+        );
       }
     } finally {
       end(controller);

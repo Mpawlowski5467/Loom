@@ -61,6 +61,7 @@ from core.config import (
     GoogleConnectorConfig,
     GoogleServiceConfig,
     LoomSettings,
+    settings,
 )
 from core.notes import parse_note
 from core.vault import VaultManager
@@ -1037,6 +1038,27 @@ class TestGoogleConnectorApi:
         assert body["google"]["gmail"]["enabled"] is False
         assert body["connection"] == {"connected": False, "account": ""}
         assert set(body["services"]) == {"calendar", "gmail"}
+
+    def test_managed_oauth_is_click_ready_without_persisted_credentials(
+        self, client: TestClient, vault_manager, monkeypatch
+    ) -> None:
+        _init(vault_manager)
+        monkeypatch.setattr(settings, "google_oauth_client_id", "managed-client")
+        monkeypatch.setattr(settings, "google_oauth_client_secret", "managed-secret")
+
+        response = client.get("/api/automations/google")
+        assert response.status_code == 200
+        assert response.json()["managed_oauth"] is True
+        assert response.json()["google"]["client_secret_set"] is True
+
+        response = client.post("/api/automations/google/connect", headers=_LOOPBACK_HEADERS)
+        assert response.status_code == 200
+        query = parse_qs(urlparse(response.json()["authorization_url"]).query)
+        assert query["client_id"] == ["managed-client"]
+
+        response = client.patch("/api/automations/google", json={"gmail": {"enabled": True}})
+        assert response.status_code == 200
+        assert GlobalConfig.load(vault_manager.config_path()).google.client_secret is None
 
     def test_patch_persists_credentials_and_services(
         self, client: TestClient, vault_manager

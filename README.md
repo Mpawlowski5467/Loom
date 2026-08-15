@@ -64,7 +64,7 @@ Open the full-size captures below for a closer look at each view.
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
 - **Multi-agent, not single-prompt.** Seven specialized agents in two tiers (Loom Layer manages the vault; Shuttle Layer produces content) — plus any custom agents you add — collaborate via a shared *read-before-write* discipline.
 - **Visual by default.** A `Sigma.js` + `graphology` canvas shows your notes as a living network — drag, zoom, filter by type or tag.
-- **Provider-agnostic.** Plug in OpenAI, Anthropic, xAI, OpenRouter, or a local Ollama model. Chat and embedding providers are independent, and every model call is recorded as an inspectable trace.
+- **Provider-agnostic.** Connect OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, or a local Ollama model. Chat and embedding providers are independent, and every model call is recorded as an inspectable trace.
 
 ## Architecture at a glance
 
@@ -97,6 +97,7 @@ flowchart LR
         Anthropic
         xAI
         OpenRouter
+        Moonshot
         Ollama
     end
 
@@ -241,7 +242,7 @@ sequenceDiagram
 
 ### Providers, and every call traced
 
-All five providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. Each trace is also tagged with the `run` and `step` it belongs to, so a multi-step agent run (e.g. the capture pipeline: `weaver → spider → scribe → sentinel → enforce`) shows up as one connected run in the **Runs** view, not a scattered list of calls. The "raw call" link anywhere in the UI reads straight from `/api/traces`; the Runs view reads `/api/traces/runs`.
+All providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. Each trace is also tagged with the `run` and `step` it belongs to, so a multi-step agent run (e.g. the capture pipeline: `weaver → spider → scribe → sentinel → enforce`) shows up as one connected run in the **Runs** view, not a scattered list of calls. The "raw call" link anywhere in the UI reads straight from `/api/traces`; the Runs view reads `/api/traces/runs`.
 
 ```mermaid
 flowchart LR
@@ -254,6 +255,7 @@ flowchart LR
         Anthropic
         xAI
         OpenRouter
+        Moonshot
         Ollama
     end
 
@@ -337,6 +339,8 @@ flowchart LR
 - Anthropic (chat)
 - xAI / Grok (chat)
 - OpenRouter (chat — including `:free` models, with rate-limit-aware retries)
+- Moonshot / Kimi (chat)
+- Groq, DeepSeek, Together AI, Mistral, and Google Gemini (OpenAI-compatible chat; embeddings where supported)
 - Ollama (local chat + embed)
 - Chat and embedding providers configured independently
 
@@ -508,6 +512,7 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `PATCH` | `/api/automations/standup` | Daily Standup schedule and redacted Calendar connection state |
 | `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
 | `GET` `PATCH` | `/api/automations/github` | Redacted GitHub connection state (repos, interval, poller status) |
+| `POST` `GET` | `/api/automations/github/oauth/start`, `/api/automations/github/oauth/status` | Start and complete GitHub browser/device authorization |
 | `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
 | `GET` `PATCH` | `/api/automations/email` | Redacted IMAP connection state (host, folder, poller status) |
 | `POST` | `/api/automations/email/test` / `/sync` | Test the mailbox login/folder or poll new mail into Inbox |
@@ -572,15 +577,15 @@ What works today:
 - Graph, Board, Inbox, and Thread views
 - Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
 - Scheduled Standup workspace plus encrypted read-only iCalendar connection
-- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection; plus an Outlook Calendar connector (Microsoft sign-in)
-- GitHub Bridge — poll repos for commits/issues/PRs into the Inbox (token encrypted at rest, per-repo cursors, interval poller)
+- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection. Set `LOOM_GOOGLE_OAUTH_CLIENT_ID` and `LOOM_GOOGLE_OAUTH_CLIENT_SECRET` once on the installation for a click-only user flow; manual app credentials remain available for self-hosters. Outlook Calendar uses the same guided browser-sign-in pattern.
+- GitHub Bridge — browser device authorization when `LOOM_GITHUB_OAUTH_CLIENT_ID` is set (with encrypted token storage), plus manual-token fallback; polls repos for commits/issues/PRs with per-repo cursors and an interval poller.
 - Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen), or Gmail via the Google connector's single sign-in
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
-- Provider system (OpenAI, Anthropic, xAI, OpenRouter, Ollama)
+- Provider system (OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, Ollama)
 - File watcher, rate limiting, separate liveness/readiness probes
 - One-command Docker run (single container serves UI + API)
 

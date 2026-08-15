@@ -41,6 +41,7 @@ _KNOWN: list[str] = [
     "together",
     "mistral",
     "gemini",
+    "moonshot",
 ]
 
 _DEFAULT_OLLAMA_HOST = "http://localhost:11434"
@@ -77,6 +78,7 @@ _KNOWN_MODELS: dict[str, dict[str, list[str]]] = {
         "embed": ["mistral-embed"],
     },
     "gemini": {"chat": ["gemini-2.0-flash", "gemini-2.5-pro"], "embed": ["text-embedding-004"]},
+    "moonshot": {"chat": ["kimi-k2.6"], "embed": []},
 }
 
 

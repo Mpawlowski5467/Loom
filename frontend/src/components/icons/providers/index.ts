@@ -12,6 +12,7 @@ export { DeepSeekIcon } from "./DeepSeekIcon";
 export { GeminiIcon } from "./GeminiIcon";
 export { GroqIcon } from "./GroqIcon";
 export { MistralIcon } from "./MistralIcon";
+export { MoonshotIcon } from "./MoonshotIcon";
 export { OllamaIcon } from "./OllamaIcon";
 export { OpenAIIcon } from "./OpenAIIcon";
 export { OpenRouterIcon } from "./OpenRouterIcon";

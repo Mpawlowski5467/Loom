@@ -195,6 +195,7 @@ export function GoogleConnectorCard(): ReactNode {
         connected={connected}
         account={automation?.connection.account ?? ""}
         loaded={automation !== null}
+        managedOAuth={automation?.managed_oauth ?? false}
         onSaveCreds={saveCreds}
         onConnect={connect}
         onDisconnect={disconnect}

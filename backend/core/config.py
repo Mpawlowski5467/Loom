@@ -145,6 +145,25 @@ class LoomSettings(BaseSettings):
             "unaffected either way."
         ),
     )
+    google_oauth_client_id: str = Field(
+        default="",
+        description=(
+            "Optional deployment-managed Google OAuth client ID. When paired "
+            "with LOOM_GOOGLE_OAUTH_CLIENT_SECRET, users can connect Google "
+            "without entering app credentials in Settings."
+        ),
+    )
+    google_oauth_client_secret: str = Field(
+        default="",
+        description="Deployment-managed Google OAuth client secret.",
+    )
+    github_oauth_client_id: str = Field(
+        default="",
+        description=(
+            "Optional GitHub App/OAuth App client ID with device flow enabled. "
+            "When set, Settings exposes browser-based GitHub connection."
+        ),
+    )
     trace_retention_days: int = Field(
         default=30,
         description=(
@@ -410,6 +429,7 @@ class GitHubBridgeConfig(BaseModel):
 
     enabled: bool = False
     token: str | None = None
+    account: str = ""
     repos: list[str] = Field(default_factory=list)
     interval_minutes: int = Field(default=15, ge=5, le=1440)
     lookback_hours: int = Field(default=24, ge=1, le=720)
@@ -449,11 +469,18 @@ class GitHubBridgeConfig(BaseModel):
             raise ValueError("at most 50 repositories can be watched")
         return cleaned
 
+    @field_validator("account")
+    @classmethod
+    def _normalize_account(cls, value: str) -> str:
+        """Keep only a compact display label returned by GitHub's /user API."""
+        return value.strip()[:100]
+
     def to_public(self) -> GitHubBridgeConfigPublic:
         """Return the redacted view safe for the API."""
         return GitHubBridgeConfigPublic(
             enabled=self.enabled,
             token_set=bool(self.token),
+            account=self.account,
             repos=list(self.repos),
             interval_minutes=self.interval_minutes,
             lookback_hours=self.lookback_hours,
@@ -468,6 +495,7 @@ class GitHubBridgeConfigPublic(BaseModel):
 
     enabled: bool
     token_set: bool
+    account: str
     repos: list[str]
     interval_minutes: int
     lookback_hours: int
@@ -760,6 +788,21 @@ class GoogleConnectorConfigPublic(BaseModel):
     client_secret_set: bool
     calendar: GoogleCalendarServiceConfigPublic
     gmail: GoogleServiceConfigPublic
+
+
+def effective_google_connector(config: GlobalConfig) -> GoogleConnectorConfig:
+    """Overlay deployment-managed OAuth credentials without persisting them.
+
+    Local users can still save their own client credentials. A deployment can
+    instead provide one OAuth app through environment variables, which makes
+    Google a true click-to-connect experience while keeping the secret out of
+    ``config.yaml`` and every API response.
+    """
+    connector = config.google.model_copy(deep=True)
+    if settings.google_oauth_client_id and settings.google_oauth_client_secret:
+        connector.client_id = settings.google_oauth_client_id
+        connector.client_secret = settings.google_oauth_client_secret
+    return connector
 
 
 class UIState(BaseModel):

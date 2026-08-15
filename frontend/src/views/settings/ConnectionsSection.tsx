@@ -6,6 +6,7 @@ import {
   disconnectOutlookCalendar,
   getEmailAutomation,
   getGitHubAutomation,
+  getGitHubOAuthStatus,
   getOutlookCalendarAutomation,
   getStandupAutomation,
   syncCalendar,
@@ -16,6 +17,7 @@ import {
   testEmail,
   testGitHub,
   testOutlookCalendar,
+  startGitHubOAuth,
   updateEmailAutomation,
   updateGitHubAutomation,
   updateOutlookCalendarAutomation,
@@ -124,10 +126,12 @@ export function ConnectionsSection(): ReactNode {
     null,
   );
   const [ghBusy, setGhBusy] = useState<
-    "save" | "test" | "sync" | "disconnect" | null
+    "save" | "test" | "sync" | "connect" | "disconnect" | null
   >(null);
   const [ghError, setGhError] = useState<string | null>(null);
+  const [ghUserCode, setGhUserCode] = useState("");
   const ghActionAbort = useRef<AbortController | null>(null);
+  const ghOAuthPoll = useRef<number | null>(null);
   const [email, setEmail] = useState<EmailAutomation | null>(null);
   const [emEnabled, setEmEnabled] = useState(false);
   const [emHost, setEmHost] = useState("");
@@ -225,6 +229,10 @@ export function ConnectionsSection(): ReactNode {
       actionAbort.current = null;
       ghActionAbort.current?.abort();
       ghActionAbort.current = null;
+      if (ghOAuthPoll.current !== null) {
+        window.clearInterval(ghOAuthPoll.current);
+        ghOAuthPoll.current = null;
+      }
       emActionAbort.current?.abort();
       emActionAbort.current = null;
     };
@@ -409,6 +417,67 @@ export function ConnectionsSection(): ReactNode {
     }
   };
 
+  const connectGitHub = async () => {
+    setGhBusy("connect");
+    setGhError(null);
+    setGhUserCode("");
+    if (ghOAuthPoll.current !== null) {
+      window.clearInterval(ghOAuthPoll.current);
+      ghOAuthPoll.current = null;
+    }
+    try {
+      const flow = await startGitHubOAuth();
+      setGhUserCode(flow.user_code);
+      window.open(flow.verification_uri, "_blank", "noopener,noreferrer");
+      let attempts = 0;
+      const maxAttempts = Math.ceil(flow.expires_in / flow.interval) + 1;
+      ghOAuthPoll.current = window.setInterval(() => {
+        attempts += 1;
+        void getGitHubOAuthStatus()
+          .then(async (result) => {
+            if (result.status === "pending" && attempts < maxAttempts) return;
+            if (ghOAuthPoll.current !== null) {
+              window.clearInterval(ghOAuthPoll.current);
+              ghOAuthPoll.current = null;
+            }
+            if (result.status === "connected") {
+              applyGitHub(await getGitHubAutomation());
+              setGhUserCode("");
+              setGhBusy(null);
+              pushToast({
+                icon: "✓",
+                agent: "github",
+                body: "GitHub connected and encrypted locally",
+              });
+              return;
+            }
+            setGhBusy(null);
+            setGhError(
+              result.error || "GitHub authorization expired. Try again.",
+            );
+          })
+          .catch((err: unknown) => {
+            if (attempts < maxAttempts) return;
+            if (ghOAuthPoll.current !== null) {
+              window.clearInterval(ghOAuthPoll.current);
+              ghOAuthPoll.current = null;
+            }
+            setGhBusy(null);
+            setGhError(
+              err instanceof Error
+                ? err.message
+                : "Could not finish GitHub authorization",
+            );
+          });
+      }, flow.interval * 1000);
+    } catch (err) {
+      setGhBusy(null);
+      setGhError(
+        err instanceof Error ? err.message : "Could not start GitHub sign-in",
+      );
+    }
+  };
+
   const testGitHubConnection = async () => {
     ghActionAbort.current?.abort();
     const controller = new AbortController();
@@ -476,6 +545,7 @@ export function ConnectionsSection(): ReactNode {
       });
       applyGitHub(next);
       setGhToken("");
+      setGhUserCode("");
       setGhTestResult(null);
       setGhSyncResult(null);
     } catch (err) {
@@ -632,11 +702,11 @@ export function ConnectionsSection(): ReactNode {
   return (
     <div className="settings-panel">
       <div className="settings-kicker">Connections</div>
-      <h1 className="settings-title">Standup &amp; Calendar</h1>
+      <h1 className="settings-title">Accounts &amp; Automations</h1>
       <p className="settings-copy">
-        Run a daily Standup in your timezone and enrich it from a private,
-        read-only iCalendar feed. Calendar events can also become durable Inbox
-        jobs. Connectors sign in once; bridges use credentials.
+        Connect accounts once, choose what Loom may read, and turn selected
+        activity into durable Inbox captures. Loom never posts, sends, or
+        modifies anything in your connected accounts.
       </p>
 
       <section
@@ -877,7 +947,7 @@ export function ConnectionsSection(): ReactNode {
         <div className="settings-connection-head">
           <div>
             <h2 id="github-connection-title">
-              <Github size={17} aria-hidden="true" /> GitHub bridge
+              <Github size={17} aria-hidden="true" /> GitHub account
             </h2>
             <p>
               Poll GitHub repos for new commits, issues, and PRs — activity
@@ -897,24 +967,67 @@ export function ConnectionsSection(): ReactNode {
             <span>{ghEnabled ? "Enabled" : "Off"}</span>
           </label>
         </div>
-        <label className="settings-field">
-          <span className="settings-field-label">
-            Personal access token {ghConnected && <em>token saved</em>}
-          </span>
-          <input
-            className="input"
-            type="password"
-            value={ghToken}
-            onChange={(event) => setGhToken(event.target.value)}
-            placeholder={
-              ghConnected
-                ? "ghp_… (leave blank to keep current)"
-                : "ghp_… or github_pat_…"
-            }
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
+        {github?.oauth_available && !ghConnected && (
+          <div className="settings-provider-connect-note" role="note">
+            <strong>Connect your GitHub account</strong>
+            <span>
+              Loom opens GitHub in your browser. Approve access there, then
+              return here; the token is stored encrypted on this device.
+            </span>
+            <button
+              className="btn btn-md btn-active"
+              type="button"
+              onClick={() => void connectGitHub()}
+              disabled={ghBusy !== null}
+            >
+              <Github size={14} aria-hidden="true" />
+              {ghBusy === "connect" ? "Waiting for GitHub…" : "Connect GitHub"}
+            </button>
+            {ghUserCode && (
+              <span className="settings-connection-status" role="status">
+                Enter this one-time code on GitHub:{" "}
+                <CopyChip text={ghUserCode} />
+              </span>
+            )}
+          </div>
+        )}
+        {!github?.oauth_available && !ghConnected && (
+          <div className="settings-provider-connect-note" role="note">
+            <strong>Connect your GitHub account</strong>
+            <span>
+              Browser login needs a one-time OAuth app client ID for this Loom
+              installation. Until then, connect the same account with a
+              read-only personal token below.
+            </span>
+          </div>
+        )}
+        {ghConnected && (
+          <p className="settings-connection-status" role="status">
+            Connected to GitHub
+            {github?.github.account ? ` as @${github.github.account}` : ""}
+          </p>
+        )}
+        <details className="settings-advanced">
+          <summary>Manual token setup</summary>
+          <label className="settings-field">
+            <span className="settings-field-label">
+              Personal access token {ghConnected && <em>token saved</em>}
+            </span>
+            <input
+              className="input"
+              type="password"
+              value={ghToken}
+              onChange={(event) => setGhToken(event.target.value)}
+              placeholder={
+                ghConnected
+                  ? "ghp_… (leave blank to keep current)"
+                  : "ghp_… or github_pat_…"
+              }
+              autoComplete="off"
+              spellCheck={false}
+            />
+          </label>
+        </details>
         <label className="settings-field">
           <span className="settings-field-label">
             Repositories — one owner/name per line

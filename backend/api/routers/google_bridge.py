@@ -50,6 +50,8 @@ from core.config import (
     GoogleConnectorConfig,
     GoogleConnectorConfigPublic,
     GoogleServiceConfig,
+    effective_google_connector,
+    settings,
 )
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
@@ -99,6 +101,7 @@ class GoogleConnectorResponse(BaseModel):
     google: GoogleConnectorConfigPublic
     connection: OAuthConnection
     services: GoogleServicesStatus
+    managed_oauth: bool = False
 
 
 class GoogleConnectResponse(BaseModel):
@@ -119,8 +122,9 @@ class GoogleTestResponse(BaseModel):
 
 def _response(config: GlobalConfig) -> GoogleConnectorResponse:
     tokens = load_google_tokens()
+    connector = effective_google_connector(config)
     return GoogleConnectorResponse(
-        google=config.google.to_public(),
+        google=connector.to_public(),
         connection=OAuthConnection(
             connected=tokens is not None,
             account=tokens.account if tokens is not None else "",
@@ -129,6 +133,7 @@ def _response(config: GlobalConfig) -> GoogleConnectorResponse:
             calendar=get_google_calendar_sync_service().status(),
             gmail=get_gmail_sync_service().status(),
         ),
+        managed_oauth=bool(settings.google_oauth_client_id and settings.google_oauth_client_secret),
     )
 
 
@@ -150,7 +155,7 @@ def _incomplete(connector: GoogleConnectorConfig) -> bool:
 
 
 def _require_app_credentials(config: GlobalConfig) -> GoogleConnectorConfig:
-    connector = config.google
+    connector = effective_google_connector(config)
     if _incomplete(connector):
         raise HTTPException(
             status_code=409,
@@ -207,7 +212,12 @@ async def patch_google_connector(
             )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
-    if (connector.calendar.enabled or connector.gmail.enabled) and _incomplete(connector):
+    managed_oauth = bool(settings.google_oauth_client_id and settings.google_oauth_client_secret)
+    if (
+        (connector.calendar.enabled or connector.gmail.enabled)
+        and _incomplete(connector)
+        and not managed_oauth
+    ):
         raise HTTPException(
             status_code=422,
             detail="A Google OAuth client ID and secret are required when a service is enabled",
@@ -284,7 +294,7 @@ async def google_connector_oauth_callback(
         return oauth_result_page("Google", success=False)
 
     config = GlobalConfig.load(vm.config_path())
-    connector = config.google
+    connector = effective_google_connector(config)
     if _incomplete(connector):
         return oauth_result_page("Google", success=False, error_status=409)
     client = GmailClient(

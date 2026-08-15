@@ -4,7 +4,7 @@ Several vendors expose an endpoint that speaks the OpenAI wire protocol, so the
 client code is identical to :class:`~core.providers.openai.OpenAIProvider` apart
 from the ``base_url`` and which env var holds the key. Rather than copy that
 class per vendor (as the original ``xai``/``openrouter`` modules did), the new
-providers — Groq, DeepSeek, Together, Mistral, Gemini — subclass
+providers — Groq, DeepSeek, Together, Mistral, Gemini, Moonshot — subclass
 :class:`OpenAICompatibleProvider` and only declare their identity + defaults.
 """
 
@@ -132,3 +132,13 @@ class GeminiProvider(OpenAICompatibleProvider):
     label = "Google Gemini"
     default_base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
     default_chat_model = "gemini-2.0-flash"
+
+
+class MoonshotProvider(OpenAICompatibleProvider):
+    """Moonshot AI — Kimi models over an OpenAI-compatible API (chat-only)."""
+
+    name = "moonshot"
+    env_key = "MOONSHOT_API_KEY"
+    label = "Moonshot AI"
+    default_base_url = "https://api.moonshot.ai/v1"
+    default_chat_model = "kimi-k2.6"

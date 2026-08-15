@@ -24,7 +24,13 @@ interface Props {
   submitError: string | null;
 }
 
-type ProviderName = "openai" | "anthropic" | "xai" | "openrouter" | "ollama";
+type ProviderName =
+  | "openai"
+  | "anthropic"
+  | "xai"
+  | "openrouter"
+  | "moonshot"
+  | "ollama";
 
 interface ProviderOption {
   name: ProviderName;
@@ -70,6 +76,14 @@ const PROVIDERS: ProviderOption[] = [
     requiresHost: false,
     hint: "openrouter.ai/keys — one key, every model.",
     defaultChat: "openai/gpt-4o-mini",
+  },
+  {
+    name: "moonshot",
+    label: "Moonshot (Kimi)",
+    requiresApiKey: true,
+    requiresHost: false,
+    hint: "Connect your Moonshot developer account with an API key.",
+    defaultChat: "kimi-k2.6",
   },
   {
     name: "ollama",

@@ -36,6 +36,7 @@ from core.providers.openai_compatible import (
     GeminiProvider,
     GroqProvider,
     MistralProvider,
+    MoonshotProvider,
     TogetherProvider,
 )
 from core.providers.openrouter import OpenRouterProvider
@@ -72,6 +73,7 @@ _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
     "together": OpenAICompatProviderConfig,
     "mistral": OpenAICompatProviderConfig,
     "gemini": OpenAICompatProviderConfig,
+    "moonshot": OpenAICompatProviderConfig,
 }
 
 _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
@@ -86,6 +88,7 @@ _PROVIDER_CLASS_MAP: dict[str, type[BaseProvider]] = {
     "together": TogetherProvider,
     "mistral": MistralProvider,
     "gemini": GeminiProvider,
+    "moonshot": MoonshotProvider,
 }
 
 

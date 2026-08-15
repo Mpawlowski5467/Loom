@@ -84,6 +84,7 @@ export interface StandupResult {
 export interface GitHubBridgeConfig {
   enabled: boolean;
   token_set: boolean;
+  account?: string;
   repos: string[];
   interval_minutes: number;
   lookback_hours: number;
@@ -102,6 +103,19 @@ export interface GitHubBridgeStatus {
 export interface GitHubAutomation {
   github: GitHubBridgeConfig;
   status: GitHubBridgeStatus;
+  oauth_available?: boolean;
+}
+
+export interface GitHubOAuthStartResult {
+  verification_uri: string;
+  user_code: string;
+  expires_in: number;
+  interval: number;
+}
+
+export interface GitHubOAuthStatusResult {
+  status: "idle" | "pending" | "connected" | "error";
+  error: string;
 }
 
 export interface GitHubAutomationUpdate {
@@ -255,6 +269,19 @@ export function getGitHubAutomation(
   return apiClient.get<GitHubAutomation>("/api/automations/github", signal);
 }
 
+export function startGitHubOAuth(): Promise<GitHubOAuthStartResult> {
+  return apiClient.post<GitHubOAuthStartResult>(
+    "/api/automations/github/oauth/start",
+    {},
+  );
+}
+
+export function getGitHubOAuthStatus(): Promise<GitHubOAuthStatusResult> {
+  return apiClient.get<GitHubOAuthStatusResult>(
+    "/api/automations/github/oauth/status",
+  );
+}
+
 export function updateGitHubAutomation(
   update: GitHubAutomationUpdate,
 ): Promise<GitHubAutomation> {
@@ -350,6 +377,7 @@ export interface GoogleConnectorConfig {
 export interface GoogleConnectorAutomation {
   google: GoogleConnectorConfig;
   connection: OAuthCalendarConnection;
+  managed_oauth?: boolean;
   services: {
     calendar: OAuthCalendarStatus;
     gmail: OAuthCalendarStatus;

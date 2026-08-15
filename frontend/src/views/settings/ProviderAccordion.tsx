@@ -48,13 +48,20 @@ export function ProviderAccordion(props: Props): ReactNode {
           <strong>{props.meta.label}</strong>
           <small>
             {props.connectionLabel ??
-              (configured ? "Configured" : "Not configured")}
+              (configured ? "Account connected" : "Account not connected")}
           </small>
         </span>
         {configured && <CheckCircle2 size={15} aria-hidden="true" />}
       </button>
       {props.open && (
         <div className="settings-provider-body">
+          <p className="settings-provider-usage">
+            <strong>Used in Loom:</strong> agents, Council chat, Researcher,
+            Standup, capture processing, and summaries.
+            {props.meta.supportsEmbed
+              ? " It can also power semantic search and graph linking."
+              : " Pair it with an embedding provider for semantic search and graph linking."}
+          </p>
           {props.provider ? (
             <ProviderFormFields
               {...props}
@@ -62,10 +69,54 @@ export function ProviderAccordion(props: Props): ReactNode {
               deleteDisabled={deleteDisabled}
             />
           ) : (
-            <button className="btn btn-md" type="button" onClick={props.onAdd}>
-              <Plus size={14} aria-hidden="true" />
-              Add provider
-            </button>
+            <>
+              {(props.meta.authMode === "codex" ||
+                props.meta.authMode === "oauth_pkce") &&
+              props.onConnect ? (
+                <div className="settings-provider-connect-note" role="note">
+                  <strong>Connect {props.meta.label}</strong>
+                  <span>
+                    {props.meta.authMode === "codex"
+                      ? "Sign in with ChatGPT through the local Codex credential store."
+                      : "Approve Loom in your browser; the resulting key is encrypted locally."}
+                  </span>
+                  <button
+                    className="btn btn-md btn-active"
+                    type="button"
+                    onClick={props.onConnect}
+                    disabled={props.authBusy}
+                  >
+                    <Link2 size={14} aria-hidden="true" />
+                    {props.authBusy
+                      ? "Opening…"
+                      : `Connect ${props.meta.label}`}
+                  </button>
+                </div>
+              ) : (
+                <div className="settings-provider-connect-note" role="note">
+                  <strong>
+                    {props.meta.authMode === "api_key"
+                      ? `Connect ${props.meta.label}`
+                      : `Add ${props.meta.label}`}
+                  </strong>
+                  <span>
+                    {props.meta.authMode === "api_key"
+                      ? `${props.meta.label}'s developer account connects with a one-time API key. Loom encrypts it locally and never returns it.`
+                      : "Configure this local provider to make it available to Loom."}
+                  </span>
+                  <button
+                    className="btn btn-md btn-active"
+                    type="button"
+                    onClick={props.onAdd}
+                  >
+                    <Plus size={14} aria-hidden="true" />
+                    {props.meta.authMode === "api_key"
+                      ? "Connect with API key"
+                      : "Add provider"}
+                  </button>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

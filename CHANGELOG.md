@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   → Inbox → filed-note smoke path with serious/critical accessibility scanning.
   A manual/monthly workflow repeats backend and frontend verification across
   Linux, macOS, and Windows; a live OAuth probe plus evidence runbook covers the
-  Google/Microsoft checks that CI cannot consent to.
+  Google/Microsoft/GitHub checks that CI cannot consent to. The browser smoke
+  path now continues through note rename, archive, and restore.
 - **Operational diagnostics** — `/api/live` reports process liveness separately
   from `/api/ready`; Settings → About now shows allowed hosts, API-token state,
   secret-storage mode, and a warning for unsafe network exposure. Vault settings
@@ -31,8 +32,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a background poller re-reads config every tick so Settings edits apply
   live. `/api/automations/github/*` exposes redacted config + poller status,
   a per-repo connection test, and a manual sync; a Connections settings card
-  drives it all. Token-based polling only — no webhooks (Loom is
-  localhost-first); one repo's failure never sinks the sync.
+  drives it all. A deployment-managed client ID enables browser device
+  authorization and records the connected username, with manual token setup as
+  a fallback. Token-based polling only — no webhooks (Loom is localhost-first);
+  one repo's failure never sinks the sync.
+- **Moonshot / Kimi provider** — native OpenAI-compatible chat support for
+  `kimi-k2.6` across onboarding, provider settings, model discovery, and the
+  traced provider registry.
 - **Email Bridge adapter** — a configured IMAP mailbox is polled on an
   interval for new mail (`backend/bridge/email*.py`). Messages land in the
   Inbox with Message-ID/UID external-ID idempotency; the mailbox is opened

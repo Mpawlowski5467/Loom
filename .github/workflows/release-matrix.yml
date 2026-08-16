@@ -54,6 +54,20 @@ jobs:
           npm run test:run
           npm run build
 
+      - name: Install smoke-test browser and Linux dependencies
+        if: runner.os == 'Linux'
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Install smoke-test browser
+        if: runner.os != 'Linux'
+        working-directory: frontend
+        run: npx playwright install chromium
+
+      - name: Run product browser smoke
+        working-directory: frontend
+        run: npm run test:browser:smoke
+
   docker:
     name: Linux container smoke
     runs-on: ubuntu-latest
@@ -69,4 +83,7 @@ jobs:
             sleep 2
           done
           curl -fsS http://localhost:8000/api/live | grep -q '"live":true'
+          curl -sS http://localhost:8000/api/ready | tee /tmp/ready.json | grep -q '"ok"'
+          grep -q '"components"' /tmp/ready.json
+          curl -fsS http://localhost:8000/ | grep -q '<div id="root">'
           docker rm -f loom-release

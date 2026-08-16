@@ -1,8 +1,8 @@
 # Loom Roadmap
 
 Loom 1.1.0 is the latest tagged release. The current worktree is the next
-open-beta release candidate, including Google Calendar + Gmail and Outlook
-Calendar connectors.
+open-beta release candidate, including Google Calendar + Gmail, Outlook
+Calendar, GitHub device authorization, and Moonshot/Kimi.
 
 ## Release objective
 
@@ -19,8 +19,8 @@ and measurable beyond unit-test volume. If the connector scope stays intact,
 - Ruff, mypy, pytest, Prettier, ESLint, Vitest, the production build, a
   deterministic semantic agent-quality evaluation, and a real export/restore
   drill gate CI.
-- Playwright covers onboarding → demo capture review → filed note and runs an
-  axe serious/critical accessibility scan.
+- Playwright covers onboarding → demo capture review → filed note → rename →
+  archive → restore and runs an axe serious/critical accessibility scan.
 - Major views and modal surfaces are code-split. Custom-agent and Council state
   moved from the AppContext compatibility shell into directly tested hooks.
 - Capture failures expose a category and recommended recovery action in Inbox
@@ -36,8 +36,8 @@ and measurable beyond unit-test volume. If the connector scope stays intact,
 
 ## Remaining release gates
 
-1. **Complete real OAuth validation.** Create the Google and Microsoft app
-   registrations, connect dedicated test accounts, and complete
+1. **Complete real OAuth validation.** Create the Google, Microsoft, and GitHub
+   app registrations, connect dedicated test accounts, and complete
    [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md). Preserve the JSON
    evidence for refresh, reconnect, multi-calendar behavior, cursor recovery,
    and duplicate suppression.
@@ -57,8 +57,10 @@ and measurable beyond unit-test volume. If the connector scope stays intact,
 - Profile the real browser at 5k and 10k notes. The collapsed-tree policy bounds
   first paint, but a virtualized recursive tree is still preferable for folders
   the user explicitly expands.
-- Extend browser coverage to real note edit/archive/restore, provider failure,
-  queue retry, backup download/import, and connector reconnect.
+- Extend browser coverage to queue retry, backup download/import, and connector
+  reconnect. The deterministic smoke now covers note rename/archive/restore and
+  a visible provider failure; a real-backend version remains part of the clean
+  release drill.
 - Continue splitting `AppContext`; graph display/navigation remains the
   highest-value ownership seam.
 - Tune Scribe phrasing and broaden Sentinel's AI-assisted validation corpus with

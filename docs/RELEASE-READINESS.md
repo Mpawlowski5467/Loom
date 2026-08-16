@@ -1,8 +1,8 @@
 # Release Readiness Audit
 
-Audit date: **2026-08-14**
-Baseline: local worktree based on commit `ba680f6` plus the changes described in
-this audit.
+Audit date: **2026-08-16**
+Baseline: `codex/account-connections-and-release-hardening`, including the
+changes described in this audit.
 
 ## Executive assessment
 
@@ -23,18 +23,18 @@ passes.
 | Check | Result |
 |---|---|
 | `ruff check backend/` | Pass |
-| `ruff format --check backend/` | Pass — 233 files |
-| `mypy .` | Pass — 142 source files |
-| `pytest -q` | Pass — 1,247 tests |
+| `ruff format --check backend/` | Pass — 235 files |
+| `mypy .` | Pass — 143 source files |
+| `pytest -q` | Pass — 1,255 tests |
 | deterministic semantic evaluation | Pass — 1.0 score, 0.9 gate |
 | temporary multi-vault restore drill | Pass — SHA-256 integrity verified |
 | 1k/5k/10k metadata + graph benchmark | Pass — 0.60s / 3.02s / 6.08s locally |
 | `python -m pip check` | Pass |
 | `npm run lint` | Pass |
 | `npm run format:check` | Pass |
-| `npm run test:run` | Pass — 845 tests across 100 files |
+| `npm run test:run` | Pass — 848 tests across 100 files |
 | `npm run build` | Pass — route chunks, no bundle warning |
-| critical Playwright + axe smoke | Pass |
+| critical Playwright + axe smoke | Pass — 2 browser tests |
 | full and production-only npm audit | Pass — 0 vulnerabilities |
 | `docker compose config --quiet` | Pass |
 | local Docker image build | Not run — Docker/OrbStack daemon unavailable |
@@ -46,8 +46,8 @@ makes that warning an error.
 ## Remaining release gates
 
 1. Follow [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md) with real
-   Google and Microsoft test accounts. Archive the live-probe and duplicate-
-   suppression evidence.
+   Google, Microsoft, and GitHub test accounts. Archive the live-probe and
+   duplicate-suppression evidence.
 2. Trigger `.github/workflows/release-matrix.yml` and record green Linux,
    macOS, Windows, and Linux-container jobs. Decide separately whether WSL is a
    supported surface and, if so, run its manual smoke pass.
@@ -62,8 +62,8 @@ makes that warning an error.
   diagnostics.
 - A versioned real-pipeline capture evaluator scores type, folder, title, tags,
   headings, wikilinks, and Sentinel verdict.
-- Playwright covers onboarding, Inbox review, filing, Thread navigation, and an
-  axe serious/critical scan.
+- Playwright covers onboarding, Inbox review, filing, Thread rename,
+  archive/restore, an axe serious/critical scan, and a visible provider failure.
 - Failed capture jobs expose recovery categories and recommended actions.
 - Successful vault exports update a visible last-backup/reminder signal; a real
   temporary export/restore drill gates CI.

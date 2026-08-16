@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate real Google and Outlook OAuth connections against a running Loom.
+"""Validate real Google, Microsoft, and GitHub connections against a running Loom.
 
 Connection tests are read-only and refresh expired tokens through the same
 code path used by the pollers. ``--sync-twice`` is opt-in because it ingests
@@ -34,7 +34,10 @@ def _request(base: str, path: str, *, token: str, method: str = "GET") -> dict[s
     return payload
 
 
-def _connected(payload: dict[str, Any]) -> bool:
+def _connected(name: str, payload: dict[str, Any]) -> bool:
+    if name == "github":
+        github = payload.get("github")
+        return isinstance(github, dict) and github.get("token_set") is True
     connection = payload.get("connection")
     return isinstance(connection, dict) and connection.get("connected") is True
 
@@ -45,7 +48,21 @@ def _test_ok(name: str, payload: dict[str, Any]) -> bool:
             isinstance(payload.get(service), dict) and payload[service].get("ok") is True
             for service in ("calendar", "gmail")
         )
+    if name == "github":
+        repos = payload.get("repos")
+        return (
+            isinstance(repos, list)
+            and bool(repos)
+            and all(isinstance(repo, dict) and repo.get("ok") is True for repo in repos)
+        )
     return payload.get("ok") is True
+
+
+def _account(name: str, payload: dict[str, Any]) -> str:
+    section = payload.get("github") if name == "github" else payload.get("connection")
+    if not isinstance(section, dict):
+        return ""
+    return str(section.get("account") or "")
 
 
 class ConnectorRoutes(TypedDict):
@@ -83,6 +100,11 @@ def main() -> None:
             "test": "/api/automations/calendar/outlook/test",
             "sync": ["/api/automations/calendar/outlook/sync"],
         },
+        "github": {
+            "status": "/api/automations/github",
+            "test": "/api/automations/github/test",
+            "sync": ["/api/automations/github/sync"],
+        },
     }
     report: dict[str, Any] = {"api_base": args.api_base, "connectors": {}}
     failures: list[str] = []
@@ -90,7 +112,7 @@ def main() -> None:
     for name, routes in connectors.items():
         try:
             status = _request(args.api_base, routes["status"], token=args.api_token)
-            connected = _connected(status)
+            connected = _connected(name, status)
             probe = (
                 _request(args.api_base, routes["test"], token=args.api_token, method="POST")
                 if connected
@@ -98,7 +120,7 @@ def main() -> None:
             )
             entry: dict[str, Any] = {
                 "connected": connected,
-                "account": status.get("connection", {}).get("account", ""),
+                "account": _account(name, status),
                 "probe": probe,
             }
             if not connected or not _test_ok(name, probe):

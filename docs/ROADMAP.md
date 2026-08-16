@@ -1,89 +1,88 @@
 # Loom Roadmap
 
-This roadmap starts from the current product, not the original concept deck.
-Loom 1.1.0 is the latest tagged release; the current worktree is an open-beta
-release candidate with Google Calendar + Gmail and Outlook Calendar connectors
-added but not yet live-validated.
+Loom 1.1.0 is the latest tagged release. The current worktree is the next
+open-beta release candidate, including Google Calendar + Gmail, Outlook
+Calendar, GitHub device authorization, and Moonshot/Kimi.
 
 ## Release objective
 
-Ship the next open-beta release as a trustworthy local-first application:
-installable in one command, honest about its security boundary, recoverable
-when agent work fails, and understandable without reading the source.
+Ship the next beta as a trustworthy local-first application: installable in one
+command, honest about its security boundary, recoverable when agent work fails,
+and measurable beyond unit-test volume. If the connector scope stays intact,
+1.2.0 is the natural version; confirm it only after every release gate passes.
 
-If the connector scope stays intact, **1.2.0** is the natural next version. The
-version number should be confirmed only after the release gates below pass.
+## Automated hardening completed
 
-## Now — release hardening
+- Process liveness is separate from operational readiness. Docker uses
+  `/api/live`, so a clean pre-onboarding container is healthy while `/api/ready`
+  still reports component state.
+- Ruff, mypy, pytest, Prettier, ESLint, Vitest, the production build, a
+  deterministic semantic agent-quality evaluation, and a real export/restore
+  drill gate CI.
+- Playwright covers onboarding → demo capture review → filed note → rename →
+  archive → restore and runs an axe serious/critical accessibility scan.
+- Major views and modal surfaces are code-split. Custom-agent and Council state
+  moved from the AppContext compatibility shell into directly tested hooks.
+- Capture failures expose a category and recommended recovery action in Inbox
+  History and detail views.
+- Vault Settings show the last successful export and a 30-day backup reminder;
+  a temporary multi-vault restore drill verifies archive integrity.
+- Large-vault coverage includes a 1,000-note regression and a provider-free
+  1k/5k/10k benchmark. Unseen file-tree folders default closed at 1,000+ notes.
+- A headed Chromium profile exercises 5k/10k graph construction and expanded
+  file-tree behavior; large folders reveal notes in bounded 200-row pages.
+- Graph navigation, selection, filter/display persistence, and camera fly-to
+  state moved out of `AppContext` into a directly tested domain hook.
+- A provider-free real-backend drill exercises durable failure/retry, export,
+  failed-import rollback, restore, and imported-job cleanup through FastAPI.
+- Settings diagnostics expose localhost/custom-host scope, optional API-token
+  state, encrypted secret-storage mode, and unsafe-exposure warnings.
+- A manual/monthly GitHub Actions matrix exercises Linux, macOS, and Windows.
+- Frontend dependency audit findings are zero after upgrading patched tooling.
 
-These are release gates, in priority order.
+## Remaining release gates
 
-Completed during the 2026-07-30 audit:
-
-- The splash, footer, and About panel now share the package-derived
-  `VITE_APP_VERSION`.
-- Google and Outlook setup cards now derive callback URLs from the configured
-  API origin instead of fixing them to `localhost:8000`.
-
-Remaining release gates:
-
-1. **Complete real OAuth validation.** Create the Google and Microsoft app
-   registrations, connect one real test account to each, verify token refresh,
-   reconnect/disconnect, incremental cursor recovery, multi-calendar selection,
-   and duplicate-free Inbox ingestion.
-2. **Correct clean-install health behavior.** The image builds and serves the
-   UI, but `/api/ready` returns 503 before onboarding because no vault/indexer or
-   agents exist; the Docker health check therefore trends unhealthy during the
-   exact first-run state. Split liveness from operational readiness, or make the
-   container health check onboarding-aware.
-3. **Establish a formatting baseline.** Python formatting passes. The frontend
-   Prettier check currently reports 81 files, while CI does not run it. Land one
-   isolated formatting-only change, then add `npm run format:check` to CI so the
-   gate remains meaningful.
-4. **Run the final release matrix.** Repeat backend lint/format/type/tests,
-   frontend lint/test/build/audit, Docker build, clean-volume onboarding, demo
-   vault import, capture processing, archive/restore, and export/import on macOS,
-   Linux, and Windows/WSL where supported.
-5. **Cut the release deliberately.** Confirm one version across Python,
-   JavaScript, API, UI, changelog, and tag; publish the screenshots and trailer;
-   then create release notes from `CHANGELOG.md`.
+1. **Complete real OAuth validation.** Create the Google, Microsoft, and GitHub
+   app registrations, connect dedicated test accounts, and complete
+   [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md). Preserve the JSON
+   evidence for refresh, reconnect, multi-calendar behavior, cursor recovery,
+   and duplicate suppression.
+2. **Run and record the hosted release matrix.** Trigger `Release matrix`, then
+   record green Linux/macOS/Windows results. Run a manual WSL smoke pass if WSL
+   is included in the support promise; GitHub's hosted Windows runner is native
+   Windows, not WSL.
+3. **Complete the product release drill.** From a clean checkout and clean
+   volume: onboard, import the demo vault, process and review a capture, edit and
+   archive/restore a note, export and restore a vault, and reconnect one Bridge.
+4. **Cut the release deliberately.** Confirm one version across Python,
+   JavaScript, API, UI, changelog, and tag. Refresh screenshots/trailer only if
+   the shipped UI changed materially, then publish release notes.
 
 ## Next — product reliability and speed
 
-- **Browser-level critical-path tests.** Put onboarding, create/capture/process,
-  review, note edit/archive, provider failure, and connector reconnect into the
-  Playwright suite and run the smoke subset in CI. The current browser suite is
-  concentrated on graph selection and performance.
-- **Large-vault performance.** Profile initial load, file-tree rendering,
-  search, and graph interaction at 1k/5k/10k notes. Virtualize the file tree and
-  keep animation degradation explicit rather than relying only on graph-size
-  heuristics.
-- **Frontend code splitting.** The production JavaScript bundle is about
-  1.05 MB minified (305 KB gzip), and the agent-registry dynamic import is
-  ineffective because the module is also imported statically. Split settings,
-  onboarding, Board details, and heavy graph controls by route or feature.
-- **State ownership.** Continue moving vault, capture, health, config, and event
-  behavior out of the `AppContext` compatibility shell into focused domain
-  hooks, with direct tests for the remaining `useGraph*` hooks and Board child
-  components.
-- **Queue recovery UX.** Surface the capture watchdog's stalled-step evidence,
-  distinguish retryable provider failures from schema review, and make the
-  recommended next action clear in the Inbox.
-- **Backup confidence.** Add a visible last-export signal, periodic backup
-  reminders, and a full restore drill using a real multi-vault fixture.
-- **Accessibility.** Complete keyboard and screen-reader passes for the graph
-  alternatives, modals, the Inbox queue, settings forms, and agent run state.
+- Track the 5k/10k browser-profile history across representative hardware and
+  tighten budgets once enough samples make the thresholds stable.
+- Extend browser coverage to queue retry, backup download/import, and connector
+  reconnect. The deterministic smoke now covers note rename/archive/restore and
+  a visible provider failure; a real-backend version remains part of the clean
+  release drill.
+- Continue splitting `AppContext`; shell layout, modal, and toast ownership are
+  the next useful seams after graph display/navigation moved out.
+- Tune Scribe phrasing and broaden Sentinel's AI-assisted validation corpus with
+  anonymized real captures. Keep the deterministic evaluator versioned as
+  prompts and schemas change.
+- Validate the optional OS-keychain backend across native macOS, Windows, and a
+  Linux Secret Service session; encrypted-file fallback and migration behavior
+  are covered deterministically in CI.
 
 ## Later — open ecosystem
 
-- A versioned Bridge/plugin contract with explicit permissions, rate limits,
-  secrets handling, cursor ownership, and capture-shape compatibility.
-- The Prompt Compiler once real trace data demonstrates which repeated context
-  and prompt construction should be centralized.
+- A versioned Bridge/plugin contract with permissions, rate limits, secrets
+  handling, cursor ownership, and capture-shape compatibility.
+- The Prompt Compiler once trace data demonstrates which repeated context and
+  prompt construction should be centralized.
 - Attachment ingestion for images, PDF, office documents, and source files,
-  always anchored by a Markdown note and recoverable original.
-- OS-keychain-backed secret storage, with migration from the existing encrypted
-  config values.
+  anchored by a Markdown note and recoverable original.
 - Authentication, TLS, and multi-user authorization only if Loom intentionally
   expands beyond its loopback, single-user boundary.
 
@@ -97,13 +96,7 @@ Remaining release gates:
 
 ## Release scorecard
 
-The next release is ready when:
-
-- all required automated checks pass from a clean checkout;
-- the Docker image is healthy both before and after onboarding;
-- Google and Outlook complete the real-account test matrix;
-- no version or callback URL is hard-coded in a user-facing surface;
-- first-run, capture-to-note, review, backup, and restore have browser-level
-  smoke coverage;
-- the changelog, README, architecture guide, screenshots, and trailer match the
-  shipped build.
+The next release is ready when all automated checks pass from a clean checkout,
+the Docker image is healthy before and after onboarding, the real-account OAuth
+matrix and hosted OS matrix have evidence, the product release drill succeeds,
+and README/architecture/changelog/media match the shipped build.

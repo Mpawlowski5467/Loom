@@ -28,7 +28,7 @@ from bridge.gcal import (
 )
 from bridge.google import load_google_tokens, save_google_tokens
 from core.capture_ingress import ingest_capture
-from core.config import GlobalConfig, settings
+from core.config import GlobalConfig, effective_google_connector, settings
 
 if TYPE_CHECKING:
     from bridge.calendar import CalendarEvent
@@ -120,7 +120,7 @@ async def sync_google_calendar(
         raise GoogleCalendarSyncConflictError("No active vault is available for calendar sync")
 
     config = GlobalConfig.load(vm.config_path())
-    connector = config.google
+    connector = effective_google_connector(config)
     gcal = connector.calendar
     if not connector.client_id or not connector.client_secret:
         raise GoogleCalendarError("Add your Google OAuth client ID and secret first")
@@ -289,7 +289,7 @@ class GoogleCalendarSyncService:
     async def _loop(self) -> None:
         while not self._stop.is_set():
             config = GlobalConfig.load(settings.config_path)
-            connector = config.google
+            connector = effective_google_connector(config)
             gcal = connector.calendar
             interval_s = max(5, gcal.interval_minutes) * 60
             if (

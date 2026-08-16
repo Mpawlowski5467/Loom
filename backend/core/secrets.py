@@ -16,8 +16,10 @@ Threat model — what this does and does NOT protect:
   the providers without ever seeing the key. Encryption-at-rest is defence in
   depth, not a substitute for an auth layer.
 
-The master key is read from the ``LOOM_SECRET_KEY`` environment variable if set,
-otherwise auto-generated once at ``~/.loom/.secret.key`` (chmod 600).
+The master key is read from the ``LOOM_SECRET_KEY`` environment variable if set.
+Otherwise Loom uses ``~/.loom/.secret.key`` (chmod 600), or — when
+``LOOM_SECRET_STORAGE=keyring`` and the optional keyring extra is available —
+migrates that master key into the operating-system credential store.
 """
 
 from __future__ import annotations
@@ -26,7 +28,10 @@ import logging
 import os
 import stat
 from functools import lru_cache
+from hashlib import sha256
+from importlib import import_module
 from pathlib import Path
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 
@@ -37,6 +42,9 @@ ENC_PREFIX = "enc:v1:"
 
 #: Env var that, when set, overrides the on-disk key file (base64 Fernet key).
 ENV_KEY_VAR = "LOOM_SECRET_KEY"
+STORAGE_MODE_VAR = "LOOM_SECRET_STORAGE"
+KEYRING_SERVICE = "loom.local"
+KEYRING_MARKER = "keyring:v1"
 
 
 def _key_path() -> Path:
@@ -47,29 +55,115 @@ def _key_path() -> Path:
     return settings.loom_home / ".secret.key"
 
 
+def _keyring_marker_path() -> Path:
+    return _key_path().with_name(".secret.backend")
+
+
+def _keyring_account() -> str:
+    """Stable, non-secret account name isolated by Loom home."""
+    home = str(_key_path().parent.resolve())
+    return f"master-key-{sha256(home.encode()).hexdigest()[:20]}"
+
+
+def _storage_mode() -> str:
+    mode = os.getenv(STORAGE_MODE_VAR, "file").strip().lower()
+    if mode not in {"file", "keyring"}:
+        logger.warning("Unknown %s=%r; using encrypted-file storage", STORAGE_MODE_VAR, mode)
+        return "file"
+    return mode
+
+
+def _write_owner_only(path: Path, value: bytes) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(value)
+    try:
+        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
+    except OSError:  # pragma: no cover - platform dependent
+        logger.debug("Could not chmod secret metadata at %s", path, exc_info=True)
+
+
+def _valid_key(value: bytes) -> bytes:
+    Fernet(value)
+    return value
+
+
+def _keyring_module() -> Any:
+    return import_module("keyring")
+
+
+def _load_or_migrate_keyring_key() -> bytes | None:
+    """Return the keychain key, migrating the file key on explicit opt-in.
+
+    Any unavailable/locked keychain fails closed to the caller, which may use
+    the existing encrypted-file backend only when that key file still exists.
+    A non-secret marker prevents silently generating a replacement key after a
+    completed migration if the OS keychain later becomes unavailable.
+    """
+    path = _key_path()
+    marker = _keyring_marker_path()
+    account = _keyring_account()
+    try:
+        keyring = _keyring_module()
+        stored = keyring.get_password(KEYRING_SERVICE, account)
+        if stored:
+            key = _valid_key(stored.strip().encode("utf-8"))
+            if not marker.exists():
+                _write_owner_only(marker, f"{KEYRING_MARKER}:{account}\n".encode())
+            if path.exists() and path.read_bytes().strip() == key:
+                path.unlink()
+            return key
+
+        key = _valid_key(path.read_bytes().strip()) if path.exists() else Fernet.generate_key()
+        keyring.set_password(KEYRING_SERVICE, account, key.decode("ascii"))
+        verified = keyring.get_password(KEYRING_SERVICE, account)
+        if not verified or verified.strip().encode("utf-8") != key:
+            raise RuntimeError("OS keychain did not return the stored Loom master key")
+        _write_owner_only(marker, f"{KEYRING_MARKER}:{account}\n".encode())
+        if path.exists():
+            path.unlink()
+        logger.info("Migrated Loom's encryption key into the OS keychain")
+        return key
+    except Exception as exc:
+        logger.warning("OS keychain unavailable; encrypted-file fallback may be used: %s", exc)
+        return None
+
+
 def _load_or_create_key() -> bytes:
     """Return the master key, generating and persisting one if absent.
 
-    Resolution order: ``LOOM_SECRET_KEY`` env var → ``~/.loom/.secret.key`` →
-    freshly generated key (written with owner-only permissions).
+    Resolution order: ``LOOM_SECRET_KEY`` env var → opted-in OS keychain →
+    ``~/.loom/.secret.key`` → freshly generated owner-only key.
     """
     env_key = os.getenv(ENV_KEY_VAR)
     if env_key:
         return env_key.strip().encode("utf-8")
 
     path = _key_path()
+    if _storage_mode() == "keyring":
+        keyring_key = _load_or_migrate_keyring_key()
+        if keyring_key is not None:
+            return keyring_key
+        if _keyring_marker_path().exists() and not path.exists():
+            raise RuntimeError(
+                "Loom's master key is in the OS keychain, but that keychain is unavailable"
+            )
     if path.exists():
-        return path.read_bytes().strip()
+        return _valid_key(path.read_bytes().strip())
 
     key = Fernet.generate_key()
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_bytes(key)
-    # Owner read/write only — best effort (no-op semantics on some filesystems).
-    try:
-        path.chmod(stat.S_IRUSR | stat.S_IWUSR)
-    except OSError:  # pragma: no cover - platform dependent
-        logger.debug("Could not chmod secret key at %s", path, exc_info=True)
+    _write_owner_only(path, key)
     return key
+
+
+def secret_storage_description() -> str:
+    """Return a redaction-safe description for diagnostics."""
+    if os.getenv(ENV_KEY_VAR):
+        return "environment-provided encryption key"
+    if _storage_mode() == "keyring":
+        if _keyring_marker_path().exists():
+            return "OS keychain-backed encryption key"
+        return "OS keychain requested (encrypted-file fallback until available)"
+    return "machine-local encrypted file"
 
 
 @lru_cache(maxsize=1)
@@ -120,4 +214,7 @@ def decrypt(value: str | None) -> str | None:
             "Could not decrypt a stored secret (wrong or rotated master key). "
             "Re-enter it in Settings."
         )
+        return None
+    except RuntimeError as exc:
+        logger.warning("Could not access Loom's secret-storage backend: %s", exc)
         return None

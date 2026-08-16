@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
-import { buildFolderTree } from "./treeModel";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, it, expect } from "vitest";
+import { buildFolderTree, useTreeExpanded } from "./treeModel";
 import type { Note, NodeType } from "../../../data/types";
 
 function mk(folder: string, title: string, type: NodeType = "custom"): Note {
@@ -123,5 +124,26 @@ describe("buildFolderTree", () => {
 
   it("does not surface root-level notes", () => {
     expect(buildFolderTree([mk("", "Loose")], [], "")).toEqual([]);
+  });
+});
+
+describe("useTreeExpanded", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("collapses unseen folders when a large-vault caller opts out", () => {
+    const { result } = renderHook(() => useTreeExpanded(false));
+    expect(result.current.isExpanded("topics")).toBe(false);
+
+    act(() => result.current.toggle("topics"));
+    expect(result.current.isExpanded("topics")).toBe(true);
+  });
+
+  it("honors a persisted choice over the caller default", () => {
+    window.localStorage.setItem(
+      "loom.treeExpanded",
+      JSON.stringify({ topics: true }),
+    );
+    const { result } = renderHook(() => useTreeExpanded(false));
+    expect(result.current.isExpanded("topics")).toBe(true);
   });
 });

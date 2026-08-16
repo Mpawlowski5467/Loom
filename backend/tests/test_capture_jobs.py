@@ -20,6 +20,8 @@ from core.capture_jobs import (
     CaptureJobStore,
     CaptureJobWorker,
     JobExecutionResult,
+    capture_failure_guidance,
+    classify_capture_failure,
 )
 from core.config import CaptureProcessingConfig
 from core.events import CAPTURE_JOB_CHANGED, get_event_hub
@@ -73,6 +75,37 @@ def _completed(path: Path) -> JobExecutionResult:
         note_type="topic",
         target_path=str(path.parent.parent / "topics" / "filed.md"),
     )
+
+
+@pytest.mark.parametrize(
+    ("status", "error", "expected"),
+    [
+        ("failed", "Provider timed out", "provider_transient"),
+        ("failed", "Invalid API key", "provider_configuration"),
+        ("needs_review", "Missing expected section: Summary", "schema_review"),
+        ("retrying", "Interrupted by process restart", "stalled"),
+        ("failed", "Source capture is no longer present", "source_missing"),
+    ],
+)
+def test_failure_evidence_has_actionable_category(status, error, expected) -> None:
+    kind = classify_capture_failure(status, error)
+    assert kind == expected
+    assert capture_failure_guidance(kind)
+
+
+def test_capture_job_serializes_recovery_guidance() -> None:
+    job = CaptureJob(
+        id="job",
+        capture_id="capture",
+        capture_path="captures/capture.md",
+        status="failed",
+        error="Invalid API key",
+        created_at="2026-08-14T00:00:00Z",
+        updated_at="2026-08-14T00:00:00Z",
+    )
+    payload = job.model_dump()
+    assert payload["failure_kind"] == "provider_configuration"
+    assert "Settings" in payload["recommended_action"]
 
 
 def _make_stale(store: CaptureJobStore, job_id: str, *, seconds: float = 7200.0) -> None:

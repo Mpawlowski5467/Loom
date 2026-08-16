@@ -8,6 +8,7 @@ import {
   disconnectOutlookCalendar,
   getEmailAutomation,
   getGitHubAutomation,
+  getGitHubOAuthStatus,
   getGoogleConnector,
   getOutlookCalendarAutomation,
   getStandupAutomation,
@@ -17,6 +18,7 @@ import {
   syncGmail,
   syncGoogleCalendar,
   syncOutlookCalendar,
+  startGitHubOAuth,
   testCalendar,
   testEmail,
   testGitHub,
@@ -42,6 +44,8 @@ vi.mock("../../api/automations", () => ({
   testCalendar: vi.fn(),
   syncCalendar: vi.fn(),
   getGitHubAutomation: vi.fn(),
+  getGitHubOAuthStatus: vi.fn(),
+  startGitHubOAuth: vi.fn(),
   updateGitHubAutomation: vi.fn(),
   testGitHub: vi.fn(),
   syncGitHub: vi.fn(),
@@ -202,6 +206,16 @@ describe("ConnectionsSection", () => {
       capture_ids: ["thr_one"],
     });
     vi.mocked(getGitHubAutomation).mockResolvedValue(githubAutomation);
+    vi.mocked(getGitHubOAuthStatus).mockResolvedValue({
+      status: "pending",
+      error: "",
+    });
+    vi.mocked(startGitHubOAuth).mockResolvedValue({
+      verification_uri: "https://github.com/login/device",
+      user_code: "ABCD-EFGH",
+      expires_in: 900,
+      interval: 5,
+    });
     vi.mocked(updateGitHubAutomation).mockResolvedValue(githubAutomation);
     vi.mocked(testGitHub).mockResolvedValue({ repos: [] });
     vi.mocked(syncGitHub).mockResolvedValue({
@@ -362,12 +376,36 @@ describe("ConnectionsSection", () => {
     });
     renderSection();
     expect(
-      await screen.findByRole("heading", { name: "GitHub bridge" }),
+      await screen.findByRole("heading", { name: "GitHub account" }),
     ).toBeInTheDocument();
     expect(screen.getByText("token saved")).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("ghp_… (leave blank to keep current)"),
     ).toHaveValue("");
+  });
+
+  it("starts browser GitHub authorization and shows the one-time code", async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      oauth_available: true,
+    });
+    const { unmount } = renderSection();
+
+    await user.click(
+      await screen.findByRole("button", { name: "Connect GitHub" }),
+    );
+
+    await waitFor(() => expect(startGitHubOAuth).toHaveBeenCalledOnce());
+    expect(openSpy).toHaveBeenCalledWith(
+      "https://github.com/login/device",
+      "_blank",
+      "noopener,noreferrer",
+    );
+    expect(await screen.findByText(/ABCD-EFGH/)).toBeInTheDocument();
+    unmount();
+    openSpy.mockRestore();
   });
 
   it("saves GitHub settings with repos serialized from lines", async () => {
@@ -779,6 +817,26 @@ describe("ConnectionsSection", () => {
     openSpy.mockRestore();
   });
 
+  it("managed Google OAuth is a direct sign-in with no credential form", async () => {
+    vi.mocked(getGoogleConnector).mockResolvedValue({
+      ...googleConnector,
+      managed_oauth: true,
+      google: { ...googleConnector.google, client_secret_set: true },
+    });
+    renderSection();
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
+
+    expect(within(card).getByText(/OAuth is ready/)).toBeInTheDocument();
+    expect(
+      within(card).getByRole("button", { name: "Sign in with Google" }),
+    ).toBeEnabled();
+    expect(
+      within(card).queryByPlaceholderText("OAuth client secret"),
+    ).not.toBeInTheDocument();
+  });
+
   it("connected state shows the account and both service sections; disconnect returns to state 2", async () => {
     const user = userEvent.setup();
     const connectedAutomation: GoogleConnectorAutomation = {
@@ -1026,7 +1084,7 @@ describe("ConnectionsSection", () => {
     renderSection();
     const google = await screen.findByRole("heading", { name: "Google" });
     const outlook = screen.getByRole("heading", { name: "Outlook Calendar" });
-    const github = screen.getByRole("heading", { name: "GitHub bridge" });
+    const github = screen.getByRole("heading", { name: "GitHub account" });
     const imap = screen.getByRole("heading", { name: "Email bridge" });
     for (const later of [outlook, github, imap]) {
       expect(

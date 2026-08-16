@@ -538,6 +538,7 @@ export function ConnectorFlowShell({
   connected,
   account,
   loaded,
+  managedOAuth = false,
   onSaveCreds,
   onConnect,
   onDisconnect,
@@ -555,6 +556,7 @@ export function ConnectorFlowShell({
   connected: boolean;
   account: string;
   loaded: boolean;
+  managedOAuth?: boolean;
   onSaveCreds: (clientId: string, clientSecret: string) => Promise<void>;
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
@@ -574,12 +576,14 @@ export function ConnectorFlowShell({
     setClientId(savedClientId);
   }, [savedClientId]);
 
-  const hasSavedCreds = savedClientId.trim() !== "" && clientSecretSet;
+  const hasSavedCreds =
+    managedOAuth || (savedClientId.trim() !== "" && clientSecretSet);
   const credsDirty =
-    clientSecret.trim() !== "" || clientId.trim() !== savedClientId.trim();
+    !managedOAuth &&
+    (clientSecret.trim() !== "" || clientId.trim() !== savedClientId.trim());
   // setup: no saved creds (form always). ready: saved + collapsed. Edit
   // re-opens the form; connect stays disabled while drafts diverge.
-  const showForm = !hasSavedCreds || editing;
+  const showForm = !managedOAuth && (!hasSavedCreds || editing);
   const signInEnabled =
     loaded && !connected && hasSavedCreds && !credsDirty && busy === null;
   const signInHint = !hasSavedCreds
@@ -649,7 +653,13 @@ export function ConnectorFlowShell({
         </div>
       </div>
 
-      {!hasSavedCreds && <SetupChecklist steps={steps} />}
+      {!managedOAuth && !hasSavedCreds && <SetupChecklist steps={steps} />}
+
+      {managedOAuth && !connected && (
+        <p className="settings-connection-status" role="status">
+          OAuth is ready — sign in to choose your Google account.
+        </p>
+      )}
 
       {showForm ? (
         <CredentialsForm
@@ -663,12 +673,12 @@ export function ConnectorFlowShell({
           onSave={() => void saveCreds()}
           onCancel={hasSavedCreds ? cancelEdit : undefined}
         />
-      ) : (
+      ) : !managedOAuth ? (
         <CollapsedCredentials
           clientId={savedClientId}
           onEdit={() => setEditing(true)}
         />
-      )}
+      ) : null}
 
       {!connected && (
         <SignInButton

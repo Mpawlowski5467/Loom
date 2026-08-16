@@ -1,16 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
-import type {
-  Agent,
-  CouncilMessage,
-  CouncilWho,
-  NoteId,
-  NodeType,
-  SettingsSection,
-  Tab,
-  Toast,
-} from "../data/types";
-import { sanitizeGraphFilters } from "../graph/filtering";
+import type { Agent, NoteId, SettingsSection, Tab, Toast } from "../data/types";
 import { agents as agentsSeed } from "../data/agents";
 import { captures as capturesSeed } from "../data/captures";
 import { changelogSeed } from "../data/changelog";
@@ -21,29 +11,18 @@ import {
   parseGraphFixture,
   type GraphFixtureSize,
 } from "../data/graphFixtures";
-import { loadChatHistory, streamCouncilMessage } from "../api/chat";
-import { listAgentRegistry } from "../api/agentsRegistry";
 import { readDemoMode } from "../data/demoMode";
 import { AppCtx } from "./app-ctx";
-import type { AppContextValue, GraphDisplay } from "./app-ctx";
-import {
-  GRAPH_DISPLAY_DEFAULTS,
-  GRAPH_DISPLAY_RANGES,
-  GRAPH_LAYOUTS,
-} from "./app-ctx";
+import type { AppContextValue } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
 import { useAgentPolling } from "./useAgentPolling";
 import { useHealthPolling } from "./useHealthPolling";
 import { useVaultContent } from "./useVaultContent";
+import { useCouncil } from "./useCouncil";
+import { useCustomAgents } from "./useCustomAgents";
+import { useGraphNavigation } from "./useGraphNavigation";
 
-const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
-const GRAPH_FILTERS_KEY = "loom.graphFilters";
 const TREE_VISIBLE_KEY = "loom.treeVisible";
-/** Display sliders / filter toggles stream changes; persist the settled value
- * rather than stringifying + writing on every input event. A trailing write
- * pending at unmount is dropped — the previous settled value is already
- * persisted, so at worst the last few hundred ms of movement is lost. */
-const PERSIST_DEBOUNCE_MS = 300;
 
 function loadTreeVisible(): boolean {
   if (typeof window === "undefined") return true;
@@ -57,109 +36,9 @@ function loadTreeVisible(): boolean {
   }
 }
 
-function loadGraphFilters(): Set<NodeType> {
-  if (typeof window === "undefined") return new Set();
-  try {
-    const raw = window.localStorage.getItem(GRAPH_FILTERS_KEY);
-    if (!raw) return new Set();
-    const parsed = JSON.parse(raw);
-    return sanitizeGraphFilters(parsed);
-  } catch {
-    return new Set();
-  }
-}
-
 function readGraphFixture(): GraphFixtureSize | null {
   if (!import.meta.env.DEV || typeof window === "undefined") return null;
   return parseGraphFixture(window.location.search);
-}
-
-function clamp(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.max(min, Math.min(max, value));
-}
-
-/** Older builds persisted the auto-cycle flag as ``orbitAutoCycle``.
- * (Their ``orbitScene`` is deliberately NOT migrated into ``layout``: the old
- * graph mode wasn't persisted and every session started in constellation, so
- * "force" — not the last-picked scene — is the faithful default.) */
-type PersistedGraphDisplay = Partial<GraphDisplay> & {
-  orbitAutoCycle?: unknown;
-};
-
-function loadGraphDisplay(): GraphDisplay {
-  if (typeof window === "undefined") return GRAPH_DISPLAY_DEFAULTS;
-  try {
-    const raw = window.localStorage.getItem(GRAPH_DISPLAY_KEY);
-    if (!raw) return GRAPH_DISPLAY_DEFAULTS;
-    const parsed = JSON.parse(raw) as PersistedGraphDisplay;
-    return {
-      nodeSizeScale: clamp(
-        Number(parsed.nodeSizeScale ?? GRAPH_DISPLAY_DEFAULTS.nodeSizeScale),
-        GRAPH_DISPLAY_RANGES.nodeSizeScale.min,
-        GRAPH_DISPLAY_RANGES.nodeSizeScale.max,
-      ),
-      labelThreshold: clamp(
-        Number(parsed.labelThreshold ?? GRAPH_DISPLAY_DEFAULTS.labelThreshold),
-        GRAPH_DISPLAY_RANGES.labelThreshold.min,
-        GRAPH_DISPLAY_RANGES.labelThreshold.max,
-      ),
-      spacingScale: clamp(
-        Number(parsed.spacingScale ?? GRAPH_DISPLAY_DEFAULTS.spacingScale),
-        GRAPH_DISPLAY_RANGES.spacingScale.min,
-        GRAPH_DISPLAY_RANGES.spacingScale.max,
-      ),
-      travelerPace: clamp(
-        Number(parsed.travelerPace ?? GRAPH_DISPLAY_DEFAULTS.travelerPace),
-        GRAPH_DISPLAY_RANGES.travelerPace.min,
-        GRAPH_DISPLAY_RANGES.travelerPace.max,
-      ),
-      labelsEnabled:
-        typeof parsed.labelsEnabled === "boolean"
-          ? parsed.labelsEnabled
-          : GRAPH_DISPLAY_DEFAULTS.labelsEnabled,
-      labelSize: clamp(
-        Number(parsed.labelSize ?? GRAPH_DISPLAY_DEFAULTS.labelSize),
-        GRAPH_DISPLAY_RANGES.labelSize.min,
-        GRAPH_DISPLAY_RANGES.labelSize.max,
-      ),
-      labelShowRatio: clamp(
-        Number(parsed.labelShowRatio ?? GRAPH_DISPLAY_DEFAULTS.labelShowRatio),
-        GRAPH_DISPLAY_RANGES.labelShowRatio.min,
-        GRAPH_DISPLAY_RANGES.labelShowRatio.max,
-      ),
-      edgeThickness: clamp(
-        Number(parsed.edgeThickness ?? GRAPH_DISPLAY_DEFAULTS.edgeThickness),
-        GRAPH_DISPLAY_RANGES.edgeThickness.min,
-        GRAPH_DISPLAY_RANGES.edgeThickness.max,
-      ),
-      travelersEnabled:
-        typeof parsed.travelersEnabled === "boolean"
-          ? parsed.travelersEnabled
-          : GRAPH_DISPLAY_DEFAULTS.travelersEnabled,
-      breathingEnabled:
-        typeof parsed.breathingEnabled === "boolean"
-          ? parsed.breathingEnabled
-          : GRAPH_DISPLAY_DEFAULTS.breathingEnabled,
-      depthEnabled:
-        typeof parsed.depthEnabled === "boolean"
-          ? parsed.depthEnabled
-          : GRAPH_DISPLAY_DEFAULTS.depthEnabled,
-      layout: (GRAPH_LAYOUTS as readonly string[]).includes(
-        parsed.layout as string,
-      )
-        ? (parsed.layout as GraphDisplay["layout"])
-        : GRAPH_DISPLAY_DEFAULTS.layout,
-      layoutAutoCycle:
-        typeof parsed.layoutAutoCycle === "boolean"
-          ? parsed.layoutAutoCycle
-          : typeof parsed.orbitAutoCycle === "boolean"
-            ? parsed.orbitAutoCycle
-            : GRAPH_DISPLAY_DEFAULTS.layoutAutoCycle,
-    };
-  } catch {
-    return GRAPH_DISPLAY_DEFAULTS;
-  }
 }
 
 interface ProviderProps {
@@ -193,117 +72,20 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setTab("thread");
   }, []);
 
-  const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
-  const [graphSelectedId, setGraphSelectedId] = useState<NoteId | null>(null);
-  const [graphFlyTo, setGraphFlyTo] = useState<{
-    id: NoteId;
-    nonce: number;
-  } | null>(null);
-  const flyToNode = useCallback((id: NoteId) => {
-    setTab("graph");
-    setGraphFlyTo((prev) => ({ id, nonce: (prev?.nonce ?? 0) + 1 }));
-  }, []);
-  const [graphFilters, setGraphFilters] = useState<Set<NodeType>>(() =>
-    graphFixture !== null ? new Set() : loadGraphFilters(),
-  );
-  const toggleGraphFilter = useCallback((t: NodeType) => {
-    setGraphFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(t)) next.delete(t);
-      else next.add(t);
-      return next;
-    });
-  }, []);
-  const clearGraphFilters = useCallback(() => {
-    setGraphFilters(new Set());
-  }, []);
-  useEffect(() => {
-    if (graphFixture !== null || typeof window === "undefined") return;
-    const timer = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(
-          GRAPH_FILTERS_KEY,
-          JSON.stringify([...graphFilters]),
-        );
-      } catch {
-        // ignore quota / serialization failures
-      }
-    }, PERSIST_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [graphFilters, graphFixture]);
-
-  const [graphDisplay, setGraphDisplayState] = useState<GraphDisplay>(() =>
-    graphFixture !== null ? GRAPH_DISPLAY_DEFAULTS : loadGraphDisplay(),
-  );
-  const setGraphDisplay = useCallback((patch: Partial<GraphDisplay>) => {
-    setGraphDisplayState((prev) => {
-      const merged: GraphDisplay = {
-        nodeSizeScale: clamp(
-          patch.nodeSizeScale ?? prev.nodeSizeScale,
-          GRAPH_DISPLAY_RANGES.nodeSizeScale.min,
-          GRAPH_DISPLAY_RANGES.nodeSizeScale.max,
-        ),
-        labelThreshold: clamp(
-          patch.labelThreshold ?? prev.labelThreshold,
-          GRAPH_DISPLAY_RANGES.labelThreshold.min,
-          GRAPH_DISPLAY_RANGES.labelThreshold.max,
-        ),
-        spacingScale: clamp(
-          patch.spacingScale ?? prev.spacingScale,
-          GRAPH_DISPLAY_RANGES.spacingScale.min,
-          GRAPH_DISPLAY_RANGES.spacingScale.max,
-        ),
-        travelerPace: clamp(
-          patch.travelerPace ?? prev.travelerPace,
-          GRAPH_DISPLAY_RANGES.travelerPace.min,
-          GRAPH_DISPLAY_RANGES.travelerPace.max,
-        ),
-        labelsEnabled: patch.labelsEnabled ?? prev.labelsEnabled,
-        labelSize: clamp(
-          patch.labelSize ?? prev.labelSize,
-          GRAPH_DISPLAY_RANGES.labelSize.min,
-          GRAPH_DISPLAY_RANGES.labelSize.max,
-        ),
-        labelShowRatio: clamp(
-          patch.labelShowRatio ?? prev.labelShowRatio,
-          GRAPH_DISPLAY_RANGES.labelShowRatio.min,
-          GRAPH_DISPLAY_RANGES.labelShowRatio.max,
-        ),
-        edgeThickness: clamp(
-          patch.edgeThickness ?? prev.edgeThickness,
-          GRAPH_DISPLAY_RANGES.edgeThickness.min,
-          GRAPH_DISPLAY_RANGES.edgeThickness.max,
-        ),
-        travelersEnabled: patch.travelersEnabled ?? prev.travelersEnabled,
-        breathingEnabled: patch.breathingEnabled ?? prev.breathingEnabled,
-        depthEnabled: patch.depthEnabled ?? prev.depthEnabled,
-        layout:
-          patch.layout !== undefined &&
-          (GRAPH_LAYOUTS as readonly string[]).includes(patch.layout)
-            ? patch.layout
-            : prev.layout,
-        layoutAutoCycle: patch.layoutAutoCycle ?? prev.layoutAutoCycle,
-      };
-      return merged;
-    });
-  }, []);
-  const resetGraphDisplay = useCallback(() => {
-    setGraphDisplayState(GRAPH_DISPLAY_DEFAULTS);
-  }, []);
-  useEffect(() => {
-    if (graphFixture !== null || typeof window === "undefined") return;
-    const timer = window.setTimeout(() => {
-      try {
-        window.localStorage.setItem(
-          GRAPH_DISPLAY_KEY,
-          JSON.stringify(graphDisplay),
-        );
-      } catch {
-        // ignore quota / serialization failures
-      }
-    }, PERSIST_DEBOUNCE_MS);
-    return () => window.clearTimeout(timer);
-  }, [graphDisplay, graphFixture]);
+  const {
+    graphFocusId,
+    setGraphFocusId,
+    graphSelectedId,
+    setGraphSelectedId,
+    graphFlyTo,
+    flyToNode,
+    graphFilters,
+    toggleGraphFilter,
+    clearGraphFilters,
+    graphDisplay,
+    setGraphDisplay,
+    resetGraphDisplay,
+  } = useGraphNavigation(graphFixture, setTab);
 
   const [primaryOpen, setPrimaryOpen] = useState(true);
   const [secondaryOpen, setSecondaryOpen] = useState(false);
@@ -423,182 +205,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     !demo && loomConfig.onboardingComplete && !loomConfig.offline,
   );
 
-  const [customAgents, setCustomAgents] = useState<Agent[]>([]);
-  const refreshCustomAgents = useCallback(async () => {
-    try {
-      const list = await listAgentRegistry();
-      const custom: Agent[] = list
-        .filter((a) => !a.system)
-        .map((a) => ({
-          id: a.id,
-          name: a.name,
-          layer: a.layer,
-          role: a.role,
-          icon: a.icon,
-          state: "idle",
-          stats: { runs: 0, lastRun: "—" },
-          lastAction: "",
-        }));
-      setCustomAgents(custom);
-    } catch {
-      // Backend unreachable — leave the list as-is.
-    }
-  }, []);
-
-  useEffect(() => {
-    if (graphFixture !== null) return;
-    void refreshCustomAgents();
-  }, [graphFixture, refreshCustomAgents]);
-
-  const [council, setCouncil] = useState<CouncilMessage[]>(
-    demo ? councilSeed : [],
+  const { customAgents, refreshCustomAgents } = useCustomAgents(
+    graphFixture === null,
   );
-  // Tracks the in-flight Council SSE stream so a new send (or unmount) can
-  // cancel it — a Council turn costs ~6 provider calls, so a leaked/duplicated
-  // stream wastes a tight per-account budget.
-  const councilAbortRef = useRef<AbortController | null>(null);
-  useEffect(
-    () => () => {
-      councilAbortRef.current?.abort();
-    },
-    [],
-  );
-  // Load persisted council history once on mount so a page refresh doesn't
-  // wipe the conversation. Skip in demo mode where seed messages are intentional.
-  useEffect(() => {
-    if (demo) return;
-    let cancelled = false;
-    void loadChatHistory("_council", 50)
-      .then((res) => {
-        if (cancelled || res.messages.length === 0) return;
-        setCouncil(
-          res.messages.map((m, i) => ({
-            id: `cm_hist_${i}_${m.timestamp}`,
-            who: m.role === "user" ? "you" : ("agent:council" as CouncilWho),
-            body: m.content,
-            at: m.timestamp,
-          })),
-        );
-      })
-      .catch(() => {
-        // best-effort; empty council is the safe default
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [demo]);
-
-  const postCouncilMessage = useCallback(async (body: string) => {
-    if (!body.trim()) return;
-    // Cancel any stream still in flight before starting another, so a rapid
-    // double-send doesn't run two uncancelled SSE fetches concurrently.
-    councilAbortRef.current?.abort();
-    const ctrl = new AbortController();
-    councilAbortRef.current = ctrl;
-    const now = Date.now();
-    const youMsg: CouncilMessage = {
-      id: `cm_${now}`,
-      who: "you",
-      body,
-      at: new Date().toISOString(),
-    };
-    const replyId = `cm_${now}_reply`;
-    const replyMsg: CouncilMessage = {
-      id: replyId,
-      who: "agent:council" as CouncilWho,
-      body: "",
-      at: new Date().toISOString(),
-      pending: true,
-    };
-    setCouncil((prev) => [...prev, youMsg, replyMsg]);
-
-    const updateReply = (
-      patch:
-        | Partial<CouncilMessage>
-        | ((m: CouncilMessage) => Partial<CouncilMessage>),
-    ) => {
-      setCouncil((prev) =>
-        prev.map((m) =>
-          m.id === replyId
-            ? { ...m, ...(typeof patch === "function" ? patch(m) : patch) }
-            : m,
-        ),
-      );
-    };
-
-    try {
-      await streamCouncilMessage(body, {
-        signal: ctrl.signal,
-        onEvent: (event) => {
-          if (event.kind === "contributions") {
-            // Per-agent sub-bubbles arrive once fan-out completes; drop any
-            // that are simultaneously silent and not-errored.
-            const contribs = event.contributions
-              .filter((c) => c.content.trim().length > 0 || c.error)
-              .map((c) => ({
-                agent: c.agent,
-                body: c.content,
-                traceId: c.trace_id || undefined,
-                error: c.error || undefined,
-              }));
-            updateReply({
-              contributions: contribs.length > 0 ? contribs : undefined,
-            });
-          } else if (event.kind === "token") {
-            // Append the streamed chunk to the assistant bubble. ``pending``
-            // stays true until ``done`` so the spinner-style affordance only
-            // turns off once the aggregator has finished.
-            updateReply((m) => ({ body: m.body + event.chunk }));
-          } else if (event.kind === "done") {
-            const finalContribs = event.contributions
-              .filter((c) => c.content.trim().length > 0 || c.error)
-              .map((c) => ({
-                agent: c.agent,
-                body: c.content,
-                traceId: c.trace_id || undefined,
-                error: c.error || undefined,
-              }));
-            updateReply({
-              body: event.assistantText,
-              traceId: event.traceId || undefined,
-              contributions:
-                finalContribs.length > 0 ? finalContribs : undefined,
-              pending: false,
-              at: new Date().toISOString(),
-            });
-          } else if (event.kind === "error") {
-            updateReply({
-              body: `⚠ ${event.message}`,
-              pending: false,
-            });
-          }
-        },
-      });
-      // Ensure pending is cleared even if the stream closed without a
-      // ``done`` event (e.g. network drop mid-response).
-      updateReply((m) => (m.pending ? { pending: false } : {}));
-    } catch (err) {
-      // An abort is a deliberate supersede/unmount, not a failure. The aborted
-      // stream still owns its reply bubble (the newer send has its own id), so
-      // clear the spinner here — otherwise the bubble stays pending forever.
-      if ((err as DOMException)?.name === "AbortError") {
-        updateReply((m) =>
-          m.body.trim().length > 0
-            ? { pending: false }
-            : { pending: false, body: "⚠ Cancelled" },
-        );
-        return;
-      }
-      updateReply({
-        body: `⚠ Failed: ${err instanceof Error ? err.message : String(err)}`,
-        pending: false,
-      });
-    } finally {
-      // Only clear the ref if this call still owns it — a superseding send may
-      // have already swapped in its own controller.
-      if (councilAbortRef.current === ctrl) councilAbortRef.current = null;
-    }
-  }, []);
+  const { council, postCouncilMessage } = useCouncil(demo, councilSeed);
 
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);

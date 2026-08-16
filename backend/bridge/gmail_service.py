@@ -24,7 +24,7 @@ from agents.sanitize import scrub_untrusted
 from bridge.gmail import GmailAuthError, GmailClient, GmailError
 from bridge.google import load_google_tokens, save_google_tokens
 from core.capture_ingress import ingest_capture
-from core.config import GlobalConfig, settings
+from core.config import GlobalConfig, effective_google_connector, settings
 
 if TYPE_CHECKING:
     from core.vault import VaultManager
@@ -97,7 +97,7 @@ async def sync_gmail(
         raise GmailSyncConflictError("No active vault is available for Gmail sync")
 
     config = GlobalConfig.load(vm.config_path())
-    connector = config.google
+    connector = effective_google_connector(config)
     gmail = connector.gmail
     if not connector.client_id or not connector.client_secret:
         raise GmailError("Add your Google OAuth client ID and secret first")
@@ -222,7 +222,7 @@ class GmailSyncService:
     async def _loop(self) -> None:
         while not self._stop.is_set():
             config = GlobalConfig.load(settings.config_path)
-            connector = config.google
+            connector = effective_google_connector(config)
             gmail = connector.gmail
             interval_s = max(5, gmail.interval_minutes) * 60
             if (

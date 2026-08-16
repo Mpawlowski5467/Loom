@@ -8,6 +8,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Optional OS-keychain master-key storage** — source installs with the
+  `keychain` extra can set `LOOM_SECRET_STORAGE=keyring` to migrate Loom's
+  Fernet master key into the native credential store. Unavailable keychains
+  retain the encrypted-file backend before migration, while a completed
+  migration never silently rotates an inaccessible key.
+- **Release-quality gates** — CI now runs a versioned semantic capture-quality
+  evaluator, a real export/restore integrity drill, and a Playwright onboarding
+  → Inbox → filed-note smoke path with serious/critical accessibility scanning.
+  A manual/monthly workflow repeats backend and frontend verification across
+  Linux, macOS, and Windows; a live OAuth probe plus evidence runbook covers the
+  Google/Microsoft/GitHub checks that CI cannot consent to. The browser smoke
+  path now continues through note rename, archive, and restore.
+- **Operational diagnostics** — `/api/live` reports process liveness separately
+  from `/api/ready`; Settings → About now shows allowed hosts, API-token state,
+  secret-storage mode, and a warning for unsafe network exposure. Vault settings
+  record the last successful export and surface a 30-day backup reminder.
+- **Large-vault tooling** — a provider-free 1k/5k/10k metadata-index + graph
+  benchmark and a 1,000-note regression test. Large vaults start with unseen
+  file-tree folders collapsed so initial render does not create thousands of
+  rows; explicitly expanded folders reveal notes in bounded 200-row pages. A
+  real Chromium profile now exercises full 5k/10k Sigma construction plus the
+  expanded-tree DOM bound.
+- **Provider-free product release drill** — a temporary real FastAPI app now
+  proves durable-job failure/retry, vault export, failed-overwrite rollback,
+  clean import, and capture integrity through public routes in CI.
 - **GitHub Bridge adapter** — configured repositories are polled on an
   interval for new commits, issues, and PRs (`backend/bridge/github*.py`).
   Activity lands in the Inbox through the unified capture ingress with
@@ -17,8 +42,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and a background poller re-reads config every tick so Settings edits apply
   live. `/api/automations/github/*` exposes redacted config + poller status,
   a per-repo connection test, and a manual sync; a Connections settings card
-  drives it all. Token-based polling only — no webhooks (Loom is
-  localhost-first); one repo's failure never sinks the sync.
+  drives it all. A deployment-managed client ID enables browser device
+  authorization and records the connected username, with manual token setup as
+  a fallback. Token-based polling only — no webhooks (Loom is localhost-first);
+  one repo's failure never sinks the sync.
+- **Moonshot / Kimi provider** — native OpenAI-compatible chat support for
+  `kimi-k2.6` across onboarding, provider settings, model discovery, and the
+  traced provider registry.
 - **Email Bridge adapter** — a configured IMAP mailbox is polled on an
   interval for new mail (`backend/bridge/email*.py`). Messages land in the
   Inbox with Message-ID/UID external-ID idempotency; the mailbox is opened
@@ -60,6 +90,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   updated to match, so the LLM no longer re-litigates them.
 
 ### Changed
+- **Frontend delivery and ownership** — Graph, Thread, Inbox, Board, Settings,
+  palette, and note modal load as independent chunks. Custom-agent registry
+  state and Council history/streaming moved out of `AppContext` into directly
+  tested hooks. The audited frontend toolchain was updated to patched versions.
+- **Inbox recovery guidance** — failed jobs are classified as transient provider,
+  provider configuration, schema review, stalled, missing source, or unknown;
+  History and detail views show the recommended next action.
 - **Scribe daily-log phrasing** — the daily-log prompt now pins concrete
   style rules (name notes as `[[wikilinks]]` in every claim, group related
   actions, plain past tense, deny-listed filler like "productive day",

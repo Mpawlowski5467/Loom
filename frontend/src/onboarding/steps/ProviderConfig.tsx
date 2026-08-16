@@ -24,7 +24,13 @@ interface Props {
   submitError: string | null;
 }
 
-type ProviderName = "openai" | "anthropic" | "xai" | "openrouter" | "ollama";
+type ProviderName =
+  | "openai"
+  | "anthropic"
+  | "xai"
+  | "openrouter"
+  | "moonshot"
+  | "ollama";
 
 interface ProviderOption {
   name: ProviderName;
@@ -70,6 +76,14 @@ const PROVIDERS: ProviderOption[] = [
     requiresHost: false,
     hint: "openrouter.ai/keys — one key, every model.",
     defaultChat: "openai/gpt-4o-mini",
+  },
+  {
+    name: "moonshot",
+    label: "Moonshot (Kimi)",
+    requiresApiKey: true,
+    requiresHost: false,
+    hint: "Connect your Moonshot developer account with an API key.",
+    defaultChat: "kimi-k2.6",
   },
   {
     name: "ollama",
@@ -201,7 +215,9 @@ export function ProviderConfig({
         default for embeddings — they can be different providers.
       </p>
       <p className="onb-sub onb-sub-muted">
-        Keys are stored unencrypted in <code>config.yaml</code> on this machine.
+        Keys are encrypted before they are stored in <code>config.yaml</code> on
+        this machine. The machine-local encryption key remains in your Loom home
+        directory.
       </p>
 
       <div className="onb-providers" role="group" aria-label="Provider">

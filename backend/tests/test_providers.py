@@ -9,6 +9,7 @@ from core.exceptions import ProviderConfigError
 from core.providers import (
     AnthropicProvider,
     CodexProvider,
+    MoonshotProvider,
     OllamaProvider,
     OpenAIProvider,
     ProviderRegistry,
@@ -111,6 +112,19 @@ class TestRegistryGetValid:
 
         assert isinstance(unwrap_provider(provider), XAIProvider)
         assert provider.name == "xai"
+
+    @patch.dict("os.environ", {"MOONSHOT_API_KEY": "moonshot-test-key"})
+    def test_get_moonshot_provider(self) -> None:
+        """get('moonshot') builds the native Kimi-compatible provider."""
+        cfg = _make_config(
+            providers={"moonshot": {"api_key": "moonshot-test-key", "chat_model": "kimi-k2.6"}}
+        )
+        registry = ProviderRegistry(cfg)
+
+        provider = registry.get("moonshot")
+
+        assert isinstance(unwrap_provider(provider), MoonshotProvider)
+        assert provider.name == "moonshot"
 
 
 # ---------------------------------------------------------------------------

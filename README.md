@@ -64,7 +64,7 @@ Open the full-size captures below for a closer look at each view.
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
 - **Multi-agent, not single-prompt.** Seven specialized agents in two tiers (Loom Layer manages the vault; Shuttle Layer produces content) — plus any custom agents you add — collaborate via a shared *read-before-write* discipline.
 - **Visual by default.** A `Sigma.js` + `graphology` canvas shows your notes as a living network — drag, zoom, filter by type or tag.
-- **Provider-agnostic.** Plug in OpenAI, Anthropic, xAI, OpenRouter, or a local Ollama model. Chat and embedding providers are independent, and every model call is recorded as an inspectable trace.
+- **Provider-agnostic.** Connect OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, or a local Ollama model. Chat and embedding providers are independent, and every model call is recorded as an inspectable trace.
 
 ## Architecture at a glance
 
@@ -97,6 +97,7 @@ flowchart LR
         Anthropic
         xAI
         OpenRouter
+        Moonshot
         Ollama
     end
 
@@ -241,7 +242,7 @@ sequenceDiagram
 
 ### Providers, and every call traced
 
-All five providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. Each trace is also tagged with the `run` and `step` it belongs to, so a multi-step agent run (e.g. the capture pipeline: `weaver → spider → scribe → sentinel → enforce`) shows up as one connected run in the **Runs** view, not a scattered list of calls. The "raw call" link anywhere in the UI reads straight from `/api/traces`; the Runs view reads `/api/traces/runs`.
+All providers sit behind one registry. Chat and embedding providers are resolved independently, and every provider is wrapped in a `TracedProvider` that records each exchange — provider, model, messages, response, duration — into a 500-entry in-memory ring that also mirrors to disk by date. Each trace is also tagged with the `run` and `step` it belongs to, so a multi-step agent run (e.g. the capture pipeline: `weaver → spider → scribe → sentinel → enforce`) shows up as one connected run in the **Runs** view, not a scattered list of calls. The "raw call" link anywhere in the UI reads straight from `/api/traces`; the Runs view reads `/api/traces/runs`.
 
 ```mermaid
 flowchart LR
@@ -254,6 +255,7 @@ flowchart LR
         Anthropic
         xAI
         OpenRouter
+        Moonshot
         Ollama
     end
 
@@ -337,6 +339,8 @@ flowchart LR
 - Anthropic (chat)
 - xAI / Grok (chat)
 - OpenRouter (chat — including `:free` models, with rate-limit-aware retries)
+- Moonshot / Kimi (chat)
+- Groq, DeepSeek, Together AI, Mistral, and Google Gemini (OpenAI-compatible chat; embeddings where supported)
 - Ollama (local chat + embed)
 - Chat and embedding providers configured independently
 
@@ -390,11 +394,11 @@ volume for a bind mount (see the commented line in `docker-compose.yml`).
 `.env.example`). Unset, both stay disabled and Loom is byte-identical without
 them.
 
-> **Note:** Provider API keys are encrypted at rest in `config.yaml` (Fernet, under
-> a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth against
-> casual disclosure of the config file, not a substitute for auth, and with no
-> OS-keychain integration yet. If you pass a key via `.env`, keep it private — it is
-> git-ignored by default.
+> **Note:** Provider API keys are encrypted at rest in `config.yaml`. By default,
+> Fernet uses a machine-local key at `~/.loom/.secret.key`; source installs can
+> install `.[keychain]` and set `LOOM_SECRET_STORAGE=keyring` to migrate that key
+> into the OS credential store. `LOOM_SECRET_KEY` remains the deployment-managed
+> override. This is defense-in-depth, not a substitute for API authentication.
 >
 > **Security:** the published port binds to `127.0.0.1` (this machine only) and the
 > API ships **no auth**. Do not expose it to a LAN/internet without a reverse proxy
@@ -508,6 +512,7 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `PATCH` | `/api/automations/standup` | Daily Standup schedule and redacted Calendar connection state |
 | `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
 | `GET` `PATCH` | `/api/automations/github` | Redacted GitHub connection state (repos, interval, poller status) |
+| `POST` `GET` | `/api/automations/github/oauth/start`, `/api/automations/github/oauth/status` | Start and complete GitHub browser/device authorization |
 | `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
 | `GET` `PATCH` | `/api/automations/email` | Redacted IMAP connection state (host, folder, poller status) |
 | `POST` | `/api/automations/email/test` / `/sync` | Test the mailbox login/folder or poll new mail into Inbox |
@@ -522,13 +527,14 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `POST` | `/api/chat/send` | Talk to a Shuttle agent or the Council |
 | `POST` | `/api/chat/send/stream` | Streamed Council reply (Server-Sent Events) |
 | `GET` `POST` `PUT` | `/api/vaults` | Multi-vault management |
+| `GET` | `/api/vaults/{name}/backup-status` | Last successful export and 30-day reminder state |
 | `GET` `POST` | `/api/settings/providers` | Provider config (keys masked on read) |
 | `GET` `PATCH` | `/api/config` | Global config (theme, active vault, default provider — redacted) |
 | `GET` `POST` | `/api/onboarding/status` / `/complete` | First-run wizard gate |
 | `POST` | `/api/providers/{name}/test` | Test provider credentials without saving |
 | `GET` | `/api/traces` | Recent LLM traces (`/api/traces/disk` pages older ones by date) |
 | `GET` | `/api/traces/runs` | Multi-step agent runs, newest first (`/api/traces/runs/{id}` for one run's step timeline + per-step traces) |
-| `GET` | `/api/health` / `/api/ready` | Health + readiness probes |
+| `GET` | `/api/live` / `/api/health` / `/api/ready` | Process liveness plus structured operational readiness |
 
 ## Development
 
@@ -537,22 +543,31 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 ruff check backend/
 ruff format --check backend/
 pytest backend/tests/
+cd backend && python -m evals.runner --mode fixture --threshold 0.9
+cd backend && python scripts/restore_drill.py
+cd backend && python scripts/benchmark_vault.py --sizes 1000 5000 10000
 
 # Frontend
 cd frontend
 npm run lint
 npm run test:run   # `npm run test` runs vitest in watch mode
+npm run test:browser:smoke
 npm run build
 ```
 
-CI runs on push via `.github/workflows/ci.yml`.
+CI runs on push via `.github/workflows/ci.yml`. A scheduled/manual release
+matrix repeats the suite on Linux, macOS, and Windows. Real OAuth accounts are
+validated separately with
+[`backend/scripts/validate_oauth_connectors.py`](backend/scripts/validate_oauth_connectors.py)
+and the [OAuth release runbook](docs/OAUTH-RELEASE-VALIDATION.md).
 
 ## Status
 
 **Current release: 1.1.0 (open beta).** Loom runs end-to-end for daily local
 use. The current worktree also contains the next connector release: Google
-Calendar + Gmail and Outlook Calendar are code-complete and mock-verified, but
-still need first live OAuth connections before release. Loom remains
+Calendar + Gmail, Outlook Calendar, and GitHub browser authorization are
+code-complete and mock-verified, but still need first live OAuth connections
+before release. Loom remains
 deliberately local-first and unauthenticated by default — it is not an
 internet-exposable service without your own reverse proxy (see *Known gaps*).
 What works today:
@@ -563,16 +578,16 @@ What works today:
 - Graph, Board, Inbox, and Thread views
 - Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
 - Scheduled Standup workspace plus encrypted read-only iCalendar connection
-- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection; plus an Outlook Calendar connector (Microsoft sign-in)
-- GitHub Bridge — poll repos for commits/issues/PRs into the Inbox (token encrypted at rest, per-repo cursors, interval poller)
+- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection. Set `LOOM_GOOGLE_OAUTH_CLIENT_ID` and `LOOM_GOOGLE_OAUTH_CLIENT_SECRET` once on the installation for a click-only user flow; manual app credentials remain available for self-hosters. Outlook Calendar uses the same guided browser-sign-in pattern.
+- GitHub Bridge — browser device authorization when `LOOM_GITHUB_OAUTH_CLIENT_ID` is set (with encrypted token storage), plus manual-token fallback; polls repos for commits/issues/PRs with per-repo cursors and an interval poller.
 - Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen), or Gmail via the Google connector's single sign-in
 - First-run onboarding wizard (vault, theme, provider)
 - Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
 - Streaming Loom Council chat with per-call trace inspection
 - Multi-vault management
 - Hybrid semantic + keyword search with graph-aware boosting
-- Provider system (OpenAI, Anthropic, xAI, OpenRouter, Ollama)
-- File watcher, rate limiting, health/readiness probes
+- Provider system (OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, Ollama)
+- File watcher, rate limiting, separate liveness/readiness probes
 - One-command Docker run (single container serves UI + API)
 
 **Resilience & correctness** (the focus of recent work):
@@ -584,14 +599,16 @@ What works today:
 - Note archival shares the edit lock, supports optimistic version checks, and restores the exact original on a failed move
 - Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
 - End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
+- A versioned semantic capture-quality evaluator, critical-path Playwright + accessibility smoke test (onboarding → Inbox → filed note → rename → archive → restore), provider-free real-backend recovery/restore drill, 1k/5k/10k backend benchmark, and 5k/10k Chromium UI profile
+- Large vaults initially collapse unseen file-tree folders to avoid creating thousands of DOM rows; major views are split into independently loaded production chunks
 - Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
 
 **Known gaps (deliberate v1 boundaries):**
 - **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
-- **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
-- **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail) and an Outlook Calendar connector (code-complete and mock-verified; first live connect pending your OAuth app registrations — setup steps are inline in the Connections cards), token-based GitHub polling, and read-only IMAP Email polling. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
+- **Provider API keys are encrypted at rest** in `config.yaml` using a deployment key, an optional OS-keychain-backed master key, or the machine-local encrypted-file fallback — defense-in-depth, not a substitute for auth
+- **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail), Outlook Calendar, GitHub browser device authorization with manual-token fallback, and read-only IMAP Email polling. The OAuth connectors are code-complete and mock-verified; first live connects still require deployment-owned app registrations. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
 - **Local model guidance (Ollama).** Agent work needs a model that follows note/frontmatter instructions reliably. Verified on Apple Silicon: `devstral` and `phi4` are fast and pass validation; `gpt-oss:20b` and `gemma4:26b` work but are slower (gemma4's Weaver step can approach 2 min). Reasoning models (`deepseek-r1`, thinking-mode Qwen) complete but are slow and their drafts often land in the review lane — usable, not recommended for agents. Very small instruct models may fail Sentinel's section checks; the Inbox review lane catches that safely. Chat completions stream internally, so slow-but-steady generation no longer trips the 120s read window.
-- `AppContext` remains the public compatibility shell, while high-churn vault/capture loading and typed SSE refresh logic are being split into domain hooks. `useGraphInstance` remains the main graph-hook test gap.
+- `AppContext` remains the public compatibility shell, while vault/capture loading, graph navigation/display persistence, typed SSE refresh, custom-agent registry state, and Council streaming/history live in focused domain hooks.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/ROADMAP.md`](docs/ROADMAP.md) for the release plan, [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md) for the current audit, [`docs/VISION.md`](docs/VISION.md) for longer-range direction, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

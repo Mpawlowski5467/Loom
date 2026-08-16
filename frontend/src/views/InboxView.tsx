@@ -522,14 +522,39 @@ export function InboxView(): ReactNode {
   const fileCapture = useCallback(
     (capId: string) => {
       const cap = captures.find((c) => c.id === capId);
-      setCaptureStatus(capId, "done");
+      if (!cap?.suggestion) return;
+      const now = new Date().toISOString();
+      const noteId = `demo_filed_${cap.id}`;
+      appendNote({
+        id: noteId,
+        title: cap.suggestion.title,
+        type: cap.suggestion.type,
+        folder: cap.suggestion.destFolder,
+        tags: cap.suggestion.tags,
+        body: cap.body,
+        links: cap.suggestion.links,
+        history: [
+          {
+            action: "created",
+            by: "agent:weaver",
+            at: now,
+            reason: "Filed from the demo Inbox",
+          },
+        ],
+        created: now,
+        modified: now,
+        status: "active",
+        source: `capture:${cap.id}`,
+      });
+      removeInboxCapture(capId);
       pushToast({
         icon: "🧶",
         agent: "weaver",
-        body: `Filed ${cap?.suggestion?.title ?? "capture"} → ${cap?.suggestion?.destFolder ?? "captures"}/`,
+        body: `Filed ${cap.suggestion.title} → ${cap.suggestion.destFolder}/`,
       });
+      openNote(noteId);
     },
-    [captures, setCaptureStatus, pushToast],
+    [appendNote, captures, openNote, pushToast, removeInboxCapture],
   );
 
   // Apply a committed note to app state + surface the agent-chain toasts.

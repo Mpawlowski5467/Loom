@@ -13,7 +13,9 @@
     "test": "vitest",
     "test:run": "vitest run",
     "test:browser": "playwright test",
-    "benchmark:graph": "playwright test e2e/graph-drag.performance.spec.ts --project=chromium --workers=1"
+    "test:browser:smoke": "playwright test --config playwright.smoke.config.ts",
+    "benchmark:graph": "playwright test e2e/graph-drag.performance.spec.ts --project=chromium --workers=1",
+    "benchmark:vault-ui": "playwright test e2e/large-vault.performance.spec.ts --project=chromium --workers=1"
   },
   "dependencies": {
     "@fontsource-variable/atkinson-hyperlegible-next": "^5.2.6",
@@ -37,6 +39,7 @@
     "sigma": "^3.0.2"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.61.1",
     "@testing-library/jest-dom": "^6.6.3",

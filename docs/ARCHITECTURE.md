@@ -820,7 +820,9 @@ exposes redacted configuration through Settings → Connections.
 
 Google and Outlook are code-complete and mock-verified in the current
 development worktree; their first live connections await user-created OAuth app
-registrations. The general community adapter contract remains planned. **Full
+registrations. A provider-free live-probe CLI and repeatable evidence matrix are
+documented in [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md). The
+general community adapter contract remains planned. **Full
 direction: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
 
 ---
@@ -892,11 +894,12 @@ loom/
 
 ## 12. Roadmap
 
-The implementation roadmap now lives in **[ROADMAP.md](ROADMAP.md)**. It starts
-with the current open-beta release candidate and names its concrete gates:
-single-sourced version UI, port-aware OAuth setup, first real Google/Microsoft
-connections, onboarding-safe container health, a frontend formatting baseline,
-and a clean-checkout release matrix.
+The implementation roadmap now lives in **[ROADMAP.md](ROADMAP.md)**. Automated
+release hardening now includes separate liveness/readiness probes, formatting
+enforcement, semantic agent evaluation, a critical-path accessibility smoke
+test, export/restore drills, large-vault benchmarks, route-level code splitting,
+and a scheduled Linux/macOS/Windows matrix. Real-account Google/Microsoft OAuth
+evidence and an actual green hosted release-matrix run remain external gates.
 
 Longer-range product direction—including the Bridge/plugin contract, Prompt
 Compiler, attachments, and possible multi-user expansion—remains in

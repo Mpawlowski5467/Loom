@@ -23,6 +23,7 @@ from core.providers.openai_compatible import (
     GeminiProvider,
     GroqProvider,
     MistralProvider,
+    MoonshotProvider,
     OpenAICompatibleProvider,
     TogetherProvider,
 )
@@ -39,6 +40,7 @@ _OPENAI_COMPAT_PROVIDERS: dict[str, type[OpenAICompatibleProvider]] = {
     "together": TogetherProvider,
     "mistral": MistralProvider,
     "gemini": GeminiProvider,
+    "moonshot": MoonshotProvider,
 }
 
 

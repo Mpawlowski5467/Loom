@@ -25,6 +25,7 @@ from core.config import (
     GitHubBridgeConfig,
     GlobalConfig,
     LoomSettings,
+    settings,
 )
 from core.notes import parse_note
 from core.vault import VaultManager
@@ -85,6 +86,15 @@ _ISSUE_PAGE = json.dumps(
 
 
 class TestGitHubAdapter:
+    @pytest.mark.asyncio
+    async def test_fetch_account_returns_login(self) -> None:
+        def handler(request: httpx.Request) -> httpx.Response:
+            assert request.url.path == "/user"
+            return httpx.Response(200, json={"login": "octocat"})
+
+        client = _make_client(handler)
+        assert await client.fetch_account() == "octocat"
+
     @pytest.mark.asyncio
     async def test_commits_map_to_items(self) -> None:
         def handler(request: httpx.Request) -> httpx.Response:
@@ -399,6 +409,46 @@ class TestGitHubApi:
         assert body["github"]["token_set"] is False
         assert "token" not in body["github"]
         assert body["status"]["running"] in (True, False)
+
+    def test_browser_oauth_stores_approved_token_encrypted(
+        self, client: TestClient, vault_manager, monkeypatch
+    ) -> None:
+        _init(vault_manager)
+        monkeypatch.setattr(settings, "github_oauth_client_id", "Iv1.test-client")
+        started = {
+            "verification_uri": "https://github.com/login/device",
+            "user_code": "ABCD-EFGH",
+            "expires_in": 900,
+            "interval": 5,
+        }
+        approved = {"status": "connected", "access_token": "ghu_secret", "error": ""}
+        with (
+            patch("api.routers.github_bridge.start_device_flow", return_value=started),
+            patch("api.routers.github_bridge.poll_device_flow", return_value=approved),
+            patch(
+                "api.routers.github_bridge.GitHubClient.fetch_account",
+                return_value="octocat",
+            ),
+        ):
+            response = client.post("/api/automations/github/oauth/start")
+            assert response.status_code == 200
+            assert response.json()["user_code"] == "ABCD-EFGH"
+            response = client.get("/api/automations/github/oauth/status")
+
+        assert response.status_code == 200
+        assert response.json()["status"] == "connected"
+        saved = GlobalConfig.load(vault_manager.config_path()).github
+        assert saved.token == "ghu_secret"
+        assert saved.account == "octocat"
+        assert "ghu_secret" not in vault_manager.config_path().read_text(encoding="utf-8")
+
+    def test_browser_oauth_requires_installation_client_id(
+        self, client: TestClient, vault_manager, monkeypatch
+    ) -> None:
+        _init(vault_manager)
+        monkeypatch.setattr(settings, "github_oauth_client_id", "")
+        response = client.post("/api/automations/github/oauth/start")
+        assert response.status_code == 409
 
     def test_patch_persists_and_encrypts(self, client: TestClient, vault_manager) -> None:
         _init(vault_manager)

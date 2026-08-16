@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import logging
 import os
 import shutil
@@ -11,7 +12,7 @@ import tarfile
 import tempfile
 import threading
 from collections.abc import AsyncIterator
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import yaml
@@ -29,6 +30,7 @@ from core.exceptions import (
     VaultNotFoundError,
 )
 from core.note_index import NoteIndex, get_note_index
+from core.notes import atomic_write_text
 from core.platform import reveal_in_explorer
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, VaultPathError, get_vault_manager
@@ -50,6 +52,7 @@ _MAX_IMPORT_MEMBERS = 50_000
 # Directory swaps are serialized in-process. Hidden deterministic ready/backup
 # paths also let startup repair the only two crash windows in an overwrite.
 _IMPORT_SWAP_LOCK = threading.Lock()
+_BACKUP_STATUS_LOCK = threading.Lock()
 _IMPORT_READY_SUFFIX = ".import-ready"
 _IMPORT_BACKUP_SUFFIX = ".import-backup"
 
@@ -123,6 +126,15 @@ class RenameVaultRequest(BaseModel):
     """Request body for renaming a vault."""
 
     new_name: str
+
+
+class VaultBackupStatus(BaseModel):
+    """Last successful export prepared by Loom for a vault."""
+
+    vault: str
+    last_exported_at: datetime | None = None
+    last_export_size: int | None = None
+    reminder_due: bool = True
 
 
 # -- Endpoints ----------------------------------------------------------------
@@ -359,6 +371,35 @@ async def delete_vault(
         return None
 
 
+@router.get("/{name}/backup-status", response_model=VaultBackupStatus)
+def get_backup_status(
+    name: str,
+    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
+) -> VaultBackupStatus:
+    try:
+        vm.validate_vault_name(name)
+    except InvalidVaultNameError as e:
+        raise HTTPException(status_code=422, detail=str(e)) from e
+    if not vm.vault_exists(name):
+        raise HTTPException(status_code=404, detail=f"Vault not found: {name}")
+    entry = _read_backup_status(vm._settings.loom_home).get(name, {})
+    exported = None
+    raw_exported = entry.get("last_exported_at") if isinstance(entry, dict) else None
+    if isinstance(raw_exported, str):
+        with contextlib.suppress(ValueError):
+            exported = datetime.fromisoformat(raw_exported)
+            if exported.tzinfo is None:
+                exported = exported.replace(tzinfo=UTC)
+    reminder_due = exported is None or datetime.now(UTC) - exported > timedelta(days=30)
+    size = entry.get("last_export_size") if isinstance(entry, dict) else None
+    return VaultBackupStatus(
+        vault=name,
+        last_exported_at=exported,
+        last_export_size=size if isinstance(size, int) else None,
+        reminder_due=reminder_due,
+    )
+
+
 @router.get("/{name}/export")
 @limiter.limit(WRITE_LIMIT)
 def export_vault(
@@ -378,6 +419,7 @@ def export_vault(
     stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     filename = f"{name}-export-{stamp}.tar.gz"
     archive_path = _build_export_archive(source, name, vm._settings.loom_home)
+    _record_backup_status(vm._settings.loom_home, name, archive_path.stat().st_size)
     return FileResponse(
         archive_path,
         media_type="application/gzip",
@@ -552,6 +594,33 @@ def _build_export_archive(source: Path, name: str, temp_root: Path) -> Path:
         _safe_unlink(archive_path)
         raise
     return archive_path
+
+
+def _backup_status_path(loom_home: Path) -> Path:
+    return loom_home / "backup-status.json"
+
+
+def _read_backup_status(loom_home: Path) -> dict[str, dict[str, object]]:
+    try:
+        raw = json.loads(_backup_status_path(loom_home).read_text(encoding="utf-8"))
+        return raw if isinstance(raw, dict) else {}
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+
+def _record_backup_status(loom_home: Path, name: str, size: int) -> None:
+    loom_home.mkdir(parents=True, exist_ok=True)
+    with _BACKUP_STATUS_LOCK:
+        state = _read_backup_status(loom_home)
+        state[name] = {
+            "last_exported_at": datetime.now(UTC).isoformat(),
+            "last_export_size": size,
+        }
+        atomic_write_text(
+            _backup_status_path(loom_home),
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            mark_graph_dirty=False,
+        )
 
 
 def _destination_has_content(dest: Path) -> bool:

@@ -144,6 +144,11 @@ class GitHubClient:
             "pushed_at": data.get("pushed_at") or "",
         }
 
+    async def fetch_account(self) -> str:
+        """Return the login belonging to the connected credential."""
+        data = await self._get_json("/user")
+        return str(data.get("login") or "").strip()
+
     async def fetch_commits(self, repo: str, since_iso: str) -> list[GitHubItem]:
         """Commits on the default branch committed at/after ``since_iso``."""
         data = await self._get_json(

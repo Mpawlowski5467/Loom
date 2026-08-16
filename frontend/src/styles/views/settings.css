@@ -439,6 +439,37 @@
   grid-column: 2;
   grid-row: 1 / span 2;
 }
+
+.settings-provider-usage {
+  margin: 0;
+  padding: 0 2px;
+  color: var(--ink-2);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.settings-provider-usage strong {
+  color: var(--ink);
+}
+
+.settings-advanced {
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: var(--ink-2);
+}
+
+.settings-advanced summary {
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+
+.settings-advanced[open] summary {
+  margin-bottom: 10px;
+}
 .settings-field-hint {
   font-family: var(--font);
   font-size: 11px;
@@ -571,6 +602,17 @@
   word-break: break-all;
 }
 
+.settings-vault-backup {
+  margin-top: 7px;
+  color: var(--ink-2);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
+.settings-vault-backup.due {
+  color: var(--you);
+}
+
 .settings-vault-actions {
   display: flex;
   align-items: center;
@@ -611,6 +653,17 @@
   color: var(--ink);
   font-size: 13px;
   font-weight: 600;
+}
+
+.settings-security-warning {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border-radius: var(--r-md);
+  color: var(--warning);
+  background: var(--warning-bg);
+  font-size: 12.5px;
+  line-height: 1.45;
 }
 
 .settings-about-card {

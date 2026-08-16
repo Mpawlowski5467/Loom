@@ -51,10 +51,10 @@ On first launch a four-step wizard appears. You can re-run it any time from
    below). You can **Skip for now** and add a provider later — but agents,
    search, and graph linking stay offline until you do.
 
-> **Heads up:** provider API keys are encrypted at rest in `config.yaml` (Fernet,
-> under a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth
-> against casual disclosure of the config file, not a substitute for auth, and with
-> no OS-keychain integration yet, so still keep the file private.
+> **Heads up:** provider API keys are encrypted at rest in `config.yaml`. The
+> default Fernet master key lives at `~/.loom/.secret.key`; source installs can
+> install `.[keychain]` and set `LOOM_SECRET_STORAGE=keyring` to migrate it into
+> the OS credential store. This remains defense-in-depth, not API authentication.
 
 ### Choosing a provider
 

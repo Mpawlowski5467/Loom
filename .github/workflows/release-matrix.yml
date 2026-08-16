@@ -41,6 +41,7 @@ jobs:
           pytest
           python -m evals.runner --mode fixture --threshold 0.9
           python scripts/restore_drill.py
+          python scripts/product_release_drill.py
 
       - name: Install frontend
         working-directory: frontend

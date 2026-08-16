@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import pytest
+
 import core.secrets as secrets_mod
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 
 def _fresh_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
@@ -20,6 +20,7 @@ def _fresh_secrets(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     into ``tmp_path``.
     """
     monkeypatch.delenv("LOOM_SECRET_KEY", raising=False)
+    monkeypatch.delenv("LOOM_SECRET_STORAGE", raising=False)
     from core.config import settings
 
     monkeypatch.setattr(settings, "loom_home", tmp_path)
@@ -97,3 +98,75 @@ def test_wrong_key_returns_none(tmp_path: Path, monkeypatch: pytest.MonkeyPatch)
     (tmp_path / ".secret.key").unlink()
     s.reset_cipher_cache()
     assert s.decrypt(token) is None
+
+
+def test_keyring_opt_in_migrates_existing_master_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Explicit keyring mode moves the Fernet key out of the Loom directory."""
+    from cryptography.fernet import Fernet
+
+    s = _fresh_secrets(tmp_path, monkeypatch)
+    key = Fernet.generate_key()
+    key_file = tmp_path / ".secret.key"
+    key_file.write_bytes(key)
+    stored: dict[tuple[str, str], str] = {}
+
+    class FakeKeyring:
+        @staticmethod
+        def get_password(service: str, account: str) -> str | None:
+            return stored.get((service, account))
+
+        @staticmethod
+        def set_password(service: str, account: str, value: str) -> None:
+            stored[(service, account)] = value
+
+    monkeypatch.setenv("LOOM_SECRET_STORAGE", "keyring")
+    monkeypatch.setattr(s, "_keyring_module", lambda: FakeKeyring)
+    s.reset_cipher_cache()
+
+    token = s.encrypt("migrated")
+
+    assert s.decrypt(token) == "migrated"
+    assert not key_file.exists()
+    assert (tmp_path / ".secret.backend").exists()
+    assert stored[(s.KEYRING_SERVICE, s._keyring_account())] == key.decode()
+    assert s.secret_storage_description() == "OS keychain-backed encryption key"
+
+
+def test_keyring_request_falls_back_before_migration(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _fresh_secrets(tmp_path, monkeypatch)
+    monkeypatch.setenv("LOOM_SECRET_STORAGE", "keyring")
+    monkeypatch.setattr(
+        s,
+        "_keyring_module",
+        lambda: (_ for _ in ()).throw(ModuleNotFoundError("keyring")),
+    )
+    s.reset_cipher_cache()
+
+    token = s.encrypt("fallback")
+
+    assert s.decrypt(token) == "fallback"
+    assert (tmp_path / ".secret.key").exists()
+    assert "fallback" in s.secret_storage_description()
+
+
+def test_completed_keyring_migration_never_silently_rotates_key(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    s = _fresh_secrets(tmp_path, monkeypatch)
+    monkeypatch.setenv("LOOM_SECRET_STORAGE", "keyring")
+    (tmp_path / ".secret.backend").write_text("keyring:v1:test\n")
+    monkeypatch.setattr(
+        s,
+        "_keyring_module",
+        lambda: (_ for _ in ()).throw(RuntimeError("locked")),
+    )
+    s.reset_cipher_cache()
+
+    with pytest.raises(RuntimeError, match="keychain is unavailable"):
+        s.encrypt("must-not-use-a-new-key")
+
+    assert not (tmp_path / ".secret.key").exists()

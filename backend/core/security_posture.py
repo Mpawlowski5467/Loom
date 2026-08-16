@@ -5,6 +5,8 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass
 
+from core.secrets import secret_storage_description
+
 DEFAULT_ALLOWED_HOSTS = ("localhost", "127.0.0.1", "*.localhost", "testserver")
 _LOCAL_HOSTS = {*DEFAULT_ALLOWED_HOSTS, "::1", "[::1]"}
 
@@ -32,11 +34,7 @@ def inspect_security_posture(*, api_token: str) -> SecurityPosture:
     allowed_hosts = resolve_allowed_hosts()
     local_only = all(host.lower() in _LOCAL_HOSTS for host in allowed_hosts)
     token_configured = bool(api_token)
-    secret_storage = (
-        "environment-provided encryption key"
-        if os.environ.get("LOOM_SECRET_KEY")
-        else "machine-local encrypted file"
-    )
+    secret_storage = secret_storage_description()
     warnings: list[str] = []
     if not local_only and not token_configured:
         warnings.append(

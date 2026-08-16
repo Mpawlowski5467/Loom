@@ -394,11 +394,11 @@ volume for a bind mount (see the commented line in `docker-compose.yml`).
 `.env.example`). Unset, both stay disabled and Loom is byte-identical without
 them.
 
-> **Note:** Provider API keys are encrypted at rest in `config.yaml` (Fernet, under
-> a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth against
-> casual disclosure of the config file, not a substitute for auth, and with no
-> OS-keychain integration yet. If you pass a key via `.env`, keep it private — it is
-> git-ignored by default.
+> **Note:** Provider API keys are encrypted at rest in `config.yaml`. By default,
+> Fernet uses a machine-local key at `~/.loom/.secret.key`; source installs can
+> install `.[keychain]` and set `LOOM_SECRET_STORAGE=keyring` to migrate that key
+> into the OS credential store. `LOOM_SECRET_KEY` remains the deployment-managed
+> override. This is defense-in-depth, not a substitute for API authentication.
 >
 > **Security:** the published port binds to `127.0.0.1` (this machine only) and the
 > API ships **no auth**. Do not expose it to a LAN/internet without a reverse proxy
@@ -599,16 +599,16 @@ What works today:
 - Note archival shares the edit lock, supports optimistic version checks, and restores the exact original on a failed move
 - Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
 - End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
-- A versioned semantic capture-quality evaluator, critical-path Playwright + accessibility smoke test (onboarding → Inbox → filed note → rename → archive → restore), provider-free restore drill, and 1k/5k/10k vault benchmark
+- A versioned semantic capture-quality evaluator, critical-path Playwright + accessibility smoke test (onboarding → Inbox → filed note → rename → archive → restore), provider-free real-backend recovery/restore drill, 1k/5k/10k backend benchmark, and 5k/10k Chromium UI profile
 - Large vaults initially collapse unseen file-tree folders to avoid creating thousands of DOM rows; major views are split into independently loaded production chunks
 - Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
 
 **Known gaps (deliberate v1 boundaries):**
 - **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
-- **Provider API keys are encrypted at rest** in `config.yaml` (Fernet, machine-local master key) — defense-in-depth, not a substitute for auth; no OS-keychain integration yet
+- **Provider API keys are encrypted at rest** in `config.yaml` using a deployment key, an optional OS-keychain-backed master key, or the machine-local encrypted-file fallback — defense-in-depth, not a substitute for auth
 - **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail), Outlook Calendar, GitHub browser device authorization with manual-token fallback, and read-only IMAP Email polling. The OAuth connectors are code-complete and mock-verified; first live connects still require deployment-owned app registrations. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
 - **Local model guidance (Ollama).** Agent work needs a model that follows note/frontmatter instructions reliably. Verified on Apple Silicon: `devstral` and `phi4` are fast and pass validation; `gpt-oss:20b` and `gemma4:26b` work but are slower (gemma4's Weaver step can approach 2 min). Reasoning models (`deepseek-r1`, thinking-mode Qwen) complete but are slow and their drafts often land in the review lane — usable, not recommended for agents. Very small instruct models may fail Sentinel's section checks; the Inbox review lane catches that safely. Chat completions stream internally, so slow-but-steady generation no longer trips the 120s read window.
-- `AppContext` remains the public compatibility shell, while vault/capture loading, typed SSE refresh, custom-agent registry state, and Council streaming/history live in focused domain hooks. Graph display/navigation remains the largest state slice still owned by the shell.
+- `AppContext` remains the public compatibility shell, while vault/capture loading, graph navigation/display persistence, typed SSE refresh, custom-agent registry state, and Council streaming/history live in focused domain hooks.
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/ROADMAP.md`](docs/ROADMAP.md) for the release plan, [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md) for the current audit, [`docs/VISION.md`](docs/VISION.md) for longer-range direction, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
 

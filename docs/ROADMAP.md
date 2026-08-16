@@ -29,6 +29,12 @@ and measurable beyond unit-test volume. If the connector scope stays intact,
   a temporary multi-vault restore drill verifies archive integrity.
 - Large-vault coverage includes a 1,000-note regression and a provider-free
   1k/5k/10k benchmark. Unseen file-tree folders default closed at 1,000+ notes.
+- A headed Chromium profile exercises 5k/10k graph construction and expanded
+  file-tree behavior; large folders reveal notes in bounded 200-row pages.
+- Graph navigation, selection, filter/display persistence, and camera fly-to
+  state moved out of `AppContext` into a directly tested domain hook.
+- A provider-free real-backend drill exercises durable failure/retry, export,
+  failed-import rollback, restore, and imported-job cleanup through FastAPI.
 - Settings diagnostics expose localhost/custom-host scope, optional API-token
   state, encrypted secret-storage mode, and unsafe-exposure warnings.
 - A manual/monthly GitHub Actions matrix exercises Linux, macOS, and Windows.
@@ -54,20 +60,20 @@ and measurable beyond unit-test volume. If the connector scope stays intact,
 
 ## Next — product reliability and speed
 
-- Profile the real browser at 5k and 10k notes. The collapsed-tree policy bounds
-  first paint, but a virtualized recursive tree is still preferable for folders
-  the user explicitly expands.
+- Track the 5k/10k browser-profile history across representative hardware and
+  tighten budgets once enough samples make the thresholds stable.
 - Extend browser coverage to queue retry, backup download/import, and connector
   reconnect. The deterministic smoke now covers note rename/archive/restore and
   a visible provider failure; a real-backend version remains part of the clean
   release drill.
-- Continue splitting `AppContext`; graph display/navigation remains the
-  highest-value ownership seam.
+- Continue splitting `AppContext`; shell layout, modal, and toast ownership are
+  the next useful seams after graph display/navigation moved out.
 - Tune Scribe phrasing and broaden Sentinel's AI-assisted validation corpus with
   anonymized real captures. Keep the deterministic evaluator versioned as
   prompts and schemas change.
-- Add an optional OS-keychain backend with explicit migration and fallback from
-  the current Fernet-encrypted config values.
+- Validate the optional OS-keychain backend across native macOS, Windows, and a
+  Linux Secret Service session; encrypted-file fallback and migration behavior
+  are covered deterministically in CI.
 
 ## Later — open ecosystem
 

@@ -53,6 +53,9 @@ jobs:
       - name: Run vault export/restore drill
         run: cd backend && python scripts/restore_drill.py
 
+      - name: Run product release drill
+        run: cd backend && python scripts/product_release_drill.py
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

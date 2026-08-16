@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { CSSProperties, ReactNode } from "react";
 import { Dot } from "../../primitives/Dot";
 import { notePathOf } from "../../../api/notes";
@@ -8,6 +9,7 @@ import {
 } from "./treeModel";
 
 const INDENT_STEP = 12;
+export const TREE_NOTE_PAGE_SIZE = 200;
 
 /** Depth → left-indent, exposed as the ``--indent`` custom property the tree
  * CSS folds into each row's left padding. */
@@ -86,12 +88,15 @@ function RenameInput(props: {
  */
 export function FolderSection(props: FolderSectionProps): ReactNode {
   const { node, depth, interaction } = props;
+  const [visibleNotes, setVisibleNotes] = useState(TREE_NOTE_PAGE_SIZE);
   const open = props.filterActive || props.isExpanded(node.path);
   const isDropping = props.dropTarget === node.path;
   const folderEditable = !RESERVED_FOLDERS.has(node.path);
   const renaming = interaction?.kind === "rename" ? interaction : null;
   const folderRenaming = renaming?.path === node.path;
   const childDepth = depth + 1;
+  const shownNotes = node.notes.slice(0, visibleNotes);
+  const hiddenNotes = Math.max(0, node.notes.length - shownNotes.length);
 
   return (
     <div
@@ -157,7 +162,7 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
       )}
 
       {open &&
-        node.notes.map((n) => {
+        shownNotes.map((n) => {
           const notePath = notePathOf(n);
           const rowRenaming = renaming?.path === notePath;
           return rowRenaming && renaming ? (
@@ -201,6 +206,20 @@ export function FolderSection(props: FolderSectionProps): ReactNode {
             </button>
           );
         })}
+
+      {open && hiddenNotes > 0 && (
+        <button
+          type="button"
+          className="tree-show-more"
+          style={indentStyle(childDepth)}
+          onClick={() =>
+            setVisibleNotes((count) => count + TREE_NOTE_PAGE_SIZE)
+          }
+        >
+          Show {Math.min(hiddenNotes, TREE_NOTE_PAGE_SIZE)} more notes
+          <span>{hiddenNotes} remaining</span>
+        </button>
+      )}
     </div>
   );
 }

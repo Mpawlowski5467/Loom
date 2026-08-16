@@ -23,16 +23,18 @@ passes.
 | Check | Result |
 |---|---|
 | `ruff check backend/` | Pass |
-| `ruff format --check backend/` | Pass — 235 files |
-| `mypy .` | Pass — 143 source files |
-| `pytest -q` | Pass — 1,255 tests |
+| `ruff format --check backend/` | Pass — 237 files |
+| `mypy .` | Pass — 144 source files |
+| `pytest -q` | Pass — 1,260 tests |
 | deterministic semantic evaluation | Pass — 1.0 score, 0.9 gate |
 | temporary multi-vault restore drill | Pass — SHA-256 integrity verified |
+| real-backend product release drill | Pass — retry, rollback, export/import |
 | 1k/5k/10k metadata + graph benchmark | Pass — 0.60s / 3.02s / 6.08s locally |
+| 5k/10k Chromium UI profile | Pass — 9.1s / 19.9s locally |
 | `python -m pip check` | Pass |
 | `npm run lint` | Pass |
 | `npm run format:check` | Pass |
-| `npm run test:run` | Pass — 848 tests across 100 files |
+| `npm run test:run` | Pass — 861 tests across 105 files |
 | `npm run build` | Pass — route chunks, no bundle warning |
 | critical Playwright + axe smoke | Pass — 2 browser tests |
 | full and production-only npm audit | Pass — 0 vulnerabilities |
@@ -67,8 +69,11 @@ makes that warning an error.
 - Failed capture jobs expose recovery categories and recommended actions.
 - Successful vault exports update a visible last-backup/reminder signal; a real
   temporary export/restore drill gates CI.
+- A second provider-free drill runs the public FastAPI routes for durable-job
+  retry, failed-overwrite rollback, export/import, and imported-job cleanup.
 - Major frontend surfaces are code-split, custom-agent/Council state moved into
-  tested hooks, and large vaults avoid eagerly rendering every note row.
+  tested hooks, graph navigation/display lives in a focused hook, and expanded
+  large-vault folders reveal notes in bounded pages.
 - Settings diagnostics report allowed hosts, local/custom network scope,
   API-token state, encrypted secret-storage mode, and exposure warnings.
 - Patched frontend tooling resolves the advisories discovered during this run.
@@ -77,8 +82,9 @@ makes that warning an error.
 
 ## Deliberate boundaries
 
-- Secrets remain Fernet-encrypted with a machine-local key (or an externally
-  supplied `LOOM_SECRET_KEY`). This is defense-in-depth, not OS-keychain storage.
+- Secrets remain Fernet-encrypted using a machine-local key, an optional
+  OS-keychain-backed master key, or an externally supplied `LOOM_SECRET_KEY`.
+  This is defense-in-depth, not application authentication.
 - The API is a single-user localhost service. `LOOM_API_TOKEN` is a shared-token
   speed bump, not multi-user authentication; network exposure requires an
   authenticated TLS reverse proxy.

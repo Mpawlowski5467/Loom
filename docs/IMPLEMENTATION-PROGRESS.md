@@ -2,7 +2,7 @@
 
 Scope: implement the actionable recommendations in the September 5 project review, preserving the existing PR #31 work. Public plugins, hosted multi-user operation, and additional themes remain intentionally deferred as recommended. Live OAuth consent requires user-owned accounts; no mocked check will be reported as live validation.
 
-Working branch: `codex/review-improvements`, based on `8d00307` (includes local main and the four unmerged release commits).
+Implementation commit: `8d64bba`, based on `8d00307` and now on local `main`. All four existing PR #31 release commits are retained in its ancestry.
 
 - [x] Correct editor draft loss, conflict recovery, tags and link completion.
 - [x] Resolve slug/title/path/alias links consistently, including ambiguity and heading navigation.
@@ -20,7 +20,7 @@ Working branch: `codex/review-improvements`, based on `8d00307` (includes local 
 - [x] Consolidate capture lifecycle code and update architecture/docs to shipped behavior.
 - [x] Pin runtimes, make optional services optional dependencies, patch dependency audit findings.
 - [x] Add actual-backend browser workflows, perform release checks and record evidence.
-- [ ] Consolidate finished branches without losing work; report any external release gates.
+- [x] Consolidate finished local branches without losing work; report the remaining remote PR and external release gates.
 
 Each checkbox requires implementation and relevant verification. Subtasks use bounded sessions and targeted checks; complete suites run at integration milestones.
 
@@ -52,6 +52,7 @@ Each checkbox requires implementation and relevant verification. Subtasks use bo
 | npm audit | 0 advisories, including development dependencies |
 | pip dependency consistency | Passed |
 | Docker Compose configuration | Passed |
+| Visual inspection | Thread, Today, and Quick Capture inspected; reader recovery controls aligned |
 
 The synthetic 1,000-note profile used 10 KiB bodies and actual in-process API calls. Metadata pages plus graph and one selected body transferred **584,532 bytes**, versus **10,756,913 bytes** for full bodies (94.6% less). Local elapsed time was **445.07 ms** versus **413.28 ms**; this establishes payload reduction, not a speed improvement. The reusable probe is `backend/scripts/metadata_profile.py`.
 
@@ -69,4 +70,11 @@ One initial profiling attempt incorrectly invoked normal application startup. It
 
 ## Repository cleanup
 
-Pending final integration commit and local branch consolidation. The existing PR #31 commits are ancestors of this work and will be retained. Remote PR #31 remains open and is not yet merged into `origin/main`; remote publication is separate from local implementation and cleanup.
+Local `main` was fast-forwarded to the completed implementation. Both local working branches were then deleted with Git's merged-branch check:
+
+- `codex/review-improvements`
+- `codex/account-connections-and-release-hardening`
+
+There is one worktree, no stashes, and no other local branches. No commits were discarded. Nothing was pushed or published.
+
+The GitHub branch `codex/account-connections-and-release-hardening` remains because [PR #31](https://github.com/Mpawlowski5467/Loom/pull/31) is still open and its commits are not on `origin/main`. Local cleanup is complete; deleting that remote branch remains tied to resolving the open PR. The implementation and earlier release work are all preserved on local `main`.

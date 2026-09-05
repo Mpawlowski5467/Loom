@@ -17,6 +17,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from agents.loom.pipeline_graph import build_pipeline_graph
+from agents.runner import AgentRunner, PipelineResult
 from agents.shuttle.graph_runtime import run_scope
 from core.traces import get_trace_store
 
@@ -58,6 +59,30 @@ def _install_agents(monkeypatch, *, weaver, sentinel, spider=None, scribe=None):
     monkeypatch.setattr(sentinel_mod, "get_sentinel", lambda: sentinel)
 
 
+def test_runner_marks_publication_recovery_as_reviewable(monkeypatch, tmp_path: Path) -> None:
+    """The public runner result never reports a recovered source as filed."""
+    from agents.loom import enforcement
+
+    monkeypatch.setattr(
+        enforcement,
+        "enforce_verdict",
+        lambda *args, **kwargs: enforcement.EnforcementOutcome(
+            capture_archived=False,
+            review_required=True,
+            reasons=["Publication could not be completed; source restored"],
+        ),
+    )
+    runner = AgentRunner(tmp_path)
+    result = PipelineResult()
+
+    runner._enforce_into_result(tmp_path / "capture.md", None, None, result)
+
+    assert result.capture_archived is False
+    assert result.review_required is True
+    assert result.success is False
+    assert result.errors == ["Publication could not be completed; source restored"]
+
+
 class TestPipelineGraphStructure:
     @pytest.mark.asyncio
     async def test_happy_path_runs_all_steps_once(self, monkeypatch) -> None:
@@ -73,7 +98,7 @@ class TestPipelineGraphStructure:
             final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
             steps = [s.name for s in rec.steps]
 
-        assert steps == ["weaver", "sentinel", "spider", "scribe", "enforce"]
+        assert steps == ["weaver", "sentinel", "enforce", "spider", "scribe"]
         assert final["capture_archived"] is True
         # Weaver ran exactly once (no retry on a passed verdict).
         assert weaver.process_capture_full.call_count == 1
@@ -95,6 +120,56 @@ class TestPipelineGraphStructure:
         assert steps == ["weaver"]
         assert final.get("note") is None
         runner._enforce_verdict.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_enforcement_refreshes_published_note_before_scribe_without_spider(
+        self, monkeypatch
+    ) -> None:
+        weaver = MagicMock()
+        weaver.process_capture_full = AsyncMock(return_value=(_note(), _STUB_CHAIN))
+        sentinel = MagicMock()
+        sentinel.validate_action = AsyncMock(return_value=_verdict("passed"))
+        events: list[str] = []
+        scribe = MagicMock()
+        scribe.update_index = AsyncMock(side_effect=lambda _: events.append("scribe"))
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel, spider=None, scribe=scribe)
+
+        runner = _fake_runner()
+        graph = build_pipeline_graph(runner, refresh_index=lambda _: events.append("refresh"))
+        async with run_scope("pipeline"):
+            final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+
+        assert final["capture_archived"] is True
+        assert events == ["refresh", "scribe"]
+
+    @pytest.mark.asyncio
+    async def test_enforcement_refreshes_rejected_draft_and_surfaces_recovery_error(
+        self, monkeypatch
+    ) -> None:
+        weaver = MagicMock()
+        weaver.process_capture_full = AsyncMock(return_value=(_note(), _STUB_CHAIN))
+        sentinel = MagicMock()
+        sentinel.validate_action = AsyncMock(return_value=_verdict("passed"))
+        _install_agents(monkeypatch, weaver=weaver, sentinel=sentinel)
+        runner = _fake_runner()
+        runner._enforce_verdict = MagicMock(
+            return_value={
+                "capture_archived": False,
+                "review_required": True,
+                "flagged": False,
+                "errors": ["Publication could not be completed; source restored"],
+            }
+        )
+        refresh = MagicMock()
+        graph = build_pipeline_graph(runner, refresh_index=refresh)
+        async with run_scope("pipeline") as rec:
+            final = await graph.ainvoke({"capture_path": "/tmp/vault/threads/captures/c.md"})
+
+        assert [step.name for step in rec.steps] == ["weaver", "sentinel", "enforce"]
+        assert final["capture_archived"] is False
+        assert final["review_required"] is True
+        assert final["errors"][-1] == "Publication could not be completed; source restored"
+        refresh.assert_called_once_with(Path("/tmp/vault/threads/topics/n.md"))
 
 
 class TestSentinelRetryLoop:
@@ -120,9 +195,9 @@ class TestSentinelRetryLoop:
             "sentinel",
             "weaver-retry",
             "sentinel",
+            "enforce",
             "spider",
             "scribe",
-            "enforce",
         ]
         assert weaver.process_capture_full.call_count == 2
         assert sentinel.validate_action.call_count == 2

@@ -14,7 +14,7 @@ def _setup_vault(tmp_path: Path) -> Path:
     root.mkdir()
 
     # vault.yaml
-    vault_config = {"name": "test", "custom_folders": [], "auto_git": False}
+    vault_config = {"name": "test", "custom_folders": []}
     (root / "vault.yaml").write_text(yaml.safe_dump(vault_config), encoding="utf-8")
 
     # rules/prime.md
@@ -242,7 +242,6 @@ def _setup_full_vault(tmp_path: Path) -> Path:
     vault_config = {
         "name": "integration-test",
         "custom_folders": ["research"],
-        "auto_git": False,
     }
     (root / "vault.yaml").write_text(yaml.safe_dump(vault_config), encoding="utf-8")
 

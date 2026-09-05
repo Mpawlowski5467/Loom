@@ -119,6 +119,9 @@ def initialize_vault_runtime(
     if not vault_dir.exists():
         return
     threads_dir = vault_dir / "threads"
+    from core.revisions import recover
+
+    recover(vault_dir)
     (note_index or get_note_index()).build(threads_dir)
     init_vector_index(vault_dir)
     init_agents(vault_dir)

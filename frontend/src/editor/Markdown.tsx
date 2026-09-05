@@ -7,6 +7,8 @@ import type { Pluggable } from "unified";
 import { Wikilink } from "../components/primitives/Wikilink";
 import { walkHeadings } from "./renderMarkdown";
 import type { HastNode } from "./renderMarkdown";
+import { useApp } from "../context/app-ctx";
+import { apiUrl } from "../api/client";
 
 /* ── remark plugin: [[wikilink]] / [[target|label]] → <loom-wikilink> ── */
 
@@ -74,24 +76,92 @@ function remarkWikilink() {
  * DOM match the Thread outline built by ``extractHeadings`` exactly (see
  * ``renderMarkdown.tsx``).
  */
-function rehypeHeadingIds() {
+function rehypeHeadingIds(options?: { prefix?: string }) {
   return (tree: HastNode): void =>
     walkHeadings(tree, { n: 0 }, (node, id) => {
       node.properties = node.properties ?? {};
       if (node.properties.id == null) {
-        node.properties.id = id;
+        node.properties.id = `${options?.prefix ?? ""}${id}`;
       }
     });
 }
 
 /* ── components ── */
 
-const components = {
-  a: ({ href, children }: { href?: string; children?: ReactNode }) => (
+function decodeFragment(value: string): string {
+  try {
+    return decodeURIComponent(value);
+  } catch {
+    return value;
+  }
+}
+
+function documentTarget(href: string, folder: string): string {
+  const decoded = decodeFragment(href);
+  if (!decoded.startsWith("./") && !decoded.startsWith("../"))
+    return decoded.replace(/^\//, "");
+  const parts = folder
+    .replace(/^threads\//, "")
+    .split("/")
+    .filter(Boolean);
+  for (const part of decoded.split("/")) {
+    if (part === "..") parts.pop();
+    else if (part !== ".") parts.push(part);
+  }
+  return parts.join("/");
+}
+
+function DocumentLink({
+  href,
+  children,
+}: {
+  href?: string;
+  children?: ReactNode;
+}) {
+  const { currentNoteId, openNote, noteById } = useApp();
+  if (href?.startsWith("/api/imports/files/"))
+    return (
+      <a href={apiUrl(href)} target="_blank" rel="noreferrer noopener">
+        {children}
+      </a>
+    );
+  if (href?.startsWith("#") && currentNoteId) {
+    return (
+      <a
+        href={href}
+        onClick={(event) => {
+          event.preventDefault();
+          openNote(currentNoteId, decodeFragment(href.slice(1)));
+        }}
+      >
+        {children}
+      </a>
+    );
+  }
+  if (
+    href &&
+    !/^[a-z][a-z0-9+.-]*:|^\/\//i.test(href) &&
+    /\.md(?:#|$)/i.test(href)
+  ) {
+    return (
+      <Wikilink
+        target={documentTarget(
+          href,
+          currentNoteId ? (noteById(currentNoteId)?.folder ?? "") : "",
+        )}
+        label={typeof children === "string" ? children : undefined}
+      />
+    );
+  }
+  return (
     <a href={href} target="_blank" rel="noreferrer noopener">
       {children}
     </a>
-  ),
+  );
+}
+
+const components = {
+  a: DocumentLink,
   "loom-wikilink": ({ target, label }: { target?: string; label?: string }) => (
     <Wikilink target={target ?? ""} label={label ? label : undefined} />
   ),
@@ -109,15 +179,27 @@ const REHYPE_PLUGINS: Pluggable[] = [
 export function Markdown({
   source,
   bodyClass,
+  headingIdPrefix,
 }: {
   source: string;
   bodyClass?: string;
+  headingIdPrefix?: string;
 }): ReactElement {
   return (
     <div className={bodyClass}>
       <ReactMarkdown
         remarkPlugins={REMARK_PLUGINS}
-        rehypePlugins={REHYPE_PLUGINS}
+        rehypePlugins={
+          headingIdPrefix
+            ? [
+                [
+                  rehypeHeadingIds,
+                  { prefix: headingIdPrefix },
+                ] as unknown as Pluggable,
+                rehypeHighlight,
+              ]
+            : REHYPE_PLUGINS
+        }
         components={components}
       >
         {source}

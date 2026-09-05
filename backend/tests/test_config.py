@@ -30,6 +30,13 @@ class TestSchemaVersion:
         path.write_text("name: notes\n")
         assert VaultConfig.load(path).schema_version == 1
 
+    def test_vault_ignores_legacy_auto_git_setting(self, tmp_path: Path) -> None:
+        path = tmp_path / "vault.yaml"
+        path.write_text("name: notes\nauto_git: true\n")
+        config = VaultConfig.load(path)
+        assert config.name == "notes"
+        assert "auto_git" not in config.model_dump()
+
     def test_global_round_trips(self, tmp_path: Path) -> None:
         path = tmp_path / "config.yaml"
         GlobalConfig(schema_version=1).save(path)

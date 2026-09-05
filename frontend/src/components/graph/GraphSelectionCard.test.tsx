@@ -82,4 +82,20 @@ describe("GraphSelectionCard", () => {
     await user.click(toggle);
     expect(onNeighborsOnlyChange).toHaveBeenCalledWith(false);
   });
+
+  it("offers keyboard-reachable evidence actions for connected notes", async () => {
+    const user = userEvent.setup();
+    const onInspectConnection = vi.fn();
+    renderCard({
+      connections: [{ id: "search", title: "Search" }],
+      onInspectConnection,
+    });
+
+    await user.click(screen.getByText("Inspect connection evidence"));
+    await user.click(
+      screen.getByRole("button", { name: "Evidence for Search" }),
+    );
+
+    expect(onInspectConnection).toHaveBeenCalledWith("search");
+  });
 });

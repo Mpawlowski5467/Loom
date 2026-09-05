@@ -1341,6 +1341,10 @@ class CaptureJobWorker:
                 or worker_index >= self.policy.concurrency
             ):
                 return None
+            from core.automation_policy import automation_is_paused
+
+            if automation_is_paused(self.vault_root):
+                return None
             return await asyncio.to_thread(self.store.claim_next)
 
     async def _run_worker(self, worker_index: int) -> None:

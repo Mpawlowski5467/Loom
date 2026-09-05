@@ -4,8 +4,7 @@ Models the full capture→note pipeline:
 
     weaver → sentinel → (conditional)
                   ├─ failed & not retried → weaver (retry once)
-                  ├─ passed/warning       → spider → scribe → enforce → END
-                  └─ unavailable/other    → enforce → END
+                  └─ any other verdict    → enforce → (published → spider → scribe) → END
 
 Each node wraps an existing Loom agent method (logic is reused, not rewritten)
 and runs inside a :func:`step` scope so its LLM calls are attributed to the
@@ -63,6 +62,8 @@ class PipelineState(TypedDict, total=False):
     capture_archived: bool
     review_required: bool
     flagged: bool
+    source_coverage: dict[str, Any]
+    oversized_source: dict[str, Any]
 
 
 def build_pipeline_graph(
@@ -86,6 +87,8 @@ def build_pipeline_graph(
     async def weaver_node(state: PipelineState) -> PipelineState:
         attempts = state.get("weaver_attempts", 0)
         errors = list(state.get("errors", []))
+        from agents.loom.weaver_llm import SourceTooLargeError
+
         # The prior attempt's note (set on a Sentinel-retry). Retired below once
         # the retry produces a replacement, so one capture never leaves two
         # active notes both tagged source: capture:<id>.
@@ -101,6 +104,20 @@ def build_pipeline_graph(
                 return {"note": None, "errors": errors, "weaver_attempts": attempts + 1}
             try:
                 note, chain = await weaver.process_capture_full(_resolve(state["capture_path"]))
+            except SourceTooLargeError as exc:
+                logger.warning("Capture source is over the Weaver extraction limit")
+                coverage = exc.coverage.to_dict()
+                message = str(exc)
+                errors.append(message)
+                record.status = "error"
+                record.error = message
+                return {
+                    "note": None,
+                    "errors": errors,
+                    "weaver_attempts": attempts + 1,
+                    "source_coverage": coverage,
+                    "oversized_source": coverage,
+                }
             except Exception as exc:  # pragma: no cover - defensive
                 logger.warning("Weaver failed during pipeline run", exc_info=True)
                 message = f"Weaver failed: {exc}"
@@ -136,6 +153,10 @@ def build_pipeline_graph(
             "note_path": note.file_path,
             "weaver_attempts": attempts + 1,
             "errors": errors,
+            "source_coverage": dict(getattr(note, "extra", {}).get("source_coverage") or {})
+            if isinstance(getattr(note, "extra", {}).get("source_coverage"), dict)
+            else {},
+            "oversized_source": {},
         }
 
     async def spider_node(state: PipelineState) -> PipelineState:
@@ -145,10 +166,8 @@ def build_pipeline_graph(
         async with step("spider", caller="spider") as record:
             spider = get_spider()
             try:
-                # The draft is indexed only after Sentinel explicitly approves
-                # it. Failed/unavailable drafts never reach this node.
-                if refresh_index is not None:
-                    refresh_index(_resolve(state["note_path"]))
+                # Enforcement has already published this accepted draft. Failed
+                # and unavailable drafts never reach this node.
                 if spider is not None:
                     report = await spider.scan_and_report(_resolve(state["note_path"]))
                     linked = list(report.auto_linked)
@@ -246,6 +265,8 @@ def build_pipeline_graph(
         """
         if state.get("note") is not None:
             return "sentinel"
+        if state.get("oversized_source"):
+            return "enforce"
         if state.get("weaver_attempts", 0) > 1 and state.get("note_path"):
             return "enforce"
         return "end"
@@ -256,9 +277,13 @@ def build_pipeline_graph(
         verdict = validation.status if validation else ""
         if verdict == "failed" and state.get("weaver_attempts", 0) <= _MAX_WEAVER_RETRIES:
             return "weaver"
-        if verdict in {"passed", "warning"}:
-            return "spider"
         return "enforce"
+
+    def route_after_enforce(state: PipelineState) -> str:
+        """Run downstream mutations only after enforcement publishes a draft."""
+        if state.get("capture_archived") and not state.get("review_required"):
+            return "spider"
+        return "end"
 
     async def enforce_node(state: PipelineState) -> PipelineState:
         """Sentinel enforcement: archive unless failed; annotate accordingly."""
@@ -270,6 +295,26 @@ def build_pipeline_graph(
                 state.get("validation"),
                 errors,
             )
+            enforcement_errors = list(flags.get("errors", []))
+            if enforcement_errors:
+                errors.extend(enforcement_errors)
+            # Refresh immediately after enforcement, before Spider/Scribe. This
+            # publishes an accepted note even if Spider is disabled and removes
+            # a rejected/pending draft from an index that a watcher had seen.
+            if refresh_index is not None and state.get("note_path"):
+                refresh_index(_resolve(state["note_path"]))
+            coverage = state.get("source_coverage")
+            # Publication recovery restores the Inbox source byte-for-byte.
+            # Do not follow that recovery with an otherwise benign coverage
+            # annotation that would turn its pristine source into a new draft.
+            if coverage and not enforcement_errors:
+                from agents.loom.enforcement import annotate_frontmatter
+
+                annotate_frontmatter(
+                    runner._vault_root,
+                    _resolve(state["capture_path"]),
+                    {"source_coverage": coverage},
+                )
         return {
             "errors": errors,
             "capture_archived": flags["capture_archived"],
@@ -292,9 +337,13 @@ def build_pipeline_graph(
     graph.add_conditional_edges(
         "sentinel",
         route_after_sentinel,
-        {"weaver": "weaver", "spider": "spider", "enforce": "enforce"},
+        {"weaver": "weaver", "enforce": "enforce"},
+    )
+    graph.add_conditional_edges(
+        "enforce",
+        route_after_enforce,
+        {"spider": "spider", "end": END},
     )
     graph.add_edge("spider", "scribe")
-    graph.add_edge("scribe", "enforce")
-    graph.add_edge("enforce", END)
+    graph.add_edge("scribe", END)
     return graph.compile()

@@ -822,6 +822,56 @@ class AgentModelOverride(BaseModel):
     chat_model: str | None = None
 
 
+class AutomationPolicyConfig(BaseModel):
+    """Guardrails for unattended imports and cloud provider calls.
+
+    Zero limits mean "unlimited" so existing installations retain their
+    behavior until an operator opts into a limit.
+    """
+
+    paused: bool = False
+    per_source_daily_capture_limit: int = Field(default=0, ge=0, le=1_000_000)
+    daily_token_limit: int = Field(default=0, ge=0, le=10_000_000_000)
+    excluded_cloud_folders: list[str] = Field(default_factory=list, max_length=100)
+    excluded_cloud_tags: list[str] = Field(default_factory=list, max_length=100)
+    retain_raw_traces: bool = False
+    # Optional operator-supplied prices per one thousand tokens. Loom never
+    # invents a price when this mapping has no entry for a provider.
+    provider_prices_per_1k: dict[str, float] = Field(default_factory=dict)
+
+    @field_validator("provider_prices_per_1k")
+    @classmethod
+    def valid_prices(cls, values: dict[str, float]) -> dict[str, float]:
+        from math import isfinite
+
+        if any(not isfinite(price) or price < 0 for price in values.values()):
+            raise ValueError("Provider prices must be finite, nonnegative amounts")
+        return values
+
+    def model_post_init(self, __context: Any) -> None:
+        self.excluded_cloud_folders = _normalise_policy_values(self.excluded_cloud_folders)
+        self.excluded_cloud_tags = _normalise_policy_values(self.excluded_cloud_tags)
+        self.provider_prices_per_1k = {
+            str(name).strip().lower(): price
+            for name, price in self.provider_prices_per_1k.items()
+            if str(name).strip() and price >= 0
+        }
+
+
+def _normalise_policy_values(values: list[str]) -> list[str]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for raw in values:
+        value = raw.strip().strip("/").lower()
+        if not value or value in seen:
+            continue
+        if len(value) > 200:
+            raise ValueError("policy entries must be at most 200 characters")
+        seen.add(value)
+        normalized.append(value)
+    return normalized
+
+
 class OnboardingState(BaseModel):
     """Server-side onboarding gate.
 
@@ -847,6 +897,7 @@ class GlobalConfig(BaseModel):
     chat_provider: str | None = None
     rate_limit: RateLimitConfig = Field(default_factory=RateLimitConfig)
     capture_processing: CaptureProcessingConfig = Field(default_factory=CaptureProcessingConfig)
+    automation_policy: AutomationPolicyConfig = Field(default_factory=AutomationPolicyConfig)
     standup_schedule: StandupScheduleConfig = Field(default_factory=StandupScheduleConfig)
     calendar: CalendarBridgeConfig = Field(default_factory=CalendarBridgeConfig)
     github: GitHubBridgeConfig = Field(default_factory=GitHubBridgeConfig)
@@ -961,6 +1012,7 @@ class GlobalConfig(BaseModel):
             default_provider=self.default_provider,
             providers={name: cfg.to_public() for name, cfg in self.providers.items()},
             capture_processing=self.capture_processing,
+            automation_policy=self.automation_policy,
             standup_schedule=self.standup_schedule,
             calendar=self.calendar.to_public(),
             github=self.github.to_public(),
@@ -979,6 +1031,7 @@ class GlobalConfigPublic(BaseModel):
     default_provider: str
     providers: dict[str, ProviderConfigPublic]
     capture_processing: CaptureProcessingConfig
+    automation_policy: AutomationPolicyConfig
     standup_schedule: StandupScheduleConfig
     calendar: CalendarBridgeConfigPublic
     github: GitHubBridgeConfigPublic
@@ -998,7 +1051,6 @@ class VaultConfig(BaseModel):
     )
     name: str
     custom_folders: list[str] = []
-    auto_git: bool = False
     memory_summarize_cadence: int = Field(
         default=20,
         description="Number of agent actions between memory summarizations",

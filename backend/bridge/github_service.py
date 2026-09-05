@@ -238,7 +238,11 @@ class GitHubSyncService:
         while not self._stop.is_set():
             config = GlobalConfig.load(settings.config_path)
             interval_s = max(5, config.github.interval_minutes) * 60
-            if config.github.enabled and config.github.repos:
+            if (
+                not config.automation_policy.paused
+                and config.github.enabled
+                and config.github.repos
+            ):
                 try:
                     result = await sync_github()
                     self._last_run = result["synced_at"]

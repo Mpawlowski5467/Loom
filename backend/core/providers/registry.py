@@ -59,6 +59,8 @@ def _agents_for_caller(caller: str) -> tuple[str, ...]:
 
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     from pydantic import BaseModel
 
 _CONFIG_MODEL_MAP: dict[str, type[BaseModel]] = {
@@ -377,6 +379,7 @@ class TracedProvider(BaseProvider):
         messages: list[dict[str, Any]],
         system: str = "",
     ) -> str:
+        vault_root = self._usage_vault()
         start = time.perf_counter()
         response_text = ""
         error_text = ""
@@ -386,13 +389,16 @@ class TracedProvider(BaseProvider):
         for a in pulsing:
             activity.begin(a)
         self._call_start()
+
+        async def attempt() -> str:
+            self._reserve_budget(messages, system, vault_root)
+            return await self._inner.chat(messages=messages, system=system)
+
         try:
             if self._should_retry():
-                response_text = await with_retry(
-                    lambda: self._inner.chat(messages=messages, system=system)
-                )
+                response_text = await with_retry(attempt)
             else:
-                response_text = await self._inner.chat(messages=messages, system=system)
+                response_text = await attempt()
             return response_text
         except Exception as exc:
             error_text = str(exc)
@@ -408,6 +414,7 @@ class TracedProvider(BaseProvider):
                 error_text=error_text,
                 duration_ms=int((time.perf_counter() - start) * 1000),
                 caller=caller,
+                vault_root=vault_root,
             )
 
     async def chat_stream(
@@ -420,6 +427,7 @@ class TracedProvider(BaseProvider):
         Accumulates chunks for the trace record so streamed calls still show
         up in ``/api/traces`` with the full assembled response after close.
         """
+        vault_root = self._usage_vault()
         start = time.perf_counter()
         chunks: list[str] = []
         error_text = ""
@@ -440,6 +448,7 @@ class TracedProvider(BaseProvider):
             content has been delivered, we never replay: re-running a
             half-delivered stream would double-count tokens.
             """
+            self._reserve_budget(messages, system, vault_root)
             iterator = self._inner.chat_stream(messages=messages, system=system).__aiter__()
             try:
                 first = await iterator.__anext__()
@@ -472,14 +481,21 @@ class TracedProvider(BaseProvider):
                 error_text=error_text,
                 duration_ms=int((time.perf_counter() - start) * 1000),
                 caller=caller,
+                vault_root=vault_root,
             )
 
     async def embed(self, text: str) -> list[float]:
+        vault_root = self._usage_vault()
         self._call_start()
+
+        async def attempt() -> list[float]:
+            self._reserve_budget([], text, vault_root)
+            return await self._inner.embed(text)
+
         try:
             if self._should_retry():
-                return await with_retry(lambda: self._inner.embed(text))
-            return await self._inner.embed(text)
+                return await with_retry(attempt)
+            return await attempt()
         finally:
             self._call_end()
 
@@ -503,6 +519,7 @@ class TracedProvider(BaseProvider):
         error_text: str,
         duration_ms: int,
         caller: str,
+        vault_root: Path,
     ) -> None:
         model = (
             getattr(self._inner, "_chat_model", None)
@@ -510,19 +527,53 @@ class TracedProvider(BaseProvider):
             or ""
         )
         try:
+            policy = GlobalConfig.load(settings.config_path).automation_policy
+            from core.tokens import count_tokens
+            from core.usage import UsageLedger
+
+            if response_text:
+                UsageLedger(vault_root).record_output(
+                    self._provider_name, count_tokens(response_text)
+                )
             get_trace_store().add(
                 TraceRecord(
                     provider=self._provider_name,
                     model=str(model),
-                    messages=list(messages),
-                    system=system,
-                    response=response_text,
+                    messages=list(messages) if policy.retain_raw_traces else [],
+                    system=system if policy.retain_raw_traces else "",
+                    response=response_text if policy.retain_raw_traces else "",
                     duration_ms=duration_ms,
-                    error=error_text,
+                    error=error_text
+                    if policy.retain_raw_traces
+                    else "Provider call failed (details withheld)"
+                    if error_text
+                    else "",
                     caller=caller,
                     run_id=get_run(),
                     step=get_step(),
+                    content_retained=policy.retain_raw_traces,
                 )
             )
         except Exception:  # pragma: no cover - tracing must never break a chat call
             logger.debug("Failed to record trace", exc_info=True)
+
+    @staticmethod
+    def _usage_vault() -> Path:
+        from core.vault import get_vault_manager
+
+        return get_vault_manager().active_vault_dir()
+
+    def _reserve_budget(
+        self, messages: list[dict[str, Any]], system: str, vault_root: Path
+    ) -> None:
+        """Reserve a fail-closed estimated allowance before an external call."""
+        from core.automation_policy import require_token_budget
+
+        config = GlobalConfig.load(settings.config_path)
+        content = system + "\n" + "\n".join(str(message.get("content", "")) for message in messages)
+        require_token_budget(
+            vault_root,
+            self._provider_name,
+            content,
+            config.automation_policy,
+        )

@@ -3,6 +3,9 @@
   "private": true,
   "version": "1.1.0",
   "type": "module",
+  "engines": {
+    "node": ">=22.0.0 <23"
+  },
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -14,6 +17,7 @@
     "test:run": "vitest run",
     "test:browser": "playwright test",
     "test:browser:smoke": "playwright test --config playwright.smoke.config.ts",
+    "test:browser:backend": "playwright test --config playwright.backend.config.ts",
     "benchmark:graph": "playwright test e2e/graph-drag.performance.spec.ts --project=chromium --workers=1",
     "benchmark:vault-ui": "playwright test e2e/large-vault.performance.spec.ts --project=chromium --workers=1"
   },

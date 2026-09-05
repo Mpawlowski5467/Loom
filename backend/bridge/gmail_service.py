@@ -226,7 +226,8 @@ class GmailSyncService:
             gmail = connector.gmail
             interval_s = max(5, gmail.interval_minutes) * 60
             if (
-                gmail.enabled
+                not config.automation_policy.paused
+                and gmail.enabled
                 and connector.client_id
                 and connector.client_secret
                 and load_google_tokens()

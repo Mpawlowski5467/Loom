@@ -6,6 +6,7 @@ export interface TraceMessage {
 }
 
 export interface TraceDetail {
+  content_retained?: boolean;
   id: string;
   timestamp: string;
   provider: string;

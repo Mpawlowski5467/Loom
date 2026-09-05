@@ -42,7 +42,7 @@ vi.mock("./useLoomConfig", () => ({
 const { EMPTY } = vi.hoisted(() => ({ EMPTY: [] as never[] }));
 
 vi.mock("../api/notes", () => ({
-  loadAllNotes: vi.fn(() => Promise.resolve([])),
+  loadNoteSummaries: vi.fn(() => Promise.resolve([])),
   backendNotesToFrontend: vi.fn(() => []),
 }));
 vi.mock("../api/captures", () => ({

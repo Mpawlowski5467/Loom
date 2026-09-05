@@ -1,8 +1,11 @@
-# Loom — Vision & Roadmap
+# Loom — future design reference
 
 > A self-organizing AI memory system with a multi-agent backbone and a visual knowledge graph.
 
-This is Loom's **north-star design**: subsystems and capabilities that are **planned, not yet built**, framed as future direction / RFC. For what ships today, see [ARCHITECTURE.md](ARCHITECTURE.md).
+This is Loom's preserved north-star design: future directions and RFC material.
+It is not a release-status document. For the implementation that exists today,
+see the [architecture reference](architecture-ref.md); for prioritized planned
+work, see [ROADMAP.md](ROADMAP.md).
 
 These sections were moved verbatim out of the architecture document so that document can describe only what exists. Each retains its original 🔭 *planned — not yet built* callout.
 
@@ -17,35 +20,30 @@ These sections were moved verbatim out of the architecture document so that docu
 
 ## Layer 6: The Bridge
 
-> 🌓 **Partially shipped.** The connector contract is still evolving, but six
-> adapters now live in `backend/bridge/`: a bounded, read-only iCalendar
-> adapter (recurrence/timezone support, encrypted private URL, Standup
-> context, idempotent Inbox sync); a read-only GitHub adapter (token polling
-> of commits/issues/PRs, external-ID idempotency, per-repo cursors, interval
-> poller); a read-only Email adapter (IMAP polling with UID cursors,
-> `BODY.PEEK` fetches so mail is never marked seen); a Google connector
-> (one union-scope sign-in covering Calendar + Gmail — an OAuth
-> alternative to IMAP for mail); and an Outlook Calendar adapter. The
-> OAuth connectors share one loopback authorization-code flow with
-> encrypted auto-refreshing tokens and incremental cursors — code-complete
-> and mock-verified, pending the user's OAuth app registrations for the
-> first live connect. GitHub webhooks and community plugins remain design
-> targets.
+> **Reference note.** The implementation details and live-validation gates for
+> current connectors are maintained in [architecture-ref.md](architecture-ref.md).
+> This section retains the future plugin-contract design only.
 
-The Bridge is how Loom connects to the outside world. All integrations follow the same flow: external data lands in `captures/`, and Loom agents process it from there.
+The proposed Bridge contract would connect Loom to external sources through
+captures, which agents can then process.
 
 ### 7.1 Key Decisions
 
-- **v1 integrations** (hardcoded into core): GitHub, Email, Calendar
-- **v2**: refactor into a plugin system with a standard interface for community-built integrations (Slack, Notion, web clipper, etc.)
+- **Future contract**: a standard interface for community-built integrations
+  (Slack, Notion, web clipper, and others).
 
 ### 7.2 v1 Integrations
 
-**GitHub**: shipped as token-based polling (Loom is localhost-first, so no webhooks). Configured repos are polled on an interval for commits, issues, and PRs; activity lands in the Inbox as idempotent captures (`github:<repo>:<kind>:<id>`) with metadata (repo, author, labels, timestamp). Weaver files them under the right project. Webhook delivery and a plugin contract remain planned.
+**GitHub**: this design anticipates source polling, durable capture provenance,
+and a future plugin contract. It intentionally does not define webhooks for a
+local-first deployment.
 
-**Email**: shipped as read-only IMAP polling, with Gmail available through the Google connector as an alternative. IMAP: a configured mailbox is polled on an interval; new messages become markdown captures with sender, subject, date, and body (text/plain preferred, stripped HTML fallback). The mailbox is opened read-only with `BODY.PEEK` fetches so Loom never marks mail as seen; the app password is encrypted at rest; Message-ID/UID external IDs make re-polls idempotent. Gmail via the connector: one union-scope sign-in shared with Google Calendar (encrypted auto-refreshing token, bounded `in:inbox` window poll, `gmail:<message-id>` external IDs, IMAP-parity capture shape) — code-complete and mock-verified, pending the user's OAuth app registration.
+**Email**: a future adapter should keep mailbox access read-only, preserve stable
+source identifiers, and produce an auditable capture rather than mutate notes
+directly.
 
-**Calendar**: private iCalendar feeds are shipped, now joined by OAuth connectors: Google Calendar rides the Google connector (one union-scope sign-in shared with Gmail), and Outlook Calendar has its own Microsoft connector. Both use the loopback connect flow, tokens encrypted at rest with auto-refresh, per-calendar incremental cursors, and multi-calendar selection (up to 20 calendar IDs per service). All paths pull a selected day's expanded occurrences into Standup context and optionally create Inbox captures with stable event provenance. The OAuth connectors are code-complete and mock-verified; the first live connect awaits the user's OAuth app registrations.
+**Calendar**: a future adapter should use a user-authorized, read-only source,
+encrypted refreshable credentials, durable cursors, and stable event provenance.
 
 ### 7.3 Integration Data Flow
 
@@ -67,7 +65,7 @@ Spider links it → Scribe updates indexes → Sentinel validates
 
 ## Layer 7: The Prompt Compiler
 
-> 🔭 **Planned — not yet built.** There is no `backend/compiler/` today. Agents currently assemble prompts directly and call the provider registry (which traces every call — see [ARCHITECTURE.md §3.3](ARCHITECTURE.md#33-provider-tracing)). The optimization pipeline below is the intended evolution, not current behavior.
+> 🔭 **Planned — not yet built.** There is no `backend/compiler/` today. Agents currently assemble prompts directly and call the provider registry (which traces every call; see [the architecture reference](architecture-ref.md#providers-policy-and-trace-data)). The optimization pipeline below is the intended evolution, not current behavior.
 
 The Prompt Compiler is the system that sits between agents and the LLM. Every prompt passes through it before being sent. Its job is to produce token-efficient, well-structured, high-quality prompts every time.
 
@@ -286,7 +284,9 @@ Attachments appear as smaller secondary nodes connected to their parent note, vi
 
 ## Roadmap: Beyond v1
 
-These milestones extend the shipped MVP and v1 roadmap (see [ARCHITECTURE.md §12](ARCHITECTURE.md#12-roadmap)).
+These milestones are future direction; see [ROADMAP.md](ROADMAP.md) for the
+prioritized plan and [architecture-ref.md](architecture-ref.md) for the current
+system.
 
 ### v2 — "Connect and Grow"
 

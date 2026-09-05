@@ -16,9 +16,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-import yaml
-from pydantic import ValidationError
-
+from core.automation_policy import AutomationPolicyError, require_capture_allowed
 from core.capture_jobs import (
     CaptureJob,
     CaptureJobsBusyError,
@@ -26,7 +24,8 @@ from core.capture_jobs import (
     get_capture_job_service,
     publish_job_change,
 )
-from core.config import CaptureProcessingConfig, GlobalConfig
+from core.capture_source_index import CaptureSourceIndex
+from core.config import AutomationPolicyConfig, CaptureProcessingConfig, GlobalConfig
 from core.events import publish_capture_change
 from core.note_index import NoteIndex, get_note_index
 from core.notes import Note, generate_id, now_iso, parse_note
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "CaptureIngressError",
     "CaptureIngressResult",
+    "automation_policy_for_vault",
     "capture_processing_policy_for_vault",
     "ingest_capture",
 ]
@@ -71,6 +71,13 @@ def capture_processing_policy_for_vault(vault_root: Path) -> CaptureProcessingCo
     if root.parent.name != "vaults":
         return CaptureProcessingConfig()
     return GlobalConfig.load(root.parent.parent / "config.yaml").capture_processing
+
+
+def automation_policy_for_vault(vault_root: Path) -> AutomationPolicyConfig:
+    root = vault_root.resolve()
+    if root.parent.name != "vaults":
+        return AutomationPolicyConfig()
+    return GlobalConfig.load(root.parent.parent / "config.yaml").automation_policy
 
 
 def _required_text(value: str, field: str, *, max_length: int) -> str:
@@ -126,24 +133,6 @@ def _string_list(
         normalized.append(value)
         seen.add(value)
     return normalized
-
-
-def _find_capture_by_external_key(threads_dir: Path, source: str, external_id: str) -> Note | None:
-    """Find an active or archived capture matching a stable producer key."""
-    if not threads_dir.exists():
-        return None
-    for path in sorted(threads_dir.rglob("*.md")):
-        try:
-            note = parse_note(path)
-        except (OSError, yaml.YAMLError, ValidationError, ValueError):
-            continue
-        if (
-            note.type == "capture"
-            and note.source == source
-            and str(note.extra.get("external_id") or "") == external_id
-        ):
-            return note
-    return None
 
 
 def _capture_path(
@@ -202,6 +191,8 @@ async def ingest_capture(
     filename_stem: str | None = None,
     filename_prefix: str | None = None,
     policy: CaptureProcessingConfig | None = None,
+    automation_policy: AutomationPolicyConfig | None = None,
+    automated: bool = True,
     index: NoteIndex | None = None,
 ) -> CaptureIngressResult:
     """Create one durable Inbox capture and its immediately eligible job.
@@ -228,6 +219,7 @@ async def ingest_capture(
         raise CaptureIngressError("provenance must be an object")
 
     selected_policy = policy or capture_processing_policy_for_vault(root)
+    selected_automation_policy = automation_policy or automation_policy_for_vault(root)
     selected_index = index or get_note_index()
     service = get_capture_job_service()
     created_note: Note
@@ -242,8 +234,7 @@ async def ingest_capture(
         async with path_lock(captures_dir / ".capture-ingest"):
             if normalized_external_id is not None:
                 existing = await asyncio.to_thread(
-                    _find_capture_by_external_key,
-                    threads_dir,
+                    CaptureSourceIndex(root).find,
                     normalized_source,
                     normalized_external_id,
                 )
@@ -254,6 +245,13 @@ async def ingest_capture(
                         created=False,
                         deduplicated=True,
                     )
+
+            try:
+                require_capture_allowed(
+                    root, normalized_source, selected_automation_policy, automated=automated
+                )
+            except AutomationPolicyError as exc:
+                raise CaptureIngressError(str(exc)) from exc
 
             capture_id = generate_id()
             timestamp = now_iso()
@@ -293,6 +291,8 @@ async def ingest_capture(
             selected_index.refresh_file(capture_path)
             # Parse before notifying a worker that may immediately claim it.
             created_note = parse_note(capture_path)
+            if normalized_external_id is not None:
+                CaptureSourceIndex(root).record(created_note)
 
             if selected_policy.permits(normalized_source):
                 enqueue_result = await asyncio.to_thread(

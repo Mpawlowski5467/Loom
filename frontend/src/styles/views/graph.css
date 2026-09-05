@@ -450,6 +450,77 @@
   font-size: 9px;
 }
 
+.graph-selection-connections {
+  margin-top: 12px;
+  color: var(--ink-2);
+  font: 10px var(--mono);
+}
+.graph-selection-connections summary {
+  cursor: pointer;
+}
+.graph-selection-connections ul {
+  display: grid;
+  gap: 5px;
+  max-height: 104px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+.graph-selection-connections button {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--agent);
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.graph-connection-evidence {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 6;
+  width: min(360px, calc(100% - 32px));
+  max-height: calc(100% - 32px);
+  padding: 15px;
+  overflow-y: auto;
+  border: 1px solid var(--rule-2);
+  border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--bg-elevated) 94%, transparent);
+  box-shadow: 0 8px 24px var(--shadow-elev);
+  backdrop-filter: blur(8px);
+  animation: graphSceneFadeIn 220ms var(--ease);
+}
+.graph-connection-evidence-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.graph-connection-evidence-kicker,
+.graph-connection-evidence-path {
+  margin: 0;
+  color: var(--ink-3);
+  font-size: 10px;
+}
+.graph-connection-evidence h3 {
+  margin: 3px 0 0;
+  color: var(--ink);
+  font-size: 20px;
+  font-weight: 500;
+}
+.graph-connection-evidence-path {
+  margin-top: 8px;
+}
+.graph-connection-evidence .connection-evidence {
+  margin-top: 12px;
+}
+
 .graph-selection-controls {
   justify-content: space-between;
   gap: 12px;

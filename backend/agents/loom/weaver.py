@@ -9,13 +9,18 @@ writes them to the appropriate vault folder with correct frontmatter.
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from agents.base import BaseAgent
 from agents.loom.schema_sections import skeleton_body
 from agents.loom.weaver_io import write_note
-from agents.loom.weaver_llm import classify_capture, format_content, generate_note_body
+from agents.loom.weaver_llm import (
+    SourceTooLargeError,
+    classify_capture,
+    format_content,
+    generate_note_body,
+)
 from agents.loom.weaver_tags import snap_tags
 from core.note_index import get_note_index
 from core.notes import Note, normalize_wikilinks_in_body, parse_note
@@ -40,6 +45,8 @@ class CaptureProposal:
     tags: list[str]
     body: str
     raw_capture_id: str = ""
+    source_link: str = ""
+    source_coverage: dict[str, Any] = field(default_factory=dict)
 
 
 class Weaver(BaseAgent):
@@ -52,6 +59,31 @@ class Weaver(BaseAgent):
     @property
     def role(self) -> str:
         return "Note creator: classifies captures and generates structured vault notes"
+
+    @staticmethod
+    def _source_link(raw_note: Note) -> str:
+        """Return the strongest stable link carried by a capture."""
+        provenance = raw_note.extra.get("provenance")
+        if isinstance(provenance, dict):
+            for key in ("url", "source_url", "web_url", "link"):
+                value = provenance.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+        return raw_note.source or f"capture:{raw_note.id}"
+
+    @staticmethod
+    def _coverage(classification: Any, generation: Any, source_link: str) -> dict[str, Any]:
+        """Combine classifier/generator coverage for persisted note metadata."""
+        cls = getattr(classification, "coverage", None)
+        gen = getattr(generation, "coverage", None)
+        cls_data = cls.to_dict() if cls is not None else {}
+        gen_data = gen.to_dict() if gen is not None else {}
+        return {
+            "source_link": source_link,
+            "complete": bool(cls_data.get("complete", True) and gen_data.get("complete", True)),
+            "classification": cls_data,
+            "generation": gen_data,
+        }
 
     async def process_capture(self, capture_path: Path) -> Note:
         """Process a raw capture into a structured vault note."""
@@ -72,6 +104,16 @@ class Weaver(BaseAgent):
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
             captured_chain["chain"] = chain
             raw_note = parse_note(capture_path)
+            from core.automation_policy import note_allowed_for_provider
+
+            if not note_allowed_for_provider(
+                self._chat_provider, capture_path, raw_note.tags, self._vault_root
+            ):
+                return {
+                    "action": "review",
+                    "details": "Capture is excluded from cloud processing by its folder or tag",
+                    "note": None,
+                }
             raw_content = raw_note.body.strip()
 
             if not raw_content:
@@ -81,12 +123,19 @@ class Weaver(BaseAgent):
                     "note": None,
                 }
 
-            note_type, folder, title, tags = await self._classify_and_tag(
+            source_link = self._source_link(raw_note)
+            note_type, folder, title, tags, classification = await self._classify_and_tag_details(
                 raw_content, raw_note, capture_path
             )
             body = await generate_note_body(
-                self._vault_root, raw_content, note_type, self._chat_provider, chain
+                self._vault_root,
+                raw_content,
+                note_type,
+                self._chat_provider,
+                chain,
+                source_link=source_link,
             )
+            coverage = self._coverage(classification, body, source_link)
 
             note = write_note(
                 self._vault_root,
@@ -96,6 +145,7 @@ class Weaver(BaseAgent):
                 folder,
                 body,
                 source=f"capture:{raw_note.id}",
+                coverage=coverage,
             )
 
             # NOTE: We deliberately do NOT archive the capture here. The
@@ -134,7 +184,9 @@ class Weaver(BaseAgent):
             tags = list(overrides.get("tags") or [])
             return note_type, folder, title, tags
 
-        classification = await classify_capture(raw_content, self._chat_provider)
+        classification = await classify_capture(
+            raw_content, self._chat_provider, source_link=self._source_link(raw_note)
+        )
         note_type = classification.get("type", "topic")
         folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
         title = classification.get("title", raw_note.title or capture_path.stem)
@@ -153,6 +205,39 @@ class Weaver(BaseAgent):
             )
         return note_type, folder, title, tags
 
+    async def _classify_and_tag_details(
+        self,
+        raw_content: str,
+        raw_note: Note,
+        capture_path: Path,
+        overrides: dict[str, Any] | None = None,
+    ) -> tuple[str, str, str, list[str], Any]:
+        """Classify and return the raw result so coverage can be persisted."""
+        if overrides is not None:
+            note_type = overrides.get("note_type") or "topic"
+            folder = overrides.get("folder") or TYPE_TO_FOLDER.get(note_type, "topics")
+            title = overrides.get("title") or raw_note.title or capture_path.stem
+            tags = list(overrides.get("tags") or [])
+            return note_type, folder, title, tags, None
+
+        classification = await classify_capture(
+            raw_content, self._chat_provider, source_link=self._source_link(raw_note)
+        )
+        note_type = classification.get("type", "topic")
+        folder = classification.get("folder", TYPE_TO_FOLDER.get(note_type, "topics"))
+        title = classification.get("title", raw_note.title or capture_path.stem)
+        tags_str = classification.get("tags", "")
+        raw_tags = [t.strip() for t in tags_str.split(",") if t.strip()]
+        vault_tags = get_note_index().get_tag_set()
+        tags, snapped = snap_tags(raw_tags, vault_tags)
+        if snapped:
+            logger.info(
+                "Weaver snapped tags for %s: %s",
+                capture_path.name,
+                ", ".join(f"{a!r}→{b!r}" for a, b in snapped),
+            )
+        return note_type, folder, title, tags, classification
+
     async def propose_capture(
         self, capture_path: Path, overrides: dict[str, Any] | None = None
     ) -> CaptureProposal | None:
@@ -167,12 +252,35 @@ class Weaver(BaseAgent):
         if not raw_content:
             return None
 
-        note_type, folder, title, tags = await self._classify_and_tag(
-            raw_content, raw_note, capture_path, overrides
-        )
-        body = await generate_note_body(
-            self._vault_root, raw_content, note_type, self._chat_provider
-        )
+        source_link = self._source_link(raw_note)
+        try:
+            note_type, folder, title, tags, classification = await self._classify_and_tag_details(
+                raw_content, raw_note, capture_path, overrides
+            )
+        except SourceTooLargeError as exc:
+            return self._over_limit_proposal(
+                raw_note, capture_path, raw_content, source_link, exc, "classification"
+            )
+        try:
+            body = await generate_note_body(
+                self._vault_root,
+                raw_content,
+                note_type,
+                self._chat_provider,
+                source_link=source_link,
+            )
+        except SourceTooLargeError as exc:
+            return self._over_limit_proposal(
+                raw_note,
+                capture_path,
+                raw_content,
+                source_link,
+                exc,
+                "generation",
+                note_type=note_type,
+                folder=folder,
+                tags=tags,
+            )
         return CaptureProposal(
             note_type=note_type,
             folder=folder,
@@ -182,6 +290,40 @@ class Weaver(BaseAgent):
             # sees the same targets the eventual write will store.
             body=normalize_wikilinks_in_body(body),
             raw_capture_id=raw_note.id,
+            source_link=source_link,
+            source_coverage=self._coverage(classification, body, source_link),
+        )
+
+    @staticmethod
+    def _over_limit_proposal(
+        raw_note: Note,
+        capture_path: Path,
+        raw_content: str,
+        source_link: str,
+        error: Any,
+        stage: str,
+        *,
+        note_type: str = "topic",
+        folder: str = "topics",
+        tags: list[str] | None = None,
+    ) -> CaptureProposal:
+        """Return a full-source preview that clearly requires review."""
+        coverage = error.coverage.to_dict()
+        return CaptureProposal(
+            note_type=note_type,
+            folder=folder,
+            title=raw_note.title or capture_path.stem,
+            tags=list(tags or raw_note.tags),
+            body=raw_content,
+            raw_capture_id=raw_note.id,
+            source_link=source_link,
+            source_coverage={
+                "source_link": source_link,
+                "complete": False,
+                "review_required": True,
+                "classification": coverage if stage == "classification" else {},
+                "generation": coverage if stage == "generation" else {},
+            },
         )
 
     async def commit_proposal(
@@ -206,6 +348,7 @@ class Weaver(BaseAgent):
                 proposal.folder,
                 proposal.body,
                 source=f"capture:{raw_note.id}",
+                coverage=proposal.source_coverage,
             )
             return {
                 "action": "created",
@@ -234,7 +377,9 @@ class Weaver(BaseAgent):
         3. Writes the note with full frontmatter.
         4. Returns the created Note.
         """
-        target_dir = self._vault_root / "threads" / folder
+        from agents.loom.weaver_io import resolve_folder
+
+        target_dir = resolve_folder(self._vault_root, folder)
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
             if content.strip() and self._chat_provider is not None:

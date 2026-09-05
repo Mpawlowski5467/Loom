@@ -75,6 +75,7 @@ export function InboxView(): ReactNode {
     pushToast,
     appendNote,
     openNote,
+    setQuickCaptureOpen,
   } = useApp();
   const [demoMode] = useState(readDemoMode);
   const {
@@ -93,7 +94,6 @@ export function InboxView(): ReactNode {
   const [search, setSearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [previews, setPreviews] = useState<Record<string, PreviewState>>({});
-  const [draftNoteIds, setDraftNoteIds] = useState<Record<string, string>>({});
   const [busyJobCaptures, setBusyJobCaptures] = useState<Set<string>>(
     new Set(),
   );
@@ -180,10 +180,15 @@ export function InboxView(): ReactNode {
   // the user never picked.
   const selected = captures.find((c) => c.id === selectedCaptureId);
   const selectedJob = selected ? jobForCapture(selected) : undefined;
+  // A review-required capture can carry a draft id from the backend, but that
+  // draft is deliberately unpublished and therefore absent from ``notes``.
+  // Only offer navigation when a published note is actually available locally.
   const selectedDraftNoteId = selected
-    ? (draftNoteIds[selected.id] ??
-      selected.draftNoteId ??
-      notes.find((note) => note.source === `capture:${selected.id}`)?.id)
+    ? notes.find(
+        (note) =>
+          note.id === selected.draftNoteId ||
+          note.source === `capture:${selected.id}`,
+      )?.id
     : undefined;
   const pendingCount = captures.filter((c) => c.status !== "done").length;
 
@@ -560,10 +565,13 @@ export function InboxView(): ReactNode {
   // Apply a committed note to app state + surface the agent-chain toasts.
   const onCommitted = useCallback(
     (cap: Capture, result: CommitResult) => {
-      const note = backendNoteToFrontend(result.note, titleMapFromNotes(notes));
-      appendNote(note);
       const outcome = outcomeOf(result);
       if (outcome === "filed") {
+        const note = backendNoteToFrontend(
+          result.note,
+          titleMapFromNotes(notes),
+        );
+        appendNote(note);
         removeInboxCapture(cap.id);
         pushToast({
           icon: "🧶",
@@ -571,15 +579,11 @@ export function InboxView(): ReactNode {
           body: `Filed "${result.note.title}" → ${result.note.type || "note"}`,
         });
       } else {
-        setDraftNoteIds((current) => ({
-          ...current,
-          [cap.id]: result.note.id,
-        }));
         setCaptureStatus(cap.id, "needs_review");
         pushToast({
           icon: "⚠",
           agent: "sentinel",
-          body: `"${result.note.title}" was created but needs review${result.validation_reasons[0] ? `: ${result.validation_reasons[0]}` : ""}`,
+          body: `"${result.note.title}" remains in Inbox for review${result.validation_reasons[0] ? `: ${result.validation_reasons[0]}` : ""}`,
         });
       }
       const linkCount = result.linked.length;
@@ -599,7 +603,7 @@ export function InboxView(): ReactNode {
           body: `Validation: ${v}`,
         });
       }
-      if (outcome === "filed") openNote(note.id);
+      if (outcome === "filed") openNote(result.note.id);
     },
     [
       notes,
@@ -1057,9 +1061,12 @@ export function InboxView(): ReactNode {
                   <div className="inbox-empty inbox-empty-zero">
                     <span className="inbox-empty-title">Inbox is clear</span>
                     <span className="inbox-empty-hint">
-                      Captures land here for triage. Drop a note in{" "}
-                      <code>captures/</code> or run a Shuttle agent to fill it.
+                      Captures land here for triage. Keep a thought before it
+                      gets away.
                     </span>
+                    <Button size="sm" onClick={() => setQuickCaptureOpen(true)}>
+                      Quick capture
+                    </Button>
                   </div>
                 ) : (
                   <div className="inbox-empty">
@@ -1124,6 +1131,14 @@ export function InboxView(): ReactNode {
               ? () => openNote(selectedDraftNoteId)
               : undefined
           }
+          onMerged={() => {
+            removeInboxCapture(selected.id);
+            pushToast({
+              icon: "✓",
+              agent: "weaver",
+              body: "Capture merge completed.",
+            });
+          }}
         />
       )}
 

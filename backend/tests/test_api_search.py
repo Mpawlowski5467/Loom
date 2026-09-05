@@ -60,6 +60,22 @@ def test_search_by_title(client: TestClient, seeded_vault: Path) -> None:
     assert data["results"][0]["title"] == "Rust Language"
 
 
+def test_exact_title_returns_before_semantic_embedding(
+    client: TestClient, seeded_vault: Path
+) -> None:
+    """Exact-title lookup is a deterministic fast path even with a searcher."""
+    from unittest.mock import AsyncMock, MagicMock, patch
+
+    searcher = MagicMock()
+    searcher.search = AsyncMock()
+    with patch("api.routers.search.get_searcher", return_value=searcher):
+        response = client.get("/api/search?q=Python")
+
+    assert response.status_code == 200
+    assert response.json()["results"][0]["title"] == "Python"
+    searcher.search.assert_not_awaited()
+
+
 def test_search_by_tag(client: TestClient, seeded_vault: Path) -> None:
     resp = client.get("/api/search?q=programming")
     data = resp.json()

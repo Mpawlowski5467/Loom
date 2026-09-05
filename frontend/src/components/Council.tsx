@@ -31,6 +31,9 @@ export function Council(): ReactNode {
   const { council, postCouncilMessage } = useApp();
   const [text, setText] = useState("");
   const [openTraceId, setOpenTraceId] = useState<string | null>(null);
+  const [expandedContributions, setExpandedContributions] = useState<
+    Set<string>
+  >(new Set());
   const logRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -69,6 +72,7 @@ export function Council(): ReactNode {
                 ? "summary"
                 : m.who.replace("agent:", "");
           const agentId = m.who.startsWith("agent:") ? m.who.slice(6) : null;
+          const contributionsExpanded = expandedContributions.has(m.id);
           return (
             <div key={m.id} className={`council-msg ${cls}`}>
               <div className="who">
@@ -93,34 +97,55 @@ export function Council(): ReactNode {
               </div>
               {m.contributions && m.contributions.length > 0 && (
                 <div className="council-contribs">
-                  {m.contributions.map((c, idx) => (
-                    <div key={`${c.agent}-${idx}`} className="council-contrib">
-                      <div className="contrib-h">
-                        <AgentBlob agent={c.agent} state="idle" size={20} />
-                        <span className="contrib-label">{c.agent}</span>
-                        {c.traceId && (
-                          <button
-                            type="button"
-                            onClick={() => setOpenTraceId(c.traceId!)}
-                            title={`View ${c.agent}'s raw LLM call`}
-                            className="raw-call-btn"
-                          >
-                            raw call
-                          </button>
-                        )}
-                      </div>
+                  <button
+                    type="button"
+                    className="council-contrib-toggle"
+                    aria-expanded={contributionsExpanded}
+                    onClick={() =>
+                      setExpandedContributions((current) => {
+                        const next = new Set(current);
+                        if (next.has(m.id)) next.delete(m.id);
+                        else next.add(m.id);
+                        return next;
+                      })
+                    }
+                  >
+                    {contributionsExpanded
+                      ? "Hide agent contributions"
+                      : `Show ${m.contributions.length} agent contributions`}
+                  </button>
+                  {contributionsExpanded &&
+                    m.contributions.map((c, idx) => (
                       <div
-                        className="contrib-body"
-                        style={
-                          c.error
-                            ? { color: "var(--you)", fontStyle: "italic" }
-                            : undefined
-                        }
+                        key={`${c.agent}-${idx}`}
+                        className="council-contrib"
                       >
-                        {c.error ? `⚠ ${c.error}` : renderInline(c.body)}
+                        <div className="contrib-h">
+                          <AgentBlob agent={c.agent} state="idle" size={20} />
+                          <span className="contrib-label">{c.agent}</span>
+                          {c.traceId && (
+                            <button
+                              type="button"
+                              onClick={() => setOpenTraceId(c.traceId!)}
+                              title={`View ${c.agent}'s raw LLM call`}
+                              className="raw-call-btn"
+                            >
+                              raw call
+                            </button>
+                          )}
+                        </div>
+                        <div
+                          className="contrib-body"
+                          style={
+                            c.error
+                              ? { color: "var(--you)", fontStyle: "italic" }
+                              : undefined
+                          }
+                        >
+                          {c.error ? `⚠ ${c.error}` : renderInline(c.body)}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    ))}
                 </div>
               )}
               <div

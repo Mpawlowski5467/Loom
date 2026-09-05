@@ -44,10 +44,19 @@ const NewNoteModal = lazy(() =>
 const Palette = lazy(() =>
   import("../views/Palette").then((module) => ({ default: module.Palette })),
 );
+const TodayView = lazy(() =>
+  import("../views/TodayView").then((module) => ({
+    default: module.TodayView,
+  })),
+);
+const QuickCapture = lazy(() =>
+  import("./QuickCapture").then((module) => ({ default: module.QuickCapture })),
+);
 
 const SPLASH_KEY = "loom.splash.seen";
 
 const TAB_LABELS: Record<Tab, string> = {
+  today: "Today",
   graph: "Graph",
   thread: "Thread",
   inbox: "Inbox",
@@ -78,6 +87,8 @@ export function MainShell(): ReactNode {
     setTab,
     paletteOpen,
     setPaletteOpen,
+    quickCaptureOpen,
+    setQuickCaptureOpen,
     newNoteOpen,
     setNewNoteOpen,
     newNoteTitle,
@@ -117,6 +128,9 @@ export function MainShell(): ReactNode {
       } else if (isMod && e.key.toLowerCase() === "n") {
         e.preventDefault();
         setNewNoteOpen(true);
+      } else if (isMod && e.shiftKey && e.key.toLowerCase() === "c") {
+        e.preventDefault();
+        setQuickCaptureOpen(true);
       } else if (isMod && e.key.toLowerCase() === "b" && treeAvailable) {
         e.preventDefault();
         setTreeVisible(!treeVisible);
@@ -133,6 +147,7 @@ export function MainShell(): ReactNode {
     paletteOpen,
     setPaletteOpen,
     setNewNoteOpen,
+    setQuickCaptureOpen,
     setTab,
     treeAvailable,
     treeVisible,
@@ -184,6 +199,7 @@ export function MainShell(): ReactNode {
               <ErrorBoundary label="this view" resetKey={tab}>
                 <Suspense fallback={<ViewLoading />}>
                   {tab === "graph" && <GraphView />}
+                  {tab === "today" && <TodayView />}
                   {tab === "thread" && <ThreadView />}
                   {tab === "inbox" && <InboxView />}
                   {tab === "board" && <BoardView />}
@@ -239,6 +255,14 @@ export function MainShell(): ReactNode {
           />
         </Suspense>
       )}
+      {quickCaptureOpen && (
+        <Suspense fallback={null}>
+          <QuickCapture
+            key={config?.active_vault ?? "default"}
+            onClose={() => setQuickCaptureOpen(false)}
+          />
+        </Suspense>
+      )}
       <ErrorBoundary label="notifications">
         <Toasts />
       </ErrorBoundary>
@@ -290,7 +314,7 @@ function OfflineBanner(): ReactNode {
         ⊘
       </span>
       <span className="banner-body">
-        Backend unreachable. Changes will sync when it's back.
+        Backend unreachable. Saving is unavailable until the connection returns.
       </span>
     </div>
   );

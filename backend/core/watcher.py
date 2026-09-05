@@ -14,6 +14,7 @@ from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
 
+from core.capture_source_index import CaptureSourceIndex
 from core.graph import build_graph, save_graph
 from core.note_index import get_note_index
 from core.notes import parse_note_meta
@@ -79,6 +80,7 @@ class _VaultEventHandler(FileSystemEventHandler):
                 # re-index the archived note.
                 return
             self._index.refresh_file(path)
+            CaptureSourceIndex(self._threads_dir.parent).refresh_path(path)
             self._vector_index_file(path)
             self._schedule_rebuild()
 
@@ -88,15 +90,24 @@ class _VaultEventHandler(FileSystemEventHandler):
             if ".archive" in path.parts:
                 return
             self._index.refresh_file(path)
+            CaptureSourceIndex(self._threads_dir.parent).refresh_path(path)
             self._vector_index_file(path)
             self._schedule_rebuild()
 
     def on_deleted(self, event: FileSystemEvent) -> None:
         if self._is_md(event):
             path = Path(str(event.src_path))
+            # macOS can deliver the deletion of an atomic replacement's old
+            # inode after its replacement has already been indexed. Reconcile
+            # the current file rather than removing live knowledge on a stale
+            # filesystem event.
+            if path.is_file():
+                self.on_modified(event)
+                return
             entry = self._index.get_by_path(path)
             note_id = entry.id if entry else None
             self._index.remove_file(path)
+            CaptureSourceIndex(self._threads_dir.parent).refresh_path(path)
             self._forget_hash(path)
             if note_id:
                 self._vector_remove_note(note_id)
@@ -107,6 +118,9 @@ class _VaultEventHandler(FileSystemEventHandler):
         dest = str(event.dest_path or "")
         if src.endswith(".md") or dest.endswith(".md"):
             self._index.move_file(Path(src), Path(dest))
+            source_index = CaptureSourceIndex(self._threads_dir.parent)
+            source_index.refresh_path(Path(src))
+            source_index.refresh_path(Path(dest))
             self._forget_hash(Path(src))
             if dest.endswith(".md") and ".archive" not in Path(dest).parts:
                 self._vector_index_file(Path(dest))

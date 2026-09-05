@@ -177,6 +177,12 @@ class Standup(BaseAgent):
         for entry in index.all_entries():
             # Check if the note's mtime matches the target date
             if entry.meta.modified and entry.meta.modified.startswith(date_str):
+                from core.automation_policy import note_allowed_for_provider
+
+                if not note_allowed_for_provider(
+                    self._chat_provider, entry.file_path, entry.tags, self._vault_root
+                ):
+                    continue
                 modified.append(
                     {
                         "title": entry.title,

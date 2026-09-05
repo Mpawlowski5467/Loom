@@ -245,7 +245,7 @@ class StandupSchedulerService:
             vault_root = vm.active_vault_dir().resolve()
             config = GlobalConfig.load(vm.config_path())
             schedule = config.standup_schedule
-            if not schedule.enabled or not vault_root.exists():
+            if config.automation_policy.paused or not schedule.enabled or not vault_root.exists():
                 return False
             now = self._now(ZoneInfo(schedule.timezone))
             today = now.date()

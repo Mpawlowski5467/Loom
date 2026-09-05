@@ -15,7 +15,13 @@
 
 services:
   loom:
-    build: .
+    build:
+      context: .
+      # The default image has no Redis/Postgres client packages. For the
+      # profile-gated services, set LOOM_BACKEND_EXTRAS=redis,postgres in
+      # .env before `docker compose --profile full up --build`.
+      args:
+        LOOM_BACKEND_EXTRAS: ${LOOM_BACKEND_EXTRAS:-}
     image: loom:latest
     container_name: loom
     ports:

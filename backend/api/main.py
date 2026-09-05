@@ -29,9 +29,11 @@ from api.routers.agents_registry import router as agents_registry_router
 from api.routers.archive import router as archive_router
 from api.routers.automations import router as automations_router
 from api.routers.calendar_outlook import router as calendar_outlook_router
+from api.routers.capture_review import router as capture_review_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
+from api.routers.connections import router as connections_router
 from api.routers.diagnostics import router as diagnostics_router
 from api.routers.email_bridge import router as email_bridge_router
 from api.routers.events import router as events_router
@@ -39,13 +41,17 @@ from api.routers.github_bridge import router as github_bridge_router
 from api.routers.google_bridge import router as google_bridge_router
 from api.routers.graph import router as graph_router
 from api.routers.hardware import router as hardware_router
+from api.routers.imports import router as imports_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
 from api.routers.onboarding import router as onboarding_router
+from api.routers.policy import router as policy_router
 from api.routers.provider_auth import router as provider_auth_router
 from api.routers.providers import router as providers_router
+from api.routers.revisions import router as revisions_router
 from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
+from api.routers.sources import router as sources_router
 from api.routers.traces import router as traces_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import (
@@ -340,6 +346,11 @@ register_exception_handlers(app)
 
 app.include_router(vaults_router)
 app.include_router(notes_router)
+app.include_router(revisions_router)
+app.include_router(imports_router)
+app.include_router(policy_router)
+app.include_router(connections_router)
+app.include_router(sources_router)
 app.include_router(archive_router)
 app.include_router(automations_router)
 app.include_router(github_bridge_router)
@@ -350,6 +361,7 @@ app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)
 app.include_router(captures_router)
+app.include_router(capture_review_router)
 app.include_router(index_router)
 app.include_router(agents_router)
 app.include_router(agents_registry_router)

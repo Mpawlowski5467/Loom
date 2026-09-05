@@ -29,6 +29,7 @@ from core.config import LoomSettings
 from core.note_index import get_note_index
 from core.notes import parse_note
 from core.providers.base import BaseProvider
+from core.tokens import count_tokens
 from core.vault import VaultManager
 
 DEFAULT_CASES = Path(__file__).with_name("capture_quality.yaml")
@@ -47,9 +48,14 @@ class FixtureProvider(BaseProvider):
 
     async def chat(self, messages: list[dict[str, Any]], system: str = "") -> str:  # noqa: ARG002
         try:
-            return next(self._responses)
+            response = next(self._responses)
         except StopIteration as exc:
             raise RuntimeError("Evaluation fixture exhausted its responses") from exc
+        if response == "__PROVIDER_ERROR__":
+            from core.exceptions import ProviderError
+
+            raise ProviderError(self.name, "fixture provider failure")
+        return response
 
 
 @dataclass(slots=True)
@@ -67,6 +73,11 @@ class CaseResult:
     latency_ms: int
     checks: list[Check] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    source_fidelity: float = 0.0
+    filing: float = 0.0
+    link: float = 0.0
+    review: float = 0.0
+    token_estimates: dict[str, int] = field(default_factory=dict)
 
 
 @dataclass(slots=True)
@@ -76,6 +87,8 @@ class EvaluationReport:
     passed: bool
     threshold: float
     cases: list[CaseResult]
+    metrics: dict[str, float] = field(default_factory=dict)
+    score_scope: str = "fixture orchestration-only"
 
 
 def load_cases(path: Path) -> list[dict[str, Any]]:
@@ -105,6 +118,24 @@ def _check(name: str, expected: Any, actual: Any, passed: bool) -> Check:
     return Check(name=name, expected=expected, actual=actual, passed=passed)
 
 
+def _capture_body(capture: dict[str, Any]) -> str:
+    """Materialize compact corpus repeat/tail fields into one source string."""
+    body = str(capture.get("body") or "")
+    repeat = int(capture.get("repeat") or 1)
+    tail = str(capture.get("tail") or "")
+    return body * max(repeat, 1) + tail
+
+
+def _folder_from_path(file_path: str) -> str:
+    """Return a vault-relative folder without resolving temp-dir symlinks."""
+    parts = Path(file_path).parent.parts
+    try:
+        index = parts.index("threads")
+    except ValueError:
+        return Path(file_path).parent.name
+    return str(Path(*parts[index + 1 :]))
+
+
 async def evaluate_case(case: dict[str, Any], mode: str) -> CaseResult:
     started = time.perf_counter()
     checks: list[Check] = []
@@ -131,7 +162,7 @@ async def evaluate_case(case: dict[str, Any], mode: str) -> CaseResult:
             ingress = await ingest_capture(
                 root,
                 title=str(capture.get("title") or case_id),
-                body=str(capture.get("body") or ""),
+                body=_capture_body(capture),
                 source="evaluation",
                 external_id=case_id,
             )
@@ -153,8 +184,8 @@ async def evaluate_case(case: dict[str, Any], mode: str) -> CaseResult:
                         _check(
                             "folder",
                             expected_folder,
-                            Path(note.file_path).parent.name,
-                            Path(note.file_path).parent.name == expected_folder,
+                            _folder_from_path(note.file_path),
+                            _folder_from_path(note.file_path) == expected_folder,
                         ),
                         _check("title", expected_title, note.title, note.title == expected_title),
                     ]
@@ -171,22 +202,85 @@ async def evaluate_case(case: dict[str, Any], mode: str) -> CaseResult:
                     checks.append(
                         _check(f"link:{link}", link, note.wikilinks, link in note.wikilinks)
                     )
+                for marker in expected.get("source_fidelity") or []:
+                    checks.append(
+                        _check(
+                            f"source:{marker}",
+                            marker,
+                            note.body,
+                            str(marker).lower() in note.body.lower(),
+                        )
+                    )
+                for marker in expected.get("forbidden_output") or []:
+                    checks.append(
+                        _check(
+                            f"forbidden:{marker}",
+                            marker,
+                            note.body,
+                            str(marker).lower() not in note.body.lower(),
+                        )
+                    )
+                if expected.get("source_link"):
+                    checks.append(
+                        _check(
+                            "source_link",
+                            str(expected["source_link"]),
+                            note.source,
+                            note.source.startswith(str(expected["source_link"])),
+                        )
+                    )
 
             verdict = result.validation.status if result.validation else "missing"
             accepted = [str(value) for value in expected.get("sentinel") or []]
             checks.append(_check("sentinel", accepted, verdict, verdict in accepted))
+            if "review_required" in expected:
+                checks.append(
+                    _check(
+                        "review_required",
+                        bool(expected["review_required"]),
+                        result.review_required,
+                        result.review_required == bool(expected["review_required"]),
+                    )
+                )
             errors.extend(result.errors)
     except Exception as exc:  # noqa: BLE001 - evaluator must report every case
         errors.append(f"{exc.__class__.__name__}: {exc}")
 
     passed_checks = sum(check.passed for check in checks)
     score = passed_checks / len(checks) if checks else 0.0
+    source_checks = [check for check in checks if check.name.startswith("source:")]
+    filing_checks = [
+        check
+        for check in checks
+        if check.name in {"type", "folder", "title"} or check.name.startswith("tag:")
+    ]
+    link_checks = [check for check in checks if check.name.startswith("link:")]
+    review_checks = [check for check in checks if check.name in {"sentinel", "review_required"}]
+    capture_body = _capture_body(case.get("capture") or {})
+    source_tokens = count_tokens(capture_body)
     return CaseResult(
         case_id=case_id,
         score=round(score, 4),
         latency_ms=round((time.perf_counter() - started) * 1000),
         checks=checks,
         errors=errors,
+        source_fidelity=(sum(check.passed for check in source_checks) / len(source_checks))
+        if source_checks
+        else 1.0,
+        filing=(sum(check.passed for check in filing_checks) / len(filing_checks))
+        if filing_checks
+        else 1.0,
+        link=(sum(check.passed for check in link_checks) / len(link_checks))
+        if link_checks
+        else 1.0,
+        review=(sum(check.passed for check in review_checks) / len(review_checks))
+        if review_checks
+        else 1.0,
+        token_estimates={
+            "source": source_tokens,
+            "classification_chunks": max(1, (source_tokens + 1499) // 1500),
+            "body_chunks": max(1, (source_tokens + 1999) // 2000),
+        },
     )
 
 
@@ -194,12 +288,30 @@ async def evaluate(path: Path, mode: str, threshold: float) -> EvaluationReport:
     results = [await evaluate_case(case, mode) for case in load_cases(path)]
     score = sum(result.score for result in results) / len(results)
     passed = score >= threshold and all(not result.errors for result in results)
+    metrics = {
+        "score": round(score, 4),
+        "source_fidelity": round(
+            sum(result.source_fidelity for result in results) / len(results), 4
+        ),
+        "filing": round(sum(result.filing for result in results) / len(results), 4),
+        "link": round(sum(result.link for result in results) / len(results), 4),
+        "review": round(sum(result.review for result in results) / len(results), 4),
+        "latency_ms": round(sum(result.latency_ms for result in results) / len(results), 2),
+    }
     return EvaluationReport(
         mode=mode,
         score=round(score, 4),
         passed=passed,
         threshold=threshold,
         cases=results,
+        metrics=metrics,
+        score_scope=(
+            "fixture orchestration-only"
+            if mode == "fixture"
+            else "heuristic orchestration-only"
+            if mode == "heuristic"
+            else "configured live provider"
+        ),
     )
 
 
@@ -209,7 +321,15 @@ def main() -> None:
     parser.add_argument("--mode", choices=("fixture", "heuristic", "configured"), default="fixture")
     parser.add_argument("--threshold", type=float, default=0.9)
     parser.add_argument("--output", type=Path)
+    parser.add_argument(
+        "--allow-live",
+        action="store_true",
+        help="Required with --mode configured; may incur provider charges",
+    )
     args = parser.parse_args()
+
+    if args.mode == "configured" and not args.allow_live:
+        parser.error("--mode configured requires explicit --allow-live")
 
     report = asyncio.run(evaluate(args.cases, args.mode, args.threshold))
     payload = json.dumps(asdict(report), indent=2)

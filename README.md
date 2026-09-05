@@ -9,7 +9,7 @@
   A local-first AI memory system with a multi-agent backbone and a visual knowledge graph.
 </p>
 
-![Python](https://img.shields.io/badge/python-3.11%2B-blue)
+![Python](https://img.shields.io/badge/python-3.12-blue)
 ![React](https://img.shields.io/badge/react-19-61dafb)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Status](https://img.shields.io/badge/status-open%20beta-orange)
@@ -22,7 +22,7 @@ Loom is a personal knowledge system that stores everything as **plain Markdown**
 
 You write captures; agents do the structuring, linking, summarizing, and validating. The whole stack runs locally — your files, your provider keys, your machine.
 
-> **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, the four views, and the capture → note → graph loop.
+> **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, Today and the main views, and the capture → note → graph loop.
 
 ## See Loom
 
@@ -315,24 +315,35 @@ flowchart LR
 - Multi-vault filesystem at `~/.loom/vaults/`
 - Fixed core folders (`daily`, `projects`, `topics`, `people`, `captures`) plus your own
 - Atomic Markdown writes with YAML frontmatter (`id`, `title`, `type`, `tags`, `created`, `modified`, `author`, `status`, `history`)
-- Edit history tracked per-mutation in frontmatter
+- Metadata-first lists load bodies only for the selected note
+- Durable editor drafts are scoped to a vault and note, preserve their base version, and expose explicit conflict recovery
+- Edit history supports version-checked restore/undo
 - Deletion = move to `.archive/`, never destroyed
 - File watcher reflects external edits live
 
 ### Search
-- Hybrid: semantic (LanceDB vectors) + keyword + tag/type filters
+- Hybrid: semantic (LanceDB vectors) + keyword ranks fused with RRF, plus tag/type filters
 - Graph-aware boosting — linked notes rank higher
 - Keyword fallback when no embedding provider is configured
 - Global search bar (Cmd/Ctrl+K) plus a separate file-tree filter
 
 ### Agents & chat
 - Loom Council chat streams its answer token-by-token over SSE, with each agent's contribution shown as its own bubble
-- Every model call is captured as a trace — open the "raw call" on any message to see provider, model, prompt, response, and latency
+- Every model call is captured as a trace with provider, model, and latency; prompts and responses are included only when raw-content retention is enabled
 - Custom agents: spin up your own Shuttle-tier agent from the Board; the seven built-in agents stay read-only
 - Per-agent `memory.md` summarized every 20 actions
 - Per-agent-per-day changelog at `.loom/changelog/<agent>/<date>.md`
 - Chat history persisted as Markdown: `agents/_council/chat/` for Council, `agents/<name>/chat/` for Shuttle
 - Captures inbox view for triaging raw input before Weaver structures it
+- Spider records deterministic link evidence with source excerpts and explicit suggested/applied/user-accepted states
+
+### Daily workflow
+- **Today** can be the default home and surfaces recent notes, pinned projects, pending captures/jobs, and the latest Standup
+- **Quick Capture** is available from the shell shortcut and routes text or URLs through the same durable capture ingress as agents and connectors
+- **Recoverable editing** keeps local drafts across navigation/reloads, compares conflicting edits, and offers revision restore plus conflict-checked undo of an AI run
+- **Review with evidence** compares original/proposed text, suggests existing notes for an approved append/merge, and explains graph connections using recorded excerpts
+- **Automation controls** pause background work, limit captures by source and estimated input tokens per day, show usage, and exclude folders/tags from cloud context
+- **Source preservation** keeps original captures and bounded URL/PDF imports with extraction provenance; PDFs must contain extractable text (no OCR)
 
 ### Providers
 - OpenAI (chat + embed)
@@ -355,11 +366,11 @@ flowchart LR
 
 | Layer | Tools |
 |---|---|
-| Backend | Python 3.11+, FastAPI, Pydantic v2, Uvicorn |
+| Backend | Python 3.12, FastAPI, Pydantic v2, Uvicorn |
 | Agent orchestration | LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs over Loom's own providers (no LangChain provider stack) |
 | Frontend | React 19, TypeScript 5.9, Vite |
 | Graph | Sigma.js 3 + graphology (force-atlas2 layout) |
-| Editor | Custom Markdown renderer (`frontend/src/editor/renderMarkdown.tsx`) with `[[wikilink]]` support |
+| Editor | `react-markdown` preview with `[[wikilink]]` handling and a version-checked textarea editor |
 | Vector DB | LanceDB + PyArrow |
 | AI | OpenAI / Anthropic SDKs, `httpx` for xAI / OpenRouter / Ollama |
 | Realtime | Server-Sent Events (SSE) for streamed Council replies |
@@ -409,21 +420,28 @@ them.
 ### Run from source (for development)
 
 #### Prerequisites
-- Python ≥ 3.11
+- Python 3.12
 - Node.js 22 with npm
 - An API key for at least one provider (or a running Ollama instance)
 
 #### Backend
 ```bash
 cd backend
-pip install -e ".[dev]" --break-system-packages
-uvicorn api.main:app --reload --port 8000
+python3.12 -m venv .venv
+source .venv/bin/activate
+python -m pip install -r requirements.lock -r requirements-dev.lock
+python -m pip install --no-deps -e ".[dev]"
+python -m uvicorn api.main:app --reload --port 8000
 ```
+
+On Windows, create the environment with `py -3.12 -m venv .venv` and activate
+it with `.venv\Scripts\Activate.ps1`. Redis/Postgres clients are optional:
+install `requirements-optional.lock` only when using those services.
 
 #### Frontend
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev   # serves on http://localhost:5173
 ```
 
@@ -563,54 +581,18 @@ and the [OAuth release runbook](docs/OAUTH-RELEASE-VALIDATION.md).
 
 ## Status
 
-**Current release: 1.1.0 (open beta).** Loom runs end-to-end for daily local
-use. The current worktree also contains the next connector release: Google
-Calendar + Gmail, Outlook Calendar, and GitHub browser authorization are
-code-complete and mock-verified, but still need first live OAuth connections
-before release. Loom remains
-deliberately local-first and unauthenticated by default — it is not an
-internet-exposable service without your own reverse proxy (see *Known gaps*).
-What works today:
+Loom is under active development. The architecture reference documents the
+features in this worktree, but it is not a release declaration or a statement
+that the release matrix has passed.
 
-- All 5 Loom Layer agents (Weaver, Spider, Archivist, Scribe, Sentinel) with the read-before-write chain
-- Both Shuttle Layer agents (Researcher, Standup) plus user-defined custom agents
-- Scribe daily-log generation and Sentinel AI-assisted validation (LLM path with a deterministic fallback)
-- Graph, Board, Inbox, and Thread views
-- Durable Inbox queue with retry/cancel, review handling, automation policy, and job history
-- Scheduled Standup workspace plus encrypted read-only iCalendar connection
-- Google connector — one sign-in covers Calendar + Gmail: single union-scope consent, one encrypted auto-refreshing token, per-calendar incremental cursors, multi-calendar selection. Set `LOOM_GOOGLE_OAUTH_CLIENT_ID` and `LOOM_GOOGLE_OAUTH_CLIENT_SECRET` once on the installation for a click-only user flow; manual app credentials remain available for self-hosters. Outlook Calendar uses the same guided browser-sign-in pattern.
-- GitHub Bridge — browser device authorization when `LOOM_GITHUB_OAUTH_CLIENT_ID` is set (with encrypted token storage), plus manual-token fallback; polls repos for commits/issues/PRs with per-repo cursors and an interval poller.
-- Email Bridge — read-only IMAP polling into the Inbox (app password encrypted at rest, UID cursors, never marks mail as seen), or Gmail via the Google connector's single sign-in
-- First-run onboarding wizard (vault, theme, provider)
-- Settings UI — appearance, providers (with key validation), vault, about/diagnostics, danger zone
-- Streaming Loom Council chat with per-call trace inspection
-- Multi-vault management
-- Hybrid semantic + keyword search with graph-aware boosting
-- Provider system (OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, Ollama)
-- File watcher, rate limiting, separate liveness/readiness probes
-- One-command Docker run (single container serves UI + API)
-
-**Resilience & correctness** (the focus of recent work):
-- Bounded provider retry (backoff + jitter) at the trace chokepoint — a transient blip no longer fails a whole search or index pass (OpenRouter keeps its own 429 loop)
-- Index-drift detection: notes that land in the metadata index but miss the vector store are reconciled on startup, surfaced via `/api/health`, and shown as a "rebuilding" banner
-- Idempotent capture pipeline — a crash between note-write and archive can't create a duplicate on retry
-- One shared capture-ingress path gives every producer immediate idempotency, provenance, indexing, queue policy, and typed live events
-- Vault export/import is size-bounded and disk-streamed; overwrite restores use an atomic staged swap with rollback and startup recovery
-- Note archival shares the edit lock, supports optimistic version checks, and restores the exact original on a failed move
-- Token-based prompt truncation (`tiktoken`, char-count fallback) so a dense note can't silently blow the context window
-- End-to-end tests through the real HTTP routers (capture → process → graph → search), plus failure-path coverage for the providers/onboarding/SSE/agent routes; strict `mypy` gates CI with the type backlog at zero
-- A versioned semantic capture-quality evaluator, critical-path Playwright + accessibility smoke test (onboarding → Inbox → filed note → rename → archive → restore), provider-free real-backend recovery/restore drill, 1k/5k/10k backend benchmark, and 5k/10k Chromium UI profile
-- Large vaults initially collapse unseen file-tree folders to avoid creating thousands of DOM rows; major views are split into independently loaded production chunks
-- Boot-screen timeout with a Retry fallback instead of an infinite spinner; accessible confirm dialogs in place of `window.confirm`
-
-**Known gaps (deliberate v1 boundaries):**
-- **Local-first, no auth by design.** The API ships no authentication — safe on a loopback bind, not for an untrusted network. An optional `LOOM_API_TOKEN` shared-token gate adds a speed bump for a deliberately-exposed port, not access control; put real auth + TLS in a reverse proxy. See [SECURITY.md](SECURITY.md)
-- **Provider API keys are encrypted at rest** in `config.yaml` using a deployment key, an optional OS-keychain-backed master key, or the machine-local encrypted-file fallback — defense-in-depth, not a substitute for auth
-- **Bridge status** — shipped: private iCalendar feeds (Standup enrichment + idempotent Inbox jobs), a Google connector (one sign-in covering Calendar + Gmail), Outlook Calendar, GitHub browser device authorization with manual-token fallback, and read-only IMAP Email polling. The OAuth connectors are code-complete and mock-verified; first live connects still require deployment-owned app registrations. The general plugin contract, the Prompt Compiler, and multi-file attachments remain planned; see [`docs/VISION.md`](docs/VISION.md)
-- **Local model guidance (Ollama).** Agent work needs a model that follows note/frontmatter instructions reliably. Verified on Apple Silicon: `devstral` and `phi4` are fast and pass validation; `gpt-oss:20b` and `gemma4:26b` work but are slower (gemma4's Weaver step can approach 2 min). Reasoning models (`deepseek-r1`, thinking-mode Qwen) complete but are slow and their drafts often land in the review lane — usable, not recommended for agents. Very small instruct models may fail Sentinel's section checks; the Inbox review lane catches that safely. Chat completions stream internally, so slow-but-steady generation no longer trips the 120s read window.
-- `AppContext` remains the public compatibility shell, while vault/capture loading, graph navigation/display persistence, typed SSE refresh, custom-agent registry state, and Council streaming/history live in focused domain hooks.
-
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the shipped design (and [`docs/architecture-ref.md`](docs/architecture-ref.md) for the condensed version), [`docs/ROADMAP.md`](docs/ROADMAP.md) for the release plan, [`docs/RELEASE-READINESS.md`](docs/RELEASE-READINESS.md) for the current audit, [`docs/VISION.md`](docs/VISION.md) for longer-range direction, and [`docs/style-guide.md`](docs/style-guide.md) for conventions.
+The remaining operational gates include real OAuth validation with
+operator-created Google and Microsoft applications, the hosted operating-system
+matrix, and a clean-volume Docker product drill. Loom remains a local
+single-user service: use a TLS reverse proxy with authentication before exposing
+it beyond loopback. See [ROADMAP.md](docs/ROADMAP.md) for planned work and
+release gates, [architecture-ref.md](docs/architecture-ref.md) for current
+behavior, and [RELEASE-READINESS.md](docs/RELEASE-READINESS.md) for the dated
+audit that recorded earlier evidence.
 
 ## Historical wireframes
 

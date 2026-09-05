@@ -21,6 +21,7 @@ import { useVaultContent } from "./useVaultContent";
 import { useCouncil } from "./useCouncil";
 import { useCustomAgents } from "./useCustomAgents";
 import { useGraphNavigation } from "./useGraphNavigation";
+import { readNavigation, useNavigationHistory } from "./useNavigationHistory";
 
 const TREE_VISIBLE_KEY = "loom.treeVisible";
 
@@ -62,13 +63,19 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
   const initialCaptures = useMemo(() => (demo ? capturesSeed : []), [demo]);
 
-  const [tab, setTab] = useState<Tab>("graph");
+  const [tab, setTab] = useState<Tab>(() => readNavigation().tab);
   const [settingsSection, setSettingsSection] =
     useState<SettingsSection>("appearance");
-  const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>("thr_t001");
+  const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>(
+    () => readNavigation().noteId ?? "thr_t001",
+  );
+  const [noteHeading, setNoteHeading] = useState<string>(
+    () => readNavigation().heading,
+  );
 
-  const openNote = useCallback((id: NoteId) => {
+  const openNote = useCallback((id: NoteId, heading = "") => {
     setCurrentNoteId(id);
+    setNoteHeading(heading);
     setTab("thread");
   }, []);
 
@@ -115,6 +122,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
+  const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
 
   const [toasts, setToasts] = useState<Toast[]>([]);
   const pushToast = useCallback((toast: Omit<Toast, "id">) => {
@@ -129,6 +137,14 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   }, []);
 
   const liveLoomConfig = useLoomConfig(pushToast);
+  useNavigationHistory({
+    tab,
+    noteId: currentNoteId,
+    heading: noteHeading,
+    setTab,
+    setNoteId: setCurrentNoteId,
+    setHeading: setNoteHeading,
+  });
   // A graph fixture must render immediately even with no backend. The config
   // hook still owns theme behavior, while these read-only shell fields place
   // the app in its existing standalone/offline-ready phase.
@@ -161,6 +177,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     appendNote,
     updateNote,
     removeNote,
+    reloadNoteBody,
     captures,
     capturesLoaded,
     capturesError,
@@ -171,6 +188,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   } = useVaultContent({
     enabled: !demo && loomConfig.onboardingComplete && !loomConfig.offline,
     activeVault: loomConfig.config?.active_vault,
+    currentNoteId: tab === "thread" ? currentNoteId : graphSelectedId,
     initialNotes,
     initialCaptures,
     setCurrentNoteId,
@@ -258,6 +276,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setSettingsSection,
       currentNoteId,
       openNote,
+      noteHeading,
 
       graphFocusId,
       setGraphFocusId,
@@ -285,6 +304,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
       paletteOpen,
       setPaletteOpen,
+      quickCaptureOpen,
+      setQuickCaptureOpen,
 
       toasts,
       pushToast,
@@ -307,6 +328,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       appendNote,
       updateNote,
       removeNote,
+      reloadNoteBody,
 
       captures,
       capturesLoaded,
@@ -341,6 +363,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       tab,
       settingsSection,
       currentNoteId,
+      noteHeading,
       graphFocusId,
       graphSelectedId,
       graphFlyTo,
@@ -351,6 +374,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       editing,
       treeVisible,
       paletteOpen,
+      quickCaptureOpen,
       toasts,
       agentActivity,
       changelog,
@@ -393,6 +417,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       appendNote,
       updateNote,
       removeNote,
+      reloadNoteBody,
       selectCapture,
       setCaptureStatus,
       removeCapture,

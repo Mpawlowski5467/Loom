@@ -278,7 +278,21 @@ class Scribe(BaseAgent):
         trustworthy ``## Notes Referenced`` section — so this method only has to
         supply ``## Summary`` and ``## Activity`` content.
         """
-        if self._chat_provider is not None:
+        # Changelog text can contain historical excerpts with no reliable
+        # note provenance. When any cloud exclusion exists, keep this derived
+        # aggregate local/deterministic rather than risk relaying old content.
+        from core.automation_policy import is_cloud_provider
+        from core.config import GlobalConfig
+
+        root = self._vault_root.resolve()
+        cloud_exclusions = False
+        if root.parent.name == "vaults":
+            policy = GlobalConfig.load(root.parent.parent / "config.yaml").automation_policy
+            cloud_exclusions = bool(policy.excluded_cloud_folders or policy.excluded_cloud_tags)
+        provider_name = str(getattr(self._chat_provider, "name", ""))
+        if self._chat_provider is not None and not (
+            cloud_exclusions and is_cloud_provider(provider_name)
+        ):
             try:
                 return await self._chat_provider.chat(
                     messages=[
@@ -317,6 +331,12 @@ class Scribe(BaseAgent):
             try:
                 meta = parse_note_meta(md)
                 if not meta.id:
+                    continue
+                from core.automation_policy import note_allowed_for_provider
+
+                if not note_allowed_for_provider(
+                    self._chat_provider, md, meta.tags, self._vault_root
+                ):
                     continue
                 # Read first 200 chars of body for preview
                 note = parse_note(md)

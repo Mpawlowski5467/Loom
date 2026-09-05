@@ -49,7 +49,11 @@ ENV PYTHONUNBUFFERED=1 \
 # cached across code-only edits. The lock is regenerated from a venv where the
 # full test suite passes (see backend/pyproject.toml).
 COPY backend/requirements.lock ./
-RUN pip install --upgrade pip && pip install -r requirements.lock
+COPY backend/requirements-optional.lock ./
+ARG LOOM_BACKEND_EXTRAS=""
+RUN pip install --upgrade pip \
+    && pip install -r requirements.lock \
+    && if [ -n "$LOOM_BACKEND_EXTRAS" ]; then pip install -r requirements-optional.lock; fi
 
 # Then install the project itself without re-resolving dependencies — the
 # locked pins above are the single source of truth for its runtime deps.

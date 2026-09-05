@@ -60,6 +60,7 @@ class ReadChainResult:
     memory: str = ""
     folder_index: str = ""
     related_notes: list[dict[str, Any]] = field(default_factory=list)
+    omit_derived_context: bool = False
 
     @property
     def failed_required(self) -> list[StepResult]:
@@ -74,9 +75,9 @@ class ReadChainResult:
             parts.append(f"# Constitution\n\n{self.prime_text}")
         if self.role_rules:
             parts.append(f"# Role Rules\n\n{self.role_rules}")
-        if self.memory:
+        if self.memory and not self.omit_derived_context:
             parts.append(f"# Agent Memory\n\n{self.memory}")
-        if self.folder_index:
+        if self.folder_index and not self.omit_derived_context:
             parts.append(f"# Folder Index\n\n{self.folder_index}")
         for note in self.related_notes:
             parts.append(f"# Related: {note['title']}\n\n{note['body']}")
@@ -86,9 +87,15 @@ class ReadChainResult:
 class ReadChain:
     """Executes the mandatory read-before-write chain for an agent."""
 
-    def __init__(self, vault_root: Path, note_index: NoteIndex | None = None) -> None:
+    def __init__(
+        self,
+        vault_root: Path,
+        note_index: NoteIndex | None = None,
+        chat_provider: Any | None = None,
+    ) -> None:
         self._root = vault_root
         self._note_index = note_index
+        self._chat_provider = chat_provider
 
     def execute(self, agent_name: str, target_path: Path) -> ReadChainResult:
         """Run the full 6-step read chain.
@@ -122,6 +129,23 @@ class ReadChain:
 
         # Mark overall success based on required steps
         result.success = len(result.failed_required) == 0
+        # Old memories and folder indexes may contain excerpts with no note
+        # provenance. Retain the read for agent correctness, but do not pass
+        # it into a cloud prompt while any exclusion rule is active.
+        from core.automation_policy import is_cloud_provider
+        from core.config import GlobalConfig
+
+        root = self._root.resolve()
+        name = str(getattr(self._chat_provider, "name", ""))
+        if (
+            self._chat_provider is not None
+            and root.parent.name == "vaults"
+            and is_cloud_provider(name)
+        ):
+            policy = GlobalConfig.load(root.parent.parent / "config.yaml").automation_policy
+            result.omit_derived_context = bool(
+                policy.excluded_cloud_folders or policy.excluded_cloud_tags
+            )
         return result
 
     def _step_vault_config(self, result: ReadChainResult) -> StepResult:
@@ -221,9 +245,23 @@ class ReadChain:
                     # Use cached index if available, else fall back to rglob
                     title_map = self._get_title_map(threads_dir)
                     for link_text in wikilinks:
-                        linked_path = title_map.get(link_text.lower())
+                        from core.wikilinks import link_target
+
+                        linked_path = title_map.get(link_target(link_text))
                         if linked_path and linked_path != target_path:
                             linked = parse_note(linked_path)
+                            # Related-note bodies become prompt material for
+                            # every Loom agent. Exclude protected notes here;
+                            # local providers are intentionally still allowed.
+                            from core.automation_policy import note_allowed_for_provider
+
+                            # ReadChain has no provider binding, so mark the
+                            # protected note for callers to omit when sending
+                            # cloud prompts (its body is never put in context).
+                            if not note_allowed_for_provider(
+                                self._chat_provider, linked_path, linked.tags, self._root
+                            ):
+                                continue
                             related.append(
                                 {
                                     "title": linked.title,
@@ -243,7 +281,7 @@ class ReadChain:
         return step
 
     def _get_title_map(self, threads_dir: Path) -> dict[str, Path]:
-        """Return a title→path map, preferring the cached NoteIndex."""
+        """Return canonical, ambiguity-safe wikilink targets to paths."""
         if self._note_index is not None and self._note_index.size > 0:
             return self._note_index.get_title_map()
         return self._build_title_map_from_disk(threads_dir)
@@ -252,15 +290,16 @@ class ReadChain:
     def _build_title_map_from_disk(threads_dir: Path) -> dict[str, Path]:
         """Build a lowercase-title → path map from all .md files in threads/."""
         from core.notes import parse_note_meta
+        from core.wikilinks import unique_link_map
 
-        title_map: dict[str, Path] = {}
+        entries: list[tuple[Any, Path]] = []
         for md in threads_dir.rglob("*.md"):
             if ".archive" in md.parts:
                 continue
             try:
                 meta = parse_note_meta(md)
-                if meta.title:
-                    title_map[meta.title.lower()] = md
+                if meta.id:
+                    entries.append((meta, md))
             except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
-        return title_map
+        return unique_link_map(entries)

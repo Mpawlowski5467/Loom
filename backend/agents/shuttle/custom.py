@@ -124,6 +124,12 @@ class CustomAgent(BaseAgent):
         entries.sort(key=lambda e: e.meta.modified or "", reverse=True)
         parts: list[str] = []
         for entry in entries[:_MAX_CONTEXT_NOTES]:
+            from core.automation_policy import note_allowed_for_provider
+
+            if not note_allowed_for_provider(
+                self._chat_provider, entry.file_path, entry.tags, self._vault_root
+            ):
+                continue
             try:
                 note = parse_note(entry.file_path)
             except (OSError, ValueError):

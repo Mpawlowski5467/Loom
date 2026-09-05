@@ -7,6 +7,7 @@ import {
   type RunSummary,
 } from "../api/runs";
 import { TraceModal } from "./TraceModal";
+import { RunUndo } from "./RunUndo";
 
 interface Props {
   /** Only show runs made by this agent (matches RunSummary.agent). */
@@ -142,6 +143,9 @@ export function RunFeed({
                 );
               })}
             </ol>
+          )}
+          {expanded === run.run_id && (
+            <RunUndo key={run.run_id} runId={run.run_id} />
           )}
         </div>
       ))}

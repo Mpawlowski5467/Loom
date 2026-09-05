@@ -583,13 +583,21 @@ def _build_export_archive(source: Path, name: str, temp_root: Path) -> Path:
             vault_yaml = source / "vault.yaml"
             if vault_yaml.exists():
                 tar.add(vault_yaml, arcname=f"{name}/vault.yaml")
-            for sub in ("threads", "agents", "rules", "prompts"):
+            for sub in ("threads", "agents", "rules", "prompts", "attachments"):
                 src = source / sub
                 if src.exists():
                     tar.add(src, arcname=f"{name}/{sub}")
             changelog = source / ".loom" / "changelog"
             if changelog.exists():
                 tar.add(changelog, arcname=f"{name}/.loom/changelog")
+            from core.revisions import export_snapshot
+
+            with tempfile.TemporaryDirectory(
+                dir=temp_root, prefix=".loom-revision-export-"
+            ) as snapshot_dir:
+                snapshot = Path(snapshot_dir) / "revisions.sqlite3"
+                if export_snapshot(source, snapshot):
+                    tar.add(snapshot, arcname=f"{name}/.loom/revisions.sqlite3")
     except BaseException:
         _safe_unlink(archive_path)
         raise

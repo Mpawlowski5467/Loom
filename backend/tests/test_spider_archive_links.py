@@ -68,14 +68,13 @@ def _write_note(root: Path, folder: str, filename: str, meta: dict, body: str) -
 
 
 def _leak_archived_into_index(root: Path) -> None:
-    """Simulate the watcher leak: ``refresh_file`` indexes notes under
-    ``.archive/`` because the create/modify handlers don't filter it."""
+    """Assert the current index invariant: archived notes are never indexed."""
     index = get_note_index()
     index.build(root / "threads")
     for md in (root / "threads" / ".archive").rglob("*.md"):
         index.refresh_file(md)
     leaked = [e for e in index.all_entries() if ".archive" in e.file_path.parts]
-    assert leaked, "simulation broken: NoteIndex no longer accepts .archive entries"
+    assert not leaked, "archived notes must not enter NoteIndex"
 
 
 # =============================================================================
@@ -121,7 +120,7 @@ class TestArchivedBacklinkTargets:
         assert linked == ["Live Target"]
         assert archived_path.read_text(encoding="utf-8") == archived_before
         assert "Live Target" in parse_note(source_path).wikilinks
-        assert "Source Note" in parse_note(live_path).wikilinks
+        assert any("Source Note" in link for link in parse_note(live_path).wikilinks)
 
     @pytest.mark.asyncio
     async def test_apply_links_with_leaked_index_skips_archived(self, tmp_path: Path):

@@ -8,6 +8,7 @@ import { Markdown } from "./Markdown";
 
 interface RenderOptions {
   bodyClass?: string;
+  headingIdPrefix?: string;
 }
 
 export interface Heading {
@@ -21,7 +22,13 @@ export function renderMarkdown(
   md: string,
   opts: RenderOptions = {},
 ): ReactElement {
-  return <Markdown source={md} bodyClass={opts.bodyClass} />;
+  return (
+    <Markdown
+      source={md}
+      bodyClass={opts.bodyClass}
+      headingIdPrefix={opts.headingIdPrefix}
+    />
+  );
 }
 
 /* ── shared HAST heading walk (the single source of truth for ids) ── */

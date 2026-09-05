@@ -1,15 +1,14 @@
 """Search API route: semantic search with keyword fallback."""
 
+import asyncio
 import logging
 from typing import Any
 
-import yaml
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, Field
 
 from core.exceptions import ProviderConfigError, ProviderError
 from core.note_index import NoteIndex, get_note_index
-from core.notes import parse_note
 from core.rate_limit import READ_LIMIT, limiter
 from index.searcher import get_searcher
 
@@ -65,64 +64,57 @@ def _keyword_search(
     type_filter: str | None = None,
     tag_filter: list[str] | None = None,
 ) -> list[SearchResult]:
-    """Original keyword search as fallback when vector index is unavailable."""
-    query_lower = query.lower()
-    scored: list[SearchResult] = []
-
-    for entry in index.all_entries():
-        score = 0
-        body_text: str | None = None
-
-        # Apply type filter early
-        if type_filter and entry.type != type_filter:
-            continue
-
-        # Apply tag filter early
-        if tag_filter and not all(t in entry.tags for t in tag_filter):
-            continue
-
-        # Title match (highest weight)
-        if query_lower in entry.title.lower():
-            score += 10
-            if entry.title.lower() == query_lower:
-                score += 5
-
-        # Tag match
-        for tag in entry.tags:
-            if query_lower in tag.lower():
-                score += 5
-
-        # Body match
-        if entry.file_path.exists():
-            try:
-                note = parse_note(entry.file_path)
-                body_text = note.body
-            except (OSError, yaml.YAMLError, ValidationError, ValueError):
-                body_text = None
-
-        if body_text and query_lower in body_text.lower():
-            score += 2
-            count = body_text.lower().count(query_lower)
-            score += min(count, 3)
-
-        if score == 0:
-            continue
-
-        snippet = _snippet(body_text, query) if body_text else ""
-
-        scored.append(
-            SearchResult(
-                id=entry.id,
-                title=entry.title,
-                type=entry.type,
-                tags=entry.tags,
-                snippet=snippet,
-                score=score,
-            )
+    """Retrieve independent, filtered FTS candidates from the rebuildable index."""
+    return [
+        SearchResult(
+            id=entry.id,
+            title=entry.title,
+            type=entry.type,
+            tags=entry.tags,
+            snippet=_snippet(entry.body, query),
+            score=score,
         )
+        for entry, score in index.lexical_search(query, type_filter, tag_filter, MAX_RESULTS * 4)
+    ]
 
-    scored.sort(key=lambda r: (-r.score, r.title.lower()))
-    return scored[:MAX_RESULTS]
+
+def _merge_search_results(
+    query: str,
+    keyword: list[SearchResult],
+    semantic: list[Any],
+    index: NoteIndex,
+) -> list[SearchResult]:
+    """Union lexical and vector candidates, then rank once at note level."""
+    # Scores from keyword matching and vector distance have unrelated scales.
+    # Reciprocal-rank fusion combines their order without pretending otherwise.
+    fused: dict[str, float] = {}
+    combined: dict[str, SearchResult] = {}
+    rrf_k = 60
+    for rank, result in enumerate(keyword, start=1):
+        fused[result.id] = fused.get(result.id, 0) + 1 / (rrf_k + rank)
+        combined[result.id] = result
+    for rank, hit in enumerate(semantic, start=1):
+        entry = index.get_by_id(hit.note_id)
+        if entry is None:
+            continue
+        fused[hit.note_id] = fused.get(hit.note_id, 0) + 1 / (rrf_k + rank)
+        previous = combined.get(hit.note_id)
+        combined[hit.note_id] = SearchResult(
+            id=hit.note_id,
+            title=entry.title,
+            type=hit.note_type,
+            tags=hit.tags,
+            snippet=hit.snippet or (previous.snippet if previous else ""),
+            heading=hit.heading,
+            score=0,
+        )
+    for note_id, result in combined.items():
+        result.score = round(fused.get(note_id, 0), 6)
+    exact = query.strip().lower()
+    return sorted(
+        combined.values(),
+        key=lambda result: (result.title.lower() != exact, -result.score, result.title.lower()),
+    )[:MAX_RESULTS]
 
 
 @router.get("")
@@ -145,7 +137,40 @@ async def search_notes(
     """
     tag_list = [t.strip() for t in tags.split(",") if t.strip()] if tags else None
 
-    # Try semantic search first
+    # An exact title is deterministic, free, and more useful than waiting for
+    # an embedding request. Keep filters in this fast path so it has the same
+    # contract as hybrid retrieval.
+    exact = q.strip().lower()
+    exact_entries = [
+        entry
+        for entry in index.all_entries()
+        if entry.title.lower() == exact
+        and (note_type is None or entry.type == note_type)
+        and (tag_list is None or all(tag in entry.tags for tag in tag_list))
+    ]
+    if exact_entries:
+        return SearchResponse(
+            query=q,
+            results=[
+                SearchResult(
+                    id=entry.id,
+                    title=entry.title,
+                    type=entry.type,
+                    tags=entry.tags,
+                    score=100,
+                )
+                for entry in exact_entries
+            ],
+            mode="keyword",
+        )
+
+    # Lexical candidates are always collected first so exact title/body
+    # matches are never discarded by a vector-only candidate cutoff.
+    keyword_results = await asyncio.to_thread(
+        _keyword_search, q, index, type_filter=note_type, tag_filter=tag_list
+    )
+
+    # Add vector candidates when available, then rank the union at note level.
     searcher = get_searcher()
     if searcher is not None:
         try:
@@ -165,26 +190,13 @@ async def search_notes(
             )
 
             if semantic_results:
-                # Enrich with note titles from the in-memory index
-                results: list[SearchResult] = []
-                for sr in semantic_results:
-                    entry = index.get_by_id(sr.note_id)
-                    title = entry.title if entry else sr.note_id
-                    results.append(
-                        SearchResult(
-                            id=sr.note_id,
-                            title=title,
-                            type=sr.note_type,
-                            tags=sr.tags,
-                            snippet=sr.snippet,
-                            score=sr.score,
-                            heading=sr.heading,
-                        )
-                    )
-                return SearchResponse(query=q, results=results, mode="semantic")
+                return SearchResponse(
+                    query=q,
+                    results=_merge_search_results(q, keyword_results, semantic_results, index),
+                    mode="semantic",
+                )
         except (ProviderError, ProviderConfigError, OSError):
             logger.warning("Semantic search failed, falling back to keyword", exc_info=True)
 
     # Keyword fallback
-    keyword_results = _keyword_search(q, index, type_filter=note_type, tag_filter=tag_list)
     return SearchResponse(query=q, results=keyword_results, mode="keyword")

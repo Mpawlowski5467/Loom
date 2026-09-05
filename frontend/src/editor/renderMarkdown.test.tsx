@@ -18,6 +18,34 @@ function renderMarkdownWithContext(markdown: string, openNote = vi.fn()) {
 }
 
 describe("renderMarkdown", () => {
+  it("opens relative Markdown documents and heading fragments inside Loom", async () => {
+    const user = userEvent.setup();
+    const openNote = vi.fn();
+    const resolveWikilink = vi.fn(() => "target");
+    const value = {
+      currentNoteId: "source",
+      openNote,
+      resolveWikilink,
+      noteById: () => ({ folder: "projects/atlas", type: "topic" }),
+    } as unknown as AppContextValue;
+    render(
+      <AppCtx.Provider value={value}>
+        {renderMarkdown(
+          "[sibling](../other.md#Next%20steps) · [here](#Local%20heading) · [malformed](broken%GG.md)",
+        )}
+      </AppCtx.Provider>,
+    );
+    await user.click(screen.getByRole("button", { name: "Open note sibling" }));
+    expect(resolveWikilink).toHaveBeenCalledWith(
+      "projects/other.md#Next steps",
+    );
+    expect(openNote).toHaveBeenCalledWith("target", "Next steps");
+    await user.click(screen.getByRole("link", { name: "here" }));
+    expect(openNote).toHaveBeenCalledWith("source", "Local heading");
+    expect(
+      screen.getByRole("button", { name: "Open note malformed" }),
+    ).toBeInTheDocument();
+  });
   it("renders plain markdown", () => {
     renderMarkdownWithContext("## Heading\n\nHello Loom");
 

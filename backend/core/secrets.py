@@ -113,6 +113,13 @@ def _load_or_migrate_keyring_key() -> bytes | None:
                 path.unlink()
             return key
 
+        # A marker means the file key was deliberately retired after a
+        # verified migration.  Never manufacture a new key if the keychain
+        # entry has since disappeared: that would make existing ciphertext
+        # unrecoverable while looking like a successful startup.
+        if marker.exists() and not path.exists():
+            raise RuntimeError("Loom keychain migration completed, but its master key is missing")
+
         key = _valid_key(path.read_bytes().strip()) if path.exists() else Fernet.generate_key()
         keyring.set_password(KEYRING_SERVICE, account, key.decode("ascii"))
         verified = keyring.get_password(KEYRING_SERVICE, account)
@@ -147,6 +154,14 @@ def _load_or_create_key() -> bytes:
             raise RuntimeError(
                 "Loom's master key is in the OS keychain, but that keychain is unavailable"
             )
+    # Do not let switching LOOM_SECRET_STORAGE back to ``file`` silently
+    # rotate a key whose file was intentionally removed after keychain
+    # migration.  The caller must restore the keychain entry (or explicitly
+    # supply LOOM_SECRET_KEY for recovery).
+    if _keyring_marker_path().exists() and not path.exists():
+        raise RuntimeError(
+            "Loom's master key was migrated to the OS keychain and cannot be recreated as a file"
+        )
     if path.exists():
         return _valid_key(path.read_bytes().strip())
 

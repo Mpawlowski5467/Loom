@@ -408,8 +408,18 @@ class Sentinel(BaseAgent):
         target_content = ""
         if target.is_file() and target.suffix == ".md":
             with contextlib.suppress(Exception):
+                note = parse_note(target)
+                from core.automation_policy import note_allowed_for_provider
+
+                if not note_allowed_for_provider(
+                    self._chat_provider, target, note.tags, self._vault_root
+                ):
+                    result.status = "unavailable"
+                    result.modes.append("cloud_excluded")
+                    result.reasons.append("Target is excluded from cloud validation")
+                    return result
                 target_content = scrub_untrusted(
-                    truncate_to_tokens(target.read_text(encoding="utf-8"), _NOTE_CONTENT_TOKENS)
+                    truncate_to_tokens(note.body, _NOTE_CONTENT_TOKENS)
                 )
 
         user_msg = (

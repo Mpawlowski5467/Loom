@@ -142,6 +142,9 @@ export function CardsMode(): ReactNode {
 
   return (
     <div>
+      <div className="section-divider">Recent outcomes</div>
+      <RecentActivity changelog={changelog} />
+
       <div className="section-divider">Loom Layer · vault hygiene</div>
       <div className="agents-grid">{loom.map(card)}</div>
 
@@ -157,10 +160,6 @@ export function CardsMode(): ReactNode {
           <span>Add agent</span>
         </button>
       </div>
-
-      <div className="section-divider">Recent activity</div>
-      <RecentActivity changelog={changelog} />
-
       {detailAgent && (
         <AgentDetailModal
           agent={detailAgent}

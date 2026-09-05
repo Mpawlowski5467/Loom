@@ -242,6 +242,12 @@ class Researcher(BaseAgent):
                 note = parse_note(path)
             except (OSError, yaml.YAMLError, ValidationError, ValueError):
                 continue
+            from core.automation_policy import note_allowed_for_provider
+
+            if not note_allowed_for_provider(
+                self._chat_provider, path, note.tags, self._vault_root
+            ):
+                continue
             if not note.id or not note.title:
                 continue
 
@@ -312,6 +318,10 @@ class Researcher(BaseAgent):
             return None
         path, meta = resolved
         if not meta.title:
+            return None
+        from core.automation_policy import note_allowed_for_provider
+
+        if not note_allowed_for_provider(self._chat_provider, path, meta.tags, self._vault_root):
             return None
         return {
             "note_id": meta.id,

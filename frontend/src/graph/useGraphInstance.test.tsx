@@ -307,6 +307,7 @@ function setup(initialNotes: Note[]) {
     tuningRef: ref<GraphTuning>(makeTuning()),
     graphDisplayRef: ref<GraphDisplay>({ ...GRAPH_DISPLAY_DEFAULTS }),
     openNote: vi.fn(),
+    onEdgeClick: vi.fn(),
     setGraphFocusId: vi.fn(),
     setGraphSelectedId: vi.fn(),
   };
@@ -363,6 +364,28 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     expect(result.current.building).toBe(false);
   });
 
+  it("reports the selected relationship when an edge is clicked", () => {
+    const { onEdgeClick, setGraphSelectedId } = setup([
+      note("a", ["b"]),
+      note("b"),
+    ]);
+    build();
+    const instance = sigmaInstances()[0]!;
+    const edge = instance.graph.edge("a", "b");
+    const handler = instance.on.mock.calls.find(
+      ([event]) => event === "clickEdge",
+    )?.[1] as ((event: { edge: string }) => void) | undefined;
+
+    expect(edge).toBeTruthy();
+    expect(handler).toBeDefined();
+    act(() => {
+      handler?.({ edge: edge! });
+    });
+
+    expect(onEdgeClick).toHaveBeenCalledWith("a", "b");
+    expect(setGraphSelectedId).toHaveBeenCalledWith("a");
+  });
+
   it("does not construct a Sigma when there are no notes", () => {
     setup([]);
     build();
@@ -381,6 +404,7 @@ describe("useGraphInstance — Sigma lifecycle", () => {
 
     // Sanity: live subscriptions the teardown must unwind.
     expect(inst.listenerCount("clickNode")).toBe(1);
+    expect(inst.listenerCount("clickEdge")).toBe(1);
     expect(inst.camera.listenerCount("updated")).toBe(1);
     expect(clock.queued).toBe(1); // the shared frame loop holds one pending frame
 
@@ -394,6 +418,7 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     );
     expect(inst.camera.listenerCount("updated")).toBe(0);
     expect(inst.listenerCount("clickNode")).toBe(0);
+    expect(inst.listenerCount("clickEdge")).toBe(0);
 
     // Drag detached, overlay animators destroyed, debug hook uninstalled,
     // ResizeObserver disconnected, refs cleared.

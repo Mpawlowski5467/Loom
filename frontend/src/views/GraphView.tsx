@@ -3,6 +3,7 @@ import type { KeyboardEvent, ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
 import { GraphToolbar } from "../components/graph/GraphToolbar";
 import { GraphSelectionCard } from "../components/graph/GraphSelectionCard";
+import { GraphConnectionEvidencePanel } from "../components/graph/GraphConnectionEvidencePanel";
 import type { ExportFormat } from "../components/graph/GraphToolbar";
 import {
   exportGraphJson,
@@ -59,6 +60,10 @@ export function GraphView(): ReactNode {
   const overlayRef = useRef<SVGSVGElement | null>(null);
   const spacingScaleRef = useRef<number>(graphDisplay.spacingScale);
   const [isolateNeighbors, setIsolateNeighbors] = useState(false);
+  const [selectedConnection, setSelectedConnection] = useState<{
+    sourceId: string;
+    targetId: string;
+  } | null>(null);
 
   // Latest display settings for build-time seeding (the build effect only
   // depends on ``notes``, so it reads this rather than a stale closure).
@@ -102,6 +107,24 @@ export function GraphView(): ReactNode {
     () => computeVisibleNeighborIds(notes, graphFilters, graphSelectedId),
     [notes, graphFilters, graphSelectedId],
   );
+  const selectedConnections = useMemo(
+    () =>
+      notes
+        .filter((note) => selectedNeighborIds.has(note.id))
+        .map(({ id, title }) => ({ id, title }))
+        .sort((left, right) => left.title.localeCompare(right.title)),
+    [notes, selectedNeighborIds],
+  );
+  const selectedConnectionNotes = useMemo(() => {
+    if (!selectedConnection) return null;
+    const source = notes.find(
+      (note) => note.id === selectedConnection.sourceId,
+    );
+    const target = notes.find(
+      (note) => note.id === selectedConnection.targetId,
+    );
+    return source && target ? { source, target } : null;
+  }, [notes, selectedConnection]);
   const stats = useMemo(
     () =>
       computeVisibleGraphStats(notes, graphFilters, {
@@ -130,6 +153,8 @@ export function GraphView(): ReactNode {
     tuningRef,
     graphDisplayRef,
     openNote,
+    onEdgeClick: (sourceId, targetId) =>
+      setSelectedConnection({ sourceId, targetId }),
     setGraphFocusId,
     setGraphSelectedId,
   });
@@ -174,6 +199,7 @@ export function GraphView(): ReactNode {
   const clearSelection = useCallback(() => {
     setIsolateNeighbors(false);
     setGraphSelectedId(null);
+    setSelectedConnection(null);
   }, [setGraphSelectedId]);
 
   // Selection can outlive a note or a type-filter change because it lives in
@@ -194,6 +220,16 @@ export function GraphView(): ReactNode {
     isolateNeighbors,
     clearSelection,
   ]);
+
+  useEffect(() => {
+    if (
+      selectedConnection &&
+      graphSelectedId !== selectedConnection.sourceId &&
+      graphSelectedId !== selectedConnection.targetId
+    ) {
+      setSelectedConnection(null);
+    }
+  }, [graphSelectedId, selectedConnection]);
 
   const handleFitView = useCallback(() => {
     const sigma = sigmaRef.current;
@@ -497,6 +533,17 @@ export function GraphView(): ReactNode {
             onCenterNode={handleCenterSelected}
             onOpenNote={() => openNote(selectedNote.id)}
             onClearSelection={handleClearSelection}
+            connections={selectedConnections}
+            onInspectConnection={(targetId) =>
+              setSelectedConnection({ sourceId: selectedNote.id, targetId })
+            }
+          />
+        )}
+        {selectedConnectionNotes && (
+          <GraphConnectionEvidencePanel
+            source={selectedConnectionNotes.source}
+            target={selectedConnectionNotes.target}
+            onClose={() => setSelectedConnection(null)}
           />
         )}
         {loadingNotes && (

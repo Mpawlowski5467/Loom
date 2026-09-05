@@ -61,6 +61,7 @@ export function useGraphInstance(args: {
   tuningRef: Ref<GraphTuning>;
   graphDisplayRef: Ref<GraphDisplay>;
   openNote: (id: NoteId) => void;
+  onEdgeClick?: (sourceId: NoteId, targetId: NoteId) => void;
   setGraphFocusId: (id: NoteId | null) => void;
   setGraphSelectedId: (id: NoteId | null) => void;
 }): GraphInstance {
@@ -71,6 +72,7 @@ export function useGraphInstance(args: {
     tuningRef,
     graphDisplayRef,
     openNote,
+    onEdgeClick,
     setGraphFocusId,
     setGraphSelectedId,
   } = args;
@@ -216,6 +218,16 @@ export function useGraphInstance(args: {
         // Orbit selection preserves the existing focus-first scene behavior;
         // selection remains separate so clearing the card does not reshuffle.
         if (tuningRef.current.graphMode === "orbit") setGraphFocusId(node);
+      });
+      sigma.on("clickEdge", ({ edge }) => {
+        if (isDraggingRef.current || justDraggedRef.current) return;
+        const [source, target] = graph.extremities(edge);
+        host.focus({ preventScroll: true });
+        onEdgeClick?.(source as NoteId, target as NoteId);
+        setGraphSelectedId(source as NoteId);
+        if (tuningRef.current.graphMode === "orbit") {
+          setGraphFocusId(source as NoteId);
+        }
       });
       sigma.on("clickStage", () => {
         if (isDraggingRef.current || justDraggedRef.current) return;

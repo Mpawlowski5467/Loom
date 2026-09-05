@@ -48,6 +48,7 @@ class TraceRecord:
         caller: str = "",
         run_id: str = "",
         step: str = "",
+        content_retained: bool = True,
     ) -> None:
         self.id = f"trc_{secrets.token_hex(4)}"
         self.timestamp = datetime.now(UTC).isoformat()
@@ -61,6 +62,7 @@ class TraceRecord:
         self.caller = caller
         self.run_id = run_id
         self.step = step
+        self.content_retained = content_retained
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -71,6 +73,7 @@ class TraceRecord:
             "caller": self.caller,
             "run_id": self.run_id,
             "step": self.step,
+            "content_retained": self.content_retained,
             "system": self.system,
             "messages": self.messages,
             "response": self.response,

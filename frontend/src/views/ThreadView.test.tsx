@@ -1,21 +1,29 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState, type ReactNode } from "react";
+import { StrictMode, useState, type ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { AppCtx, type AppContextValue } from "../context/app-ctx";
 import { ThreadView } from "./ThreadView";
 import type { Note } from "../data/types";
 import type { NoteRecord } from "../api/notes";
+import { ApiError } from "../api/client";
 
 // --- Mock the notes API network calls; keep the real pure transforms. ---
-const { updateNote, archiveNote } = vi.hoisted(() => ({
+const { updateNote, archiveNote, getNote } = vi.hoisted(() => ({
   updateNote: vi.fn(),
   archiveNote: vi.fn(),
+  getNote: vi.fn(),
 }));
 
 vi.mock("../api/notes", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../api/notes")>();
-  return { ...actual, updateNote, archiveNote };
+  return { ...actual, updateNote, archiveNote, getNote };
 });
 
 function mkNote(overrides: Partial<Note> = {}): Note {
@@ -85,6 +93,8 @@ function renderThread(
     secondaryOpen?: boolean;
     backlinks?: string[];
     extraNotes?: Note[];
+    vault?: string;
+    strict?: boolean;
   } = {},
 ): Spies {
   const note = opts.note === undefined ? mkNote() : opts.note;
@@ -110,6 +120,7 @@ function renderThread(
     backlinksFor: () => opts.backlinks ?? [],
     primaryOpen: opts.primaryOpen ?? false,
     secondaryOpen: opts.secondaryOpen ?? false,
+    config: { active_vault: opts.vault ?? "default" },
     editing: opts.editing ?? false,
     // Wikilinks rendered inside the body/sidebars resolve through context.
     resolveWikilink: (raw: string) =>
@@ -126,7 +137,15 @@ function renderThread(
       </AppCtx.Provider>
     );
   }
-  render(<Harness />);
+  render(
+    opts.strict ? (
+      <StrictMode>
+        <Harness />
+      </StrictMode>
+    ) : (
+      <Harness />
+    ),
+  );
   return spies;
 }
 
@@ -138,6 +157,8 @@ function titleButton(name = "Caching strategy"): HTMLElement {
 beforeEach(() => {
   updateNote.mockReset();
   archiveNote.mockReset();
+  getNote.mockReset();
+  window.localStorage.clear();
 });
 
 afterEach(() => {
@@ -254,6 +275,23 @@ describe("ThreadView — editing", () => {
     );
   });
 
+  it("uses contentVersion as the edit base when present", async () => {
+    const user = userEvent.setup();
+    updateNote.mockResolvedValue(mkRecord({ content_version: "sha256:new" }));
+    renderThread({
+      editing: true,
+      note: mkNote({ contentVersion: "sha256:old" }),
+    });
+    await user.type(screen.getByRole("textbox"), " changed");
+    await user.click(screen.getByRole("button", { name: /Save note/ }));
+    await waitFor(() =>
+      expect(updateNote).toHaveBeenCalledWith(
+        "thr_1",
+        expect.objectContaining({ base_modified: "sha256:old" }),
+      ),
+    );
+  });
+
   it("keeps the draft's base version when SSE refreshes the open note", async () => {
     const user = userEvent.setup();
     const original = mkNote({
@@ -338,6 +376,102 @@ describe("ThreadView — editing", () => {
       ),
     );
     expect(spies.setEditing).not.toHaveBeenCalled();
+  });
+
+  it("recovers an exact draft after the editor unmounts and remounts", async () => {
+    const note = mkNote({ body: "Original\n\nbody" });
+    renderThread({ note, editing: true });
+    const textarea = screen.getByRole("textbox", { name: "Note body" });
+    fireEvent.change(textarea, {
+      target: { value: "Exact draft\n\nwith [[Links]]" },
+    });
+
+    // Tear down the view as MainShell does on a tab switch, then mount it again.
+    cleanup();
+    // StrictMode replays layout effects before queued state updates are
+    // visible; a recovered draft must still win over the remote body.
+    renderThread({ note, editing: true, strict: true });
+    expect(screen.getByRole("textbox", { name: "Note body" })).toHaveValue(
+      "Exact draft\n\nwith [[Links]]",
+    );
+  });
+
+  it("keeps drafts isolated by active vault even when note ids match", async () => {
+    const user = userEvent.setup();
+    const note = mkNote({ body: "Alpha body" });
+    renderThread({ note, editing: true, vault: "alpha" });
+    await user.type(
+      screen.getByRole("textbox", { name: "Note body" }),
+      " local",
+    );
+    cleanup();
+    renderThread({
+      note: mkNote({ body: "Beta body" }),
+      editing: true,
+      vault: "beta",
+    });
+    expect(screen.getByRole("textbox", { name: "Note body" })).toHaveValue(
+      "Beta body",
+    );
+    cleanup();
+    renderThread({ note, editing: true, vault: "alpha" });
+    expect(screen.getByRole("textbox", { name: "Note body" })).toHaveValue(
+      "Alpha body local",
+    );
+  });
+
+  it("inserts a slug wikilink from accessible textarea suggestions", async () => {
+    const user = userEvent.setup();
+    const target = mkNote({
+      id: "thr_2",
+      title: "Agent Models",
+      filename: "agent-models.md",
+    });
+    renderThread({ editing: true, extraNotes: [target] });
+    const textarea = screen.getByRole("textbox", { name: "Note body" });
+    fireEvent.change(textarea, {
+      target: { value: "See [[agent", selectionStart: 11 },
+    });
+
+    expect(
+      screen.getByRole("option", { name: /Agent Models/ }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: /Agent Models/ }));
+    expect(textarea).toHaveValue("See [[agent-models]]");
+  });
+
+  it("keeps a 409 draft and offers compare, reload, and explicit overwrite", async () => {
+    const user = userEvent.setup();
+    const note = mkNote({
+      body: "Remote body",
+      modified: "2026-05-03T10:30:00Z",
+    });
+    updateNote.mockRejectedValue(new ApiError("Version conflict", 409));
+    getNote.mockResolvedValue(
+      mkRecord({ body: "Remote body", modified: note.modified }),
+    );
+    renderThread({ note, editing: true });
+
+    await user.type(
+      screen.getByRole("textbox", { name: "Note body" }),
+      " local",
+    );
+    await user.click(screen.getByRole("button", { name: /Save note/ }));
+
+    expect(screen.getByText(/Save was blocked/)).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Compare versions" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Keep draft" }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Compare versions" }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("Remote body");
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    await user.click(screen.getByRole("button", { name: "Reload remote" }));
+    expect(screen.getByRole("textbox", { name: "Note body" })).toHaveValue(
+      "Remote body",
+    );
   });
 });
 

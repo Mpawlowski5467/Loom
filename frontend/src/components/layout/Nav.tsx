@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { NotebookPen, PanelLeft, Settings } from "lucide-react";
+import { NotebookPen, PanelLeft, Plus, Settings } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
 import type { Tab } from "../../data/types";
 import { LoomMark } from "../primitives/LoomMark";
 
 const TABS: { value: Tab; label: string }[] = [
+  { value: "today", label: "Today" },
   { value: "graph", label: "Graph" },
   { value: "thread", label: "Thread" },
   { value: "inbox", label: "Inbox" },
@@ -17,6 +18,7 @@ export function Nav(): ReactNode {
     setTab,
     setPaletteOpen,
     setNewNoteOpen,
+    setQuickCaptureOpen,
     treeVisible,
     setTreeVisible,
   } = useApp();
@@ -48,6 +50,15 @@ export function Nav(): ReactNode {
         <span aria-hidden="true">⌕</span>
         <span>search vault…</span>
         <kbd>⌘K</kbd>
+      </button>
+      <button
+        className="icon-btn"
+        type="button"
+        aria-label="Quick capture"
+        title="Quick capture (⌘⇧C)"
+        onClick={() => setQuickCaptureOpen(true)}
+      >
+        <Plus size={16} strokeWidth={1.7} aria-hidden="true" />
       </button>
       {treeAvailable && (
         <button

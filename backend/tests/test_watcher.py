@@ -122,6 +122,18 @@ class TestOnModified:
 
 
 class TestOnDeleted:
+    def test_delayed_atomic_replace_delete_keeps_existing_note_indexed(
+        self, tmp_path: Path
+    ) -> None:
+        index = NoteIndex()
+        handler = _make_handler(tmp_path, note_index=index)
+        path = tmp_path / "threads/topics/replaced.md"
+        _write_note(path, "thr_replaced", "Replacement")
+        index.refresh_file(path)
+        with patch("index.indexer.get_indexer", return_value=None):
+            handler.on_deleted(FileDeletedEvent(str(path)))
+        assert index.get_path_by_id("thr_replaced") == path
+
     def test_md_file_triggers_remove(self, tmp_path: Path) -> None:
         """on_deleted for a .md file calls note_index.remove_file."""
         mock_index = MagicMock(spec=NoteIndex)

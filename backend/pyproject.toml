@@ -6,17 +6,19 @@ build-backend = "hatchling.build"
 name = "loom-backend"
 version = "1.1.0"
 description = "Loom — local-first AI memory system"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 # Runtime ranges below express compatibility intent. The pinned set actually
 # installed by the Docker image lives in requirements.lock (same directory) —
 # regenerate it from a venv where the full test suite passes:
 #   backend/.venv/bin/python -m pip freeze --exclude-editable \
 #     | grep -vE '^(loom-backend|.*file://)' \
 #     | grep -vE '^(ruff|mypy|pytest|pytest-asyncio|types-PyYAML)==' \
+#     | grep -vE '^(redis|asyncpg)==' \
 #     > backend/requirements.lock
 # (Keep the header comment when regenerating; the dev-only tools are excluded
-# so production images don't ship them. The Dockerfile installs the lock
-# first, then the project itself with `pip install --no-deps .`.)
+# so production images don't ship them. Optional service clients are pinned in
+# requirements-optional.lock. The Dockerfile installs the runtime lock first,
+# then the project itself with `pip install --no-deps .`.)
 dependencies = [
     "fastapi>=0.115",
     "pydantic>=2.0",
@@ -38,14 +40,16 @@ dependencies = [
     "slowapi>=0.1.9",
     "cryptography>=42.0",
     "langgraph>=0.2,<2",
-    # Optional-at-runtime backends (Redis response cache, Postgres trace
-    # mirror). The clients are always installed; the services activate only
-    # when LOOM_REDIS_URL / LOOM_DATABASE_URL are set.
-    "redis>=5.0",
-    "asyncpg>=0.30",
+    "pypdf>=6.17,<7",
 ]
 
 [project.optional-dependencies]
+redis = [
+    "redis>=5.0",
+]
+postgres = [
+    "asyncpg>=0.30",
+]
 keychain = [
     "keyring>=25.7,<26",
 ]

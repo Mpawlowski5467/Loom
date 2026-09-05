@@ -170,3 +170,45 @@ def test_completed_keyring_migration_never_silently_rotates_key(
         s.encrypt("must-not-use-a-new-key")
 
     assert not (tmp_path / ".secret.key").exists()
+
+
+def test_missing_completed_keyring_entry_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A lost keychain entry must never be replaced with a new master key."""
+    s = _fresh_secrets(tmp_path, monkeypatch)
+    monkeypatch.setenv("LOOM_SECRET_STORAGE", "keyring")
+    (tmp_path / ".secret.backend").write_text("keyring:v1:test\n")
+    calls: list[str] = []
+
+    class EmptyKeyring:
+        @staticmethod
+        def get_password(service: str, account: str) -> None:
+            return None
+
+        @staticmethod
+        def set_password(service: str, account: str, value: str) -> None:
+            calls.append(value)
+
+    monkeypatch.setattr(s, "_keyring_module", lambda: EmptyKeyring)
+    s.reset_cipher_cache()
+
+    with pytest.raises(RuntimeError, match="keychain is unavailable"):
+        s.encrypt("must-not-rotate")
+
+    assert calls == []
+    assert not (tmp_path / ".secret.key").exists()
+
+
+def test_file_mode_after_keyring_migration_does_not_mint_replacement(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Changing storage mode cannot silently replace an OS-keychain key."""
+    s = _fresh_secrets(tmp_path, monkeypatch)
+    (tmp_path / ".secret.backend").write_text("keyring:v1:test\n")
+    s.reset_cipher_cache()
+
+    with pytest.raises(RuntimeError, match="cannot be recreated as a file"):
+        s.encrypt("must-not-rotate")
+
+    assert not (tmp_path / ".secret.key").exists()

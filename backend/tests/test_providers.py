@@ -318,7 +318,8 @@ class TestTracedProviderWrapper:
         latest = after[0]
         assert latest.provider == "fake"
         assert latest.model == "fake-model"
-        assert latest.response == "fake response"
+        assert latest.response == ""
+        assert latest.content_retained is False
         assert latest.error == ""
 
     @pytest.mark.asyncio
@@ -347,7 +348,7 @@ class TestTracedProviderWrapper:
 
         after = store.list(limit=10)
         assert len(after) == before + 1
-        assert after[0].error == "kaboom"
+        assert after[0].error == "Provider call failed (details withheld)"
 
     @pytest.mark.asyncio
     async def test_embed_passes_through_untraced(self) -> None:

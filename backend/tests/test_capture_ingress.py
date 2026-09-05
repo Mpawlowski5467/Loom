@@ -12,6 +12,7 @@ from agents.shuttle.researcher import Researcher
 from agents.shuttle.standup import Standup
 from core.capture_ingress import CaptureIngressError, ingest_capture
 from core.capture_jobs import capture_job_store
+from core.capture_source_index import CaptureSourceIndex
 from core.config import CaptureProcessingConfig, GlobalConfig
 from core.events import CAPTURE_CHANGED, CAPTURE_JOB_CHANGED, get_event_hub
 from core.note_index import NoteIndex
@@ -70,6 +71,22 @@ async def test_external_key_is_idempotent_at_the_service_boundary(tmp_path: Path
     assert retry.capture.body == "original"
     assert index.get_path_by_id(first.capture.id) == first.capture_path
     assert len(list((root / "threads" / "captures").glob("*.md"))) == 1
+
+
+def test_source_index_validates_external_id_and_containment(tmp_path: Path) -> None:
+    root = _producer_vault(tmp_path)
+    outside = tmp_path / "outside.md"
+    outside.write_text(
+        "---\nid: cap_x\ntitle: outside\ntype: capture\nsource: bridge\nexternal_id: x\n---\n"
+    )
+    index = CaptureSourceIndex(root)
+    index._ensure()
+    with index._connect() as conn:
+        conn.execute(
+            "INSERT INTO captures(source, external_id, path) VALUES (?, ?, ?)",
+            ("bridge", "x", str(outside)),
+        )
+    assert index.find("bridge", "x") is None
 
 
 @pytest.mark.asyncio
@@ -172,6 +189,33 @@ async def test_standup_capture_uses_ingress_and_dedupes_the_date(tmp_path: Path)
 
 
 @pytest.mark.asyncio
+async def test_external_id_lookup_rebuilds_after_archive_move(tmp_path: Path) -> None:
+    """The persisted source lookup recovers archived paths from Markdown once."""
+    root = _producer_vault(tmp_path)
+    first = await ingest_capture(
+        root,
+        title="Event",
+        source="calendar",
+        external_id="event-1",
+        policy=CaptureProcessingConfig(),
+    )
+    archived = root / "threads" / ".archive" / first.capture_path.name
+    archived.parent.mkdir(parents=True, exist_ok=True)
+    first.capture_path.rename(archived)
+
+    again = await ingest_capture(
+        root,
+        title="Changed",
+        source="calendar",
+        external_id="event-1",
+        policy=CaptureProcessingConfig(),
+    )
+    assert again.deduplicated is True
+    assert again.capture.id == first.capture.id
+    assert CaptureSourceIndex(root).find("calendar", "event-1").file_path == str(archived)  # type: ignore[union-attr]
+
+
+@pytest.mark.asyncio
 async def test_custom_agent_capture_uses_ingress_job_policy(tmp_path: Path) -> None:
     root = _producer_vault(tmp_path)
     agent = CustomAgent(
@@ -194,3 +238,50 @@ async def test_custom_agent_capture_uses_ingress_job_policy(tmp_path: Path) -> N
     assert "custom-agent" in note.tags
     assert job is not None
     assert job.status == "queued"
+
+
+def test_source_index_rebuild_preserves_a_concurrent_record(tmp_path: Path, monkeypatch) -> None:
+    from concurrent.futures import ThreadPoolExecutor
+    from contextlib import contextmanager
+    from threading import Event
+
+    root = _producer_vault(tmp_path)
+    first = CaptureSourceIndex(root)
+    second = CaptureSourceIndex(root)
+    scanned, resume, attempting, recorded = Event(), Event(), Event(), Event()
+    connect = first._connect
+    connections = 0
+
+    @contextmanager
+    def pause_after_scan():
+        nonlocal connections
+        connections += 1
+        if connections == 2:
+            scanned.set()
+            assert resume.wait(5)
+        with connect() as connection:
+            yield connection
+
+    monkeypatch.setattr(first, "_connect", pause_after_scan)
+    path = root / "threads" / "captures" / "external.md"
+
+    def ingress_record():
+        path.write_text(
+            "---\nid: c\ntitle: C\ntype: capture\nsource: bridge\nexternal_id: e\n---\nbody"
+        )
+        attempting.set()
+        second.record(parse_note(path))
+        recorded.set()
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        rebuilding = executor.submit(first.rebuild)
+        assert scanned.wait(5)
+        writing = executor.submit(ingress_record)
+        try:
+            assert attempting.wait(5)
+            assert not recorded.wait(0.1), "A record must wait for the rebuild snapshot to commit"
+        finally:
+            resume.set()
+        rebuilding.result(timeout=5)
+        writing.result(timeout=5)
+    assert second.find("bridge", "e") is not None

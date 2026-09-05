@@ -176,6 +176,49 @@ def test_create_note_does_not_overwrite_same_title(client: TestClient, seeded_va
     assert again.json()["title"] == "Duplicate Name"
 
 
+def test_create_note_uses_nested_folder_and_rejects_unsafe_folder(
+    client: TestClient, seeded_vault: Path, monkeypatch
+) -> None:
+    """The direct fallback shares Weaver's nested-folder safety contract."""
+    monkeypatch.setattr("agents.loom.weaver.get_weaver", lambda: None)
+    nested = client.post(
+        "/api/notes",
+        json={"title": "Atlas", "type": "project", "folder": "projects/atlas", "tags": []},
+    )
+    assert nested.status_code == 201
+    assert Path(nested.json()["file_path"]).parent == seeded_vault / "threads/projects/atlas"
+
+    unsafe = client.post(
+        "/api/notes",
+        json={"title": "Unsafe", "type": "topic", "folder": "../outside", "tags": []},
+    )
+    assert unsafe.status_code == 400
+    assert "Invalid folder" in unsafe.json()["detail"]
+
+
+def test_list_notes_hides_pending_and_rejected_drafts(
+    client: TestClient, seeded_vault: Path, note_index
+) -> None:
+    """Normal note retrieval never exposes capture drafts awaiting review."""
+    for state in ("pending", "rejected"):
+        path = seeded_vault / "threads" / "topics" / f"{state}.md"
+        path.write_text(
+            "---\n"
+            f"id: thr_{state}\n"
+            f"title: {state.title()} Draft\n"
+            "type: topic\n"
+            "tags: []\n"
+            f"publication_state: {state}\n"
+            "---\n\nPrivate draft.\n",
+            encoding="utf-8",
+        )
+        note_index.refresh_file(path)
+
+    ids = {note["id"] for note in client.get("/api/notes").json()["notes"]}
+    assert "thr_pending" not in ids
+    assert "thr_rejected" not in ids
+
+
 def test_update_note(client: TestClient, seeded_vault: Path) -> None:
     resp = client.put(
         "/api/notes/thr_aaa111",
@@ -389,3 +432,44 @@ def test_get_graph_filter_tag(client: TestClient, seeded_vault: Path) -> None:
     data = resp.json()
     assert len(data["nodes"]) == 1
     assert data["nodes"][0]["id"] == "thr_aaa111"
+
+
+def test_external_edit_without_timestamp_change_rejects_stale_content_version(
+    client, vault_manager, note_index
+):
+    from core.notes import parse_note
+    from tests.conftest import _seed_notes
+
+    root = _seed_notes(
+        vault_manager,
+        note_index,
+        [
+            (
+                "topics",
+                "external.md",
+                {"id": "external", "title": "External", "type": "topic", "modified": "same"},
+                "Original text",
+            )
+        ],
+    )
+    original = client.get("/api/notes/external").json()
+    path = root / "threads/topics/external.md"
+    path.write_text(path.read_text().replace("Original text", "Externally changed text"))
+    assert parse_note(path).modified == "same"
+    for method, kwargs in [
+        (
+            client.put,
+            {"json": {"body": "Stale draft", "base_modified": original["content_version"]}},
+        ),
+        (client.delete, {"params": {"base_modified": original["content_version"]}}),
+    ]:
+        result = method("/api/notes/external", **kwargs)
+        assert result.status_code == 409, result.text
+        assert "Externally changed text" in path.read_text()
+    note_index.refresh_file(path)
+    metadata = client.get("/api/notes").json()["notes"]
+    assert (
+        next(note for note in metadata if note["id"] == "external")["content_version"]
+        != original["content_version"]
+    )
+    assert "content_version:" not in path.read_text()

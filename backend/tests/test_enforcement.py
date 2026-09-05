@@ -9,6 +9,7 @@ from pathlib import Path
 
 import pytest
 
+from agents.loom import enforcement
 from agents.loom.enforcement import enforce_verdict
 from core.notes import note_to_file_content, now_iso, parse_note
 
@@ -24,12 +25,14 @@ def _build_vault(tmp_path: Path) -> Path:
     return root
 
 
-def _write_note(path: Path, note_id: str, title: str, source: str) -> None:
+def _write_note(
+    path: Path, note_id: str, title: str, source: str, note_type: str = "topic"
+) -> None:
     ts = now_iso()
     meta = {
         "id": note_id,
         "title": title,
-        "type": "topic",
+        "type": note_type,
         "tags": [],
         "created": ts,
         "modified": ts,
@@ -47,7 +50,7 @@ def vault_with_capture(tmp_path: Path) -> tuple[Path, Path, Path]:
     root = _build_vault(tmp_path)
     capture = root / "threads" / "captures" / "cap.md"
     note = root / "threads" / "topics" / "note.md"
-    _write_note(capture, "thr_cap001", "Cap", "manual")
+    _write_note(capture, "thr_cap001", "Cap", "manual", note_type="capture")
     _write_note(note, "thr_note01", "Note", "capture:thr_cap001")
     return root, capture, note
 
@@ -93,6 +96,7 @@ def test_failed_keeps_capture_and_marks_review_required(
     note_extra = parse_note(note).extra
     assert note_extra.get("review_required") is True
     assert note_extra.get("review_reasons") == ["missing summary"]
+    assert note_extra.get("publication_state") == "rejected"
 
 
 def test_failed_then_passed_retry_clears_stale_note_review_state(
@@ -131,6 +135,7 @@ def test_failed_then_passed_retry_clears_stale_note_review_state(
     assert note_extra.get("review_reasons") == []
     assert note_extra.get("flagged") is False
     assert note_extra.get("flag_reasons") == []
+    assert note_extra.get("publication_state") == "published"
 
 
 def test_warning_archives_capture_and_flags_note(
@@ -146,6 +151,43 @@ def test_warning_archives_capture_and_flags_note(
     note_extra = parse_note(note).extra
     assert note_extra.get("flagged") is True
     assert note_extra.get("flag_reasons") == ["thin content"]
+
+
+def test_publication_annotation_failure_restores_exact_inbox_capture(
+    vault_with_capture: tuple[Path, Path, Path], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed publication commit cannot leave an accepted capture only in archive."""
+    root, capture, note = vault_with_capture
+    original_capture = capture.read_text(encoding="utf-8")
+    note.write_text(
+        note.read_text(encoding="utf-8").replace(
+            "status: active", "status: active\npublication_state: pending"
+        ),
+        encoding="utf-8",
+    )
+    annotate = enforcement.annotate_frontmatter
+
+    def fail_publication(
+        vault_dir: Path, path: Path, fields: dict[str, object], *, strict: bool = False
+    ) -> bool:
+        if strict and path == note:
+            raise OSError("disk full")
+        return annotate(vault_dir, path, fields, strict=strict)
+
+    monkeypatch.setattr(enforcement, "annotate_frontmatter", fail_publication)
+
+    outcome = enforce_verdict(root, capture, note, "passed", [])
+
+    assert outcome.capture_archived is False
+    assert outcome.review_required is True
+    assert outcome.flagged is False
+    assert any("Publication could not be completed" in reason for reason in outcome.reasons)
+    assert capture.read_text(encoding="utf-8") == original_capture
+    assert not (root / "threads" / ".archive" / "cap.md").exists()
+    # The failed draft remains unpublished; a refresh removes it from retrieval.
+    assert parse_note(note).extra.get("publication_state") == "pending"
+    changelog = next((root / ".loom" / "changelog" / "weaver").glob("*.md"))
+    assert "Publication could not be completed" in changelog.read_text(encoding="utf-8")
 
 
 @pytest.mark.parametrize("verdict", ["", "unavailable", "bogus"])

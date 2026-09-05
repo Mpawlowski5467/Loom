@@ -280,7 +280,8 @@ class OutlookCalendarSyncService:
             outlook = config.outlook_calendar
             interval_s = max(5, outlook.interval_minutes) * 60
             if (
-                outlook.enabled
+                not config.automation_policy.paused
+                and outlook.enabled
                 and outlook.client_id
                 and outlook.client_secret
                 and load_outlook_tokens()

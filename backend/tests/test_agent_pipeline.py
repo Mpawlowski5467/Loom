@@ -30,7 +30,7 @@ def _build_vault(tmp_path: Path) -> Path:
 
     # vault.yaml
     (root / "vault.yaml").write_text(
-        yaml.safe_dump({"name": "pipeline-test", "custom_folders": [], "auto_git": False}),
+        yaml.safe_dump({"name": "pipeline-test", "custom_folders": []}),
         encoding="utf-8",
     )
 

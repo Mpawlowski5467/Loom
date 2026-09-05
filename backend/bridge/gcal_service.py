@@ -293,7 +293,8 @@ class GoogleCalendarSyncService:
             gcal = connector.calendar
             interval_s = max(5, gcal.interval_minutes) * 60
             if (
-                gcal.enabled
+                not config.automation_policy.paused
+                and gcal.enabled
                 and connector.client_id
                 and connector.client_secret
                 and load_google_tokens()

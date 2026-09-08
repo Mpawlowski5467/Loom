@@ -1,5 +1,7 @@
 # Review implementation progress
 
+Follow-up: [September 7 release verification](RELEASE-VERIFICATION-2026-09-07.md) adds clean Python 3.12 test, browser, and restore evidence.
+
 Scope: implement the actionable recommendations in the September 5 project review, preserving the existing PR #31 work. Public plugins, hosted multi-user operation, and additional themes remain intentionally deferred as recommended. Live OAuth consent requires user-owned accounts; no mocked check will be reported as live validation.
 
 Implementation commit: `8d64bba`, based on `8d00307` and now on local `main`. All four existing PR #31 release commits are retained in its ancestry.

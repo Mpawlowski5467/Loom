@@ -4,6 +4,7 @@ cursor behavior, config validation, and the /api/automations/email endpoints."""
 from __future__ import annotations
 
 import json
+import ssl
 import time
 from pathlib import Path
 from unittest.mock import patch
@@ -199,6 +200,33 @@ class TestEmailClient:
         async with _client({1: _PLAIN}) as client:
             with pytest.raises(EmailError, match="MISSING"):
                 await client.validate("MISSING")
+
+    @pytest.mark.asyncio
+    async def test_ssl_connection_verifies_certificate_and_hostname(self, monkeypatch) -> None:
+        seen: dict[str, object] = {}
+
+        def fake_imap4_ssl(host: str, port: int, *, ssl_context: ssl.SSLContext) -> FakeImap:
+            seen["context"] = ssl_context
+            return FakeImap(host, port, {})
+
+        monkeypatch.setattr("bridge.email.imaplib.IMAP4_SSL", fake_imap4_ssl)
+        async with EmailClient("imap.example.com", 993, "user", "pw"):
+            pass
+
+        context = seen["context"]
+        assert isinstance(context, ssl.SSLContext)
+        assert context.verify_mode == ssl.CERT_REQUIRED
+        assert context.check_hostname is True
+
+    @pytest.mark.asyncio
+    async def test_untrusted_certificate_is_a_clear_error(self) -> None:
+        def reject(host: str, port: int) -> FakeImap:
+            raise ssl.SSLCertVerificationError(1, "certificate verify failed")
+
+        client = EmailClient("imap.example.com", 993, "user", "pw", imap_factory=reject)
+        with pytest.raises(EmailError, match="could not be verified"):
+            async with client:
+                pass
 
 
 def _lookback():

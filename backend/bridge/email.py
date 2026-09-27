@@ -17,6 +17,7 @@ import email.utils
 import imaplib
 import logging
 import re
+import ssl
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
@@ -209,6 +210,16 @@ def _parse_date(raw: str | None) -> str:
         return raw.strip()
 
 
+def _imap_ssl(host: str, port: int) -> imaplib.IMAP4_SSL:
+    """Open IMAP over TLS, verifying the server certificate and hostname.
+
+    ``imaplib.IMAP4_SSL`` without an explicit context falls back to
+    ``ssl._create_stdlib_context()``, which checks neither, so anyone on the
+    network path could impersonate the server and read the login.
+    """
+    return imaplib.IMAP4_SSL(host, port, ssl_context=ssl.create_default_context())
+
+
 class EmailClient:
     """Async facade over a synchronous IMAP connection.
 
@@ -233,7 +244,7 @@ class EmailClient:
         if imap_factory is not None:
             self._factory = imap_factory
         elif use_ssl:
-            self._factory = imaplib.IMAP4_SSL
+            self._factory = _imap_ssl
         else:
             self._factory = imaplib.IMAP4
         self._conn: _ImapConnection | None = None
@@ -244,6 +255,12 @@ class EmailClient:
             await asyncio.to_thread(self._conn.login, self._username, self._password)
         except imaplib.IMAP4.error as exc:
             raise EmailError(f"IMAP login failed for {self._host}: {exc}") from exc
+        except ssl.SSLCertVerificationError as exc:
+            reason = getattr(exc, "verify_message", "") or exc
+            raise EmailError(
+                f"TLS certificate for {self._host} could not be verified ({reason}). "
+                "Loom only connects to IMAP servers with a valid certificate."
+            ) from exc
         except OSError as exc:
             raise EmailError(f"Cannot reach IMAP host {self._host}:{self._port}: {exc}") from exc
         return self

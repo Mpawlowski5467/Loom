@@ -16,15 +16,23 @@ import email.header
 import email.utils
 import imaplib
 import logging
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 _MAX_BODY_CHARS = 2000
 _MAX_SUBJECT_CHARS = 300
+# The body is clipped to _MAX_BODY_CHARS afterwards, so the HTML fallback
+# never needs more than this much markup. The cap bounds its cost on the
+# event loop even for hostile mail.
+_MAX_HTML_CHARS = 256_000
+_BLOCK_END_TAGS = frozenset({"p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"})
+_SKIPPED_TAGS = frozenset({"script", "style"})
 _IMAP_DATE_FMT = "%d-%b-%Y"
 
 
@@ -118,23 +126,48 @@ def _decode_payload(part: email.message.Message) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
-def _strip_html(markup: str) -> str:
-    """Crude but dependency-free HTML→text: block tags become newlines, the
-    rest drop silently, entities resolve, whitespace collapses."""
-    import re
+class _HtmlText(HTMLParser):
+    """Collect an HTML document's visible text in one linear pass."""
 
-    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", markup)
-    text = re.sub(r"(?i)<\s*(br|/p|/div|/li|/tr|/h[1-6])\s*/?>", "\n", text)
-    text = re.sub(r"(?s)<[^>]+>", "", text)
-    for entity, char in (
-        ("&nbsp;", " "),
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&quot;", '"'),
-    ):
-        text = text.replace(entity, char)
-    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth += 1
+        elif tag == "br":
+            self.parts.append("\n")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "br":
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag in _BLOCK_END_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self.parts.append(data)
+
+
+def _strip_html(markup: str) -> str:
+    """Dependency-free HTML→text: block tags become newlines, the rest drop
+    silently, script/style content is removed, entities resolve, whitespace
+    collapses.
+
+    Uses a streaming parser rather than regexes: this runs on untrusted mail,
+    and backtracking regexes took minutes on a few KB of unclosed tags.
+    """
+    parser = _HtmlText()
+    parser.feed(markup[:_MAX_HTML_CHARS])
+    parser.close()
+    text = "".join(parser.parts)
+    lines = [re.sub(r"[ \t\xa0]+", " ", line).strip() for line in text.splitlines()]
     return "\n".join(line for line in lines if line).strip()
 
 

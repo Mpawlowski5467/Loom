@@ -4,13 +4,20 @@ cursor behavior, config validation, and the /api/automations/email endpoints."""
 from __future__ import annotations
 
 import json
+import time
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 from starlette.testclient import TestClient
 
-from bridge.email import EmailClient, EmailError, _parse_message, _strip_html
+from bridge.email import (
+    _MAX_HTML_CHARS,
+    EmailClient,
+    EmailError,
+    _parse_message,
+    _strip_html,
+)
 from bridge.email_service import EmailSyncConflictError, EmailSyncService, sync_email
 from core.config import (
     CaptureProcessingConfig,
@@ -140,6 +147,23 @@ class TestEmailParsing:
 
     def test_strip_html_handles_entities(self) -> None:
         assert _strip_html("<p>a &amp; b&nbsp;c</p>") == "a & b c"
+
+    def test_strip_html_drops_script_and_style_and_breaks_blocks(self) -> None:
+        markup = "<style>p{}</style><p>keep<script>x()</script> this</p>next<br/>line"
+        assert _strip_html(markup) == "keep this\nnext\nline"
+
+    def test_strip_html_is_linear_on_hostile_markup(self) -> None:
+        # Unclosed <style> tags drove the old regex stripper cubic: this 14 KB
+        # body took over a minute and froze the event loop for every poll.
+        started = time.perf_counter()
+        assert _strip_html("<style>" * 2000) == ""
+        assert time.perf_counter() - started < 1.0
+
+    def test_strip_html_ignores_markup_past_the_cap(self) -> None:
+        markup = "<p>head</p>" + "x" * _MAX_HTML_CHARS + "<p>tail</p>"
+        text = _strip_html(markup)
+        assert text.startswith("head")
+        assert "tail" not in text
 
     def test_unparseable_message_never_raises(self) -> None:
         item = _parse_message(b"\x00\xff\x01not an email", uid=9, folder="INBOX")

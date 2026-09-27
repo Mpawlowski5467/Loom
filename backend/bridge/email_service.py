@@ -16,7 +16,11 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
+
+# typing_extensions, not typing: Pydantic rejects typing.TypedDict as a
+# response model on Python < 3.12, and these shapes are FastAPI response_models.
+from typing_extensions import TypedDict
 
 from bridge.email import EmailClient, EmailError
 from core.capture_ingress import ingest_capture

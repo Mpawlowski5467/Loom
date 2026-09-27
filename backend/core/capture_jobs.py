@@ -53,6 +53,11 @@ _ACTIVE_STATUSES = ("queued", "running", "retrying")
 _RETRYABLE_STATUSES = ("failed", "needs_review", "cancelled")
 _DISCOVERY_INTERVAL_SECONDS = 2.0
 _MAX_BACKOFF_SECONDS = 3600.0
+# Upper bound on one background pipeline run, matching the synchronous
+# /process route. Without it one stalled run (a hung provider, a lock that
+# never frees) holds a worker slot forever and every queued capture waits
+# behind it until restart.
+_PIPELINE_TIMEOUT_SECONDS = 900.0
 _ACTIVE_WORKER_ROOTS: set[Path] = set()
 _ACTIVE_WORKER_ROOTS_LOCK = threading.Lock()
 
@@ -1032,8 +1037,17 @@ async def _default_processor(vault_root: Path, capture_path: Path) -> JobExecuti
 
     runner = AgentRunner(vault_root)
     try:
-        result = await runner.run_pipeline(
-            capture_path, refresh_index=get_note_index().refresh_file
+        result = await asyncio.wait_for(
+            runner.run_pipeline(capture_path, refresh_index=get_note_index().refresh_file),
+            timeout=_PIPELINE_TIMEOUT_SECONDS,
+        )
+    except TimeoutError:
+        logger.warning("Background capture processing timed out: %s", capture_path)
+        return JobExecutionResult(
+            status="failed",
+            outcome="failed",
+            error=f"Processing timed out after {int(_PIPELINE_TIMEOUT_SECONDS)}s",
+            transient=True,
         )
     except Exception as exc:  # noqa: BLE001 - converted to durable job state
         return JobExecutionResult(

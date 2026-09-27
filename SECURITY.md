@@ -22,6 +22,12 @@ access control. Do not do this on an untrusted network.
 To expose Loom intentionally, put it behind something like nginx/Caddy/Traefik
 with auth + TLS, and only then change the compose port binding.
 
+**Other websites cannot write to your local Loom.** A page you visit can make
+your browser send requests to `localhost`. Loom refuses any POST/PUT/PATCH/DELETE
+whose `Origin` is neither Loom's own page nor listed in `LOOM_CORS_ORIGINS`
+(see `backend/api/csrf.py`). If a reverse proxy rewrites the `Host` header,
+add its public origin (e.g. `https://loom.example.com`) to `LOOM_CORS_ORIGINS`.
+
 ## Optional API token
 
 For users who do expose the port, an optional shared-token gate adds a single

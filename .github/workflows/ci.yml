@@ -72,7 +72,7 @@ jobs:
             ${{ runner.os }}-py311-pip-
 
       - name: Install dependencies
-        run: cd backend && pip install -e ".[dev]"
+        run: cd backend && pip install -e ".[dev]" --break-system-packages
 
       - name: Run tests
         run: cd backend && pytest

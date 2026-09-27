@@ -10,6 +10,7 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
+import yaml
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
@@ -66,6 +67,21 @@ class _VaultEventHandler(FileSystemEventHandler):
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
 
+    def dispatch(self, event: FileSystemEvent) -> None:
+        """Route one event to its handler, never letting an error escape.
+
+        Watchdog's dispatcher thread only catches ``queue.Empty``: an exception
+        raised here would end the observer thread for good, silently stopping
+        live indexing and ``vault-changed`` events until a restart. Log and
+        drop the offending event instead.
+        """
+        try:
+            super().dispatch(event)
+        except Exception:
+            logger.exception(
+                "Watcher failed to handle %s event for %s", event.event_type, event.src_path
+            )
+
     def _is_md(self, event: FileSystemEvent) -> bool:
         return str(event.src_path).endswith(".md")
 
@@ -113,7 +129,7 @@ class _VaultEventHandler(FileSystemEventHandler):
             elif src.endswith(".md"):
                 try:
                     meta = parse_note_meta(Path(dest))
-                except (OSError, ValueError):
+                except (OSError, ValueError, yaml.YAMLError):
                     meta = None
                 if meta is not None and meta.id:
                     self._vector_remove_note(meta.id)

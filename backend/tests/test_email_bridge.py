@@ -12,6 +12,7 @@ from unittest.mock import patch
 import pytest
 from starlette.testclient import TestClient
 
+from bridge import email_service
 from bridge.email import (
     _MAX_HTML_CHARS,
     EmailClient,
@@ -20,6 +21,7 @@ from bridge.email import (
     _strip_html,
 )
 from bridge.email_service import EmailSyncConflictError, EmailSyncService, sync_email
+from core.capture_ingress import CaptureIngressError
 from core.config import (
     CaptureProcessingConfig,
     EmailBridgeConfig,
@@ -73,6 +75,7 @@ class FakeImap:
         self.port = port
         self._messages = dict(messages or {})
         self.logged_out = False
+        self.uid_validity: str | None = None
 
     def set_messages(self, messages: dict[int, bytes]) -> None:
         self._messages = dict(messages)
@@ -108,6 +111,10 @@ class FakeImap:
     def logout(self):
         self.logged_out = True
         return ("OK", [])
+
+    def response(self, code: str):
+        value = self.uid_validity.encode() if self.uid_validity else None
+        return (code, [value])
 
     # imaplib.IMAP4.error stand-in
     class error(Exception):
@@ -186,8 +193,30 @@ class TestEmailClient:
             items = await client2.fetch_since(
                 "INBOX", since_uid=0, lookback_start=_lookback(), limit=2
             )
-        # Fresh cursor keeps only the newest `limit` messages.
-        assert [i.uid for i in items] == [2, 3]
+        # Oldest first, so a cursor advanced per message walks the backlog
+        # forward across polls instead of skipping the older mail.
+        assert [i.uid for i in items] == [1, 2]
+
+    @pytest.mark.asyncio
+    async def test_fetch_restarts_when_folder_was_renumbered(self) -> None:
+        box = FakeImap("imap.example.com", 993, {1: _PLAIN, 2: _HTML})
+        box.uid_validity = "222"
+        client = EmailClient("h", 993, "u", "p", imap_factory=lambda host, port: box)
+        async with client:
+            items = await client.fetch_since(
+                "INBOX", since_uid=500, uid_validity="111", lookback_start=_lookback(), limit=10
+            )
+        assert [i.uid for i in items] == [1, 2]
+        assert client.uid_validity == "222"
+
+    def test_deeply_nested_mime_becomes_a_placeholder(self) -> None:
+        nesting = "".join(
+            f'Content-Type: multipart/mixed; boundary="b{i}"\n\n--b{i}\n' for i in range(1500)
+        )
+        raw = ("Subject: nested\n" + nesting + "Content-Type: text/plain\n\nhi\n").encode()
+        item = _parse_message(raw, uid=7, folder="INBOX")
+        assert item.subject == "(unparseable message)"
+        assert item.external_id == "email:uid:INBOX:7"
 
     @pytest.mark.asyncio
     async def test_validate_reports_folder(self) -> None:
@@ -233,6 +262,23 @@ def _lookback():
     from datetime import UTC, datetime, timedelta
 
     return datetime.now(UTC) - timedelta(hours=24)
+
+
+def _numbered(uid: int) -> bytes:
+    return (
+        f"Message-ID: <msg-{uid}@example.com>\nSubject: Message {uid}\n"
+        f"Content-Type: text/plain\n\nBody {uid}\n"
+    ).encode()
+
+
+def _cursor(tmp_path: Path) -> dict:
+    return json.loads((tmp_path / "email-sync.json").read_text())
+
+
+def _set_email(manager: VaultManager, **fields: object) -> None:
+    config = GlobalConfig.load(manager.config_path())
+    config.email = config.email.model_copy(update=fields)
+    config.save(manager.config_path())
 
 
 def _email_vault(tmp_path: Path, monkeypatch) -> VaultManager:
@@ -294,6 +340,94 @@ class TestEmailSyncService:
         second = await sync_email(vm=manager, client=client2)
         assert second["fetched"] == 1
         assert second["created"] == 1
+
+    @pytest.mark.asyncio
+    async def test_backlog_larger_than_one_poll_is_walked_not_dropped(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        manager = _email_vault(tmp_path, monkeypatch)
+        _set_email(manager, max_messages_per_poll=2)
+        mailbox = {uid: _numbered(uid) for uid in range(1, 6)}
+
+        seen = []
+        for _ in range(3):
+            result = await sync_email(vm=manager, client=_client(mailbox))
+            seen.append(result["fetched"])
+
+        assert seen == [2, 2, 1]
+        assert _cursor(tmp_path)["last_uid"] == 5
+        assert len(list((manager.active_vault_dir() / "threads" / "captures").glob("*.md"))) == 5
+
+    @pytest.mark.asyncio
+    async def test_transient_failure_does_not_skip_the_failed_message(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        manager = _email_vault(tmp_path, monkeypatch)
+        mailbox = {uid: _numbered(uid) for uid in range(1, 4)}
+        real_ingest = email_service.ingest_capture
+        calls = 0
+
+        async def flaky_ingest(*args, **kwargs):
+            nonlocal calls
+            calls += 1
+            if calls == 2:
+                raise OSError("disk busy")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(email_service, "ingest_capture", flaky_ingest)
+        with pytest.raises(OSError):
+            await sync_email(vm=manager, client=_client(mailbox))
+        assert _cursor(tmp_path)["last_uid"] == 1
+
+        retry = await sync_email(vm=manager, client=_client(mailbox))
+        assert retry["fetched"] == 2
+        assert retry["created"] == 2
+        assert _cursor(tmp_path)["last_uid"] == 3
+
+    @pytest.mark.asyncio
+    async def test_message_rejected_by_ingress_is_skipped_not_retried(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        manager = _email_vault(tmp_path, monkeypatch)
+        mailbox = {uid: _numbered(uid) for uid in range(1, 4)}
+        real_ingest = email_service.ingest_capture
+
+        async def picky_ingest(*args, **kwargs):
+            if kwargs["title"] == "Message 2":
+                raise CaptureIngressError("title rejected")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(email_service, "ingest_capture", picky_ingest)
+        result = await sync_email(vm=manager, client=_client(mailbox))
+
+        assert (result["fetched"], result["created"]) == (3, 2)
+        assert _cursor(tmp_path)["last_uid"] == 3
+
+    @pytest.mark.asyncio
+    async def test_changing_folder_starts_a_fresh_cursor(self, tmp_path, monkeypatch) -> None:
+        manager = _email_vault(tmp_path, monkeypatch)
+        # A high UID from INBOX would hide every message of the new folder.
+        await sync_email(vm=manager, client=_client({900: _numbered(900)}))
+        assert _cursor(tmp_path)["last_uid"] == 900
+
+        _set_email(manager, folder="Archive")
+        result = await sync_email(vm=manager, client=_client({3: _numbered(3)}))
+
+        assert result["fetched"] == 1
+        assert _cursor(tmp_path) == {
+            "mailbox": "user@example.com@imap.example.com/Archive",
+            "last_uid": 3,
+            "uid_validity": "",
+        }
+
+    @pytest.mark.asyncio
+    async def test_legacy_cursor_without_mailbox_is_kept(self, tmp_path, monkeypatch) -> None:
+        manager = _email_vault(tmp_path, monkeypatch)
+        (tmp_path / "email-sync.json").write_text(json.dumps({"last_uid": 2}))
+
+        result = await sync_email(vm=manager, client=_client({2: _PLAIN, 3: _numbered(3)}))
+
+        assert result["fetched"] == 1
 
     @pytest.mark.asyncio
     async def test_incomplete_config_raises(self, tmp_path, monkeypatch) -> None:

@@ -248,6 +248,9 @@ class EmailClient:
         else:
             self._factory = imaplib.IMAP4
         self._conn: _ImapConnection | None = None
+        # UIDVALIDITY of the folder last opened by fetch_since ("" if the
+        # server did not report one). Stored alongside the UID cursor.
+        self.uid_validity = ""
 
     async def __aenter__(self) -> EmailClient:
         try:
@@ -293,17 +296,27 @@ class EmailClient:
         since_uid: int,
         lookback_start: datetime,
         limit: int,
+        uid_validity: str = "",
     ) -> list[EmailItem]:
-        """Fetch up to ``limit`` newest messages above ``since_uid``.
+        """Fetch up to ``limit`` of the *oldest* messages above ``since_uid``.
 
-        On a fresh cursor (``since_uid == 0``) the window is bounded by
-        ``lookback_start`` (IMAP ``SINCE`` date search) instead.
+        Oldest first, sorted by UID, so a caller that advances its cursor per
+        message walks a backlog forward across polls instead of skipping it.
+        On a fresh cursor (``since_uid == 0``) the window starts at
+        ``lookback_start`` (IMAP ``SINCE`` date search) instead. When the
+        folder's UIDVALIDITY differs from ``uid_validity`` the server has
+        renumbered it, so the old cursor means nothing and the fetch starts
+        over from ``lookback_start``.
         """
         assert self._conn is not None
         try:
             status, _ = await asyncio.to_thread(self._conn.select, folder, True)
             if status != "OK":
                 raise EmailError(f"Cannot open folder {folder!r}")
+            self.uid_validity = _read_uid_validity(self._conn)
+            if uid_validity and self.uid_validity and uid_validity != self.uid_validity:
+                logger.info("IMAP folder %r was renumbered; restarting from lookback", folder)
+                since_uid = 0
             if since_uid > 0:
                 criteria = f"UID {since_uid + 1}:*"
             else:
@@ -315,8 +328,7 @@ class EmailClient:
             uids = [u for u in uids if u > since_uid]
             if not uids:
                 return []
-            # Newest last; keep only the newest `limit`.
-            uids = sorted(uids)[-limit:]
+            uids = sorted(uids)[:limit]
             uid_set = ",".join(str(u) for u in uids)
             status, fetch_data = await asyncio.to_thread(
                 self._conn.uid, "FETCH", uid_set, "(BODY.PEEK[])"
@@ -339,7 +351,24 @@ class EmailClient:
             uid = _uid_from_fetch_part(header_blob, current_uid)
             current_uid = uid
             items.append(_parse_message(raw, uid=uid, folder=folder))
+        # FETCH responses are not guaranteed to arrive in UID order.
+        items.sort(key=lambda item: item.uid)
         return items
+
+
+def _read_uid_validity(conn: _ImapConnection) -> str:
+    """The UIDVALIDITY the server sent with the last SELECT, or ""."""
+    response = getattr(conn, "response", None)
+    if response is None:
+        return ""
+    try:
+        _code, data = response("UIDVALIDITY")
+    except (imaplib.IMAP4.error, ValueError, TypeError):
+        return ""
+    value = data[-1] if data else None
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return str(value) if value else ""
 
 
 def _uid_from_fetch_part(part: Any, fallback: int) -> int:
@@ -359,10 +388,17 @@ def _uid_from_fetch_part(part: Any, fallback: int) -> int:
 
 
 def _parse_message(raw: bytes, *, uid: int, folder: str) -> EmailItem:
-    """Parse one RFC 822 message into an EmailItem (never raises)."""
+    """Parse one RFC 822 message into an EmailItem (never raises).
+
+    Malformed or hostile mail (e.g. thousands of nested MIME parts, which
+    overflow the parser's recursion) becomes a placeholder item. Raising here
+    would abort the whole fetch before the cursor moves, so the sync would
+    stall on that one message forever.
+    """
     try:
-        msg = email.message_from_bytes(raw)
-    except (email.errors.MessageError, ValueError):
+        return _parse_message_unchecked(raw, uid=uid, folder=folder)
+    except Exception:  # noqa: BLE001 - any parse failure becomes a placeholder
+        logger.warning("Could not parse IMAP message uid=%s", uid, exc_info=True)
         return EmailItem(
             uid=uid,
             message_id="",
@@ -372,6 +408,10 @@ def _parse_message(raw: bytes, *, uid: int, folder: str) -> EmailItem:
             body="",
             folder=folder,
         )
+
+
+def _parse_message_unchecked(raw: bytes, *, uid: int, folder: str) -> EmailItem:
+    msg = email.message_from_bytes(raw)
     message_id = (msg.get("Message-ID") or "").strip().strip("<>")
     subject = _clip(_decode_header_value(msg.get("Subject")), _MAX_SUBJECT_CHARS)
     sender = _decode_header_value(msg.get("From"))

@@ -197,6 +197,7 @@ class GoogleCalendarClient:
     def _adopt_tokens(self, tokens: OAuthTokens) -> OAuthTokens:
         account = self._tokens.account if self._tokens is not None else ""
         tokens.account = tokens.account or account
+        tokens.client_id = self._client_id  # refreshes must use the issuing app
         self._tokens = tokens
         if self._on_tokens is not None:
             self._on_tokens(tokens)
@@ -231,17 +232,20 @@ class GoogleCalendarClient:
             + (f": {error}" if error else "")
         )
 
-    async def exchange_code(self, code: str, *, redirect_uri: str) -> OAuthTokens:
-        """Trade an authorization code for tokens at the token endpoint."""
-        data = await self._post_token(
-            {
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
-            }
-        )
+    async def exchange_code(
+        self, code: str, *, redirect_uri: str, code_verifier: str = ""
+    ) -> OAuthTokens:
+        """Trade an authorization code (plus its PKCE verifier) for tokens."""
+        form = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        }
+        if code_verifier:
+            form["code_verifier"] = code_verifier
+        data = await self._post_token(form)
         return self._adopt_tokens(_tokens_from_response(data))
 
     async def ensure_fresh_token(self) -> OAuthTokens:

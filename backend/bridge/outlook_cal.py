@@ -53,8 +53,8 @@ class OutlookCalendarAuthError(OutlookCalendarError):
     """Raised when the stored grant is revoked or rejected — reconnect required."""
 
 
-def authorization_url(*, client_id: str, redirect_uri: str, state: str) -> str:
-    """Build the Microsoft identity platform v2 consent URL for one flow."""
+def authorization_url(*, client_id: str, redirect_uri: str, state: str, code_challenge: str) -> str:
+    """Build the Microsoft identity platform v2 consent URL for one PKCE flow."""
     query = urlencode(
         {
             "client_id": client_id,
@@ -63,6 +63,8 @@ def authorization_url(*, client_id: str, redirect_uri: str, state: str) -> str:
             "response_mode": "query",
             "scope": _SCOPE,
             "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         }
     )
     return f"{_AUTHORIZE_URL}?{query}"
@@ -233,12 +235,17 @@ class OutlookCalendarClient:
     def _adopt_tokens(self, tokens: OAuthTokens) -> OAuthTokens:
         account = self._tokens.account if self._tokens is not None else ""
         tokens.account = tokens.account or account
+        tokens.client_id = self._client_id  # refreshes must use the issuing app
         self._tokens = tokens
         if self._on_tokens is not None:
             self._on_tokens(tokens)
         return tokens
 
     async def _post_token(self, form: dict[str, str]) -> Any:
+        if not form.get("client_secret"):
+            # A public client (Loom's built-in app) has no secret; PKCE on the
+            # code exchange stands in for it, and refreshes need none.
+            form = {key: value for key, value in form.items() if key != "client_secret"}
         try:
             resp = await self._http.post(
                 _TOKEN_URL,
@@ -267,18 +274,21 @@ class OutlookCalendarClient:
             + (f": {error}" if error else "")
         )
 
-    async def exchange_code(self, code: str, *, redirect_uri: str) -> OAuthTokens:
-        """Trade an authorization code for tokens at the token endpoint."""
-        data = await self._post_token(
-            {
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
-                "scope": _SCOPE,
-            }
-        )
+    async def exchange_code(
+        self, code: str, *, redirect_uri: str, code_verifier: str = ""
+    ) -> OAuthTokens:
+        """Trade an authorization code (plus its PKCE verifier) for tokens."""
+        form = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+            "scope": _SCOPE,
+        }
+        if code_verifier:
+            form["code_verifier"] = code_verifier
+        data = await self._post_token(form)
         return self._adopt_tokens(_tokens_from_response(data))
 
     async def ensure_fresh_token(self) -> OAuthTokens:

@@ -154,6 +154,35 @@ class LoomSettings(BaseSettings):
             "LOOM_TRACE_RETENTION_DAYS; a negative value disables pruning."
         ),
     )
+    # Built-in OAuth apps: registered once by whoever ships Loom (see
+    # docs/oauth-apps.md) so users connect with one click instead of creating
+    # their own. Empty (the default) keeps the bring-your-own-app flow. A
+    # user's own app, when configured, always wins.
+    google_client_id: str = Field(
+        default="",
+        description="Built-in Google OAuth client (Desktop app type). LOOM_GOOGLE_CLIENT_ID.",
+    )
+    google_client_secret: str = Field(
+        default="",
+        description=(
+            "Secret of the built-in Google Desktop client. Google documents that "
+            "installed-app secrets are not confidential; PKCE protects the flow. "
+            "LOOM_GOOGLE_CLIENT_SECRET."
+        ),
+    )
+    microsoft_client_id: str = Field(
+        default="",
+        description=(
+            "Built-in Microsoft Entra app (public client, no secret, PKCE). "
+            "LOOM_MICROSOFT_CLIENT_ID."
+        ),
+    )
+    github_client_id: str = Field(
+        default="",
+        description=(
+            "Built-in GitHub OAuth app with device flow enabled (no secret). LOOM_GITHUB_CLIENT_ID."
+        ),
+    )
     demo_vault_dir: Path = Field(
         # Source checkout: <repo>/examples/demo-vault, three levels up from this
         # module (backend/core/config.py). The Docker image pip-installs the

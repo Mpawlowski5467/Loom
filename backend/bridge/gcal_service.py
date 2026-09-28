@@ -30,7 +30,7 @@ from bridge.gcal import (
     GoogleCalendarError,
     GoogleSyncTokenExpired,
 )
-from bridge.google import load_google_tokens, save_google_tokens
+from bridge.google import google_app, google_app_for, load_google_tokens, save_google_tokens
 from core.capture_ingress import CaptureIngressError, ingest_capture
 from core.config import GlobalConfig, settings
 
@@ -126,16 +126,21 @@ async def sync_google_calendar(
     config = GlobalConfig.load(vm.config_path())
     connector = config.google
     gcal = connector.calendar
-    if not connector.client_id or not connector.client_secret:
+    if google_app(connector) is None:
         raise GoogleCalendarError("Add your Google OAuth client ID and secret first")
     tokens = load_google_tokens()
     if tokens is None:
         raise GoogleCalendarError("Connect your Google account first")
+    app = google_app_for(connector, tokens)
+    if app is None:
+        raise GoogleCalendarError(
+            "Reconnect Google: the app this account was connected with is gone"
+        )
 
     owns_client = client is None
     client = client or GoogleCalendarClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_google_tokens,
     )
@@ -301,12 +306,7 @@ class GoogleCalendarSyncService:
             connector = config.google
             gcal = connector.calendar
             interval_s = max(5, gcal.interval_minutes) * 60
-            if (
-                gcal.enabled
-                and connector.client_id
-                and connector.client_secret
-                and load_google_tokens()
-            ):
+            if gcal.enabled and google_app(connector) is not None and load_google_tokens():
                 try:
                     result = await sync_google_calendar()
                     self._last_run = result["synced_at"]

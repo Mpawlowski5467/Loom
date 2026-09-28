@@ -21,8 +21,14 @@ from typing import TYPE_CHECKING, Any
 # response model on Python < 3.12, and these shapes are FastAPI response_models.
 from typing_extensions import TypedDict
 
-from bridge.github import GitHubClient, GitHubError, fetch_repo_activity
-from core.capture_ingress import ingest_capture
+from bridge.github import (
+    GitHubClient,
+    GitHubError,
+    fetch_repo_activity,
+    format_github_time,
+    parse_github_time,
+)
+from core.capture_ingress import CaptureIngressError, ingest_capture
 from core.config import GlobalConfig, settings
 
 if TYPE_CHECKING:
@@ -77,10 +83,22 @@ def _save_cursors(cursors: dict[str, dict[str, str]]) -> None:
     tmp.replace(path)
 
 
-def _max_iso(a: str, b: str) -> str:
-    """Return the later of two ISO timestamps (lexicographic is safe for
-    GitHub's uniform ``YYYY-MM-DDTHH:MM:SSZ`` shape)."""
-    return max(a, b)
+def _advance(cursor: str, occurred_at: str, ceiling: datetime) -> str:
+    """Move a feed cursor up to a handled item's timestamp.
+
+    Compares parsed times, not strings (cursors and GitHub timestamps do not
+    share one format), and never moves past ``ceiling`` (the poll's start):
+    a commit dated in the future by a skewed clock would otherwise push the
+    cursor past every real commit until that date arrives.
+    """
+    current = parse_github_time(cursor)
+    candidate = parse_github_time(occurred_at)
+    if candidate is None:
+        return cursor
+    candidate = min(candidate, ceiling)
+    if current is not None and candidate <= current:
+        return cursor
+    return format_github_time(candidate)
 
 
 async def sync_github(
@@ -107,7 +125,8 @@ async def sync_github(
         raise GitHubError("Add at least one repository first")
 
     cursors = _load_cursors()
-    default_since = (datetime.now(UTC) - timedelta(hours=gh.lookback_hours)).isoformat()
+    poll_started = datetime.now(UTC)
+    default_since = format_github_time(poll_started - timedelta(hours=gh.lookback_hours))
 
     owns_client = client is None
     client = client or GitHubClient(gh.token)
@@ -143,23 +162,34 @@ async def sync_github(
                     include_pull_requests=gh.include_pull_requests,
                 ):
                     result["fetched"] += 1
-                    if item.kind == "commit":
-                        new_commits_since = _max_iso(new_commits_since, item.occurred_at)
-                    else:
-                        new_issues_since = _max_iso(new_issues_since, item.occurred_at)
                     if vm.active_vault_dir().resolve() != vault_root:
                         raise GitHubSyncConflictError("The active vault changed; retry GitHub sync")
-                    ingested = await ingest_capture(
-                        vault_root,
-                        title=item.title,
-                        body=item.to_capture_markdown(),
-                        source="bridge:github",
-                        tags=("github", item.kind),
-                        external_id=item.external_id,
-                        provenance=item.provenance(),
-                    )
-                    result["created"] += int(ingested.created)
-                    result["deduplicated"] += int(ingested.deduplicated)
+                    try:
+                        ingested = await ingest_capture(
+                            vault_root,
+                            title=item.title,
+                            body=item.to_capture_markdown(),
+                            source="bridge:github",
+                            tags=("github", item.kind),
+                            external_id=item.external_id,
+                            provenance=item.provenance(),
+                        )
+                    except CaptureIngressError:
+                        # Permanently invalid: skip it rather than stall the feed.
+                        logger.warning("Skipping %s rejected by ingress", item.external_id)
+                    else:
+                        result["created"] += int(ingested.created)
+                        result["deduplicated"] += int(ingested.deduplicated)
+                    # Items arrive oldest first, and the cursor moves only past
+                    # handled ones: a failure above leaves the rest to retry.
+                    if item.kind == "commit":
+                        new_commits_since = _advance(
+                            new_commits_since, item.occurred_at, poll_started
+                        )
+                    else:
+                        new_issues_since = _advance(
+                            new_issues_since, item.occurred_at, poll_started
+                        )
             except GitHubSyncConflictError:
                 raise
             except Exception as exc:  # one repo down must not sink the rest
@@ -169,8 +199,9 @@ async def sync_github(
             repo_cursor["commits"] = new_commits_since
             repo_cursor["issues"] = new_issues_since
             cursors[repo] = repo_cursor
-            # Persist per repo so a crash mid-sync loses at most one repo's
-            # cursor progress (re-listing is safe thanks to ingress dedup).
+            # Persist per repo, including a failed repo's progress up to the
+            # failure, so a crash mid-sync loses at most one repo's progress
+            # (re-listing is safe thanks to ingress dedup).
             try:
                 _save_cursors(cursors)
             except OSError:

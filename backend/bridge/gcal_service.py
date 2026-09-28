@@ -31,7 +31,7 @@ from bridge.gcal import (
     GoogleSyncTokenExpired,
 )
 from bridge.google import load_google_tokens, save_google_tokens
-from core.capture_ingress import ingest_capture
+from core.capture_ingress import CaptureIngressError, ingest_capture
 from core.config import GlobalConfig, settings
 
 if TYPE_CHECKING:
@@ -184,13 +184,13 @@ async def sync_google_calendar(
                         time_max=time_max,
                         default_tz=timezone,
                     )
-                try:
-                    for event in events:
-                        if vm.active_vault_dir().resolve() != vault_root:
-                            raise GoogleCalendarSyncConflictError(
-                                "The active vault changed; retry calendar sync"
-                            )
-                        result["fetched"] += 1
+                for event in events:
+                    if vm.active_vault_dir().resolve() != vault_root:
+                        raise GoogleCalendarSyncConflictError(
+                            "The active vault changed; retry calendar sync"
+                        )
+                    result["fetched"] += 1
+                    try:
                         ingested = await ingest_capture(
                             vault_root,
                             title=scrub_untrusted(event.title) or "Untitled event",
@@ -209,20 +209,25 @@ async def sync_google_calendar(
                                 "event_url": event.url,
                             },
                         )
-                        result["created"] += int(ingested.created)
-                        result["deduplicated"] += int(ingested.deduplicated)
-                finally:
-                    # Advance the sync token once listing succeeded so a poison
-                    # event cannot stall the calendar; ingress dedup covers the
-                    # re-listed remainder on the next poll.
-                    if next_token:
-                        cursor["sync_token"] = next_token
-                    cursor["synced_at"] = datetime.now(UTC).isoformat()
-                    cursors[calendar_id] = cursor
-                    try:
-                        _save_cursors(cursors)
-                    except OSError:
-                        logger.warning("Could not persist Google Calendar cursors", exc_info=True)
+                    except CaptureIngressError:
+                        # Permanently invalid: skip it so it cannot stall the calendar.
+                        logger.warning("Skipping calendar event %s rejected by ingress", event.uid)
+                        continue
+                    result["created"] += int(ingested.created)
+                    result["deduplicated"] += int(ingested.deduplicated)
+                # Adopt the new sync token only once every listed event was
+                # handled. Google never re-lists changes older than a token, so
+                # saving it after a failed ingest would drop the rest of this
+                # batch for good; keeping the old one re-lists it next poll,
+                # and ingress dedup skips what was already filed.
+                if next_token:
+                    cursor["sync_token"] = next_token
+                cursor["synced_at"] = datetime.now(UTC).isoformat()
+                cursors[calendar_id] = cursor
+                try:
+                    _save_cursors(cursors)
+                except OSError:
+                    logger.warning("Could not persist Google Calendar cursors", exc_info=True)
             except GoogleCalendarSyncConflictError:
                 raise
             except Exception as exc:  # one calendar down must not sink the rest

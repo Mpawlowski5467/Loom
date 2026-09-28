@@ -21,6 +21,7 @@ import pytest
 from starlette.testclient import TestClient
 
 import bridge.oauth as oauth
+from bridge import gcal_service
 from bridge.calendar import CalendarEvent
 from bridge.gcal import (
     GoogleCalendarAuthError,
@@ -54,6 +55,7 @@ from bridge.google import (
     save_google_tokens,
 )
 from bridge.oauth import OAuthTokens, load_tokens, save_tokens
+from core.capture_ingress import CaptureIngressError
 from core.config import (
     CaptureProcessingConfig,
     GlobalConfig,
@@ -311,8 +313,12 @@ class TestCalendarEventListing:
         def handler(request: httpx.Request) -> httpx.Response:
             params = request.url.params
             assert params["syncToken"] == "old-token"
-            assert "timeMin" not in params
-            assert "singleEvents" not in params
+            # Forbidden with a sync token.
+            for forbidden in ("timeMin", "timeMax", "orderBy"):
+                assert forbidden not in params
+            # Must match the initial call (Google: "all other query parameters
+            # should be the same"), or recurring series stop expanding.
+            assert params["singleEvents"] == "true"
             return httpx.Response(200, json={"items": [], "nextSyncToken": "fresh-token"})
 
         client = _calendar_client(handler, tokens=_tokens())
@@ -685,6 +691,49 @@ class TestCalendarSync:
         third = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
         assert (third["created"], third["deduplicated"]) == (0, 2)
         assert len(list(captures_dir.glob("*.md"))) == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_ingest_keeps_the_old_sync_token(self, tmp_path, monkeypatch) -> None:
+        manager = _google_vault(tmp_path, monkeypatch)
+        events = [_event("evt-1", "Design review"), _event("evt-2", "1:1 with manager")]
+        client = _FakeCalendarClient({"primary": (events, False)})
+        real_ingest = gcal_service.ingest_capture
+
+        async def fail_second(*args, **kwargs):
+            if kwargs["title"] == "1:1 with manager":
+                raise OSError("disk busy")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", fail_second)
+        first = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+        assert first["errors"] == 1
+        # Adopting the new token here would mean Google never re-lists evt-2.
+        assert not (tmp_path / "gcal-sync.json").exists()
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", real_ingest)
+        retry = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+        assert (retry["created"], retry["deduplicated"], retry["errors"]) == (1, 1, 0)
+        cursors = json.loads((tmp_path / "gcal-sync.json").read_text(encoding="utf-8"))
+        assert cursors["calendars"]["primary"]["sync_token"] == "sync-token-2"
+
+    @pytest.mark.asyncio
+    async def test_event_rejected_by_ingress_is_skipped(self, tmp_path, monkeypatch) -> None:
+        manager = _google_vault(tmp_path, monkeypatch)
+        events = [_event("evt-1", "Design review"), _event("evt-2", "Rejected")]
+        client = _FakeCalendarClient({"primary": (events, False)})
+        real_ingest = gcal_service.ingest_capture
+
+        async def picky(*args, **kwargs):
+            if kwargs["title"] == "Rejected":
+                raise CaptureIngressError("bad event")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", picky)
+        result = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+
+        assert (result["created"], result["errors"]) == (1, 0)
+        cursors = json.loads((tmp_path / "gcal-sync.json").read_text(encoding="utf-8"))
+        assert cursors["calendars"]["primary"]["sync_token"] == "sync-token-2"
 
     @pytest.mark.asyncio
     async def test_external_id_includes_recurrence_start(self, tmp_path, monkeypatch) -> None:

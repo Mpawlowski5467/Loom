@@ -20,6 +20,7 @@ from bridge.github_service import (
     get_github_sync_service,
     sync_github,
 )
+from bridge.oauth_apps import github_device_client_id
 from core.capture_jobs import CaptureJobsBusyError
 from core.config import GitHubBridgeConfig, GitHubBridgeConfigPublic, GlobalConfig
 from core.rate_limit import WRITE_LIMIT, limiter
@@ -45,6 +46,8 @@ class GitHubBridgePatch(BaseModel):
 class GitHubAutomationResponse(BaseModel):
     github: GitHubBridgeConfigPublic
     status: dict[str, Any]
+    # Loom ships a GitHub app, so users can sign in instead of pasting a token.
+    builtin_app: bool = False
 
 
 class RepoTestResult(BaseModel):
@@ -65,6 +68,7 @@ def _response(config: GlobalConfig) -> GitHubAutomationResponse:
     return GitHubAutomationResponse(
         github=config.github.to_public(),
         status=get_github_sync_service().status(),
+        builtin_app=bool(github_device_client_id()),
     )
 
 
@@ -101,6 +105,9 @@ async def patch_github_automation(
     updates = body.model_dump(exclude_none=True, exclude={"clear_token"})
     if body.clear_token:
         updates["token"] = None
+    if "token" in updates:
+        # A pasted (or cleared) token is not the signed-in account any more.
+        updates["account"] = ""
     try:
         config.github = GitHubBridgeConfig.model_validate({**config.github.model_dump(), **updates})
     except ValidationError as exc:

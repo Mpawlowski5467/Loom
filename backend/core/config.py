@@ -439,6 +439,9 @@ class GitHubBridgeConfig(BaseModel):
 
     enabled: bool = False
     token: str | None = None
+    # GitHub login the token belongs to, when it came from "Sign in with
+    # GitHub" (display only; empty for a pasted personal access token).
+    account: str = Field(default="", max_length=100)
     repos: list[str] = Field(default_factory=list)
     interval_minutes: int = Field(default=15, ge=5, le=1440)
     lookback_hours: int = Field(default=24, ge=1, le=720)
@@ -483,6 +486,7 @@ class GitHubBridgeConfig(BaseModel):
         return GitHubBridgeConfigPublic(
             enabled=self.enabled,
             token_set=bool(self.token),
+            account=self.account,
             repos=list(self.repos),
             interval_minutes=self.interval_minutes,
             lookback_hours=self.lookback_hours,
@@ -497,6 +501,7 @@ class GitHubBridgeConfigPublic(BaseModel):
 
     enabled: bool
     token_set: bool
+    account: str = ""
     repos: list[str]
     interval_minutes: int
     lookback_hours: int

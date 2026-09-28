@@ -36,7 +36,9 @@ _TOKEN_URL = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
 _GRAPH_BASE = "https://graph.microsoft.com/v1.0"
 _SCOPE = "offline_access Calendars.Read"
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
-_MAX_PAGES = 20
+# Safety bound on @odata.nextLink pages per calendar (10,000 occurrences), far
+# beyond any look-back + look-ahead window; hitting it is logged, not silent.
+_MAX_PAGES = 200
 _PAGE_SIZE = 50
 _MAX_FIELD_CHARS = 20_000
 _EVENT_SELECT = (
@@ -368,7 +370,8 @@ class OutlookCalendarClient:
 
         ``calendar_id`` of ``primary`` addresses the default calendar via
         ``/me/calendarView``; any other ID uses ``/me/calendars/{id}`` .
-        ``@odata.nextLink`` pagination is followed (bounded by ``_MAX_PAGES``).
+        ``@odata.nextLink`` pagination is followed to the end of the window,
+        bounded by ``_MAX_PAGES`` as a safety net (logged when hit).
         """
         try:
             tz = ZoneInfo(default_tz)
@@ -400,4 +403,12 @@ class OutlookCalendarClient:
             next_link = data.get("@odata.nextLink") if isinstance(data, dict) else None
             url = str(next_link) if isinstance(next_link, str) and next_link else None
             params = {}  # the nextLink URL embeds the full query
+        if url is not None:
+            logger.warning(
+                "Outlook calendar %s has more than %d events in the sync window; "
+                "only the first %d were read",
+                calendar_name or calendar_id or "primary",
+                _MAX_PAGES * _PAGE_SIZE,
+                len(events),
+            )
         return events

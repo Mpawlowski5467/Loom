@@ -214,10 +214,11 @@ Inbox pipeline. Connections are opt-in and read-only:
   auto-refreshing token.
 - **Outlook Calendar** uses delegated, read-only Microsoft Calendar access.
 
-The Google and Outlook connectors are code-complete and mock-verified in the
-current development worktree. Their first real connection requires app
-registrations in Google Cloud and Microsoft Entra; follow the callback URL and
-steps shown in the card for the instance you are running.
+If whoever runs your Loom has set up its built-in apps
+([docs/oauth-apps.md](oauth-apps.md)), Google, Outlook, and GitHub each connect
+with one **Sign in with …** button. Otherwise each card walks you through
+registering your own app in Google Cloud or Microsoft Entra (or pasting a GitHub
+token), with the callback URL for the instance you are running.
 
 ---
 

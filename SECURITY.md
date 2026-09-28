@@ -22,6 +22,13 @@ access control. Do not do this on an untrusted network.
 To expose Loom intentionally, put it behind something like nginx/Caddy/Traefik
 with auth + TLS, and only then change the compose port binding.
 
+**Built-in OAuth apps** (`LOOM_GOOGLE_CLIENT_ID` and friends, see
+[docs/oauth-apps.md](docs/oauth-apps.md)) only identify Loom to Google,
+Microsoft, and GitHub. Client IDs are public, Microsoft and GitHub use no secret,
+and Google's Desktop-client secret is non-confidential by Google's own design.
+Every Google and Microsoft sign-in uses PKCE, and the resulting tokens are
+stored encrypted like any other connection secret.
+
 **Other websites cannot write to your local Loom.** A page you visit can make
 your browser send requests to `localhost`. Loom refuses any POST/PUT/PATCH/DELETE
 whose `Origin` is neither Loom's own page nor listed in `LOOM_CORS_ORIGINS`

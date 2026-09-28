@@ -198,6 +198,7 @@ export function GoogleConnectorCard(): ReactNode {
         onSaveCreds={saveCreds}
         onConnect={connect}
         onDisconnect={disconnect}
+        builtinApp={automation?.builtin_app ?? false}
       >
         {automation && (
           <>

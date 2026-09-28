@@ -45,6 +45,8 @@ vi.mock("../../api/automations", () => ({
   updateGitHubAutomation: vi.fn(),
   testGitHub: vi.fn(),
   syncGitHub: vi.fn(),
+  startGitHubSignIn: vi.fn(),
+  pollGitHubSignIn: vi.fn(),
   getEmailAutomation: vi.fn(),
   updateEmailAutomation: vi.fn(),
   testEmail: vi.fn(),
@@ -368,6 +370,42 @@ describe("ConnectionsSection", () => {
     expect(
       screen.getByPlaceholderText("ghp_… (leave blank to keep current)"),
     ).toHaveValue("");
+  });
+
+  it("offers Sign in with GitHub first when Loom ships a GitHub app", async () => {
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      builtin_app: true,
+    });
+    renderSection();
+
+    expect(
+      await screen.findByRole("button", { name: "Sign in with GitHub" }),
+    ).toBeInTheDocument();
+    // The token field is still there, tucked behind a disclosure.
+    expect(
+      screen.getByText("Use a personal access token instead"),
+    ).toBeInTheDocument();
+  });
+
+  it("shows the signed-in GitHub account instead of the token field", async () => {
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      builtin_app: true,
+      github: {
+        ...githubAutomation.github,
+        token_set: true,
+        account: "ada-dev",
+      },
+    });
+    renderSection();
+
+    expect(
+      await screen.findByText("Signed in as @ada-dev"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Use a personal access token instead"),
+    ).not.toBeInTheDocument();
   });
 
   it("saves GitHub settings with repos serialized from lines", async () => {

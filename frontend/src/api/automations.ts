@@ -84,6 +84,8 @@ export interface StandupResult {
 export interface GitHubBridgeConfig {
   enabled: boolean;
   token_set: boolean;
+  /** GitHub login when the token came from "Sign in with GitHub". */
+  account?: string;
   repos: string[];
   interval_minutes: number;
   lookback_hours: number;
@@ -102,6 +104,22 @@ export interface GitHubBridgeStatus {
 export interface GitHubAutomation {
   github: GitHubBridgeConfig;
   status: GitHubBridgeStatus;
+  /** Loom ships a GitHub app, so "Sign in with GitHub" is available. */
+  builtin_app?: boolean;
+}
+
+export interface GitHubSignInStart {
+  flow_id: string;
+  user_code: string;
+  verification_uri: string;
+  expires_in: number;
+  interval: number;
+}
+
+export interface GitHubSignInPoll {
+  status: "pending" | "connected" | "expired" | "denied";
+  interval: number;
+  account: string;
 }
 
 export interface GitHubAutomationUpdate {
@@ -261,6 +279,28 @@ export function updateGitHubAutomation(
   return apiClient.patch<GitHubAutomation>("/api/automations/github", update);
 }
 
+/** Begin "Sign in with GitHub": returns the code the user approves on github.com. */
+export function startGitHubSignIn(
+  includePrivate: boolean,
+): Promise<GitHubSignInStart> {
+  return apiClient.post<GitHubSignInStart>(
+    "/api/automations/github/device/start",
+    { include_private: includePrivate },
+  );
+}
+
+/** Check once whether the user approved the code (call on `interval`). */
+export function pollGitHubSignIn(
+  flowId: string,
+  signal?: AbortSignal,
+): Promise<GitHubSignInPoll> {
+  return apiClient.post<GitHubSignInPoll>(
+    "/api/automations/github/device/poll",
+    { flow_id: flowId },
+    signal,
+  );
+}
+
 export function testGitHub(signal?: AbortSignal): Promise<GitHubTestResult> {
   return apiClient.post<GitHubTestResult>(
     "/api/automations/github/test",
@@ -354,6 +394,8 @@ export interface GoogleConnectorAutomation {
     calendar: OAuthCalendarStatus;
     gmail: OAuthCalendarStatus;
   };
+  /** Loom ships its own Google app, so no client ID/secret is needed. */
+  builtin_app?: boolean;
 }
 
 export interface GoogleServiceUpdate {
@@ -389,6 +431,8 @@ export interface OutlookCalendarAutomation {
   outlook: OAuthCalendarConfig;
   connection: OAuthCalendarConnection;
   status: OAuthCalendarStatus;
+  /** Loom ships its own Microsoft app, so no client ID/secret is needed. */
+  builtin_app?: boolean;
 }
 
 export interface OAuthCalendarUpdate {

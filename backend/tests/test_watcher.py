@@ -265,6 +265,57 @@ class TestOnMoved:
 
         mock_index.move_file.assert_not_called()
 
+    def test_move_into_archive_with_malformed_yaml_does_not_raise(self, tmp_path: Path) -> None:
+        """A note whose frontmatter isn't valid YAML can still be archived."""
+        mock_index = MagicMock(spec=NoteIndex)
+        handler = _make_handler(tmp_path, note_index=mock_index)
+
+        src = tmp_path / "threads" / "topics" / "meeting.md"
+        dest = tmp_path / "threads" / ".archive" / "meeting.md"
+        dest.parent.mkdir(parents=True)
+        # "title: Meeting: Q3" is a YAML scanner error (unquoted colon).
+        dest.write_text("---\nid: thr_bad001\ntitle: Meeting: Q3\n---\n\nBody\n")
+
+        with patch.object(handler, "_vector_remove_note") as remove:
+            handler.on_moved(FileMovedEvent(str(src), str(dest)))
+
+        mock_index.move_file.assert_called_once_with(src, dest)
+        remove.assert_not_called()
+
+
+class TestDispatchResilience:
+    def test_handler_error_does_not_escape_dispatch(self, tmp_path: Path) -> None:
+        """An exception in a handler must not reach watchdog's dispatcher thread.
+
+        Watchdog ends the observer thread on any escaping exception, which
+        would silently stop live indexing for the rest of the process.
+        """
+        mock_index = MagicMock(spec=NoteIndex)
+        mock_index.refresh_file.side_effect = RuntimeError("boom")
+        handler = _make_handler(tmp_path, note_index=mock_index)
+        path = tmp_path / "threads" / "topics" / "note.md"
+
+        handler.dispatch(FileCreatedEvent(str(path)))
+
+        mock_index.refresh_file.assert_called_once_with(path)
+
+    def test_later_events_still_handled_after_a_failure(self, tmp_path: Path) -> None:
+        mock_index = MagicMock(spec=NoteIndex)
+        mock_index.refresh_file.side_effect = [RuntimeError("boom"), None]
+        handler = _make_handler(tmp_path, note_index=mock_index)
+        first = tmp_path / "threads" / "topics" / "a.md"
+        second = tmp_path / "threads" / "topics" / "b.md"
+
+        with (
+            patch.object(handler, "_vector_index_file"),
+            patch.object(handler, "_schedule_rebuild") as rebuild,
+        ):
+            handler.dispatch(FileCreatedEvent(str(first)))
+            handler.dispatch(FileCreatedEvent(str(second)))
+
+        assert mock_index.refresh_file.call_count == 2
+        rebuild.assert_called_once()
+
 
 # ---------------------------------------------------------------------------
 # _is_md filter

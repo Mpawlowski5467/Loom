@@ -888,3 +888,25 @@ async def test_worker_start_recovers_previous_process_running_row_in_manual_mode
     assert final is not None
     assert final.status == "completed"
     assert final.outcome == "filed"
+
+
+@pytest.mark.asyncio
+async def test_default_processor_times_out_a_stalled_pipeline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A hung run must fail (and be retryable) instead of holding the worker forever."""
+    import core.capture_jobs as capture_jobs
+
+    async def _never_finishes(*_args: object, **_kwargs: object) -> None:
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(capture_jobs, "_PIPELINE_TIMEOUT_SECONDS", 0.05)
+    monkeypatch.setattr("agents.runner.AgentRunner.run_pipeline", _never_finishes)
+    root = _vault(tmp_path)
+    capture = _write_capture(root, "thr_hang01")
+
+    result = await asyncio.wait_for(capture_jobs._default_processor(root, capture), timeout=5)
+
+    assert result.status == "failed"
+    assert result.transient is True
+    assert "timed out" in result.error

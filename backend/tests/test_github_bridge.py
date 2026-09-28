@@ -14,12 +14,14 @@ import httpx
 import pytest
 from starlette.testclient import TestClient
 
+from bridge import github_service
 from bridge.github import GitHubClient, GitHubError, GitHubItem, fetch_repo_activity
 from bridge.github_service import (
     GitHubSyncConflictError,
     GitHubSyncService,
     sync_github,
 )
+from core.capture_ingress import CaptureIngressError
 from core.config import (
     CaptureProcessingConfig,
     GitHubBridgeConfig,
@@ -106,6 +108,27 @@ class TestGitHubAdapter:
         markdown = item.to_capture_markdown()
         assert "## Commit `abc123de` on o/r" in markdown
         assert "longer body here" in markdown
+
+    @pytest.mark.asyncio
+    async def test_commit_backlog_is_paged_through(self) -> None:
+        def commit(n: int) -> dict:
+            return {
+                "sha": f"{n:040x}",
+                "commit": {"message": f"c{n}", "committer": {"date": "2026-07-18T10:00:00Z"}},
+            }
+
+        pages = {1: [commit(n) for n in range(50)], 2: [commit(n) for n in range(50, 53)]}
+        requested: list[int] = []
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            page = int(request.url.params["page"])
+            requested.append(page)
+            return httpx.Response(200, content=json.dumps(pages.get(page, [])).encode())
+
+        items = await _make_client(handler).fetch_commits("o/r", "2026-07-17T00:00:00Z")
+
+        assert requested == [1, 2]
+        assert len(items) == 53
 
     @pytest.mark.asyncio
     async def test_issues_feed_splits_issues_and_prs(self) -> None:
@@ -253,6 +276,19 @@ def _item(kind: str, ext: str, title: str, occurred: str) -> GitHubItem:
     )
 
 
+def _hours_ago(hours: int) -> str:
+    return (datetime.now(UTC) - timedelta(hours=hours)).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _github_ts(value: str) -> str:
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _cursors(tmp_path: Path) -> dict[str, str]:
+    data = json.loads((tmp_path / "github-sync.json").read_text(encoding="utf-8"))
+    return data["repos"]["o/r"]
+
+
 class TestGitHubSyncService:
     @pytest.mark.asyncio
     async def test_sync_ingests_and_is_idempotent(self, tmp_path, monkeypatch) -> None:
@@ -294,8 +330,73 @@ class TestGitHubSyncService:
         await sync_github(vm=manager, client=_FakeClient(items))  # type: ignore[arg-type]
 
         cursors = json.loads((tmp_path / "github-sync.json").read_text(encoding="utf-8"))
-        assert cursors["repos"]["o/r"]["commits"] == commit_ts
-        assert cursors["repos"]["o/r"]["issues"] == issue_ts
+        # Normalized to GitHub's documented `since` format (second precision).
+        assert cursors["repos"]["o/r"]["commits"] == _github_ts(commit_ts)
+        assert cursors["repos"]["o/r"]["issues"] == _github_ts(issue_ts)
+
+    @pytest.mark.asyncio
+    async def test_failed_commit_is_retried_not_skipped(self, tmp_path, monkeypatch) -> None:
+        manager = _github_vault(tmp_path, monkeypatch)
+        # GitHub lists commits newest first; they must be handled oldest first.
+        stamps = [_hours_ago(h) for h in (1, 2, 3)]
+        commits = [
+            _item("commit", f"github:o/r:commit:{n}", f"c{n}", ts)
+            for n, ts in zip((3, 2, 1), stamps, strict=True)
+        ]
+        real_ingest = github_service.ingest_capture
+
+        async def fail_on_c2(*args, **kwargs):
+            if kwargs["title"] == "c2":
+                raise OSError("disk busy")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(github_service, "ingest_capture", fail_on_c2)
+        first = await sync_github(vm=manager, client=_FakeClient(commits))  # type: ignore[arg-type]
+        assert first["repos"][0]["error"] == "disk busy"
+        assert first["created"] == 1
+        # Cursor stops at c1, the last handled commit, so c2 and c3 come back.
+        assert _cursors(tmp_path)["commits"] == _github_ts(stamps[2])
+
+        monkeypatch.setattr(github_service, "ingest_capture", real_ingest)
+        retry = await sync_github(vm=manager, client=_FakeClient(commits))  # type: ignore[arg-type]
+        assert retry["created"] == 2
+        assert _cursors(tmp_path)["commits"] == _github_ts(stamps[0])
+
+    @pytest.mark.asyncio
+    async def test_future_dated_commit_does_not_push_cursor_ahead(
+        self, tmp_path, monkeypatch
+    ) -> None:
+        manager = _github_vault(tmp_path, monkeypatch)
+        future = (datetime.now(UTC) + timedelta(days=30)).isoformat()
+        commits = [_item("commit", "github:o/r:commit:skew", "skewed clock", future)]
+
+        before = datetime.now(UTC)
+        await sync_github(vm=manager, client=_FakeClient(commits))  # type: ignore[arg-type]
+
+        saved = datetime.fromisoformat(_cursors(tmp_path)["commits"].replace("Z", "+00:00"))
+        assert saved <= datetime.now(UTC)
+        assert saved >= before.replace(microsecond=0)
+
+    @pytest.mark.asyncio
+    async def test_commit_rejected_by_ingress_is_skipped(self, tmp_path, monkeypatch) -> None:
+        manager = _github_vault(tmp_path, monkeypatch)
+        stamps = [_hours_ago(h) for h in (1, 2)]
+        commits = [
+            _item("commit", "github:o/r:commit:new", "keep", stamps[0]),
+            _item("commit", "github:o/r:commit:old", "reject", stamps[1]),
+        ]
+        real_ingest = github_service.ingest_capture
+
+        async def picky(*args, **kwargs):
+            if kwargs["title"] == "reject":
+                raise CaptureIngressError("bad title")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(github_service, "ingest_capture", picky)
+        result = await sync_github(vm=manager, client=_FakeClient(commits))  # type: ignore[arg-type]
+
+        assert (result["created"], result["errors"]) == (1, 0)
+        assert _cursors(tmp_path)["commits"] == _github_ts(stamps[0])
 
     @pytest.mark.asyncio
     async def test_repo_error_is_isolated(self, tmp_path, monkeypatch) -> None:

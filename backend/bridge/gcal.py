@@ -331,7 +331,11 @@ class GoogleCalendarClient:
         for _ in range(_MAX_PAGES):
             params: dict[str, Any]
             if sync_token:
-                params = {"syncToken": sync_token, "maxResults": _PAGE_SIZE}
+                # Google forbids the window/order parameters with a sync token
+                # but requires every other one to match the initial call.
+                # Without singleEvents a changed recurring series comes back
+                # as one master event instead of its instances.
+                params = {"syncToken": sync_token, "singleEvents": "true", "maxResults": _PAGE_SIZE}
             else:
                 params = {
                     "timeMin": _rfc3339(time_min),

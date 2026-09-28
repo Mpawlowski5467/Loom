@@ -1,8 +1,8 @@
 """Email Bridge orchestration into the shared capture ingress, plus the
 background poller.
 
-Cursor state (last seen IMAP UID) lives in ``email-sync.json`` next to
-``config.yaml``. Like the GitHub bridge, the cursor is an *efficiency*
+Cursor state (the last handled IMAP UID, plus the mailbox and UIDVALIDITY
+it belongs to) lives in ``email-sync.json`` next to ``config.yaml``. Like the GitHub bridge, the cursor is an *efficiency*
 layer only — correctness comes from capture-ingress idempotency on each
 message's ``external_id``, so a lost cursor can re-list mail but never
 duplicate a filed capture.
@@ -16,10 +16,14 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
+
+# typing_extensions, not typing: Pydantic rejects typing.TypedDict as a
+# response model on Python < 3.12, and these shapes are FastAPI response_models.
+from typing_extensions import TypedDict
 
 from bridge.email import EmailClient, EmailError
-from core.capture_ingress import ingest_capture
+from core.capture_ingress import CaptureIngressError, ingest_capture
 from core.config import GlobalConfig, settings
 
 if TYPE_CHECKING:
@@ -45,18 +49,33 @@ def _cursor_path() -> Path:
     return Path(settings.config_path).parent / "email-sync.json"
 
 
-def _load_cursor() -> int:
+def _mailbox_key(host: str, username: str, folder: str) -> str:
+    """Identify the mailbox a UID cursor belongs to: UIDs are per folder."""
+    return f"{username.lower()}@{host.lower()}/{folder}"
+
+
+def _load_cursor(mailbox: str) -> tuple[int, str]:
+    """Return ``(last_uid, uid_validity)`` for ``mailbox``.
+
+    A cursor saved for another host, account, or folder is meaningless here,
+    and following it could skip every message, so it reads as a fresh start.
+    Cursors written before the mailbox was recorded are trusted as-is.
+    """
     try:
         data = json.loads(_cursor_path().read_text(encoding="utf-8"))
-        return int(data.get("last_uid") or 0)
-    except (OSError, ValueError, TypeError):
-        return 0
+        saved_for = data.get("mailbox")
+        if saved_for is not None and saved_for != mailbox:
+            return 0, ""
+        return int(data.get("last_uid") or 0), str(data.get("uid_validity") or "")
+    except (OSError, ValueError, TypeError, AttributeError):
+        return 0, ""
 
 
-def _save_cursor(last_uid: int) -> None:
+def _save_cursor(mailbox: str, last_uid: int, uid_validity: str) -> None:
     path = _cursor_path()
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps({"last_uid": last_uid}), encoding="utf-8")
+    payload = {"mailbox": mailbox, "last_uid": last_uid, "uid_validity": uid_validity}
+    tmp.write_text(json.dumps(payload), encoding="utf-8")
     tmp.replace(path)
 
 
@@ -79,7 +98,8 @@ async def sync_email(
     if not mail.host or not mail.username or not mail.password:
         raise EmailError("Configure the IMAP host, username, and password first")
 
-    cursor = _load_cursor()
+    mailbox = _mailbox_key(mail.host, mail.username, mail.folder)
+    cursor, uid_validity = _load_cursor(mailbox)
     lookback_start = datetime.now(UTC) - timedelta(hours=mail.lookback_hours)
 
     # Injected or constructed, the client's async context manager owns logout.
@@ -90,38 +110,50 @@ async def sync_email(
     created = 0
     deduplicated = 0
     capture_ids: list[str] = []
-    max_uid = cursor
+    # The cursor only ever moves past messages that were handled: ingested,
+    # or permanently rejected by ingress validation (so one bad message
+    # cannot stall the mailbox). A transient failure stops the sync *before*
+    # that message, and the next poll retries it.
+    handled_uid = cursor
+    fetched_ok = False
     try:
         async with client:
             items = await client.fetch_since(
                 mail.folder,
                 since_uid=cursor,
+                uid_validity=uid_validity,
                 lookback_start=lookback_start,
                 limit=mail.max_messages_per_poll,
             )
-            for item in items:
+            fetched_ok = True
+            if client.uid_validity and client.uid_validity != uid_validity and uid_validity:
+                handled_uid = 0  # folder renumbered: fetch_since restarted the walk
+            for item in items:  # oldest first
                 if vm.active_vault_dir().resolve() != vault_root:
                     raise EmailSyncConflictError("The active vault changed; retry email sync")
                 fetched += 1
-                max_uid = max(max_uid, item.uid)
-                ingested = await ingest_capture(
-                    vault_root,
-                    title=item.subject or "(no subject)",
-                    body=item.to_capture_markdown(),
-                    source="bridge:email",
-                    tags=("email",),
-                    external_id=item.external_id,
-                    provenance=item.provenance(),
-                )
-                created += int(ingested.created)
-                deduplicated += int(ingested.deduplicated)
-                capture_ids.append(ingested.capture.id)
+                try:
+                    ingested = await ingest_capture(
+                        vault_root,
+                        title=item.subject or "(no subject)",
+                        body=item.to_capture_markdown(),
+                        source="bridge:email",
+                        tags=("email",),
+                        external_id=item.external_id,
+                        provenance=item.provenance(),
+                    )
+                except CaptureIngressError:
+                    logger.warning("Skipping email uid=%s rejected by ingress", item.uid)
+                else:
+                    created += int(ingested.created)
+                    deduplicated += int(ingested.deduplicated)
+                    capture_ids.append(ingested.capture.id)
+                handled_uid = item.uid
     finally:
-        # Advance the cursor even on a partial sync — ingress dedup makes
-        # re-fetching safe, and a poison message must not stall the mailbox.
-        if max_uid > cursor:
+        new_validity = client.uid_validity or uid_validity
+        if fetched_ok and (handled_uid, new_validity) != (cursor, uid_validity):
             try:
-                _save_cursor(max_uid)
+                _save_cursor(mailbox, handled_uid, new_validity)
             except OSError:
                 logger.warning("Could not persist email sync cursor", exc_info=True)
 

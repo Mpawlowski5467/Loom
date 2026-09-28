@@ -47,6 +47,36 @@ jobs:
       - name: Run tests
         run: cd backend && pytest
 
+  # requires-python is >=3.11, but the runtime image is 3.12, so nothing else
+  # exercises the floor. Tests only: lint and mypy are interpreter-independent
+  # and already gate in the job above. Installs from pyproject ranges (the
+  # lockfile pins numpy 2.5, which needs 3.12).
+  backend-py311:
+    name: Backend (Python 3.11)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-py311-pip-${{ hashFiles('backend/pyproject.toml') }}
+          restore-keys: |
+            ${{ runner.os }}-py311-pip-
+
+      - name: Install dependencies
+        run: cd backend && pip install -e ".[dev]" --break-system-packages
+
+      - name: Run tests
+        run: cd backend && pytest
+
   frontend:
     name: Frontend
     runs-on: ubuntu-latest

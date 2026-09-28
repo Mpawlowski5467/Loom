@@ -20,6 +20,7 @@ from starlette.middleware.base import RequestResponseEndpoint
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from starlette.status import HTTP_503_SERVICE_UNAVAILABLE
 
+from api.csrf import reject_cross_site_writes
 from api.exception_handlers import register_exception_handlers
 from api.health import build_health_report
 from api.optional_services import init_optional_services, shutdown_optional_services
@@ -349,6 +350,10 @@ async def api_token_gate(request: Request, call_next: RequestResponseEndpoint) -
             )
     return await call_next(request)
 
+
+# Registered last so it runs first: a cross-site write is refused before any
+# other middleware or route sees it. See api/csrf.py.
+app.middleware("http")(reject_cross_site_writes)
 
 register_exception_handlers(app)
 

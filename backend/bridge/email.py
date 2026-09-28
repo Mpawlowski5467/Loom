@@ -16,15 +16,24 @@ import email.header
 import email.utils
 import imaplib
 import logging
+import re
+import ssl
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from html.parser import HTMLParser
 from typing import Any, Protocol
 
 logger = logging.getLogger(__name__)
 
 _MAX_BODY_CHARS = 2000
 _MAX_SUBJECT_CHARS = 300
+# The body is clipped to _MAX_BODY_CHARS afterwards, so the HTML fallback
+# never needs more than this much markup. The cap bounds its cost on the
+# event loop even for hostile mail.
+_MAX_HTML_CHARS = 256_000
+_BLOCK_END_TAGS = frozenset({"p", "div", "li", "tr", "h1", "h2", "h3", "h4", "h5", "h6"})
+_SKIPPED_TAGS = frozenset({"script", "style"})
 _IMAP_DATE_FMT = "%d-%b-%Y"
 
 
@@ -118,23 +127,48 @@ def _decode_payload(part: email.message.Message) -> str:
         return payload.decode("utf-8", errors="replace")
 
 
-def _strip_html(markup: str) -> str:
-    """Crude but dependency-free HTML→text: block tags become newlines, the
-    rest drop silently, entities resolve, whitespace collapses."""
-    import re
+class _HtmlText(HTMLParser):
+    """Collect an HTML document's visible text in one linear pass."""
 
-    text = re.sub(r"(?is)<(script|style).*?>.*?</\1>", " ", markup)
-    text = re.sub(r"(?i)<\s*(br|/p|/div|/li|/tr|/h[1-6])\s*/?>", "\n", text)
-    text = re.sub(r"(?s)<[^>]+>", "", text)
-    for entity, char in (
-        ("&nbsp;", " "),
-        ("&amp;", "&"),
-        ("&lt;", "<"),
-        ("&gt;", ">"),
-        ("&quot;", '"'),
-    ):
-        text = text.replace(entity, char)
-    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.parts: list[str] = []
+        self._skip_depth = 0
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth += 1
+        elif tag == "br":
+            self.parts.append("\n")
+
+    def handle_startendtag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag == "br":
+            self.parts.append("\n")
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag in _SKIPPED_TAGS:
+            self._skip_depth = max(0, self._skip_depth - 1)
+        elif tag in _BLOCK_END_TAGS:
+            self.parts.append("\n")
+
+    def handle_data(self, data: str) -> None:
+        if not self._skip_depth:
+            self.parts.append(data)
+
+
+def _strip_html(markup: str) -> str:
+    """Dependency-free HTML→text: block tags become newlines, the rest drop
+    silently, script/style content is removed, entities resolve, whitespace
+    collapses.
+
+    Uses a streaming parser rather than regexes: this runs on untrusted mail,
+    and backtracking regexes took minutes on a few KB of unclosed tags.
+    """
+    parser = _HtmlText()
+    parser.feed(markup[:_MAX_HTML_CHARS])
+    parser.close()
+    text = "".join(parser.parts)
+    lines = [re.sub(r"[ \t\xa0]+", " ", line).strip() for line in text.splitlines()]
     return "\n".join(line for line in lines if line).strip()
 
 
@@ -176,6 +210,16 @@ def _parse_date(raw: str | None) -> str:
         return raw.strip()
 
 
+def _imap_ssl(host: str, port: int) -> imaplib.IMAP4_SSL:
+    """Open IMAP over TLS, verifying the server certificate and hostname.
+
+    ``imaplib.IMAP4_SSL`` without an explicit context falls back to
+    ``ssl._create_stdlib_context()``, which checks neither, so anyone on the
+    network path could impersonate the server and read the login.
+    """
+    return imaplib.IMAP4_SSL(host, port, ssl_context=ssl.create_default_context())
+
+
 class EmailClient:
     """Async facade over a synchronous IMAP connection.
 
@@ -200,10 +244,13 @@ class EmailClient:
         if imap_factory is not None:
             self._factory = imap_factory
         elif use_ssl:
-            self._factory = imaplib.IMAP4_SSL
+            self._factory = _imap_ssl
         else:
             self._factory = imaplib.IMAP4
         self._conn: _ImapConnection | None = None
+        # UIDVALIDITY of the folder last opened by fetch_since ("" if the
+        # server did not report one). Stored alongside the UID cursor.
+        self.uid_validity = ""
 
     async def __aenter__(self) -> EmailClient:
         try:
@@ -211,6 +258,12 @@ class EmailClient:
             await asyncio.to_thread(self._conn.login, self._username, self._password)
         except imaplib.IMAP4.error as exc:
             raise EmailError(f"IMAP login failed for {self._host}: {exc}") from exc
+        except ssl.SSLCertVerificationError as exc:
+            reason = getattr(exc, "verify_message", "") or exc
+            raise EmailError(
+                f"TLS certificate for {self._host} could not be verified ({reason}). "
+                "Loom only connects to IMAP servers with a valid certificate."
+            ) from exc
         except OSError as exc:
             raise EmailError(f"Cannot reach IMAP host {self._host}:{self._port}: {exc}") from exc
         return self
@@ -243,17 +296,27 @@ class EmailClient:
         since_uid: int,
         lookback_start: datetime,
         limit: int,
+        uid_validity: str = "",
     ) -> list[EmailItem]:
-        """Fetch up to ``limit`` newest messages above ``since_uid``.
+        """Fetch up to ``limit`` of the *oldest* messages above ``since_uid``.
 
-        On a fresh cursor (``since_uid == 0``) the window is bounded by
-        ``lookback_start`` (IMAP ``SINCE`` date search) instead.
+        Oldest first, sorted by UID, so a caller that advances its cursor per
+        message walks a backlog forward across polls instead of skipping it.
+        On a fresh cursor (``since_uid == 0``) the window starts at
+        ``lookback_start`` (IMAP ``SINCE`` date search) instead. When the
+        folder's UIDVALIDITY differs from ``uid_validity`` the server has
+        renumbered it, so the old cursor means nothing and the fetch starts
+        over from ``lookback_start``.
         """
         assert self._conn is not None
         try:
             status, _ = await asyncio.to_thread(self._conn.select, folder, True)
             if status != "OK":
                 raise EmailError(f"Cannot open folder {folder!r}")
+            self.uid_validity = _read_uid_validity(self._conn)
+            if uid_validity and self.uid_validity and uid_validity != self.uid_validity:
+                logger.info("IMAP folder %r was renumbered; restarting from lookback", folder)
+                since_uid = 0
             if since_uid > 0:
                 criteria = f"UID {since_uid + 1}:*"
             else:
@@ -265,8 +328,7 @@ class EmailClient:
             uids = [u for u in uids if u > since_uid]
             if not uids:
                 return []
-            # Newest last; keep only the newest `limit`.
-            uids = sorted(uids)[-limit:]
+            uids = sorted(uids)[:limit]
             uid_set = ",".join(str(u) for u in uids)
             status, fetch_data = await asyncio.to_thread(
                 self._conn.uid, "FETCH", uid_set, "(BODY.PEEK[])"
@@ -289,7 +351,24 @@ class EmailClient:
             uid = _uid_from_fetch_part(header_blob, current_uid)
             current_uid = uid
             items.append(_parse_message(raw, uid=uid, folder=folder))
+        # FETCH responses are not guaranteed to arrive in UID order.
+        items.sort(key=lambda item: item.uid)
         return items
+
+
+def _read_uid_validity(conn: _ImapConnection) -> str:
+    """The UIDVALIDITY the server sent with the last SELECT, or ""."""
+    response = getattr(conn, "response", None)
+    if response is None:
+        return ""
+    try:
+        _code, data = response("UIDVALIDITY")
+    except (imaplib.IMAP4.error, ValueError, TypeError):
+        return ""
+    value = data[-1] if data else None
+    if isinstance(value, bytes):
+        return value.decode(errors="replace")
+    return str(value) if value else ""
 
 
 def _uid_from_fetch_part(part: Any, fallback: int) -> int:
@@ -309,10 +388,17 @@ def _uid_from_fetch_part(part: Any, fallback: int) -> int:
 
 
 def _parse_message(raw: bytes, *, uid: int, folder: str) -> EmailItem:
-    """Parse one RFC 822 message into an EmailItem (never raises)."""
+    """Parse one RFC 822 message into an EmailItem (never raises).
+
+    Malformed or hostile mail (e.g. thousands of nested MIME parts, which
+    overflow the parser's recursion) becomes a placeholder item. Raising here
+    would abort the whole fetch before the cursor moves, so the sync would
+    stall on that one message forever.
+    """
     try:
-        msg = email.message_from_bytes(raw)
-    except (email.errors.MessageError, ValueError):
+        return _parse_message_unchecked(raw, uid=uid, folder=folder)
+    except Exception:  # noqa: BLE001 - any parse failure becomes a placeholder
+        logger.warning("Could not parse IMAP message uid=%s", uid, exc_info=True)
         return EmailItem(
             uid=uid,
             message_id="",
@@ -322,6 +408,10 @@ def _parse_message(raw: bytes, *, uid: int, folder: str) -> EmailItem:
             body="",
             folder=folder,
         )
+
+
+def _parse_message_unchecked(raw: bytes, *, uid: int, folder: str) -> EmailItem:
+    msg = email.message_from_bytes(raw)
     message_id = (msg.get("Message-ID") or "").strip().strip("<>")
     subject = _clip(_decode_header_value(msg.get("Subject")), _MAX_SUBJECT_CHARS)
     sender = _decode_header_value(msg.get("From"))

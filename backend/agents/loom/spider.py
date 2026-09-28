@@ -19,7 +19,7 @@ from pydantic import ValidationError
 from agents.base import BaseAgent
 from agents.loom.spider_candidates import find_candidates
 from agents.loom.spider_linker import apply_links
-from agents.loom.spider_lookup import build_title_map
+from agents.loom.spider_lookup import build_title_map, is_link_candidate
 from agents.loom.spider_models import LinkCandidate, ScanReport, VaultScanReport
 from core.notes import Note, parse_note
 
@@ -149,9 +149,7 @@ class Spider(BaseAgent):
         if not threads_dir.exists():
             return []
         return [
-            p
-            for p in threads_dir.rglob("*.md")
-            if ".archive" not in p.parts and p.name != "_index.md"
+            p for p in threads_dir.rglob("*.md") if is_link_candidate(p) and p.name != "_index.md"
         ]
 
     def _collect_existing_links(self, note: Note, note_path: Path) -> set[str]:

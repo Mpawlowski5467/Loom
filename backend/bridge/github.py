@@ -18,6 +18,7 @@ from __future__ import annotations
 import logging
 from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, Literal
 
 import httpx
@@ -27,6 +28,9 @@ logger = logging.getLogger(__name__)
 _API_BASE = "https://api.github.com"
 _API_VERSION = "2022-11-28"
 _PER_PAGE = 50
+# Commits come newest first with no ascending option, so a backlog is paged
+# through in full (up to this bound) before being processed oldest first.
+_MAX_COMMIT_PAGES = 10
 _MAX_BODY_CHARS = 2000
 _MAX_TITLE_CHARS = 300
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
@@ -145,12 +149,29 @@ class GitHubClient:
         }
 
     async def fetch_commits(self, repo: str, since_iso: str) -> list[GitHubItem]:
-        """Commits on the default branch committed at/after ``since_iso``."""
-        data = await self._get_json(
-            f"/repos/{repo}/commits", {"since": since_iso, "per_page": _PER_PAGE}
-        )
+        """Commits on the default branch committed at/after ``since_iso``.
+
+        Follows pagination so a burst of more than one page since the last
+        poll is not cut off at the newest page.
+        """
+        entries: list[Any] = []
+        for page in range(1, _MAX_COMMIT_PAGES + 1):
+            data = await self._get_json(
+                f"/repos/{repo}/commits",
+                {"since": since_iso, "per_page": _PER_PAGE, "page": page},
+            )
+            batch = data if isinstance(data, list) else []
+            entries.extend(batch)
+            if len(batch) < _PER_PAGE:
+                break
+        else:
+            logger.warning(
+                "%s has more than %d new commits; only the newest are synced",
+                repo,
+                _MAX_COMMIT_PAGES * _PER_PAGE,
+            )
         items: list[GitHubItem] = []
-        for entry in data or []:
+        for entry in entries:
             sha = str(entry.get("sha") or "")
             if not sha:
                 continue
@@ -229,16 +250,41 @@ async def fetch_repo_activity(
 ) -> AsyncIterator[GitHubItem]:
     """Yield activity items for one repo, honoring the include flags.
 
+    Each feed is yielded oldest first, so a caller that advances its cursor
+    per item never moves it past an item it has not handled yet.
+
     Issues and PRs share one feed, so a repo with both disabled makes no
     issue-feed call at all; a repo with only one enabled filters the other
     kind out after the (shared) fetch.
     """
     if include_commits and commits_since is not None:
-        for item in await client.fetch_commits(repo, commits_since):
+        for item in sorted(await client.fetch_commits(repo, commits_since), key=_occurred_key):
             yield item
     if (include_issues or include_pull_requests) and issues_since is not None:
-        for item in await client.fetch_issues_and_prs(repo, issues_since):
+        issues = await client.fetch_issues_and_prs(repo, issues_since)
+        for item in sorted(issues, key=_occurred_key):
             if (item.kind == "issue" and include_issues) or (
                 item.kind == "pr" and include_pull_requests
             ):
                 yield item
+
+
+def parse_github_time(value: str) -> datetime | None:
+    """Parse a GitHub ISO 8601 timestamp (``...Z`` or offset form) to UTC."""
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (ValueError, AttributeError):
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=UTC)
+    return parsed.astimezone(UTC)
+
+
+def format_github_time(moment: datetime) -> str:
+    """Format a timestamp the way GitHub documents its ``since`` parameter."""
+    return moment.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _occurred_key(item: GitHubItem) -> datetime:
+    # Unparseable timestamps sort first; they never advance the cursor.
+    return parse_github_time(item.occurred_at) or datetime.min.replace(tzinfo=UTC)

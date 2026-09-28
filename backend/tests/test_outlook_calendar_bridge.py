@@ -82,6 +82,7 @@ class TestOutlookAuthorizationUrl:
             client_id="client-id",
             redirect_uri="http://localhost:8000/api/automations/calendar/outlook/callback",
             state="state-123",
+            code_challenge="challenge-abc",
         )
         parsed = urlparse(url)
         query = parse_qs(parsed.query)
@@ -96,6 +97,8 @@ class TestOutlookAuthorizationUrl:
         assert query["response_mode"] == ["query"]
         assert query["scope"] == ["offline_access Calendars.Read"]
         assert query["state"] == ["state-123"]
+        assert query["code_challenge"] == ["challenge-abc"]
+        assert query["code_challenge_method"] == ["S256"]
 
 
 class TestOutlookTokenLifecycle:

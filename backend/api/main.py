@@ -37,6 +37,7 @@ from api.routers.diagnostics import router as diagnostics_router
 from api.routers.email_bridge import router as email_bridge_router
 from api.routers.events import router as events_router
 from api.routers.github_bridge import router as github_bridge_router
+from api.routers.github_sign_in import router as github_sign_in_router
 from api.routers.google_bridge import router as google_bridge_router
 from api.routers.graph import router as graph_router
 from api.routers.hardware import router as hardware_router
@@ -362,6 +363,7 @@ app.include_router(notes_router)
 app.include_router(archive_router)
 app.include_router(automations_router)
 app.include_router(github_bridge_router)
+app.include_router(github_sign_in_router)
 app.include_router(email_bridge_router)
 app.include_router(calendar_outlook_router)
 app.include_router(google_bridge_router)

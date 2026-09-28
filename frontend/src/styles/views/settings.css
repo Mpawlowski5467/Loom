@@ -1049,6 +1049,35 @@
   align-items: center;
 }
 
+.github-device {
+  display: grid;
+  gap: 10px;
+}
+
+.github-device-code {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0;
+}
+
+.github-device-code code {
+  font-family: var(--mono);
+  font-size: 22px;
+  letter-spacing: 0.12em;
+  color: var(--ink);
+}
+
+.connector-advanced summary {
+  color: var(--agent);
+  font-size: 11.5px;
+  cursor: pointer;
+}
+
+.connector-advanced[open] summary {
+  margin-bottom: 10px;
+}
+
 .connector-service {
   display: grid;
   gap: 16px;

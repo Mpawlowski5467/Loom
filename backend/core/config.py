@@ -154,6 +154,35 @@ class LoomSettings(BaseSettings):
             "LOOM_TRACE_RETENTION_DAYS; a negative value disables pruning."
         ),
     )
+    # Built-in OAuth apps: registered once by whoever ships Loom (see
+    # docs/oauth-apps.md) so users connect with one click instead of creating
+    # their own. Empty (the default) keeps the bring-your-own-app flow. A
+    # user's own app, when configured, always wins.
+    google_client_id: str = Field(
+        default="",
+        description="Built-in Google OAuth client (Desktop app type). LOOM_GOOGLE_CLIENT_ID.",
+    )
+    google_client_secret: str = Field(
+        default="",
+        description=(
+            "Secret of the built-in Google Desktop client. Google documents that "
+            "installed-app secrets are not confidential; PKCE protects the flow. "
+            "LOOM_GOOGLE_CLIENT_SECRET."
+        ),
+    )
+    microsoft_client_id: str = Field(
+        default="",
+        description=(
+            "Built-in Microsoft Entra app (public client, no secret, PKCE). "
+            "LOOM_MICROSOFT_CLIENT_ID."
+        ),
+    )
+    github_client_id: str = Field(
+        default="",
+        description=(
+            "Built-in GitHub OAuth app with device flow enabled (no secret). LOOM_GITHUB_CLIENT_ID."
+        ),
+    )
     demo_vault_dir: Path = Field(
         # Source checkout: <repo>/examples/demo-vault, three levels up from this
         # module (backend/core/config.py). The Docker image pip-installs the
@@ -410,6 +439,9 @@ class GitHubBridgeConfig(BaseModel):
 
     enabled: bool = False
     token: str | None = None
+    # GitHub login the token belongs to, when it came from "Sign in with
+    # GitHub" (display only; empty for a pasted personal access token).
+    account: str = Field(default="", max_length=100)
     repos: list[str] = Field(default_factory=list)
     interval_minutes: int = Field(default=15, ge=5, le=1440)
     lookback_hours: int = Field(default=24, ge=1, le=720)
@@ -454,6 +486,7 @@ class GitHubBridgeConfig(BaseModel):
         return GitHubBridgeConfigPublic(
             enabled=self.enabled,
             token_set=bool(self.token),
+            account=self.account,
             repos=list(self.repos),
             interval_minutes=self.interval_minutes,
             lookback_hours=self.lookback_hours,
@@ -468,6 +501,7 @@ class GitHubBridgeConfigPublic(BaseModel):
 
     enabled: bool
     token_set: bool
+    account: str = ""
     repos: list[str]
     interval_minutes: int
     lookback_hours: int

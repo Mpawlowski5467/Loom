@@ -26,7 +26,7 @@ from typing_extensions import TypedDict
 
 from agents.sanitize import scrub_untrusted
 from bridge.gmail import GmailAuthError, GmailClient, GmailError
-from bridge.google import load_google_tokens, save_google_tokens
+from bridge.google import google_app, google_app_for, load_google_tokens, save_google_tokens
 from core.capture_ingress import ingest_capture
 from core.config import GlobalConfig, settings
 
@@ -103,16 +103,19 @@ async def sync_gmail(
     config = GlobalConfig.load(vm.config_path())
     connector = config.google
     gmail = connector.gmail
-    if not connector.client_id or not connector.client_secret:
+    if google_app(connector) is None:
         raise GmailError("Add your Google OAuth client ID and secret first")
     tokens = load_google_tokens()
     if tokens is None:
         raise GmailError("Connect your Google account first")
+    app = google_app_for(connector, tokens)
+    if app is None:
+        raise GmailError("Reconnect Google: the app this account was connected with is gone")
 
     owns_client = client is None
     client = client or GmailClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_google_tokens,
     )
@@ -229,12 +232,7 @@ class GmailSyncService:
             connector = config.google
             gmail = connector.gmail
             interval_s = max(5, gmail.interval_minutes) * 60
-            if (
-                gmail.enabled
-                and connector.client_id
-                and connector.client_secret
-                and load_google_tokens()
-            ):
+            if gmail.enabled and google_app(connector) is not None and load_google_tokens():
                 try:
                     result = await sync_gmail()
                     self._last_run = result["synced_at"]

@@ -31,6 +31,7 @@ import {
 } from "../../api/automations";
 import { apiUrl } from "../../api/client";
 import { useApp } from "../../context/app-ctx";
+import { GitHubSignIn } from "./GitHubSignIn";
 import { GoogleConnectorCard } from "./GoogleConnectorCard";
 import { CopyChip } from "./connector-flow";
 import {
@@ -64,6 +65,7 @@ function normalizeOutlook(next: OutlookCalendarAutomation): OAuthCalendarState {
     config: next.outlook,
     connection: next.connection,
     status: next.status,
+    builtinApp: next.builtin_app ?? false,
   };
 }
 
@@ -357,6 +359,28 @@ export function ConnectionsSection(): ReactNode {
     }
   };
 
+  // Sign-in and sign-out only change the connection, so refresh just that:
+  // re-applying the whole config would wipe unsaved repo/interval edits.
+  const handleGitHubSignedIn = useCallback(
+    (account: string) => {
+      getGitHubAutomation()
+        .then(setGithub)
+        .catch(() => undefined);
+      pushToast({
+        icon: "✓",
+        agent: "github",
+        body: account
+          ? `Signed in to GitHub as @${account}`
+          : "GitHub connected",
+      });
+    },
+    [pushToast],
+  );
+
+  const signOutGitHub = useCallback(async () => {
+    setGithub(await updateGitHubAutomation({ clear_token: true }));
+  }, []);
+
   const persistGitHub = useCallback(
     async (signal?: AbortSignal): Promise<GitHubAutomation> => {
       const next = await updateGitHubAutomation({
@@ -620,6 +644,26 @@ export function ConnectionsSection(): ReactNode {
   const connected = automation?.calendar.feed_url_set ?? false;
   const status = automation?.status;
   const ghConnected = github?.github.token_set ?? false;
+  const ghTokenField = (
+    <label className="settings-field">
+      <span className="settings-field-label">
+        Personal access token {ghConnected && <em>token saved</em>}
+      </span>
+      <input
+        className="input"
+        type="password"
+        value={ghToken}
+        onChange={(event) => setGhToken(event.target.value)}
+        placeholder={
+          ghConnected
+            ? "ghp_… (leave blank to keep current)"
+            : "ghp_… or github_pat_…"
+        }
+        autoComplete="off"
+        spellCheck={false}
+      />
+    </label>
+  );
   const ghStatus = github?.status;
   const ghSyncErrors = ghSyncResult?.repos.filter((repo) => repo.error) ?? [];
   const emConnected = email?.email.password_set ?? false;
@@ -897,24 +941,24 @@ export function ConnectionsSection(): ReactNode {
             <span>{ghEnabled ? "Enabled" : "Off"}</span>
           </label>
         </div>
-        <label className="settings-field">
-          <span className="settings-field-label">
-            Personal access token {ghConnected && <em>token saved</em>}
-          </span>
-          <input
-            className="input"
-            type="password"
-            value={ghToken}
-            onChange={(event) => setGhToken(event.target.value)}
-            placeholder={
-              ghConnected
-                ? "ghp_… (leave blank to keep current)"
-                : "ghp_… or github_pat_…"
-            }
-            autoComplete="off"
-            spellCheck={false}
-          />
-        </label>
+        {github?.builtin_app ? (
+          <>
+            <GitHubSignIn
+              account={github.github.account ?? ""}
+              onConnected={handleGitHubSignedIn}
+              onSignOut={signOutGitHub}
+              disabled={ghBusy !== null}
+            />
+            {!github.github.account && (
+              <details className="connector-advanced">
+                <summary>Use a personal access token instead</summary>
+                {ghTokenField}
+              </details>
+            )}
+          </>
+        ) : (
+          ghTokenField
+        )}
         <label className="settings-field">
           <span className="settings-field-label">
             Repositories — one owner/name per line

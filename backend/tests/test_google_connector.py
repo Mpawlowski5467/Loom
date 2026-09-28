@@ -7,6 +7,7 @@ validation, and the /api/automations/google endpoints."""
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import time
 from datetime import UTC, datetime, timedelta
@@ -119,6 +120,7 @@ class TestConnectorConsentUrl:
             client_id="client-id",
             redirect_uri="http://localhost:8000/api/automations/google/callback",
             state="state-123",
+            code_challenge="challenge-abc",
         )
         parsed = urlparse(url)
         query = parse_qs(parsed.query)
@@ -130,6 +132,8 @@ class TestConnectorConsentUrl:
         assert query["access_type"] == ["offline"]
         assert query["prompt"] == ["consent"]
         assert query["state"] == ["state-123"]
+        assert query["code_challenge"] == ["challenge-abc"]
+        assert query["code_challenge_method"] == ["S256"]
         scopes = set(query["scope"][0].split())
         assert scopes == {GOOGLE_SCOPE_CALENDAR, GOOGLE_SCOPE_GMAIL}
 
@@ -1186,7 +1190,10 @@ class TestGoogleConnectorApi:
         _connect_config(client)
         state = _start_connect(client)
         with oauth._FLOWS_LOCK:
-            oauth._FLOWS[f"google:{state}"] = time.monotonic() - 1
+            key = f"google:{state}"
+            oauth._FLOWS[key] = dataclasses.replace(
+                oauth._FLOWS[key], deadline=time.monotonic() - 1
+            )
         response = client.get(
             "/api/automations/google/callback",
             params={"state": state, "code": "expired-code"},

@@ -479,6 +479,8 @@ export interface GmailSyncResult {
   deduplicated: number;
   errors: number;
   capture_ids: string[];
+  /** Messages still queued; later polls import them, oldest first. */
+  pending?: number;
 }
 
 export function getGoogleConnector(

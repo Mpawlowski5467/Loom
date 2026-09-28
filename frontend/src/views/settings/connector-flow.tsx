@@ -228,6 +228,8 @@ export interface ServiceSyncOutcome {
   deduplicated: number;
   failed: number;
   errorLines: string[];
+  /** Items still queued for later polls (a backlog being worked through). */
+  pending?: number;
 }
 
 export interface ServiceStatusLine {
@@ -382,7 +384,7 @@ export function ServiceSection({
       pushToast({
         icon: "↷",
         agent: "connector",
-        body: `${serviceLabel} sync: ${result.created} new capture${result.created === 1 ? "" : "s"}, ${result.deduplicated} already in Inbox${result.failed ? `, ${result.failed} failed` : ""}`,
+        body: `${serviceLabel} sync: ${result.created} new capture${result.created === 1 ? "" : "s"}, ${result.deduplicated} already in Inbox${result.failed ? `, ${result.failed} failed` : ""}${result.pending ? `, ${result.pending} more queued` : ""}`,
       });
     } catch (err) {
       if ((err as DOMException)?.name !== "AbortError") {

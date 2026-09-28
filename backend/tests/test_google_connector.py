@@ -39,6 +39,7 @@ from bridge.gmail import (
     GmailAuthError,
     GmailClient,
     GmailError,
+    GmailHistoryExpiredError,
     GmailItem,
     _map_message,
 )
@@ -611,6 +612,12 @@ class _FakeGmailClient:
         self.items = items
         self.auth_error = auth_error
         self.queries: list[str] = []
+        # History API: each list_history call returns the next batch of IDs.
+        self.history_batches: list[list[str]] = []
+        self.history_expired = False
+        self.history_starts: list[str] = []
+        self.fetched: list[str] = []
+        self._position = 1
 
     async def ensure_fresh_token(self) -> OAuthTokens:
         if self.auth_error is not None:
@@ -619,9 +626,21 @@ class _FakeGmailClient:
 
     async def list_message_ids(self, *, query: str, max_messages: int) -> list[str]:
         self.queries.append(query)
-        return list(self.ids)
+        return list(self.ids)  # newest first, like Gmail
+
+    async def fetch_history_id(self) -> str:
+        return f"h{self._position}"
+
+    async def list_history(self, start_history_id: str) -> tuple[list[str], str]:
+        self.history_starts.append(start_history_id)
+        if self.history_expired:
+            raise GmailHistoryExpiredError("Gmail history expired")
+        batch = self.history_batches.pop(0) if self.history_batches else []
+        self._position += 1
+        return batch, f"h{self._position}"
 
     async def fetch_message(self, message_id: str) -> GmailItem | None:
+        self.fetched.append(message_id)
         entry = self.items.get(message_id)
         if isinstance(entry, Exception):
             raise entry
@@ -829,9 +848,17 @@ class TestGmailSync:
 
         cursor = json.loads((tmp_path / "gmail-sync.json").read_text(encoding="utf-8"))
         assert cursor["mailbox"]["synced_at"]
+        assert (cursor["mailbox"]["history_id"], cursor["mailbox"]["pending"]) == ("h1", [])
 
+        # Later polls read only what arrived since: nothing is re-downloaded.
         second = await sync_gmail(vm=manager, client=client)  # type: ignore[arg-type]
-        assert (second["fetched"], second["created"], second["deduplicated"]) == (2, 0, 2)
+        assert (second["fetched"], second["created"], second["deduplicated"]) == (0, 0, 0)
+        assert client.history_starts == ["h1"]
+
+        # Cursor lost: the window is listed again and ingress dedup is the backstop.
+        (tmp_path / "gmail-sync.json").unlink()
+        third = await sync_gmail(vm=manager, client=client)  # type: ignore[arg-type]
+        assert (third["fetched"], third["created"], third["deduplicated"]) == (2, 0, 2)
         assert len(list(captures_dir.glob("*.md"))) == 2
 
     @pytest.mark.asyncio
@@ -860,6 +887,10 @@ class TestGmailSync:
         result = await sync_gmail(vm=manager, client=client)  # type: ignore[arg-type]
         assert result["errors"] == 1
         assert result["created"] == 1
+        # The failed message stays queued for the next poll instead of being lost.
+        assert result["pending"] == 1
+        cursor = json.loads((tmp_path / "gmail-sync.json").read_text(encoding="utf-8"))
+        assert cursor["mailbox"]["pending"] == ["bad"]
 
     @pytest.mark.asyncio
     async def test_auth_error_mid_sync_propagates(self, tmp_path, monkeypatch) -> None:
@@ -947,7 +978,7 @@ class TestConnectorPollers:
 
         async def _fake_sync() -> dict:
             calls.append("tick")
-            return {"synced_at": "2026-07-21T00:00:00Z", "created": 1, "errors": 0}
+            return {"synced_at": "2026-07-21T00:00:00Z", "created": 1, "errors": 0, "pending": 0}
 
         cfg = GlobalConfig()
         cfg.google = GoogleConnectorConfig(
@@ -984,7 +1015,7 @@ class TestConnectorPollers:
 
         async def _fake_gmail_sync() -> dict:
             calls.append("gmail")
-            return {"synced_at": "", "created": 0, "errors": 0}
+            return {"synced_at": "", "created": 0, "errors": 0, "pending": 0}
 
         monkeypatch.setattr(GlobalConfig, "load", classmethod(lambda cls, path: GlobalConfig()))
         monkeypatch.setattr("bridge.gcal_service.sync_google_calendar", _fake_cal_sync)
@@ -1402,6 +1433,7 @@ class TestGoogleConnectorApi:
             "deduplicated": 0,
             "errors": 0,
             "capture_ids": ["thr_a", "thr_b"],
+            "pending": 0,
         }
         with patch("api.routers.google_bridge.sync_gmail", return_value=gmail_payload):
             response = client.post("/api/automations/google/sync/gmail")

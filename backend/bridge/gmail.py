@@ -40,8 +40,11 @@ logger = logging.getLogger(__name__)
 _TOKEN_URL = "https://oauth2.googleapis.com/token"
 _API_BASE = "https://gmail.googleapis.com/gmail/v1/users/me"
 _TIMEOUT = httpx.Timeout(connect=10.0, read=30.0, write=10.0, pool=10.0)
-_MAX_PAGES = 10
-_PAGE_SIZE = 100
+# messages.list returns at most 500 IDs per page; IDs are cheap, so a whole
+# look-back window is listed and the service queues it for import.
+_MAX_PAGES = 20
+_PAGE_SIZE = 500
+_MAX_HISTORY_PAGES = 50
 _MAX_PART_BYTES = 1024 * 1024
 
 
@@ -51,6 +54,14 @@ class GmailError(RuntimeError):
 
 class GmailAuthError(GmailError):
     """Raised when the stored grant is revoked or rejected — reconnect required."""
+
+
+class GmailNotFoundError(GmailError):
+    """Raised on HTTP 404: the message (or history position) no longer exists."""
+
+
+class GmailHistoryExpiredError(GmailError):
+    """The saved history position is too old for Gmail (it keeps about a week)."""
 
 
 def _tokens_from_response(data: Any, *, prior_refresh: str = "") -> OAuthTokens:
@@ -346,7 +357,7 @@ class GmailClient:
                 "OAuth client and reconnect"
             )
         if resp.status_code == 404:
-            raise GmailError("Message not found or not accessible")
+            raise GmailNotFoundError("Message not found or not accessible")
         if resp.status_code == 429:
             raise GmailError("Gmail API rate limit exceeded — retry later")
         if resp.status_code >= 400:
@@ -363,8 +374,68 @@ class GmailClient:
             return str(data.get("emailAddress") or "")
         return ""
 
+    async def fetch_history_id(self) -> str:
+        """The mailbox's current history position (users.getProfile)."""
+        data = await self._get_json(f"{_API_BASE}/profile")
+        history_id = data.get("historyId") if isinstance(data, dict) else None
+        if not history_id:
+            raise GmailError("Gmail did not report a history position")
+        return str(history_id)
+
+    async def list_history(self, start_history_id: str) -> tuple[list[str], str]:
+        """IDs of messages added to the inbox after ``start_history_id``.
+
+        Returns them in the order Gmail recorded them, plus the history
+        position to resume from. When the page bound is hit, that position
+        is the last record read, so the next call continues exactly there.
+        Raises :class:`GmailHistoryExpiredError` when Gmail no longer has
+        history that old.
+        """
+        ids: list[str] = []
+        seen: set[str] = set()
+        page_token = ""
+        resume_from = start_history_id
+        for _ in range(_MAX_HISTORY_PAGES):
+            params: dict[str, Any] = {
+                "startHistoryId": start_history_id,
+                "historyTypes": "messageAdded",
+                "labelId": "INBOX",
+                "maxResults": 500,
+            }
+            if page_token:
+                params["pageToken"] = page_token
+            try:
+                data = await self._get_json(f"{_API_BASE}/history", params=params)
+            except GmailNotFoundError as exc:
+                raise GmailHistoryExpiredError("Gmail history expired") from exc
+            if not isinstance(data, dict):
+                raise GmailError("Gmail returned an invalid history response")
+            for record in data.get("history") or []:
+                if not isinstance(record, dict):
+                    continue
+                for added in record.get("messagesAdded") or []:
+                    message = added.get("message") if isinstance(added, dict) else None
+                    if not isinstance(message, dict) or not message.get("id"):
+                        continue
+                    labels = message.get("labelIds")
+                    if isinstance(labels, list) and "INBOX" not in labels:
+                        continue
+                    message_id = str(message["id"])
+                    if message_id not in seen:
+                        seen.add(message_id)
+                        ids.append(message_id)
+                if record.get("id"):
+                    resume_from = str(record["id"])
+            page_token = str(data.get("nextPageToken") or "")
+            if not page_token:
+                return ids, str(data.get("historyId") or resume_from)
+        logger.warning(
+            "Gmail history has more than %d pages; continuing next poll", _MAX_HISTORY_PAGES
+        )
+        return ids, resume_from
+
     async def list_message_ids(self, *, query: str, max_messages: int) -> list[str]:
-        """List message IDs matching a Gmail search query (pageToken paging)."""
+        """List message IDs matching a Gmail search query, newest first."""
         ids: list[str] = []
         page_token = ""
         for _ in range(_MAX_PAGES):

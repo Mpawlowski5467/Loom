@@ -166,6 +166,7 @@ export function GoogleConnectorCard(): ReactNode {
       created: result.created,
       deduplicated: result.deduplicated,
       failed: result.errors,
+      pending: result.pending ?? 0,
       errorLines:
         result.errors > 0
           ? [

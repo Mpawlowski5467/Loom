@@ -968,6 +968,25 @@ describe("ConnectionsSection", () => {
         }),
       ),
     );
+
+    // A backlog still being worked through is reported, not hidden.
+    vi.mocked(syncGmail).mockResolvedValue({
+      synced_at: "2026-07-14T10:05:00Z",
+      fetched: 100,
+      created: 100,
+      deduplicated: 0,
+      errors: 0,
+      capture_ids: [],
+      pending: 150,
+    });
+    await user.click(screen.getByRole("button", { name: "Sync Gmail now" }));
+    await waitFor(() =>
+      expect(pushToast).toHaveBeenCalledWith(
+        expect.objectContaining({
+          body: "Gmail sync: 100 new captures, 0 already in Inbox, 150 more queued",
+        }),
+      ),
+    );
   });
 
   it("tests a service and renders its result inline", async () => {

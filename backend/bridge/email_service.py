@@ -222,7 +222,13 @@ class EmailSyncService:
             config = GlobalConfig.load(settings.config_path)
             interval_s = max(5, config.email.interval_minutes) * 60
             mail = config.email
-            if mail.enabled and mail.host and mail.username and mail.password:
+            if (
+                not config.automation_policy.paused
+                and mail.enabled
+                and mail.host
+                and mail.username
+                and mail.password
+            ):
                 try:
                     result = await sync_email()
                     self._last_run = result["synced_at"]

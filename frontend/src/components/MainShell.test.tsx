@@ -87,11 +87,11 @@ afterEach(() => {
 });
 
 describe("MainShell ErrorBoundary coverage", () => {
-  it("renders all chrome regions when nothing throws", () => {
+  it("renders all chrome regions when nothing throws", async () => {
     render(<MainShell />);
     expect(screen.getByText("nav-region")).toBeInTheDocument();
     expect(screen.getByText("tree-region")).toBeInTheDocument();
-    expect(screen.getByText("graph-view")).toBeInTheDocument();
+    expect(await screen.findByText("graph-view")).toBeInTheDocument();
     expect(screen.getByText("toasts-region")).toBeInTheDocument();
   });
 
@@ -145,32 +145,32 @@ describe("MainShell file-tree visibility", () => {
     expect(screen.getByText("tree-region")).toBeInTheDocument();
   });
 
-  it("renders the tree on the board tab", () => {
+  it("renders the tree on the board tab", async () => {
     useApp.mockReturnValue(appState({ tab: "board" }));
     render(<MainShell />);
     expect(screen.getByText("tree-region")).toBeInTheDocument();
-    expect(screen.getByText("board")).toBeInTheDocument();
+    expect(await screen.findByText("board")).toBeInTheDocument();
   });
 
-  it("omits the tree on the thread tab (full-width view)", () => {
+  it("omits the tree on the thread tab (full-width view)", async () => {
     useApp.mockReturnValue(appState({ tab: "thread" }));
     render(<MainShell />);
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
-    expect(screen.getByText("thread")).toBeInTheDocument();
+    expect(await screen.findByText("thread")).toBeInTheDocument();
   });
 
-  it("omits the tree on the inbox tab (full-width view)", () => {
+  it("omits the tree on the inbox tab (full-width view)", async () => {
     useApp.mockReturnValue(appState({ tab: "inbox" }));
     render(<MainShell />);
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
-    expect(screen.getByText("inbox")).toBeInTheDocument();
+    expect(await screen.findByText("inbox")).toBeInTheDocument();
   });
 
-  it("omits the tree on the settings tab", () => {
+  it("omits the tree on the settings tab", async () => {
     useApp.mockReturnValue(appState({ tab: "settings" }));
     render(<MainShell />);
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
-    expect(screen.getByText("settings")).toBeInTheDocument();
+    expect(await screen.findByText("settings")).toBeInTheDocument();
   });
 
   it("omits the tree on graph when treeVisible is false", () => {

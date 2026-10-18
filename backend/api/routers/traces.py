@@ -53,6 +53,7 @@ class TraceDetail(BaseModel):
     error: str
     run_id: str = ""
     step: str = ""
+    content_retained: bool = True
 
 
 class RunStep(BaseModel):

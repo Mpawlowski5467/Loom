@@ -3,16 +3,25 @@ import type { Dispatch, SetStateAction } from "react";
 import { backendCaptureToFrontend, listCaptures } from "../api/captures";
 import { subscribeEventDomains } from "../api/events";
 import type { LoomEventType } from "../api/events";
-import { backendNotesToFrontend, loadAllNotes } from "../api/notes";
+import {
+  backendNoteToFrontend,
+  getNote,
+  loadNoteSummaries,
+  titleMapFromNotes,
+} from "../api/notes";
 import type { Capture, CaptureStatus, Note, NoteId } from "../data/types";
+import { buildWikilinkMap, linkTarget } from "../data/wikilinks";
 
 const CONTENT_EVENT_DEBOUNCE_MS = 650;
+const EMPTY_NOTES: Note[] = [];
+const EMPTY_CAPTURES: Capture[] = [];
 
 type ContentDomain = "notes" | "captures";
 
 interface UseVaultContentOptions {
   enabled: boolean;
   activeVault?: string;
+  currentNoteId?: NoteId | null;
   initialNotes: Note[];
   initialCaptures: Capture[];
   setCurrentNoteId: Dispatch<SetStateAction<NoteId | null>>;
@@ -30,6 +39,7 @@ export interface VaultContentState {
   appendNote: (note: Note) => void;
   updateNote: (note: Note) => void;
   removeNote: (id: string) => void;
+  reloadNoteBody: (id: string) => Promise<void>;
 
   captures: Capture[];
   capturesLoaded: boolean;
@@ -52,17 +62,22 @@ export interface VaultContentState {
 export function useVaultContent({
   enabled,
   activeVault,
+  currentNoteId,
   initialNotes,
   initialCaptures,
   setCurrentNoteId,
   onLoadError,
 }: UseVaultContentOptions): VaultContentState {
-  const [notes, setNotes] = useState<Note[]>(initialNotes);
+  const [notesState, setNotes] = useState<Note[]>(initialNotes);
+  const [loadedVault, setLoadedVault] = useState(activeVault);
+  const sameVault = !enabled || loadedVault === activeVault;
+  const notes = sameVault ? notesState : EMPTY_NOTES;
   const [notesLoadedState, setNotesLoadedState] = useState(
     initialNotes.length > 0,
   );
   const [notesError, setNotesError] = useState<string | null>(null);
-  const [captures, setCaptures] = useState<Capture[]>(initialCaptures);
+  const [capturesState, setCaptures] = useState<Capture[]>(initialCaptures);
+  const captures = sameVault ? capturesState : EMPTY_CAPTURES;
   const [capturesLoadedState, setCapturesLoadedState] = useState(
     initialCaptures.length > 0,
   );
@@ -72,16 +87,27 @@ export function useVaultContent({
   );
   const notesRequest = useRef<AbortController | null>(null);
   const capturesRequest = useRef<AbortController | null>(null);
+  const boundVault = useRef(activeVault);
 
   const refreshNotes = useCallback(async () => {
     notesRequest.current?.abort();
     const ctrl = new AbortController();
     notesRequest.current = ctrl;
     try {
-      const records = await loadAllNotes(ctrl.signal);
+      const loaded = await loadNoteSummaries(ctrl.signal);
       if (ctrl.signal.aborted) return;
-      const loaded = backendNotesToFrontend(records);
-      setNotes(loaded);
+      setNotes((current) => {
+        const previous = new Map(current.map((note) => [note.id, note]));
+        return loaded.map((note) => {
+          const old = previous.get(note.id);
+          return old &&
+            old.modified === note.modified &&
+            old.contentVersion === note.contentVersion &&
+            old.bodyLoaded !== false
+            ? { ...note, body: old.body, bodyLoaded: true }
+            : note;
+        });
+      });
       setNotesError(null);
       setCurrentNoteId((current) => {
         if (current && loaded.some((note) => note.id === current)) {
@@ -149,6 +175,14 @@ export function useVaultContent({
     // hook rule, this lets a same-turn active-vault/config update supersede it
     // before any request leaves the browser.
     const timer = window.setTimeout(() => {
+      if (boundVault.current !== activeVault) {
+        boundVault.current = activeVault;
+        setLoadedVault(activeVault);
+        setNotes([]);
+        setCaptures([]);
+        setNotesLoadedState(false);
+        setCapturesLoadedState(false);
+      }
       void refreshNotes();
       void refreshCaptures();
     }, 0);
@@ -157,6 +191,54 @@ export function useVaultContent({
       abortLoads();
     };
   }, [abortLoads, activeVault, enabled, refreshCaptures, refreshNotes]);
+
+  const selected = notes.find((note) => note.id === currentNoteId);
+  const selectedModified = selected?.modified;
+  const selectedContentVersion = selected?.contentVersion;
+  const needsBody = selected?.bodyLoaded === false && !selected.bodyError;
+  useEffect(() => {
+    if (!enabled || !currentNoteId || !needsBody) return;
+    const controller = new AbortController();
+    const vault = activeVault;
+    void getNote(currentNoteId, controller.signal)
+      .then((record) => {
+        if (controller.signal.aborted || boundVault.current !== vault) return;
+        setNotes((current) => {
+          const complete = backendNoteToFrontend(
+            record,
+            titleMapFromNotes(current),
+          );
+          return current.map((note) =>
+            note.id === record.id
+              ? {
+                  ...complete,
+                  links: [...new Set([...note.links, ...complete.links])],
+                }
+              : note,
+          );
+        });
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted) return;
+        const message =
+          error instanceof Error ? error.message : "Could not load note";
+        setNotes((current) =>
+          current.map((note) =>
+            note.id === currentNoteId ? { ...note, bodyError: message } : note,
+          ),
+        );
+        onLoadError("notes", message);
+      });
+    return () => controller.abort();
+  }, [
+    activeVault,
+    currentNoteId,
+    enabled,
+    needsBody,
+    onLoadError,
+    selectedModified,
+    selectedContentVersion,
+  ]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -198,6 +280,8 @@ export function useVaultContent({
   }, [enabled, refreshCaptures, refreshNotes]);
 
   const appendNote = useCallback((note: Note) => {
+    // A list fetched before this confirmed write cannot replace its result.
+    notesRequest.current?.abort();
     setNotes((current) =>
       current.some((item) => item.id === note.id)
         ? current
@@ -205,6 +289,7 @@ export function useVaultContent({
     );
   }, []);
   const updateNote = useCallback((note: Note) => {
+    notesRequest.current?.abort();
     setNotes((current) => {
       const index = current.findIndex((item) => item.id === note.id);
       if (index === -1) return [...current, note];
@@ -214,23 +299,40 @@ export function useVaultContent({
     });
   }, []);
   const removeNote = useCallback((id: string) => {
+    notesRequest.current?.abort();
     setNotes((current) => current.filter((note) => note.id !== id));
   }, []);
 
-  const wikilinkMap = useMemo(() => {
-    const map = new Map<string, NoteId>();
-    for (const note of notes) map.set(note.title.toLowerCase(), note.id);
-    return map;
-  }, [notes]);
+  const reloadNoteBody = useCallback(async (id: string) => {
+    const vault = boundVault.current;
+    const record = await getNote(id);
+    if (boundVault.current !== vault) return;
+    setNotes((current) => {
+      const complete = backendNoteToFrontend(
+        record,
+        titleMapFromNotes(current),
+      );
+      return current.map((note) =>
+        note.id === id
+          ? {
+              ...complete,
+              links: [...new Set([...note.links, ...complete.links])],
+            }
+          : note,
+      );
+    });
+  }, []);
+
+  const wikilinkMap = useMemo(() => buildWikilinkMap(notes), [notes]);
   const resolveWikilink = useCallback(
-    (raw: string): NoteId | undefined =>
-      wikilinkMap.get(raw.split("|")[0]!.trim().toLowerCase()),
+    (raw: string): NoteId | undefined => wikilinkMap.get(linkTarget(raw)),
     [wikilinkMap],
   );
-  const noteById = useCallback(
-    (id: string): Note | undefined => notes.find((note) => note.id === id),
+  const notesById = useMemo(
+    () => new Map(notes.map((note) => [note.id, note])),
     [notes],
   );
+  const noteById = useCallback((id: string) => notesById.get(id), [notesById]);
   const backlinksFor = useCallback(
     (id: string): string[] =>
       notes.filter((note) => note.links.includes(id)).map((note) => note.id),
@@ -251,7 +353,7 @@ export function useVaultContent({
 
   return {
     notes,
-    notesLoaded: enabled ? notesLoadedState : true,
+    notesLoaded: enabled ? sameVault && notesLoadedState : true,
     notesError,
     wikilinkMap,
     resolveWikilink,
@@ -260,8 +362,9 @@ export function useVaultContent({
     appendNote,
     updateNote,
     removeNote,
+    reloadNoteBody,
     captures,
-    capturesLoaded: enabled ? capturesLoadedState : true,
+    capturesLoaded: enabled ? sameVault && capturesLoadedState : true,
     capturesError,
     selectedCaptureId,
     selectCapture,

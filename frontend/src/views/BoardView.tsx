@@ -20,6 +20,9 @@ export function BoardView(): ReactNode {
             <StatusBadge state="idle" label="settling" />
             <StatusBadge state="idle" label="idle" />
           </div>
+        </div>
+        <details className="board-advanced-viz">
+          <summary>Advanced visualization</summary>
           <ModeToggle
             value={viz}
             onChange={setViz}
@@ -29,7 +32,7 @@ export function BoardView(): ReactNode {
               { value: "pulse", icon: "∿", label: "pulse" },
             ]}
           />
-        </div>
+        </details>
         <div key={viz} className="board-mode-content">
           {viz === "cards" ? <CardsMode /> : <PulseMode />}
         </div>

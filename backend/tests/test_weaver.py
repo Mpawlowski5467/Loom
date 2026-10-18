@@ -303,6 +303,38 @@ class TestWeaverCreateFromModal:
         assert "/projects/" in note.file_path
 
     @pytest.mark.asyncio
+    async def test_create_in_nested_custom_folder(self, tmp_path: Path):
+        """Nested folders selected in the modal remain valid destinations."""
+        root = _setup_vault(tmp_path)
+        weaver = Weaver(root, chat_provider=None)
+
+        note = await weaver.create_from_modal(
+            title="Atlas Plan",
+            note_type="project",
+            tags=[],
+            folder="projects/atlas",
+            content="A nested custom project.",
+        )
+
+        assert Path(note.file_path).parent == root / "threads" / "projects" / "atlas"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("folder", ["../outside", ".archive", "projects\\atlas"])
+    async def test_create_rejects_invalid_folder(self, tmp_path: Path, folder: str):
+        """Unsafe destinations fail instead of being silently refiled."""
+        root = _setup_vault(tmp_path)
+        weaver = Weaver(root, chat_provider=None)
+
+        with pytest.raises(ValueError, match="Invalid folder"):
+            await weaver.create_from_modal(
+                title="Unsafe",
+                note_type="topic",
+                tags=[],
+                folder=folder,
+                content="x",
+            )
+
+    @pytest.mark.asyncio
     async def test_create_with_llm_formatting(self, tmp_path: Path):
         """When chat provider is available, content is formatted per schema."""
         root = _setup_vault(tmp_path)

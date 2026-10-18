@@ -232,7 +232,12 @@ class GmailSyncService:
             connector = config.google
             gmail = connector.gmail
             interval_s = max(5, gmail.interval_minutes) * 60
-            if gmail.enabled and google_app(connector) is not None and load_google_tokens():
+            if (
+                not config.automation_policy.paused
+                and gmail.enabled
+                and google_app(connector) is not None
+                and load_google_tokens()
+            ):
                 try:
                     result = await sync_gmail()
                     self._last_run = result["synced_at"]

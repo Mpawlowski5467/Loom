@@ -7,6 +7,7 @@ import {
   Palette,
   Server,
   ShieldAlert,
+  ShieldCheck,
   Vault,
 } from "lucide-react";
 import { useApp } from "../context/app-ctx";
@@ -19,6 +20,7 @@ import { DangerZoneSection } from "./settings/DangerZoneSection";
 import { HardwareSection } from "./settings/HardwareSection";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { VaultSection } from "./settings/VaultSection";
+import { PolicySection } from "./settings/PolicySection";
 
 const SECTIONS: {
   id: SettingsSection;
@@ -29,6 +31,11 @@ const SECTIONS: {
   { id: "providers", label: "Providers", icon: <Server size={15} /> },
   { id: "connections", label: "Connections", icon: <Link2 size={15} /> },
   { id: "hardware", label: "Hardware & Models", icon: <Cpu size={15} /> },
+  {
+    id: "policy",
+    label: "Automation & Privacy",
+    icon: <ShieldCheck size={15} />,
+  },
   { id: "vault", label: "Vault", icon: <Vault size={15} /> },
   { id: "archived", label: "Archived", icon: <Archive size={15} /> },
   { id: "about", label: "About", icon: <Info size={15} /> },
@@ -74,6 +81,8 @@ function renderSection(section: SettingsSection): ReactNode {
       return <ConnectionsSection />;
     case "hardware":
       return <HardwareSection />;
+    case "policy":
+      return <PolicySection />;
     case "vault":
       return <VaultSection />;
     case "archived":

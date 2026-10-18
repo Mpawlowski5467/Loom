@@ -1,0 +1,22 @@
+# Pinned developer-only dependency set for CI and local verification.
+#
+# Install this after requirements.lock, then install the project editable with
+# `pip install --no-deps -e '.[dev]'`. Runtime packages stay pinned by
+# requirements.lock; this file contains only the dev tools and their extras'
+# dependencies (including the existing optional keyring support).
+httpcore2==2.10.0
+httpx2==2.10.0
+jeepney==0.9.0 ; sys_platform == "linux"
+jaraco.classes==3.4.0
+jaraco.context==6.1.2
+jaraco.functools==4.6.0
+keyring==25.7.0
+more-itertools==11.1.0
+mypy==2.1.0
+pywin32-ctypes==0.2.3 ; sys_platform == "win32"
+pytest==9.0.3
+pytest-asyncio==1.4.0
+ruff==0.15.16
+SecretStorage==3.5.0 ; sys_platform == "linux"
+truststore==0.10.4
+types-PyYAML==6.0.12.20260518

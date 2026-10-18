@@ -1,5 +1,6 @@
 """Note parser: extract YAML frontmatter, markdown body, and wikilinks."""
 
+import hashlib
 import os
 import re
 import secrets
@@ -75,6 +76,11 @@ class HistoryEntry(BaseModel):
 # value to dispatch on.
 NOTE_SCHEMA_VERSION = 1
 
+# Capture-produced notes are written before Sentinel can review them.  Keep
+# their lifecycle metadata in ``extra`` so it round-trips with arbitrary user
+# frontmatter while normal listings/indexes can consistently hide drafts.
+_UNPUBLISHED_STATES = {"pending", "rejected"}
+
 
 class NoteMeta(BaseModel):
     """Frontmatter fields (returned in list views, no body)."""
@@ -97,6 +103,7 @@ class NoteMeta(BaseModel):
     extra: dict[str, Any] = Field(default_factory=dict)
     # Derived at parse time — not stored in frontmatter
     file_path: str = ""
+    content_version: str = ""
 
 
 class Note(NoteMeta):
@@ -106,6 +113,21 @@ class Note(NoteMeta):
     wikilinks: list[str] = Field(default_factory=list)
 
 
+def is_published(meta: NoteMeta) -> bool:
+    """Return whether a note belongs in normal retrieval surfaces.
+
+    Legacy notes have no publication marker and remain visible.  Only the
+    explicit draft states written by the capture pipeline are withheld.
+    """
+    state = meta.extra.get("publication_state", "published")
+    return not isinstance(state, str) or state.lower() not in _UNPUBLISHED_STATES
+
+
+def matches_version(note: NoteMeta, expected: str) -> bool:
+    """Accept content fingerprints, retaining timestamp-only legacy clients."""
+    return expected == (note.content_version if expected.startswith("sha256:") else note.modified)
+
+
 def generate_id() -> str:
     """Generate a note id like ``thr_a1b2c3``."""
     return f"thr_{secrets.token_hex(3)}"
@@ -113,7 +135,7 @@ def generate_id() -> str:
 
 def now_iso() -> str:
     """Return the current UTC time in ISO-8601 format."""
-    return datetime.now(UTC).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="microseconds")
 
 
 def _coerce_meta(meta: dict[str, Any]) -> dict[str, Any]:
@@ -147,6 +169,8 @@ def _split_known_extra(meta: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
     known: dict[str, Any] = {}
     extra: dict[str, Any] = {}
     for k, v in meta.items():
+        if k == "content_version":
+            continue  # derived from bytes; an on-disk value is never trusted
         if k in NoteMeta.model_fields and k not in {"extra", "file_path"}:
             known[k] = v
         else:
@@ -180,6 +204,7 @@ def parse_note(path: Path) -> Note:
         body=body,
         wikilinks=wikilinks,
         file_path=str(path),
+        content_version="sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
     )
 
 
@@ -199,6 +224,7 @@ def parse_note_meta(path: Path) -> NoteMeta:
         **known,
         extra=extra,
         file_path=str(path),
+        content_version="sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest(),
     )
 
 
@@ -209,10 +235,12 @@ def build_frontmatter(meta: dict[str, Any]) -> str:
     keys, and the derived ``file_path`` is never serialized. Known fields take
     precedence over extras on the (by-construction impossible) key collision.
     """
-    out = {k: v for k, v in meta.items() if k not in {"extra", "file_path"}}
+    out = {k: v for k, v in meta.items() if k not in {"extra", "file_path", "content_version"}}
     extra = meta.get("extra") or {}
     if isinstance(extra, dict):
         for k, v in extra.items():
+            if k == "content_version":
+                continue
             out.setdefault(k, v)
     dumped: str = yaml.safe_dump(out, default_flow_style=False, sort_keys=False)
     return "---\n" + dumped + "---\n"

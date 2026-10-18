@@ -131,6 +131,35 @@ def test_build_graph_excludes_archive(tmp_path: Path) -> None:
     assert graph.nodes[0].id == "thr_act111"
 
 
+def test_build_graph_excludes_pending_and_rejected_drafts(tmp_path: Path) -> None:
+    """Capture drafts stay out of a rebuilt graph until they are published."""
+    threads = tmp_path / "threads"
+    _write_note(
+        threads,
+        "topics",
+        "published.md",
+        {"id": "thr_live01", "title": "Published", "type": "topic", "tags": []},
+        "Body.\n",
+    )
+    for state in ("pending", "rejected"):
+        _write_note(
+            threads,
+            "topics",
+            f"{state}.md",
+            {
+                "id": f"thr_{state}",
+                "title": state.title(),
+                "type": "topic",
+                "tags": [],
+                "publication_state": state,
+            },
+            "Private draft.\n",
+        )
+
+    graph = build_graph(threads)
+    assert [node.id for node in graph.nodes] == ["thr_live01"]
+
+
 def test_build_graph_skips_malformed_note(tmp_path: Path) -> None:
     """One malformed .md must not take down the whole graph build."""
     threads = tmp_path / "threads"

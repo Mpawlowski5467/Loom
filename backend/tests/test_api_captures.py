@@ -382,7 +382,7 @@ class TestSkipCapture:
         ).json()["capture"]
         path = Path(created["file_path"])
 
-        with patch("api.routers.captures.shutil.move", side_effect=OSError("disk failure")):
+        with patch("core.capture_lifecycle.record_move", side_effect=OSError("disk failure")):
             resp = client.post("/api/captures/skip", json={"capture_path": created["file_path"]})
 
         assert resp.status_code == 500
@@ -505,11 +505,21 @@ class TestProcessCapture:
 
     def test_process_capture_success(self, client: TestClient, seeded_captures: Path) -> None:
         """POST /api/captures/process with valid capture returns processed result."""
-        mock_note = MagicMock()
-        mock_note.id = "thr_new001"
-        mock_note.title = "Processed Note"
-        mock_note.type = "topic"
-        mock_note.file_path = "/tmp/threads/topics/processed.md"
+        note_path = seeded_captures / "threads" / "topics" / "processed.md"
+        vault_write_note(
+            seeded_captures,
+            note_path,
+            {
+                "id": "thr_new001",
+                "title": "Processed Note",
+                "type": "topic",
+                "status": "active",
+                "publication_state": "pending_review",
+                "source": "capture:thr_cap001",
+            },
+            "A durable processed note.",
+        )
+        mock_note = parse_note(note_path)
 
         mock_weaver = MagicMock()
         # Router calls process_capture_full(), which returns (note, chain).
@@ -1019,11 +1029,30 @@ class TestPreviewCapture:
 class TestCommitCapture:
     def test_commit_writes_and_archives(self, client: TestClient, seeded_captures: Path) -> None:
         """Commit returns the created note and archives the capture out of the inbox."""
+        note_path = seeded_captures / "threads" / "topics" / "filed.md"
+        vault_write_note(
+            seeded_captures,
+            note_path,
+            {
+                "id": "thr_new",
+                "title": "Filed Note",
+                "type": "topic",
+                "tags": ["idea"],
+                "created": "2026-03-15T10:00:00+00:00",
+                "modified": "2026-03-15T10:00:00+00:00",
+                "author": "agent:weaver",
+                "source": "capture:thr_cap001",
+                "status": "active",
+                "history": [],
+                "publication_state": "pending",
+            },
+            "## Summary\n\nx\n",
+        )
         note = Note(
             id="thr_new",
             title="Filed Note",
             type="topic",
-            file_path="/tmp/threads/topics/filed.md",
+            file_path=str(note_path),
             body="## Summary\n\nx\n",
         )
         mock_weaver = MagicMock()
@@ -1058,6 +1087,86 @@ class TestCommitCapture:
         assert data["capture_archived"] is True
         # Capture is moved out of the inbox.
         assert not (seeded_captures / "threads" / "captures" / "raw-idea.md").exists()
+
+    def test_commit_publication_failure_restores_inbox_and_returns_review(
+        self,
+        client: TestClient,
+        seeded_captures: Path,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """A failed publication commit must not report a filed capture."""
+        from agents.loom import enforcement
+
+        capture_path = seeded_captures / "threads" / "captures" / "raw-idea.md"
+        original_capture = capture_path.read_text(encoding="utf-8")
+        note_path = seeded_captures / "threads" / "topics" / "pending.md"
+        vault_write_note(
+            seeded_captures,
+            note_path,
+            {
+                "id": "thr_pending",
+                "title": "Pending publication",
+                "type": "topic",
+                "tags": [],
+                "created": "2026-03-15T10:00:00+00:00",
+                "modified": "2026-03-15T10:00:00+00:00",
+                "author": "agent:weaver",
+                "source": "capture:thr_cap001",
+                "status": "active",
+                "history": [],
+                "publication_state": "pending",
+            },
+            "## Summary\n\nx\n",
+        )
+        note = Note(
+            id="thr_pending",
+            title="Pending publication",
+            type="topic",
+            file_path=str(note_path),
+            body="## Summary\n\nx\n",
+        )
+        mock_weaver = MagicMock()
+        mock_weaver.commit_proposal = AsyncMock(return_value=(note, SimpleNamespace(success=True)))
+        mock_sentinel = MagicMock()
+        mock_sentinel.validate_action = AsyncMock(
+            return_value=ValidationResult(status="passed", modes=["deterministic"])
+        )
+        annotate = enforcement.annotate_frontmatter
+
+        def fail_publication(
+            vault_dir: Path, path: Path, fields: dict[str, object], *, strict: bool = False
+        ) -> bool:
+            if strict and path == note_path:
+                raise OSError("disk full")
+            return annotate(vault_dir, path, fields, strict=strict)
+
+        monkeypatch.setattr(enforcement, "annotate_frontmatter", fail_publication)
+        with (
+            patch("agents.loom.weaver.get_weaver", return_value=mock_weaver),
+            patch("agents.loom.sentinel.get_sentinel", return_value=mock_sentinel),
+            patch("agents.loom.spider.get_spider", return_value=None),
+            patch("agents.loom.scribe.get_scribe", return_value=None),
+        ):
+            response = client.post(
+                "/api/captures/commit",
+                json={
+                    "capture_path": "captures/raw-idea.md",
+                    "note_type": "topic",
+                    "folder": "topics",
+                    "title": "Pending publication",
+                    "tags": [],
+                    "body": "## Summary\n\nx\n",
+                },
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["outcome"] == "needs_review"
+        assert data["capture_archived"] is False
+        assert data["review_required"] is True
+        assert capture_path.read_text(encoding="utf-8") == original_capture
+        assert not (seeded_captures / "threads" / ".archive" / "raw-idea.md").exists()
+        assert parse_note(note_path).extra.get("publication_state") == "pending"
 
     def test_commit_missing_sentinel_keeps_capture_for_review(
         self, client: TestClient, seeded_captures: Path

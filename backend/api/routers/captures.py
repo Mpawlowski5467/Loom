@@ -2,7 +2,6 @@
 
 import asyncio
 import logging
-import shutil
 import traceback
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -24,12 +23,22 @@ from core.capture_jobs import (
     get_capture_job_service,
     publish_job_change,
 )
+from core.capture_lifecycle import (
+    CaptureLifecycleError,
+    archive_capture,
+    capture_processing_policy,
+    capture_vault_root,
+    finish_reserved_job,
+    reserve_capture_job,
+    resolve_inbox_capture,
+    unique_archive_path,
+)
 from core.config import CaptureProcessingConfig, GlobalConfig
 from core.events import publish_capture_change, publish_note_change
 from core.note_index import NoteIndex, get_note_index
 from core.notes import _WIKILINK_RE, Note, generate_id, now_iso, parse_note
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
-from core.vault import VaultManager, VaultPathError, get_vault_manager
+from core.vault import VaultManager, get_vault_manager
 from core.vault_io import VaultIOError
 from core.vault_io import write_note as vault_write_note
 
@@ -109,6 +118,10 @@ class CaptureItem(BaseModel):
     # hand-written/legacy captures remain fully compatible.
     external_id: str | None = None
     provenance: dict[str, Any] = Field(default_factory=dict)
+    # Weaver source coverage is present after processing (or when an
+    # over-limit source is held for review). It is optional for legacy and
+    # newly-arrived captures.
+    source_coverage: dict[str, Any] = Field(default_factory=dict)
     # Durable Inbox/enforcement state. ``enforcement_outcome`` is absent for a
     # newly-arrived capture that has not been processed yet.
     enforcement_outcome: CaptureOutcome | None = None
@@ -245,6 +258,7 @@ class ProcessResult(BaseModel):
     review_required: bool = False  # True on failed; UI surfaces the note
     flagged: bool = False  # True on warning; note ships but is annotated
     validation_reasons: list[str] = Field(default_factory=list)
+    source_coverage: dict[str, Any] = Field(default_factory=dict)
 
 
 class ProcessAllResult(BaseModel):
@@ -291,6 +305,8 @@ class CapturePreview(BaseModel):
     tags: list[str] = Field(default_factory=list)
     body: str = ""
     links: list[PreviewLink] = Field(default_factory=list)
+    source_link: str = ""
+    source_coverage: dict[str, Any] = Field(default_factory=dict)
 
 
 class PreviewResponse(BaseModel):
@@ -371,6 +387,9 @@ def _capture_item(note: Note) -> CaptureItem:
         file_path=note.file_path,
         external_id=str(external_id) if external_id is not None else None,
         provenance=provenance if isinstance(provenance, dict) else {},
+        source_coverage=dict(extra["source_coverage"])
+        if isinstance(extra.get("source_coverage"), dict)
+        else {},
         enforcement_outcome=outcome,
         review_required=review_required,
         review_reasons=_string_list(extra.get("review_reasons")),
@@ -392,36 +411,11 @@ def _capture_item(note: Note) -> CaptureItem:
 
 
 def _resolve_inbox_capture(vm: VaultManager, user_path: str) -> Path:
-    """Resolve and validate an active capture inside ``threads/captures``.
-
-    ``VaultManager.resolve_capture_path`` intentionally accepts any Markdown
-    note under ``threads/``. Capture operations are more destructive: commit
-    and process may create a draft and archive their input, so they must never
-    accept an ordinary topic/project note.
-    """
+    """Compatibility wrapper for the shared Inbox path validator."""
     try:
-        capture_path = vm.resolve_capture_path(user_path)
-    except VaultPathError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-    captures_dir = (vm.active_threads_dir() / "captures").resolve()
-    try:
-        capture_path.relative_to(captures_dir)
-    except ValueError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="Only notes in the active Inbox can be processed as captures",
-        ) from exc
-
-    if not capture_path.exists():
-        raise HTTPException(status_code=404, detail=f"Capture not found: {user_path}")
-    try:
-        capture = parse_note(capture_path)
-    except (OSError, yaml.YAMLError, ValidationError, ValueError) as exc:
-        raise HTTPException(status_code=400, detail="Capture is not a valid note") from exc
-    if capture.type != "capture":
-        raise HTTPException(status_code=400, detail="Inbox item is not a capture note")
-    return capture_path
+        return resolve_inbox_capture(vm, user_path)
+    except CaptureLifecycleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 def _persist_failed_attempt(vault_root: Path, capture_path: Path, error: str) -> bool:
@@ -452,20 +446,8 @@ def _persist_failed_attempt(vault_root: Path, capture_path: Path, error: str) ->
 
 
 def _unique_archive_path(archive_dir: Path, filename: str, capture_id: str) -> Path:
-    """Choose an archive destination without ever replacing an existing file."""
-    destination = archive_dir / filename
-    if not destination.exists():
-        return destination
-
-    suffix = capture_id or generate_id()
-    destination = destination.with_stem(f"{destination.stem}-{suffix}")
-    counter = 2
-    while destination.exists():
-        destination = (archive_dir / filename).with_stem(
-            f"{Path(filename).stem}-{suffix}-{counter}"
-        )
-        counter += 1
-    return destination
+    """Compatibility wrapper for the shared collision-safe archive naming."""
+    return unique_archive_path(archive_dir, filename, capture_id)
 
 
 def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
@@ -479,14 +461,19 @@ def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
     if note is None:
         errors = list(result.errors)
         err = "; ".join(errors) if errors else "Empty capture cannot be processed"
+        review_required = bool(getattr(result, "review_required", False))
         return ProcessResult(
             processed=False,
             # ``skipped`` is reserved for the durable /skip operation, which
             # archives the source. An empty capture remains in Inbox, so call
             # it failed rather than claiming a lifecycle transition that did
             # not happen.
-            outcome="failed",
+            outcome="needs_review" if review_required else "failed",
             error=err,
+            review_required=review_required,
+            capture_archived=bool(getattr(result, "capture_archived", False)),
+            flagged=bool(getattr(result, "flagged", False)),
+            source_coverage=dict(getattr(result, "source_coverage", {}) or {}),
         )
     validation = result.validation
     error = "; ".join(result.errors)
@@ -515,6 +502,7 @@ def _pipeline_result_to_process_result(result: Any) -> ProcessResult:
         validation_mode=validation.mode_summary if validation else "",
         validation_reasons=list(validation.reasons) if validation else [],
         error=error,
+        source_coverage=dict(getattr(result, "source_coverage", {}) or {}),
         capture_archived=result.capture_archived,
         review_required=result.review_required,
         flagged=result.flagged,
@@ -556,8 +544,8 @@ def _list_captures(captures_dir: Path) -> list[CaptureItem]:
 
 
 def _capture_processing_policy(vm: VaultManager) -> CaptureProcessingConfig:
-    """Load the active persisted processing policy for a request."""
-    return GlobalConfig.load(vm.config_path()).capture_processing
+    """Compatibility wrapper for the shared capture policy lookup."""
+    return capture_processing_policy(vm)
 
 
 async def _ensure_capture_worker(
@@ -606,8 +594,8 @@ def _job_execution_from_process_result(result: ProcessResult) -> JobExecutionRes
 
 
 def _capture_vault_root(capture_path: Path) -> Path:
-    """Recover the validated Inbox path's vault root without rereading config."""
-    return capture_path.resolve().parents[2]
+    """Compatibility wrapper for the validated capture root helper."""
+    return capture_vault_root(capture_path)
 
 
 async def _cancel_pending_job_unlocked(
@@ -647,61 +635,16 @@ async def _restore_cancelled_job_unlocked(
 
 
 async def _reserve_capture_job(vm: VaultManager, capture_path: Path) -> CaptureJob:
-    """Create/claim the durable running row for a synchronous pipeline."""
-    vault_root = _capture_vault_root(capture_path)
-    capture = await asyncio.to_thread(parse_note, capture_path)
-    reservation_task = asyncio.create_task(
-        get_capture_job_service().reserve_external(
-            vault_root,
-            capture_path,
-            capture.id,
-            capture.source,
-            _capture_processing_policy(vm),
-        )
-    )
+    """Compatibility wrapper for shared durable reservation semantics."""
     try:
-        # SQLite work runs in a thread. Shield it so cancellation cannot hide a
-        # committed ``running`` row before the caller receives its job id.
-        job = await asyncio.shield(reservation_task)
-    except asyncio.CancelledError:
-        try:
-            orphaned = await reservation_task
-        except BaseException:
-            # No completed reservation means there is no known row to clean up.
-            pass
-        else:
-            try:
-                await asyncio.shield(
-                    _finish_reserved_job(
-                        orphaned,
-                        JobExecutionResult(
-                            status="failed",
-                            outcome="failed",
-                            error="Processing request cancelled before execution",
-                        ),
-                    )
-                )
-            except Exception:
-                logger.exception(
-                    "Could not clean up cancelled capture reservation %s",
-                    orphaned.id,
-                )
-        raise
-    except (CaptureJobConflictError, CaptureJobsBusyError) as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    publish_job_change()
-    return job
+        return await reserve_capture_job(vm, capture_path)
+    except CaptureLifecycleError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 async def _finish_reserved_job(job: CaptureJob, result: JobExecutionResult) -> None:
-    """Terminalize the exact caller-owned running reservation."""
-    vault_root = _capture_vault_root(Path(job.capture_path))
-    try:
-        await asyncio.to_thread(capture_job_store(vault_root).finish, job.id, result)
-    except (CaptureJobConflictError, CaptureJobNotFoundError):
-        logger.error("Could not finalize capture job %s", job.id, exc_info=True)
-        return
-    publish_job_change()
+    """Compatibility wrapper for shared reservation finalization."""
+    await finish_reserved_job(job, result)
 
 
 async def _fail_reserved_jobs(reservations: list[CaptureJob], error: str) -> None:
@@ -785,6 +728,7 @@ async def create_capture(
             external_id=body.external_id,
             provenance=body.provenance,
             policy=policy,
+            automated=False,
             index=index,
         )
     except CaptureJobsBusyError as exc:
@@ -1052,7 +996,6 @@ async def skip_capture(
     """
     capture_path = _resolve_inbox_capture(vm, body.capture_path)
     vault_root = _capture_vault_root(capture_path)
-    threads_dir = vault_root / "threads"
     service = get_capture_job_service()
 
     from agents.file_locks import path_lock
@@ -1089,67 +1032,29 @@ async def skip_capture(
                             detail="Inbox item is not a capture note",
                         )
 
-                    archive_dir = threads_dir / ".archive"
-                    archive_dir.mkdir(parents=True, exist_ok=True)
                     try:
-                        archive_dir.resolve().relative_to(threads_dir.resolve())
-                    except ValueError as exc:
-                        raise HTTPException(
-                            status_code=400, detail="Vault archive path is unsafe"
-                        ) from exc
-
-                    ts = now_iso()
-                    meta = capture.model_dump(exclude={"body", "wikilinks", "file_path"})
-                    meta.update(
-                        {
-                            "status": "archived",
-                            "modified": ts,
-                            "enforcement_outcome": "skipped",
-                            "review_required": False,
-                            "review_reasons": [],
-                        }
-                    )
-                    meta.setdefault("history", []).append(
-                        {
-                            "action": "skipped",
-                            "by": "user",
-                            "at": ts,
-                            "reason": body.reason,
-                        }
-                    )
-                    try:
-                        vault_write_note(vault_root, capture_path, meta, capture.body)
+                        destination = archive_capture(
+                            vault_root,
+                            capture_path,
+                            by="user",
+                            action="skipped",
+                            reason=body.reason,
+                            lifecycle_fields={
+                                "enforcement_outcome": "skipped",
+                                "review_required": False,
+                                "review_reasons": [],
+                            },
+                        )
+                    except CaptureLifecycleError as exc:
+                        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
                     except VaultIOError as exc:
                         raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-                    try:
-                        destination = _unique_archive_path(
-                            archive_dir, capture_path.name, capture.id
-                        )
-                        shutil.move(str(capture_path), str(destination))
-                        archive_committed = True
-                    except OSError as exc:
+                    except Exception as exc:
                         logger.warning("Failed to archive skipped capture", exc_info=True)
-                        # Restore metadata if the move failed; otherwise the active
-                        # file would misleadingly claim it had already been skipped.
-                        original_meta = capture.model_dump(
-                            exclude={"body", "wikilinks", "file_path"}
-                        )
-                        try:
-                            vault_write_note(
-                                vault_root,
-                                capture_path,
-                                original_meta,
-                                capture.body,
-                            )
-                        except Exception:
-                            logger.error(
-                                "Failed to roll back skipped capture metadata",
-                                exc_info=True,
-                            )
                         raise HTTPException(
                             status_code=500, detail="Failed to archive capture"
                         ) from exc
+                    archive_committed = True
 
                     index.remove_file(capture_path)
             except BaseException:
@@ -1324,9 +1229,23 @@ async def _finalize_note(
         validation_mode = "unavailable"
         validation_reasons = [f"Sentinel failed: {exc}"]
 
-    if validation_status in {"passed", "warning"}:
-        index.refresh_file(note_path)
+    # Enforce the publication decision before any normal-retrieval side effect.
+    # The note was persisted as a pending draft, so the watcher cannot surface
+    # it while Sentinel is unavailable or rejects it.
+    from agents.loom.enforcement import enforce_verdict
 
+    outcome = enforce_verdict(
+        vm.active_vault_dir(),
+        capture_path,
+        note_path,
+        validation_status,
+        validation_reasons,
+        validation_mode,
+    )
+    validation_reasons.extend(outcome.reasons)
+    index.refresh_file(note_path)
+
+    if outcome.capture_archived and not outcome.review_required:
         try:
             from agents.loom.spider import get_spider
 
@@ -1351,18 +1270,6 @@ async def _finalize_note(
                 await scribe.update_index(note_path.parent)
         except Exception:
             logger.warning("Scribe index update failed for new note", exc_info=True)
-
-    # Shared fail-closed enforcement: only explicit passed/warning archives.
-    from agents.loom.enforcement import enforce_verdict
-
-    outcome = enforce_verdict(
-        vm.active_vault_dir(),
-        capture_path,
-        note_path,
-        validation_status,
-        validation_reasons,
-        validation_mode,
-    )
 
     result_outcome: Literal["filed", "needs_review", "failed"]
     if outcome.review_required:
@@ -1469,6 +1376,8 @@ async def preview_capture(
                 tags=proposal.tags,
                 body=proposal.body,
                 links=links,
+                source_link=proposal.source_link,
+                source_coverage=proposal.source_coverage,
             )
         )
     finally:
@@ -1524,6 +1433,10 @@ async def commit_capture(
                 if note is None:
                     raise HTTPException(status_code=400, detail="Failed to write note")
                 outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
+                # Enforcement updates the persisted publication marker. Return
+                # the final state rather than the pre-validation pending draft.
+                if Path(note.file_path).exists():
+                    note = await asyncio.to_thread(parse_note, Path(note.file_path))
                 response = CommitResult(note=note, **outcome)
             finally:
                 clear_caller()

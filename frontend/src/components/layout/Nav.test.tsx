@@ -26,12 +26,13 @@ beforeEach(() => {
 });
 
 describe("Nav", () => {
-  it("renders the four view tabs and marks the active one selected", () => {
+  it("renders the view tabs and marks the active one selected", () => {
     useApp.mockReturnValue(appState({ tab: "inbox" }));
     render(<Nav />);
 
     const tabs = screen.getAllByRole("tab");
     expect(tabs.map((t) => t.textContent)).toEqual([
+      "Today",
       "Graph",
       "Thread",
       "Inbox",

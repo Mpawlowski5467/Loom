@@ -47,6 +47,7 @@ class PipelineResult:
         self.capture_archived: bool = False
         self.review_required: bool = False  # True on failed verdict
         self.flagged: bool = False  # True on warning verdict
+        self.source_coverage: dict[str, Any] = {}
 
     @property
     def success(self) -> bool:
@@ -65,6 +66,7 @@ class PipelineResult:
             "capture_archived": self.capture_archived,
             "review_required": self.review_required,
             "flagged": self.flagged,
+            "source_coverage": self.source_coverage,
         }
 
 
@@ -172,6 +174,7 @@ class AgentRunner:
                 existing.id,
             )
             result.note = existing
+            result.source_coverage = dict(existing.extra.get("source_coverage") or {})
             note_path = _resolve_path(existing.file_path)
             async with run_scope("pipeline"):
                 async with step("sentinel", caller="sentinel") as record:
@@ -198,6 +201,7 @@ class AgentRunner:
         result.capture_archived = bool(final.get("capture_archived", result.capture_archived))
         result.review_required = bool(final.get("review_required", result.review_required))
         result.flagged = bool(final.get("flagged", result.flagged))
+        result.source_coverage = dict(final.get("source_coverage") or {})
         return result
 
     async def _validate_existing_note(self, note_path: Path, errors: list[str]) -> ValidationResult:
@@ -247,7 +251,7 @@ class AgentRunner:
         note_path: Path | None,
         validation: ValidationResult | None,
         errors: list[str],
-    ) -> dict[str, bool]:
+    ) -> dict[str, Any]:
         """Graph enforce-node hook: apply Sentinel's verdict, return flag deltas.
 
         Returns a dict the graph merges into state so run_pipeline can mirror
@@ -270,6 +274,7 @@ class AgentRunner:
             "capture_archived": outcome.capture_archived,
             "review_required": outcome.review_required,
             "flagged": outcome.flagged,
+            "errors": list(outcome.reasons),
         }
 
     def _enforce_into_result(
@@ -287,6 +292,7 @@ class AgentRunner:
         result.capture_archived = flags["capture_archived"]
         result.review_required = flags["review_required"]
         result.flagged = flags["flagged"]
+        result.errors.extend(flags.get("errors", []))
 
     async def run_scheduled(self, agent_name: str, **kwargs: Any) -> dict[str, Any]:
         """Trigger a scheduled agent run by name.

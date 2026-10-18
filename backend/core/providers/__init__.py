@@ -35,6 +35,7 @@ from core.providers.codex import (
 )
 from core.providers.ollama import OllamaProvider
 from core.providers.openai import OpenAIProvider
+from core.providers.openai_compatible import MoonshotProvider
 from core.providers.openrouter import OpenRouterProvider
 from core.providers.registry import (
     ChatProvider,
@@ -60,6 +61,7 @@ __all__ = [
     "CodexProvider",
     "CodexProviderConfig",
     "EmbedProvider",
+    "MoonshotProvider",
     "OllamaProvider",
     "OllamaProviderConfig",
     "OpenAIProvider",

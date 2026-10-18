@@ -8,6 +8,15 @@ export interface DiagnosticsResponse {
   started_at: string;
   build_date: string | null;
   log_path: string;
+  cache_configured: boolean;
+  cache_connected: boolean;
+  database_configured: boolean;
+  database_connected: boolean;
+  allowed_hosts: string[];
+  local_only: boolean;
+  api_token_configured: boolean;
+  secret_storage: string;
+  security_warnings: string[];
 }
 
 export interface HealthResponse {

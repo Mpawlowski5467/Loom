@@ -306,7 +306,12 @@ class GoogleCalendarSyncService:
             connector = config.google
             gcal = connector.calendar
             interval_s = max(5, gcal.interval_minutes) * 60
-            if gcal.enabled and google_app(connector) is not None and load_google_tokens():
+            if (
+                not config.automation_policy.paused
+                and gcal.enabled
+                and google_app(connector) is not None
+                and load_google_tokens()
+            ):
                 try:
                     result = await sync_google_calendar()
                     self._last_run = result["synced_at"]

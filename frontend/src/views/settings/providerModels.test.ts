@@ -32,6 +32,7 @@ describe("createProvider", () => {
     expect(createProvider("codex").embedModel).toBe("");
     expect(createProvider("anthropic").embedModel).toBe("");
     expect(createProvider("xai").embedModel).toBe("");
+    expect(createProvider("moonshot").embedModel).toBe("");
   });
 
   it("uses the default host for a local provider", () => {
@@ -105,6 +106,7 @@ describe("provider metadata invariants", () => {
     expect(PROVIDER_BY_NAME.get("codex")?.authMode).toBe("codex");
     expect(PROVIDER_BY_NAME.get("openrouter")?.authMode).toBe("oauth_pkce");
     expect(PROVIDER_BY_NAME.get("openai")?.authMode).toBe("api_key");
+    expect(PROVIDER_BY_NAME.get("moonshot")?.authMode).toBe("api_key");
     expect(PROVIDER_BY_NAME.get("ollama")?.authMode).toBe("local");
   });
 
@@ -114,5 +116,15 @@ describe("provider metadata invariants", () => {
         expect(provider.credentialUrl).toMatch(/^https:\/\//);
       }
     }
+  });
+
+  it("ships Moonshot with Kimi's hosted chat defaults", () => {
+    const moonshot = PROVIDER_BY_NAME.get("moonshot");
+    expect(moonshot).toMatchObject({
+      label: "Moonshot (Kimi)",
+      defaultChat: "kimi-k2.6",
+      defaultBaseUrl: "https://api.moonshot.ai/v1",
+      supportsEmbed: false,
+    });
   });
 });

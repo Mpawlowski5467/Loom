@@ -32,7 +32,7 @@ import {
 export function ProvidersSection(): ReactNode {
   const { config, refreshConfig, pushToast } = useApp();
   const [providers, setProviders] = useState<Record<string, ProviderForm>>({});
-  const [openName, setOpenName] = useState<ProviderName>("openai");
+  const [openName, setOpenName] = useState<ProviderName>("codex");
   const [defaultProvider, setDefaultProvider] = useState<ProviderName | "">("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -65,7 +65,7 @@ export function ProvidersSection(): ReactNode {
         setDefaultProvider(
           initial && next[initial] ? initial : (configured[0] ?? ""),
         );
-        setOpenName(configured[0] ?? "openai");
+        setOpenName(configured[0] ?? "codex");
         hydratedRef.current = true;
       })
       .catch((err) => {
@@ -234,9 +234,40 @@ export function ProvidersSection(): ReactNode {
     if (!popup) window.location.assign(url);
   };
 
+  const persistConnectedProvider = async (name: ProviderName) => {
+    const nextProviders = {
+      ...providers,
+      [name]: providers[name] ?? createProvider(name),
+    };
+    const names = Object.keys(nextProviders) as ProviderName[];
+    const effectiveDefault = defaultProvider || name;
+    await saveSettingsProviders(
+      names.map((providerName) =>
+        toProviderInput(nextProviders[providerName]!, effectiveDefault),
+      ),
+    );
+    await patchConfig({ default_provider: effectiveDefault });
+    setProviders(nextProviders);
+    setDefaultProvider(effectiveDefault);
+    setOpenName(name);
+    await refreshConfig();
+  };
+
   const connectCodex = async () => {
     if (codexStatus?.connected) {
-      setMessage("Codex is already connected through its local ChatGPT login.");
+      setAuthBusy("codex");
+      try {
+        await persistConnectedProvider("codex");
+        setMessage(
+          "Codex is connected through its local ChatGPT login and ready.",
+        );
+      } catch (err) {
+        setMessage(
+          err instanceof Error ? err.message : "Could not enable Codex",
+        );
+      } finally {
+        setAuthBusy(null);
+      }
       return;
     }
     setAuthBusy("codex");
@@ -257,14 +288,21 @@ export function ProvidersSection(): ReactNode {
           return;
         }
         void getCodexAuthStatus()
-          .then((status) => {
+          .then(async (status) => {
             setCodexStatus(status);
             if (!status.connected) return;
+            await persistConnectedProvider("codex");
             stopAuthPolling();
             setAuthBusy(null);
-            setMessage("Codex connected. Add it as a provider, then save.");
+            setMessage("Codex connected and ready.");
           })
-          .catch(() => undefined);
+          .catch((err: unknown) => {
+            stopAuthPolling();
+            setAuthBusy(null);
+            setMessage(
+              err instanceof Error ? err.message : "Could not enable Codex",
+            );
+          });
       }, 1500);
     } catch (err) {
       setAuthBusy(null);
@@ -356,11 +394,10 @@ export function ProvidersSection(): ReactNode {
       <div className="settings-kicker">Providers</div>
       <h1 className="settings-title">AI Providers</h1>
       <div className="settings-banner settings-banner-note" role="note">
-        <strong>Keys are encrypted at rest.</strong> Provider API keys are
-        encrypted with a machine-local key before being written to{" "}
-        <code>config.yaml</code>. This protects the file if it leaks on its own
-        — but the API has no authentication yet, so still don't expose the
-        backend port to other devices.
+        <strong>Connect directly where the provider supports it.</strong> Codex
+        uses ChatGPT sign-in and OpenRouter uses browser OAuth. Other model APIs
+        currently issue API keys instead; Loom labels those separately. Keys are
+        encrypted at rest with a machine-local key.
       </div>
       <DefaultProviderPicker
         names={configuredNames}

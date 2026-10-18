@@ -18,7 +18,7 @@ from pydantic import ValidationError
 
 from agents.base import BaseAgent
 from agents.loom.spider_candidates import find_candidates
-from agents.loom.spider_linker import apply_links
+from agents.loom.spider_linker import apply_links, persist_suggestions
 from agents.loom.spider_lookup import build_title_map, is_link_candidate
 from agents.loom.spider_models import LinkCandidate, ScanReport, VaultScanReport
 from core.notes import Note, parse_note
@@ -53,6 +53,19 @@ class Spider(BaseAgent):
 
         async def _action(chain: ReadChainResult) -> dict[str, Any]:
             note = parse_note(note_path)
+            from core.automation_policy import note_allowed_for_provider
+
+            if not note_allowed_for_provider(
+                self._chat_provider, note_path, note.tags, self._vault_root
+            ):
+                return {
+                    "action": "skipped",
+                    "details": "Source note is excluded from cloud linking",
+                    "linked": [],
+                    "_report": ScanReport(
+                        source_id=note.id, source_title=note.title, error="cloud excluded"
+                    ),
+                }
             if not note.id:
                 return {
                     "action": "skipped",
@@ -82,6 +95,8 @@ class Spider(BaseAgent):
                 report.auto_linked = linked_titles
 
             report.suggested = [c.title for c in to_suggest]
+            if to_suggest:
+                await persist_suggestions(self._vault_root, note_path, note, to_suggest)
 
             parts: list[str] = []
             if report.auto_linked:

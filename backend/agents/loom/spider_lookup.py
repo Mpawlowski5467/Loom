@@ -13,6 +13,7 @@ from pydantic import ValidationError
 
 from core.note_index import get_note_index
 from core.notes import parse_note_meta
+from core.wikilinks import unique_link_map
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -87,25 +88,26 @@ def list_vault_notes(threads_dir: Path, exclude_id: str = "") -> list[dict[str, 
 
 
 def build_title_map(threads_dir: Path) -> dict[str, Path]:
-    """Build a lowercase-title → path map, preferring the cached NoteIndex."""
+    """Build canonical, ambiguity-safe wikilink targets to note paths."""
     index = get_note_index()
     if index.size > 0:
-        # Built from every entry rather than ``get_title_map()``: that map keeps
-        # one path per title, and a capture shares its title with the note
-        # filed from it, so the capture could shadow the real link target.
-        return {
-            entry.title.lower(): entry.file_path
+        # Built from link-candidate entries rather than ``get_title_map()``:
+        # that map covers captures too, and a capture shares its title with
+        # the note filed from it, so the pair would make the title ambiguous
+        # and withhold the real link target.
+        return unique_link_map(
+            (entry.meta, entry.file_path)
             for entry in index.all_entries()
-            if entry.title and is_link_candidate(entry.file_path)
-        }
-    title_map: dict[str, Path] = {}
+            if is_link_candidate(entry.file_path)
+        )
+    entries: list[tuple[Any, Path]] = []
     for md in threads_dir.rglob("*.md"):
         if not is_link_candidate(md):
             continue
         try:
             meta = parse_note_meta(md)
-            if meta.title:
-                title_map[meta.title.lower()] = md
+            if meta.id:
+                entries.append((meta, md))
         except (OSError, yaml.YAMLError, ValidationError, ValueError):
             continue
-    return title_map
+    return unique_link_map(entries)

@@ -1,6 +1,6 @@
 import type { Note, NodeType } from "./types";
 
-export const GRAPH_FIXTURE_SIZES = [500, 2000] as const;
+export const GRAPH_FIXTURE_SIZES = [500, 2000, 5000, 10000] as const;
 export type GraphFixtureSize = (typeof GRAPH_FIXTURE_SIZES)[number];
 
 const NODE_TYPES: readonly NodeType[] = [
@@ -25,9 +25,7 @@ const CREATED_AT = "2026-01-01T00:00:00.000Z";
 
 export function parseGraphFixture(search: string): GraphFixtureSize | null {
   const raw = new URLSearchParams(search).get("graphFixture");
-  if (raw === "500") return 500;
-  if (raw === "2000") return 2000;
-  return null;
+  return GRAPH_FIXTURE_SIZES.find((size) => raw === String(size)) ?? null;
 }
 
 export function graphFixtureId(size: GraphFixtureSize, index: number): string {

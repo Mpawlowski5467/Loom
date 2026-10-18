@@ -59,7 +59,9 @@ def test_lookups_exclude_captures(tmp_path: Path, use_index: bool) -> None:
     assert resolve_title(root, "thr_capt01") == ""
     assert resolve_title(root, "thr_note01") == "Parser"
     # The capture must not shadow the filed note that shares its title.
-    assert build_title_map(threads_dir) == {"parser": filed}
+    title_map = build_title_map(threads_dir)
+    assert title_map["parser"] == filed
+    assert set(title_map.values()) == {filed}
     assert {n["id"] for n in list_vault_notes(threads_dir)} == {"thr_note01"}
 
 

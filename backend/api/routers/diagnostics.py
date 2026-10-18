@@ -12,6 +12,7 @@ from pydantic import BaseModel
 
 from core.cache import get_response_cache
 from core.config import GlobalConfig, settings
+from core.security_posture import inspect_security_posture
 from core.traces import get_trace_store
 
 router = APIRouter(prefix="/api", tags=["diagnostics"])
@@ -33,6 +34,11 @@ class DiagnosticsResponse(BaseModel):
     cache_connected: bool
     database_configured: bool
     database_connected: bool
+    allowed_hosts: list[str]
+    local_only: bool
+    api_token_configured: bool
+    secret_storage: str
+    security_warnings: list[str]
 
 
 @router.get("/diagnostics", response_model=DiagnosticsResponse)
@@ -45,6 +51,7 @@ async def get_diagnostics(request: Request) -> DiagnosticsResponse:
 
     cache = get_response_cache()
     mirror = get_trace_store().pg_mirror
+    posture = inspect_security_posture(api_token=settings.api_token)
     return DiagnosticsResponse(
         app_version=_app_version(),
         python_version=sys.version.split()[0],
@@ -59,6 +66,11 @@ async def get_diagnostics(request: Request) -> DiagnosticsResponse:
         cache_connected=bool(cache is not None and cache.connected),
         database_configured=bool(settings.database_url),
         database_connected=bool(mirror is not None and mirror.connected),
+        allowed_hosts=posture.allowed_hosts,
+        local_only=posture.local_only,
+        api_token_configured=posture.api_token_configured,
+        secret_storage=posture.secret_storage,
+        security_warnings=posture.warnings,
     )
 
 

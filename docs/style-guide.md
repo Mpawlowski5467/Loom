@@ -3,7 +3,7 @@
 ## Python (Backend)
 
 ### General
-- Python 3.11+ required
+- Python 3.12 required
 - Use `ruff` for linting and formatting (not black, not flake8)
 - Type hints on all function signatures — no exceptions
 - Docstrings on all public functions and classes (Google style)
@@ -67,7 +67,7 @@
 - Views go in `frontend/src/views/` — one file per view (GraphView, BoardView, InboxView, ThreadView)
 - Reusable components go in `frontend/src/components/`
 - Sigma.js graph logic isolated in `frontend/src/graph/`
-- Markdown rendering lives in `frontend/src/editor/renderMarkdown.tsx`
+- Markdown preview lives in `frontend/src/editor/Markdown.tsx` and uses `react-markdown`; editor-specific helpers live beside it
 - API calls go through clients in `frontend/src/api/` (one file per resource, shared error handling in `client.ts`)
 - Use `fetch` via the shared client — no axios
 

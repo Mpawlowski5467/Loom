@@ -1,16 +1,11 @@
-# Loom — Architecture Document
+# Loom — historical architecture design reference
 
-> A self-organizing AI memory system with a multi-agent backbone and a visual knowledge graph.
-
-Loom is a local-first, privacy-respecting AI knowledge base that lives on your machine. You point it at your notes, documents, and data — and it indexes, organizes, links, and maintains everything through a system of specialized AI agents. Your knowledge is stored as plain markdown files, visualized as an interactive graph, and searchable through natural language.
-
-> **Status legend.** This document describes what Loom ships **today**. Sections carry one of two tags — ✅ shipped · 🟡 partial (ships and works, still being refined). The north-star design — work that is planned but not yet built — lives in [docs/VISION.md](VISION.md). Quick map:
->
-> - ✅ **Shipped**: the Vault, Index (search + tracing), Agent Board (all 7 built-in agents, Council + Shuttle workspaces), custom agents, Rules Engine, Graph UI, durable Inbox jobs, read-only iCalendar, token-polled GitHub, and read-only IMAP Email.
-> - 🟡 **Partial (ships and works, still being refined)**: Google Calendar + Gmail and Outlook Calendar are code-complete and mock-verified, pending first live OAuth connections; Scribe phrasing and Sentinel's LLM-assisted validation continue to be tuned over deterministic fallbacks and rules.
-> - 🔭 **Planned (see [docs/VISION.md](VISION.md))**: a stable community Bridge contract, the Prompt Compiler, and multi-file attachments.
->
-> Sections 7–9 summarize the shipped Bridge and the two planned subsystems, with links to their longer-form direction in VISION.md.
+This is a preserved, long-form design reference. It contains earlier
+terminology, explorations, and examples that remain useful for context, but it
+is not the current implementation or release-status record. Use the concise
+[architecture reference](architecture-ref.md) for current behavior and
+[ROADMAP.md](ROADMAP.md) for unshipped work. Dated reports remain historical
+evidence and should be read in their original context.
 
 ---
 
@@ -52,7 +47,6 @@ The Vault is Loom's foundation — a structured filesystem of markdown files tha
 - **Hybrid folder structure**: fixed core folders that Loom always creates (daily, projects, topics, people, captures), plus user-defined custom folders alongside them. Fixed folders guarantee agents always know where to put things. Custom folders give power users freedom.
 - **Wikilinks**: all inter-note links use `[[note-name]]` syntax (Obsidian-style). Simple, widely supported, and makes graph construction easy — every `[[link]]` is an edge.
 - **Multi-vault**: each vault is fully self-contained with its own config, index, agents, and rules. Switch between vaults (e.g., personal, work) freely. Each vault can be its own git repo, enabling team-shared vaults.
-- **Optional auto-git**: off by default. User can enable automatic commits in config on a schedule or after agent actions.
 - **Archive-based deletion**: notes are never truly destroyed. "Deleting" moves them to `threads/.archive/` with a deletion timestamp.
 
 ### 2.2 Folder Structure
@@ -603,7 +597,7 @@ The Graph UI is the visual interface where users see and interact with their kno
 
 - **Web-based (localhost)**: runs a local FastAPI server, opens in browser. Cross-platform for free — no packaging headaches on macOS, Linux, or Windows.
 - **Sigma.js**: WebGL-powered graph rendering. Handles thousands of nodes performantly without frame drops.
-- **Custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`): a hand-rolled renderer with `[[wikilink]]` support and inline marks — not a third-party WYSIWYG framework.
+- **Markdown preview** (`frontend/src/editor/Markdown.tsx`): `react-markdown` with project `[[wikilink]]` handling; the editor remains a source textarea rather than a WYSIWYG surface.
 - **Paper theme by default**: warm cream surfaces with an ink-blue / brick-red duotone. Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember complete the final six-theme set.
 
 ### 6.2 Layout
@@ -634,7 +628,7 @@ Two-panel base layout with a contextual right sidebar that slides in when a note
 
 ### 6.3 Navigation
 
-- **Top navigation bar** across full width with view tabs: Graph, Board, Inbox
+- **Top navigation bar** across full width with view tabs: Today, Graph, Board, Inbox
 - **Global search bar** in the top nav (searches filenames, content, tags)
 - **Separate filter bar** inside the file tree for filtering the tree only
 - **Settings gear** in the top nav
@@ -690,7 +684,9 @@ Always-visible left sidebar showing the vault as a traditional file tree (VS Cod
 
 ### 6.6 Editor
 
-When editing a note, the right sidebar swaps to an editing surface backed by Loom's **custom Markdown renderer** (`frontend/src/editor/renderMarkdown.tsx`) — no third-party WYSIWYG framework.
+When editing a note, the right sidebar swaps to a source editing surface with a
+`react-markdown` preview (`frontend/src/editor/Markdown.tsx`) and project
+wikilink handling.
 
 **Meta section above editor:**
 - Type selector (topic, project, person, daily)
@@ -820,7 +816,9 @@ exposes redacted configuration through Settings → Connections.
 
 Google and Outlook are code-complete and mock-verified in the current
 development worktree; their first live connections await user-created OAuth app
-registrations. The general community adapter contract remains planned. **Full
+registrations. A provider-free live-probe CLI and repeatable evidence matrix are
+documented in [OAUTH-RELEASE-VALIDATION.md](OAUTH-RELEASE-VALIDATION.md). The
+general community adapter contract remains planned. **Full
 direction: [docs/VISION.md → Layer 6: The Bridge](VISION.md#layer-6-the-bridge).**
 
 ---
@@ -841,9 +839,9 @@ Loom is markdown-only today. A planned attachments model would let non-markdown 
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Python 3.11+ + FastAPI |
+| Backend | Python 3.12 + FastAPI |
 | Frontend | React + TypeScript + Sigma.js |
-| Editor | Custom Markdown renderer (`renderMarkdown.tsx`) |
+| Editor | `react-markdown` preview (`Markdown.tsx`) |
 | Vector DB | LanceDB |
 | Storage | Markdown files + YAML frontmatter |
 | AI Models | Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama) |
@@ -892,11 +890,12 @@ loom/
 
 ## 12. Roadmap
 
-The implementation roadmap now lives in **[ROADMAP.md](ROADMAP.md)**. It starts
-with the current open-beta release candidate and names its concrete gates:
-single-sourced version UI, port-aware OAuth setup, first real Google/Microsoft
-connections, onboarding-safe container health, a frontend formatting baseline,
-and a clean-checkout release matrix.
+The implementation roadmap now lives in **[ROADMAP.md](ROADMAP.md)**. Automated
+release hardening now includes separate liveness/readiness probes, formatting
+enforcement, semantic agent evaluation, a critical-path accessibility smoke
+test, export/restore drills, large-vault benchmarks, route-level code splitting,
+and a scheduled Linux/macOS/Windows matrix. Real-account Google/Microsoft OAuth
+evidence and an actual green hosted release-matrix run remain external gates.
 
 Longer-range product direction—including the Bridge/plugin contract, Prompt
 Compiler, attachments, and possible multi-user expansion—remains in

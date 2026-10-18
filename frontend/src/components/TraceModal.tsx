@@ -73,6 +73,12 @@ export function TraceModal({ traceId, onClose }: Props): ReactNode {
         {trace && (
           <div className="trace-modal-body">
             <Meta trace={trace} />
+            {trace.content_retained === false && (
+              <p className="settings-copy">
+                Prompt and response content was withheld by the privacy policy.
+                Only call metadata was retained.
+              </p>
+            )}
             <Section label="System prompt" body={trace.system || "(none)"} />
             {trace.messages.map((m, i) => (
               <Section

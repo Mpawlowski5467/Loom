@@ -23,11 +23,13 @@ from core.notes import (
     NoteMeta,
     atomic_write_text,
     generate_id,
+    matches_version,
     now_iso,
     parse_note,
 )
 from core.notes_helpers import TYPE_TO_FOLDER, to_kebab
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
+from core.revisions import record_move
 from core.vault import VaultManager, get_vault_manager
 from core.vault_io import VaultIOError
 from core.vault_io import write_note as vault_write_note
@@ -35,6 +37,26 @@ from core.vault_io import write_note as vault_write_note
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/notes", tags=["notes"])
+
+
+def _resolve_note_folder(threads_dir: Path, folder: str) -> Path:
+    """Resolve a note-create folder under ``threads/`` without path escapes."""
+    raw = folder.strip()
+    candidate = Path(raw)
+    if (
+        not raw
+        or "\\" in raw
+        or candidate.is_absolute()
+        or any(part in {"", ".", "..", ".archive"} for part in candidate.parts)
+    ):
+        raise HTTPException(status_code=400, detail=f"Invalid folder: {folder!r}")
+    try:
+        target = (threads_dir.resolve() / candidate).resolve()
+        target.relative_to(threads_dir.resolve())
+    except (OSError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid folder: {folder!r}") from exc
+    return target
+
 
 # -- Request / Response models ------------------------------------------------
 
@@ -158,6 +180,10 @@ async def create_note(
     from agents.loom.weaver import get_weaver
 
     folder = body.folder or TYPE_TO_FOLDER.get(body.type, "topics")
+    # Validate before invoking Weaver so invalid input cannot make its
+    # read-chain inspect an unintended path, and so the fallback has exactly
+    # the same nested-folder contract.
+    _resolve_note_folder(vm.active_threads_dir(), folder)
 
     weaver = get_weaver()
     if weaver is not None:
@@ -183,9 +209,7 @@ async def create_note(
     # Containment guard (H1): ``folder`` is attacker-influenced and was joined
     # straight into the path, so ``../../tmp`` could write outside the vault.
     # Resolve and require the target stays under threads/.
-    target_dir = (tdir / folder).resolve()
-    if not target_dir.is_relative_to(tdir.resolve()):
-        raise HTTPException(status_code=400, detail=f"Invalid folder: {folder!r}")
+    target_dir = _resolve_note_folder(tdir, folder)
     target_dir.mkdir(parents=True, exist_ok=True)
 
     note_id = generate_id()
@@ -252,7 +276,7 @@ async def update_note(
     async with path_lock(path):
         note = parse_note(path)
 
-        if body.base_modified is not None and body.base_modified != note.modified:
+        if body.base_modified is not None and not matches_version(note, body.base_modified):
             raise HTTPException(
                 status_code=409,
                 detail="Note was modified since it was loaded; reload and retry.",
@@ -294,7 +318,7 @@ async def update_note(
         vault_write_note(vm.active_vault_dir(), path, meta, new_body)
 
         if new_path is not None:
-            path.rename(new_path)
+            record_move(vm.active_vault_dir(), path, new_path)
             index.remove_file(path)
             path = new_path
 
@@ -361,7 +385,7 @@ async def _archive_note_transaction(
 
         original_content = path.read_text(encoding="utf-8")
         note = parse_note(path)
-        if base_modified is not None and base_modified != note.modified:
+        if base_modified is not None and not matches_version(note, base_modified):
             raise HTTPException(
                 status_code=409,
                 detail="Note was modified since it was loaded; reload and retry.",

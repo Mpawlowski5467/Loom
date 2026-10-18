@@ -33,6 +33,7 @@ from typing import Any
 
 from core.graph_state import mark_dirty
 from core.notes import atomic_write_text, note_to_file_content
+from core.revisions import record_mutation
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +54,8 @@ def write_note(
     ``.archive/`` paths and ``rules/prime.md`` are rejected.
     """
     safe_path = _check_writable(vault_root, path)
-    atomic_write_text(safe_path, note_to_file_content(meta, body))
+    content = note_to_file_content(meta, body)
+    record_mutation(vault_root, {safe_path: content}, lambda: atomic_write_text(safe_path, content))
 
 
 def write_note_exclusive(
@@ -92,7 +94,7 @@ def write_note_exclusive(
             os.fsync(handle.fileno())
 
         identity_stat = tmp_path.stat()
-        os.link(tmp_path, safe_path)
+        record_mutation(vault_root, {safe_path: content}, lambda: os.link(tmp_path, safe_path))
     except FileExistsError:
         raise
     except OSError as exc:
@@ -120,7 +122,11 @@ def write_text(
     live inside ``threads/``. Notes proper should go through ``write_note``.
     """
     safe_path = _check_writable(vault_root, path)
-    atomic_write_text(safe_path, content, mark_graph_dirty=mark_graph_dirty)
+    record_mutation(
+        vault_root,
+        {safe_path: content},
+        lambda: atomic_write_text(safe_path, content, mark_graph_dirty=mark_graph_dirty),
+    )
 
 
 def _check_writable(vault_root: Path, path: Path) -> Path:

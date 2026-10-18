@@ -5,7 +5,8 @@ import type { Capture, Note, NoteId } from "../data/types";
 import { useVaultContent } from "./useVaultContent";
 
 const mocks = vi.hoisted(() => ({
-  loadAllNotes: vi.fn(),
+  loadNoteSummaries: vi.fn(),
+  getNote: vi.fn(),
   listCaptures: vi.fn(),
   subscribeEventDomains: vi.fn(),
   unsubscribe: vi.fn(),
@@ -16,8 +17,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../api/notes", () => ({
-  loadAllNotes: mocks.loadAllNotes,
-  backendNotesToFrontend: vi.fn((records: unknown[]) => records),
+  loadNoteSummaries: mocks.loadNoteSummaries,
+  getNote: mocks.getNote,
+  backendNoteToFrontend: vi.fn((record: unknown) => record),
+  titleMapFromNotes: vi.fn(() => new Map()),
 }));
 
 vi.mock("../api/captures", () => ({
@@ -91,9 +94,25 @@ function renderContent(
 }
 
 describe("useVaultContent", () => {
+  it("does not let a pre-commit metadata response remove a confirmed new note", async () => {
+    let resolveList!: (value: Note[]) => void;
+    mocks.loadNoteSummaries.mockImplementationOnce(
+      () =>
+        new Promise<Note[]>((resolve) => {
+          resolveList = resolve;
+        }),
+    );
+    const { result } = renderContent();
+    await advance(0);
+    const confirmed = note("just-filed", { body: "Durable committed body" });
+    act(() => result.current.appendNote(confirmed));
+    await act(async () => resolveList([]));
+    expect(result.current.noteById("just-filed")).toEqual(confirmed);
+  });
   beforeEach(() => {
     vi.useFakeTimers();
-    mocks.loadAllNotes.mockReset().mockResolvedValue([]);
+    mocks.loadNoteSummaries.mockReset().mockResolvedValue([]);
+    mocks.getNote.mockReset();
     mocks.listCaptures.mockReset().mockResolvedValue([]);
     mocks.unsubscribe.mockReset();
     mocks.events.domains = [];
@@ -117,7 +136,7 @@ describe("useVaultContent", () => {
   it("hydrates both resources and preserves the public mutation helpers", async () => {
     const loadedNote = note("loaded", { links: ["linked"] });
     const loadedCapture = capture("loaded");
-    mocks.loadAllNotes.mockResolvedValue([loadedNote]);
+    mocks.loadNoteSummaries.mockResolvedValue([loadedNote]);
     mocks.listCaptures.mockResolvedValue([loadedCapture]);
     const { result, unmount } = renderContent();
 
@@ -175,34 +194,49 @@ describe("useVaultContent", () => {
     unmount();
   });
 
+  it("replaces a cached body when content version changes without a timestamp change", async () => {
+    const old = note("same", { body: "old", contentVersion: "sha256:old" });
+    mocks.loadNoteSummaries
+      .mockResolvedValueOnce([old])
+      .mockResolvedValueOnce([
+        note("same", { body: "new", contentVersion: "sha256:new" }),
+      ]);
+    const { result, unmount } = renderContent();
+    await advance(0);
+    act(() => mocks.events.listener?.("note-changed"));
+    await advance(650);
+    expect(result.current.notes[0]?.body).toBe("new");
+    unmount();
+  });
+
   it("routes each typed event to only its owning resource", async () => {
     const { unmount } = renderContent();
     await advance(0);
-    mocks.loadAllNotes.mockClear();
+    mocks.loadNoteSummaries.mockClear();
     mocks.listCaptures.mockClear();
 
     expect(mocks.events.domains).toEqual(["notes", "captures", "vault"]);
 
     act(() => mocks.events.listener?.("capture-job-changed"));
     await advance(700);
-    expect(mocks.loadAllNotes).not.toHaveBeenCalled();
+    expect(mocks.loadNoteSummaries).not.toHaveBeenCalled();
     expect(mocks.listCaptures).not.toHaveBeenCalled();
 
     act(() => mocks.events.listener?.("capture-changed"));
     await advance(650);
     expect(mocks.listCaptures).toHaveBeenCalledTimes(1);
-    expect(mocks.loadAllNotes).not.toHaveBeenCalled();
+    expect(mocks.loadNoteSummaries).not.toHaveBeenCalled();
     mocks.listCaptures.mockClear();
 
     act(() => mocks.events.listener?.("note-changed"));
     await advance(650);
-    expect(mocks.loadAllNotes).toHaveBeenCalledTimes(1);
+    expect(mocks.loadNoteSummaries).toHaveBeenCalledTimes(1);
     expect(mocks.listCaptures).not.toHaveBeenCalled();
-    mocks.loadAllNotes.mockClear();
+    mocks.loadNoteSummaries.mockClear();
 
     act(() => mocks.events.listener?.("vault-changed"));
     await advance(650);
-    expect(mocks.loadAllNotes).toHaveBeenCalledTimes(1);
+    expect(mocks.loadNoteSummaries).toHaveBeenCalledTimes(1);
     expect(mocks.listCaptures).toHaveBeenCalledTimes(1);
     unmount();
   });
@@ -210,7 +244,7 @@ describe("useVaultContent", () => {
   it("coalesces typed events with the watcher vault follow-up", async () => {
     const { unmount } = renderContent();
     await advance(0);
-    mocks.loadAllNotes.mockClear();
+    mocks.loadNoteSummaries.mockClear();
     mocks.listCaptures.mockClear();
 
     act(() => {
@@ -221,7 +255,7 @@ describe("useVaultContent", () => {
     act(() => mocks.events.listener?.("vault-changed"));
     await advance(150);
 
-    expect(mocks.loadAllNotes).toHaveBeenCalledTimes(1);
+    expect(mocks.loadNoteSummaries).toHaveBeenCalledTimes(1);
     expect(mocks.listCaptures).toHaveBeenCalledTimes(1);
     unmount();
   });
@@ -239,14 +273,14 @@ describe("useVaultContent", () => {
     expect(result.current.captures).toEqual([initialCapture]);
     expect(result.current.notesLoaded).toBe(true);
     expect(result.current.capturesLoaded).toBe(true);
-    expect(mocks.loadAllNotes).not.toHaveBeenCalled();
+    expect(mocks.loadNoteSummaries).not.toHaveBeenCalled();
     expect(mocks.listCaptures).not.toHaveBeenCalled();
     expect(mocks.subscribeEventDomains).not.toHaveBeenCalled();
     unmount();
   });
 
   it("surfaces a failed notes fetch as notesError and clears it on recovery", async () => {
-    mocks.loadAllNotes.mockRejectedValueOnce(new Error("backend down"));
+    mocks.loadNoteSummaries.mockRejectedValueOnce(new Error("backend down"));
     const { result, unmount, onLoadError } = renderContent();
 
     await advance(0);
@@ -258,7 +292,7 @@ describe("useVaultContent", () => {
     expect(onLoadError).toHaveBeenCalledWith("notes", "backend down");
 
     const recoveredNote = note("recovered");
-    mocks.loadAllNotes.mockResolvedValue([recoveredNote]);
+    mocks.loadNoteSummaries.mockResolvedValue([recoveredNote]);
     act(() => mocks.events.listener?.("note-changed"));
     await advance(650);
 
@@ -269,12 +303,12 @@ describe("useVaultContent", () => {
 
   it("keeps prior notes visible when a refresh fails", async () => {
     const loadedNote = note("loaded");
-    mocks.loadAllNotes.mockResolvedValue([loadedNote]);
+    mocks.loadNoteSummaries.mockResolvedValue([loadedNote]);
     const { result, unmount } = renderContent();
     await advance(0);
     expect(result.current.notes).toEqual([loadedNote]);
 
-    mocks.loadAllNotes.mockRejectedValue(new Error("backend down"));
+    mocks.loadNoteSummaries.mockRejectedValue(new Error("backend down"));
     act(() => mocks.events.listener?.("note-changed"));
     await advance(650);
 
@@ -282,5 +316,88 @@ describe("useVaultContent", () => {
     expect(result.current.notesError).toBe("backend down");
     expect(result.current.notes).toEqual([loadedNote]);
     unmount();
+  });
+
+  it("loads only the selected body and reuses it until its version changes", async () => {
+    const summary = note("a", { body: "", bodyLoaded: false });
+    mocks.loadNoteSummaries.mockResolvedValue([
+      summary,
+      note("b", { body: "", bodyLoaded: false }),
+    ]);
+    mocks.getNote.mockResolvedValue(
+      note("a", { body: "Full body", bodyLoaded: true }),
+    );
+    const onLoadError = vi.fn();
+    const { result } = renderHook(() => {
+      const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>("a");
+      return useVaultContent({
+        enabled: true,
+        activeVault: "main",
+        currentNoteId,
+        initialNotes: [],
+        initialCaptures: [],
+        setCurrentNoteId,
+        onLoadError,
+      });
+    });
+    await advance(0);
+    expect(mocks.getNote).toHaveBeenCalledTimes(1);
+    expect(mocks.getNote.mock.calls[0]?.[0]).toBe("a");
+    expect(result.current.noteById("a")?.body).toBe("Full body");
+    act(() => mocks.events.listener?.("note-changed"));
+    await advance(650);
+    expect(mocks.getNote).toHaveBeenCalledTimes(1);
+    expect(result.current.noteById("a")?.body).toBe("Full body");
+    mocks.loadNoteSummaries.mockResolvedValue([
+      { ...summary, modified: "new-version" },
+    ]);
+    mocks.getNote.mockResolvedValue(
+      note("a", { body: "Changed", bodyLoaded: true, modified: "new-version" }),
+    );
+    act(() => mocks.events.listener?.("note-changed"));
+    await advance(650);
+    expect(mocks.getNote).toHaveBeenCalledTimes(2);
+    expect(result.current.noteById("a")?.body).toBe("Changed");
+  });
+
+  it("hides prior vault content immediately and ignores a late body response", async () => {
+    let resolveBody: (value: Note) => void = () => {};
+    mocks.loadNoteSummaries.mockResolvedValue([
+      note("same", { body: "", bodyLoaded: false }),
+    ]);
+    mocks.getNote.mockImplementation(
+      () =>
+        new Promise<Note>((resolve) => {
+          resolveBody = resolve;
+        }),
+    );
+    const onLoadError = vi.fn();
+    const { result, rerender } = renderHook(
+      ({ vault }) => {
+        const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>(
+          "same",
+        );
+        return useVaultContent({
+          enabled: true,
+          activeVault: vault,
+          currentNoteId,
+          initialNotes: [],
+          initialCaptures: [],
+          setCurrentNoteId,
+          onLoadError,
+        });
+      },
+      { initialProps: { vault: "one" } },
+    );
+    await advance(0);
+    rerender({ vault: "two" });
+    expect(result.current.notes).toEqual([]);
+    expect(result.current.notesLoaded).toBe(false);
+    mocks.loadNoteSummaries.mockResolvedValue([]);
+    await act(async () =>
+      resolveBody(note("same", { body: "Private old vault body" })),
+    );
+    await advance(0);
+    expect(result.current.notes).toEqual([]);
   });
 });

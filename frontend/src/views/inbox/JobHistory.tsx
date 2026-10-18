@@ -337,6 +337,12 @@ export function JobHistory({
                     {job.error && (
                       <div className="inbox-job-row-error">{job.error}</div>
                     )}
+                    {job.recommended_action && job.failure_kind !== "none" && (
+                      <div className="inbox-job-guidance">
+                        <strong>{failureLabel(job.failure_kind)}</strong>
+                        <span>{job.recommended_action}</span>
+                      </div>
+                    )}
                     {actionErrors[job.id] && (
                       <div className="inbox-job-row-error" role="alert">
                         {actionErrors[job.id]}
@@ -417,6 +423,16 @@ function displayPath(path: string): string {
 function statusLabel(status: CaptureJobStatus | string): string {
   if (status === "needs_review") return "needs review";
   return status.replaceAll("_", " ");
+}
+
+function failureLabel(kind: CaptureJob["failure_kind"]): string {
+  if (kind === "provider_transient") return "Provider temporarily unavailable";
+  if (kind === "provider_configuration")
+    return "Provider setup needs attention";
+  if (kind === "schema_review") return "Draft needs review";
+  if (kind === "stalled") return "Interrupted step recovered";
+  if (kind === "source_missing") return "Source capture unavailable";
+  return "Recommended next action";
 }
 
 function badgeState(

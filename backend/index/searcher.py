@@ -18,6 +18,22 @@ GRAPH_BOOST_MULTIPLIER = 1.4
 DEFAULT_LIMIT = 20
 
 
+def _filter_expression(filters: dict[str, Any]) -> str:
+    """Build a Lance scalar predicate before similarity candidate limiting."""
+    parts: list[str] = []
+    note_type = filters.get("type")
+    if isinstance(note_type, str) and note_type:
+        parts.append("note_type = '" + note_type.replace("'", "''") + "'")
+    tags = filters.get("tags")
+    if isinstance(tags, str):
+        tags = [tag.strip() for tag in tags.split(",") if tag.strip()]
+    if isinstance(tags, list):
+        for tag in tags:
+            if isinstance(tag, str) and tag:
+                parts.append("array_has(tags, '" + tag.replace("'", "''") + "')")
+    return " AND ".join(parts)
+
+
 @dataclass
 class SearchResult:
     """A single search hit returned to the caller."""
@@ -79,7 +95,11 @@ class VectorSearcher:
             # LanceDB open/search/to_list are blocking — keep them off the loop.
             db = self._indexer.get_db()
             table = db.open_table("chunks")
-            rows: list[dict[str, Any]] = table.search(query_vec).limit(fetch_k).to_list()
+            query_builder = table.search(query_vec)
+            where = _filter_expression(filters or {})
+            if where:
+                query_builder = query_builder.where(where)
+            rows: list[dict[str, Any]] = query_builder.limit(fetch_k).to_list()
             return rows
 
         raw_results = await asyncio.to_thread(_vector_query)

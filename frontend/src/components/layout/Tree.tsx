@@ -15,7 +15,10 @@ export function Tree(): ReactNode {
   const [filter, setFilter] = useState("");
   const filterLower = filter.trim().toLowerCase();
 
-  const { isExpanded, toggle } = useTreeExpanded();
+  // A fully-expanded 10k-note vault would create thousands of buttons in one
+  // frame. Preserve the familiar expanded default for normal vaults, but make
+  // large vaults opt into each folder's rows on demand.
+  const { isExpanded, toggle } = useTreeExpanded(notes.length < 1_000);
   const tree = useFolderTree(notes, extraFolders, filterLower);
   const linkCount = useLinkCount(notes);
 

@@ -568,7 +568,16 @@ describe("InboxView — preview & accept", () => {
       ),
     );
     expect(spies.removeCapture).not.toHaveBeenCalled();
+    expect(spies.appendNote).not.toHaveBeenCalled();
     expect(spies.openNote).not.toHaveBeenCalled();
+    expect(
+      screen.queryByRole("button", { name: "open draft note" }),
+    ).not.toBeInTheDocument();
+    expect(spies.pushToast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        body: expect.stringContaining("remains in Inbox"),
+      }),
+    );
   });
 });
 
@@ -761,7 +770,7 @@ describe("InboxView — selection", () => {
     expect(previewCapture).not.toHaveBeenCalled();
   });
 
-  it("renders a safe retry path for captures that need review", async () => {
+  it("keeps unpublished drafts in Inbox with a safe retry path", async () => {
     const user = userEvent.setup();
     enqueueCaptureJob.mockResolvedValue(mkJob());
     const spies = renderInbox(
@@ -780,8 +789,14 @@ describe("InboxView — selection", () => {
     expect(screen.getByText("Sentinel was unavailable")).toBeInTheDocument();
     expect(previewCapture).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "open draft note" }));
-    expect(spies.openNote).toHaveBeenCalledWith("draft-1");
+    expect(
+      screen.queryByRole("button", { name: "open draft note" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /kept this capture in Inbox because it could not safely publish/i,
+      ),
+    ).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "retry processing" }));
     await waitFor(() =>

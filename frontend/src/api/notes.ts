@@ -1,5 +1,6 @@
 import { apiClient } from "./client";
 import type { NodeType, Note } from "../data/types";
+import { buildWikilinkMap, linkTarget } from "../data/wikilinks";
 
 export interface NoteRecord {
   id: string;
@@ -8,6 +9,7 @@ export interface NoteRecord {
   tags: string[];
   created: string;
   modified: string;
+  content_version?: string;
   author: string;
   source: string;
   links: string[];
@@ -16,6 +18,7 @@ export interface NoteRecord {
   file_path: string;
   body: string;
   wikilinks: string[];
+  extra?: Record<string, unknown>;
 }
 
 export type NoteMetaRecord = Omit<NoteRecord, "body" | "wikilinks">;
@@ -106,6 +109,45 @@ export async function loadAllNotes(
     offset += page.notes.length;
   }
 
+  return records;
+}
+
+/** Navigation never downloads every Markdown body. Graph edges include body links. */
+export async function loadNoteSummaries(signal?: AbortSignal): Promise<Note[]> {
+  const [records, graph] = await Promise.all([
+    loadMetadata(signal),
+    apiClient.get<{ edges: Array<{ source: string; target: string }> }>(
+      "/api/graph",
+      signal,
+    ),
+  ]);
+  const edges = new Map<string, Set<string>>();
+  for (const edge of graph.edges) {
+    const linked = edges.get(edge.source) ?? new Set<string>();
+    linked.add(edge.target);
+    edges.set(edge.source, linked);
+  }
+  const full = records.map((record) => ({
+    ...record,
+    body: "",
+    wikilinks: [],
+  }));
+  return backendNotesToFrontend(full).map((note) => ({
+    ...note,
+    bodyLoaded: false,
+    links: [...(edges.get(note.id) ?? note.links)],
+  }));
+}
+
+async function loadMetadata(signal?: AbortSignal): Promise<NoteMetaRecord[]> {
+  const records: NoteMetaRecord[] = [];
+  let total = Infinity;
+  while (records.length < total) {
+    const page = await listNoteRecords(records.length, 200, signal);
+    total = page.total;
+    if (!page.notes.length) break;
+    records.push(...page.notes);
+  }
   return records;
 }
 
@@ -223,24 +265,15 @@ const NODE_TYPES: ReadonlySet<NodeType> = new Set<NodeType>([
 ]);
 
 export function titleMapFromNotes(notes: Note[]): Map<string, string> {
-  return new Map(notes.map((n) => [n.title.toLowerCase(), n.id]));
+  return buildWikilinkMap(notes);
 }
 
 export function titleMapFromRecords(
   records: NoteRecord[],
 ): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const n of records) {
-    const slug = n.file_path
-      .split("/")
-      .pop()
-      ?.replace(/\.md$/i, "")
-      .toLowerCase();
-    if (slug && !map.has(slug)) map.set(slug, n.id);
-    const title = n.title?.toLowerCase();
-    if (title && !map.has(title)) map.set(title, n.id);
-  }
-  return map;
+  return buildWikilinkMap(
+    records.map((record) => backendNoteToFrontend(record)),
+  );
 }
 
 export function backendNoteToFrontend(
@@ -251,7 +284,9 @@ export function backendNoteToFrontend(
   const type: NodeType = NODE_TYPES.has(rawType as NodeType)
     ? (rawType as NodeType)
     : "custom";
-  const parts = record.file_path.split("/threads/")[1]?.split("/") ?? [];
+  const parts =
+    record.file_path.replace(/\\/g, "/").split("/threads/")[1]?.split("/") ??
+    [];
   const folder = parts.length > 1 ? parts.slice(0, -1).join("/") : "";
   const filename = parts[parts.length - 1] ?? `${record.id}.md`;
   const links = resolveLinkIds(record, titleToId);
@@ -263,6 +298,17 @@ export function backendNoteToFrontend(
     filename,
     tags: record.tags,
     body: record.body,
+    bodyLoaded: true,
+    aliases: Array.isArray(record.extra?.aliases)
+      ? record.extra.aliases.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [],
+    reviewRequired: record.extra?.review_required === true,
+    publication:
+      typeof record.extra?.publication_state === "string"
+        ? record.extra.publication_state
+        : undefined,
     links,
     history: record.history.map((h) => ({
       action: h.action as Note["history"][number]["action"],
@@ -272,6 +318,7 @@ export function backendNoteToFrontend(
     })),
     created: record.created,
     modified: record.modified,
+    contentVersion: record.content_version,
     status: record.status === "archived" ? "archived" : "active",
     source: record.source,
   };
@@ -287,8 +334,7 @@ function resolveLinkIds(
   titleToId: Map<string, string>,
 ): string[] {
   const ids = new Set<string>();
-  const normalize = (raw: string) =>
-    raw.split("|", 1)[0]!.split("#", 1)[0]!.trim().toLowerCase();
+  const normalize = linkTarget;
 
   for (const raw of record.links) {
     const id = titleToId.get(normalize(raw));

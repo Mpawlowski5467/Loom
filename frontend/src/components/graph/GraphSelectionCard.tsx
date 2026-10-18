@@ -10,6 +10,8 @@ export interface GraphSelectionCardProps {
   onOpenNote: () => void;
   onCenterNode?: () => void;
   onClearSelection: () => void;
+  connections?: Array<{ id: string; title: string }>;
+  onInspectConnection?: (targetId: string) => void;
 }
 
 const MAX_VISIBLE_TAGS = 3;
@@ -22,6 +24,8 @@ export function GraphSelectionCard({
   onOpenNote,
   onCenterNode,
   onClearSelection,
+  connections = [],
+  onInspectConnection,
 }: GraphSelectionCardProps): ReactNode {
   const connectionLabel = `${connectionCount} ${
     connectionCount === 1 ? "connection" : "connections"
@@ -58,6 +62,24 @@ export function GraphSelectionCard({
             <li key={`${tag}-${index}`}>#{tag}</li>
           ))}
         </ul>
+      )}
+
+      {onInspectConnection && connections.length > 0 && (
+        <details className="graph-selection-connections">
+          <summary>Inspect connection evidence</summary>
+          <ul aria-label="Connected notes">
+            {connections.map((connection) => (
+              <li key={connection.id}>
+                <button
+                  type="button"
+                  onClick={() => onInspectConnection(connection.id)}
+                >
+                  Evidence for {connection.title}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </details>
       )}
 
       <div className="graph-selection-controls">

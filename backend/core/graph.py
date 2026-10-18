@@ -8,7 +8,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, Field, ValidationError
 
-from core.notes import atomic_write_text, parse_note
+from core.notes import NoteMeta, atomic_write_text, is_published, parse_note
+from core.wikilinks import link_target, unique_link_map
 
 logger = logging.getLogger(__name__)
 
@@ -51,9 +52,10 @@ def build_graph(threads_dir: Path) -> VaultGraph:
 
     md_files = [p for p in threads_dir.rglob("*.md") if ".archive" not in p.parts]
 
-    # First pass: parse all notes; index by filename slug AND title so wikilinks
-    # written either way ([[jordan-park]] or [[Jordan Park]]) resolve.
-    notes_by_key: dict[str, str] = {}  # lowercase slug-or-title -> note id
+    # First pass: collect canonical keys. Ambiguous bare keys are deliberately
+    # withheld, matching the reader and agent-context contract.
+    note_paths: dict[Path, str] = {}
+    metas_by_path: list[tuple[NoteMeta, Path]] = []
     nodes: list[GraphNode] = []
     note_links: dict[str, list[str]] = {}  # note id -> list of wikilink targets (raw)
 
@@ -66,7 +68,7 @@ def build_graph(threads_dir: Path) -> VaultGraph:
             # Skip it and keep building from the good notes.
             logger.warning("Skipping malformed note in graph build: %s", md_path, exc_info=True)
             continue
-        if not note.id:
+        if not note.id or not is_published(note):
             continue
 
         nodes.append(
@@ -78,11 +80,11 @@ def build_graph(threads_dir: Path) -> VaultGraph:
                 link_count=len(note.wikilinks),
             )
         )
-        slug = md_path.stem.lower()
-        notes_by_key.setdefault(slug, note.id)
-        if note.title:
-            notes_by_key.setdefault(note.title.lower(), note.id)
+        note_paths[md_path] = note.id
+        metas_by_path.append((note, md_path))
         note_links[note.id] = note.wikilinks
+
+    path_by_key = unique_link_map(metas_by_path)
 
     # Second pass: resolve wikilinks to note ids and build edges.
     # Strip [[alias|target]] and [[note#anchor]] decorations before lookup.
@@ -91,8 +93,8 @@ def build_graph(threads_dir: Path) -> VaultGraph:
 
     for source_id, links in note_links.items():
         for link_text in links:
-            target = link_text.split("|", 1)[0].split("#", 1)[0].strip().lower()
-            target_id = notes_by_key.get(target)
+            target_path = path_by_key.get(link_target(link_text))
+            target_id = note_paths.get(target_path) if target_path is not None else None
             if target_id and target_id != source_id:
                 pair = (source_id, target_id)
                 if pair not in seen_edges:

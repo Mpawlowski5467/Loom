@@ -10,13 +10,14 @@ export type NodeType =
 
 export type NoteStatus = "active" | "archived";
 
-export type Tab = "graph" | "thread" | "inbox" | "board" | "settings";
+export type Tab = "today" | "graph" | "thread" | "inbox" | "board" | "settings";
 
 export type SettingsSection =
   | "appearance"
   | "providers"
   | "connections"
   | "hardware"
+  | "policy"
   | "vault"
   | "archived"
   | "about"
@@ -63,10 +64,18 @@ export interface Note {
   filename?: string;
   tags: string[];
   body: string;
+  /** Metadata-first navigation; undefined means a complete legacy/demo note. */
+  bodyLoaded?: boolean;
+  bodyError?: string;
+  aliases?: string[];
+  reviewRequired?: boolean;
+  publication?: string;
   links: NoteId[];
   history: HistoryEntry[];
   created: string;
   modified: string;
+  /** Opaque content hash used for cache invalidation and optimistic edits. */
+  contentVersion?: string;
   status: NoteStatus;
   source: string;
 }
@@ -101,6 +110,8 @@ export interface Capture {
   externalId?: string;
   /** Connector-owned, display-safe provenance such as a canonical URL. */
   provenance?: Record<string, string>;
+  /** Weaver's persisted source coverage and originating link metadata. */
+  sourceCoverage?: Record<string, unknown>;
   outcome?: CaptureOutcome;
   reviewRequired?: boolean;
   flagged?: boolean;

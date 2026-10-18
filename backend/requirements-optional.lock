@@ -1,0 +1,7 @@
+# Optional backend clients for `docker compose --profile full`.
+#
+# The default image intentionally omits these packages. Build with
+# LOOM_BACKEND_EXTRAS=redis,postgres to install this lock as well; the
+# corresponding services remain disabled unless their URLs are configured.
+asyncpg==0.31.0
+redis==8.0.1

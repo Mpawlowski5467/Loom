@@ -154,6 +154,39 @@ class TestVectorIndexer:
         total = await indexer.reindex_vault(tmp_vault / "threads")
         assert total == 0
 
+    @pytest.mark.asyncio
+    async def test_rejected_draft_is_removed_from_vector_rebuild(self, tmp_vault, fake_embed):
+        """A draft rejected after indexing cannot survive reindex or live refresh."""
+        note_path = _write_note(
+            tmp_vault / "threads" / "topics",
+            "draft.md",
+            "Draft",
+            "Private draft body.",
+            id="thr_draft1",
+        )
+        indexer = VectorIndexer(tmp_vault / ".loom", fake_embed)
+        await indexer.index_note(note_path)
+        assert "thr_draft1" in indexer.indexed_note_ids()
+
+        note_path.write_text(
+            build_frontmatter(
+                {
+                    "id": "thr_draft1",
+                    "title": "Draft",
+                    "type": "topic",
+                    "tags": [],
+                    "status": "active",
+                    "publication_state": "rejected",
+                }
+            )
+            + "\nPrivate draft body.",
+            encoding="utf-8",
+        )
+
+        assert await indexer.index_note(note_path) == 0
+        assert "thr_draft1" not in indexer.indexed_note_ids()
+        assert await indexer.reindex_vault(tmp_vault / "threads") == 0
+
 
 class TestIndexDriftReconciliation:
     """unindexed_note_ids: ids in NoteIndex but missing from the vector store."""

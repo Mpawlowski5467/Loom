@@ -119,6 +119,39 @@ class VectorIndexer:
             # when a move into the archive surfaces as delete+create.
             logger.debug("Skipping vector index of archived note: %s", note_path)
             return 0
+        from core.notes import is_published, parse_note_meta
+
+        try:
+            meta = parse_note_meta(note_path)
+        except (OSError, ValueError):
+            return 0
+        if not is_published(meta):
+            # A watcher can see a note's transition from published to a review
+            # draft.  Remove any old rows as part of the same event so a stale
+            # vector result cannot expose withheld content.
+            if meta.id:
+                await asyncio.to_thread(self.remove_note, meta.id)
+            return 0
+        # Folder/tag exclusions protect note content before it reaches a cloud
+        # embedding endpoint. Local providers remain available for private
+        # vaults; excluded notes also lose any prior rows so search cannot
+        # surface stale cloud-derived vectors.
+        from core.automation_policy import cloud_content_allowed, is_cloud_provider
+        from core.config import GlobalConfig
+
+        vault_root = self._db_path.parent.parent
+        if vault_root.parent.name == "vaults":
+            cloud_policy = GlobalConfig.load(
+                vault_root.parent.parent / "config.yaml"
+            ).automation_policy
+            provider_name = str(getattr(self._embed, "name", ""))
+            if is_cloud_provider(provider_name) and not cloud_content_allowed(
+                note_path, meta.tags, vault_root, cloud_policy
+            ):
+                if meta.id:
+                    await asyncio.to_thread(self.remove_note, meta.id)
+                logger.info("Skipped cloud embedding for excluded note: %s", note_path)
+                return 0
         chunks = chunk_file(note_path)
         if not chunks:
             return 0
@@ -166,7 +199,17 @@ class VectorIndexer:
         if not threads_dir.exists():
             return 0
 
-        md_files = [p for p in threads_dir.rglob("*.md") if ".archive" not in p.parts]
+        from core.notes import is_published, parse_note_meta
+
+        md_files: list[Path] = []
+        for path in threads_dir.rglob("*.md"):
+            if ".archive" in path.parts:
+                continue
+            try:
+                if is_published(parse_note_meta(path)):
+                    md_files.append(path)
+            except (OSError, ValueError):
+                continue
 
         # Embed every note BEFORE touching the live table.
         all_rows: list[dict[str, Any]] = []
@@ -197,18 +240,18 @@ class VectorIndexer:
         if not threads_dir.exists():
             return {"added": 0, "removed": 0}
 
-        from core.notes import parse_note_meta
+        from core.notes import is_published, parse_note_meta
 
         file_ids: dict[str, Path] = {}
         for md_path in threads_dir.rglob("*.md"):
             if ".archive" in md_path.parts:
                 continue
             try:
-                note_id = parse_note_meta(md_path).id
+                meta = parse_note_meta(md_path)
             except (OSError, ValueError):
                 continue
-            if note_id:
-                file_ids[note_id] = md_path
+            if meta.id and is_published(meta):
+                file_ids[meta.id] = md_path
 
         indexed = await asyncio.to_thread(self.indexed_note_ids)
 

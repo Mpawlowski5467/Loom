@@ -17,6 +17,7 @@ export interface CaptureRecord {
   file_path: string;
   external_id?: string;
   provenance?: Record<string, unknown>;
+  source_coverage?: Record<string, unknown>;
   review_required?: boolean;
   flagged?: boolean;
   validation?: string;
@@ -52,6 +53,7 @@ export interface ProcessResult {
   capture_archived?: boolean;
   review_required?: boolean;
   flagged?: boolean;
+  source_coverage?: Record<string, unknown>;
 }
 
 export function processCapture(capturePath: string): Promise<ProcessResult> {
@@ -99,6 +101,15 @@ export interface CaptureJob {
   updated_at: string;
   started_at?: string | null;
   finished_at?: string | null;
+  failure_kind?:
+    | "none"
+    | "provider_transient"
+    | "provider_configuration"
+    | "schema_review"
+    | "stalled"
+    | "source_missing"
+    | "unknown";
+  recommended_action?: string;
 }
 
 type CaptureJobsResponse = CaptureJob[] | { jobs: CaptureJob[] };
@@ -255,6 +266,8 @@ export interface CapturePreview {
   tags: string[];
   body: string;
   links: PreviewLink[];
+  source_link?: string;
+  source_coverage?: Record<string, unknown>;
 }
 
 /** Optional fields override Weaver's classification (sent when re-previewing edits). */
@@ -335,6 +348,7 @@ export function backendCaptureToFrontend(record: CaptureRecord): Capture {
     source: record.source || "manual",
     externalId: record.external_id || undefined,
     provenance: normalizeProvenance(record.provenance),
+    sourceCoverage: record.source_coverage,
     outcome: record.enforcement_outcome || undefined,
     reviewRequired: record.review_required ?? false,
     flagged: record.flagged ?? false,

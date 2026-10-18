@@ -19,6 +19,9 @@ class TestLoomHomeEnvVar:
         assert LoomSettings().loom_home == tmp_path
 
     def test_derived_loom_loom_home_still_accepted(self, monkeypatch, tmp_path):
+        # Exercise the fallback independently of the caller's documented
+        # LOOM_HOME setting, which intentionally takes precedence.
+        monkeypatch.delenv("LOOM_HOME", raising=False)
         monkeypatch.setenv("LOOM_LOOM_HOME", str(tmp_path))
         assert LoomSettings().loom_home == tmp_path
 

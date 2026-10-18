@@ -4,11 +4,13 @@ import { Download, Eye, FolderOpen, Pencil, Plus, Trash2 } from "lucide-react";
 import {
   archiveVault,
   createVault,
+  getVaultBackupStatus,
   listVaults,
   renameVault,
   revealVault,
   setActiveVault,
   vaultExportUrl,
+  type VaultBackupStatus,
 } from "../../api/vault";
 import type { VaultInfo } from "../../api/types";
 import { useApp } from "../../context/app-ctx";
@@ -22,6 +24,9 @@ export function VaultSection(): ReactNode {
   const { refreshConfig } = useApp();
   const [vaults, setVaults] = useState<VaultInfo[]>([]);
   const [active, setActive] = useState("");
+  const [backupStatus, setBackupStatus] = useState<
+    Record<string, VaultBackupStatus>
+  >({});
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -33,6 +38,18 @@ export function VaultSection(): ReactNode {
     const result = await listVaults();
     setVaults(result.vaults);
     setActive(result.active);
+    const entries = await Promise.all(
+      result.vaults.map(async (vault) => {
+        try {
+          return [vault.name, await getVaultBackupStatus(vault.name)] as const;
+        } catch {
+          return null;
+        }
+      }),
+    );
+    setBackupStatus(
+      Object.fromEntries(entries.filter((entry) => entry !== null)),
+    );
   };
 
   useEffect(() => {
@@ -91,6 +108,15 @@ export function VaultSection(): ReactNode {
     document.body.appendChild(link);
     link.click();
     link.remove();
+    setBackupStatus((current) => ({
+      ...current,
+      [vault]: {
+        vault,
+        last_exported_at: new Date().toISOString(),
+        last_export_size: null,
+        reminder_due: false,
+      },
+    }));
     setMessage(`Exporting ${vault}…`);
   };
 
@@ -210,6 +236,7 @@ export function VaultSection(): ReactNode {
                       {vault.name}
                     </div>
                     <div className="settings-vault-path">{vault.path}</div>
+                    <BackupStatusLine status={backupStatus[vault.name]} />
                   </>
                 )}
               </div>
@@ -292,6 +319,33 @@ export function VaultSection(): ReactNode {
       </div>
       {message && <div className="settings-inline-status">{message}</div>}
       <VaultImport onImported={load} />
+    </div>
+  );
+}
+
+function BackupStatusLine({
+  status,
+}: {
+  status: VaultBackupStatus | undefined;
+}): ReactNode {
+  if (!status?.last_exported_at) {
+    return (
+      <div className="settings-vault-backup due">
+        No export recorded — backup recommended
+      </div>
+    );
+  }
+  const exported = new Date(status.last_exported_at).toLocaleString();
+  const size = status.last_export_size
+    ? ` · ${(status.last_export_size / 1024 / 1024).toFixed(1)} MB`
+    : "";
+  return (
+    <div
+      className={`settings-vault-backup ${status.reminder_due ? "due" : ""}`}
+    >
+      Last export: {exported}
+      {size}
+      {status.reminder_due ? " · refresh recommended" : ""}
     </div>
   );
 }

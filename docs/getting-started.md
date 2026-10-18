@@ -7,7 +7,7 @@ Nothing leaves your computer except the calls you make to your chosen AI
 provider.
 
 This guide takes you from zero to a working vault. For how Loom is *built*, see
-[ARCHITECTURE.md](ARCHITECTURE.md); to contribute, see
+[architecture-ref.md](architecture-ref.md); to contribute, see
 [CONTRIBUTING.md](../CONTRIBUTING.md).
 
 ---
@@ -51,10 +51,10 @@ On first launch a four-step wizard appears. You can re-run it any time from
    below). You can **Skip for now** and add a provider later — but agents,
    search, and graph linking stay offline until you do.
 
-> **Heads up:** provider API keys are encrypted at rest in `config.yaml` (Fernet,
-> under a machine-local master key at `~/.loom/.secret.key`) — defense-in-depth
-> against casual disclosure of the config file, not a substitute for auth, and with
-> no OS-keychain integration yet, so still keep the file private.
+> **Heads up:** provider API keys are encrypted at rest in `config.yaml`. The
+> default Fernet master key lives at `~/.loom/.secret.key`; source installs can
+> install `.[keychain]` and set `LOOM_SECRET_STORAGE=keyring` to migrate it into
+> the OS credential store. This remains defense-in-depth, not API authentication.
 
 ### Choosing a provider
 
@@ -95,10 +95,22 @@ You don't have to use captures — you can also create finished notes directly
 
 ---
 
-## 4. The four views
+## 4. The main views
 
-Loom has four main views, switched from the top nav: **Graph**, **Board**, and
-**Inbox**, with a **Thread** reader that slides in when you open a note.
+Loom has **Today**, **Graph**, **Board**, and **Inbox** in the top nav, with a
+**Thread** reader when you open a note.
+
+### Today — start with active work
+
+Today is a useful default home for recent notes, vault-scoped pinned projects,
+captures and failed jobs needing review, and the latest Standup. You can choose
+Today or Graph as the default home in settings. Use **Quick Capture** from the
+**Cmd/Ctrl+Shift+C** shortcut to save a thought or URL immediately; it enters the same durable
+Inbox path as every other capture source.
+
+For a URL, enable **Fetch page text and preserve the original** to extract the page; otherwise Loom
+captures the link. Quick Capture also accepts a PDF with embedded text. Imports
+preserve the original and provenance, are limited to 8 MiB, and do not run OCR.
 
 ### Graph — see your knowledge
 
@@ -129,8 +141,13 @@ Where raw captures become notes.
   **Process** / **Skip** actions.
 - Select a capture to see its content and **Weaver's suggestion** on the right:
   the proposed type, folder, title, tags, and links.
-- **Accept** files it (and triggers Spider + Sentinel), **Edit** lets you tweak
-  the suggestion first, **Skip** discards it.
+- **Accept** validates and files it before Spider maintains its links, **Edit**
+  lets you tweak the suggestion first, and **Skip** archives the capture.
+- Compare the original and proposed text, or review duplicate candidates and
+  explicitly approve an append/merge into an existing note. A stale target
+  preserves your edit and requires comparison before rebasing.
+- A failed validation keeps the source in Inbox for retry or skip. The draft
+  stays out of ordinary search and graph results until publication succeeds.
 - Keyboard: **j/k** to move between captures, **e** to edit, **Enter** to accept.
 
 ### Board — watch (and run) the agents
@@ -147,7 +164,10 @@ A live view of Loom's agent activity.
   capture to your Inbox for triage.
 - **Recent activity** is a timeline of every agent action, with Sentinel's
   verdict (✓ / ⚠ / ✕).
-- Toggle to **pulse** mode for a heartbeat-style view of agent activity.
+- The default view leads with pending decisions, failures, and recent results.
+  **Advanced visuals** contains the optional Pulse presentation.
+- A run's **Undo** control previews every affected file and refuses to replace
+  later edits. Run-created notes move to the archive so they remain recoverable.
 - The right side hosts the **Loom Council** chat (below).
 
 ### Thread — read and edit a note
@@ -157,11 +177,31 @@ Opens when you click a note in the graph, the file tree, or search.
 ![Thread reader with note details and backlinks](screenshots/thread-view.png)
 
 - Read rendered Markdown with clickable `[[wikilinks]]`.
-- Click **✎ edit** for a split source/preview editor; **Cmd/Ctrl+S** saves.
+- Click **✎ edit** for a source/preview editor; **Cmd/Ctrl+S** saves. Unsaved
+  drafts persist per vault and note, and version conflicts retain your text for
+  comparison, reload, or an explicit overwrite.
 - **details** shows edit history, backlinks, and tags; **context** shows a 1-hop
   local graph, the heading outline, and related notes.
+- **Revision history** compares and restores saved versions. **Original capture**
+  reveals the complete source of a filed note. Recorded connection evidence is
+  also available by clicking an edge in Graph.
 - The trash icon **archives** the note (it moves to `threads/.archive/` — Loom
   never hard-deletes).
+
+---
+
+### Automation and privacy
+
+Settings' automation controls can pause background processing, set a daily
+capture limit per source, and reserve an estimated daily input-token allowance.
+Output tokens are counted after a response, so the allowance is not a hard
+spending cap. Optional prices produce estimates, not provider invoices.
+Folder/tag exclusions restrict automatic cloud context and embeddings. Raw
+trace content is off by default; changing this setting does not erase older
+traces that already contain content.
+
+Revision history starts with writes made by this version. Keep normal vault
+backups; revision and usage databases currently have no automatic pruning.
 
 ---
 
@@ -177,8 +217,9 @@ read-before-write chain and opens it in the editor, ready to type.
 ## 6. Searching
 
 Press **Cmd/Ctrl+K** for the search palette. Type a query and Loom runs **hybrid
-search** — semantic (vector) + keyword + graph-aware boosting (it falls back to
-keyword-only if you haven't configured an embedding provider).
+search** — semantic and keyword result ranks are combined with reciprocal-rank
+fusion, then type/tag filters and graph context apply. It falls back to
+keyword-only if you haven't configured an embedding provider.
 
 - **Arrow keys** to move through results, **Enter** to open a note.
 - **Alt+Enter** to *reveal in graph* — the camera flies to that node.
@@ -254,5 +295,5 @@ Then switch to it by re-running onboarding with `demo` as the vault name (or
 ## Next steps
 
 - **Contributing or running tests?** → [CONTRIBUTING.md](../CONTRIBUTING.md)
-- **How it all works under the hood?** → [ARCHITECTURE.md](ARCHITECTURE.md)
+- **How it all works under the hood?** → [architecture-ref.md](architecture-ref.md)
 - **Security & deployment boundaries?** → [SECURITY.md](../SECURITY.md)

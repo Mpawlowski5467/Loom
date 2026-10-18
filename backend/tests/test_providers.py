@@ -9,6 +9,7 @@ from core.exceptions import ProviderConfigError
 from core.providers import (
     AnthropicProvider,
     CodexProvider,
+    MoonshotProvider,
     OllamaProvider,
     OpenAIProvider,
     ProviderRegistry,
@@ -111,6 +112,19 @@ class TestRegistryGetValid:
 
         assert isinstance(unwrap_provider(provider), XAIProvider)
         assert provider.name == "xai"
+
+    @patch.dict("os.environ", {"MOONSHOT_API_KEY": "moonshot-test-key"})
+    def test_get_moonshot_provider(self) -> None:
+        """get('moonshot') builds the native Kimi-compatible provider."""
+        cfg = _make_config(
+            providers={"moonshot": {"api_key": "moonshot-test-key", "chat_model": "kimi-k2.6"}}
+        )
+        registry = ProviderRegistry(cfg)
+
+        provider = registry.get("moonshot")
+
+        assert isinstance(unwrap_provider(provider), MoonshotProvider)
+        assert provider.name == "moonshot"
 
 
 # ---------------------------------------------------------------------------
@@ -304,7 +318,8 @@ class TestTracedProviderWrapper:
         latest = after[0]
         assert latest.provider == "fake"
         assert latest.model == "fake-model"
-        assert latest.response == "fake response"
+        assert latest.response == ""
+        assert latest.content_retained is False
         assert latest.error == ""
 
     @pytest.mark.asyncio
@@ -333,7 +348,7 @@ class TestTracedProviderWrapper:
 
         after = store.list(limit=10)
         assert len(after) == before + 1
-        assert after[0].error == "kaboom"
+        assert after[0].error == "Provider call failed (details withheld)"
 
     @pytest.mark.asyncio
     async def test_embed_passes_through_untraced(self) -> None:

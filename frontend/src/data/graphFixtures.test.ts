@@ -10,6 +10,8 @@ describe("parseGraphFixture", () => {
   it("accepts only the supported fixture sizes", () => {
     expect(parseGraphFixture("?graphFixture=500")).toBe(500);
     expect(parseGraphFixture("?demo=1&graphFixture=2000")).toBe(2000);
+    expect(parseGraphFixture("?graphFixture=5000")).toBe(5000);
+    expect(parseGraphFixture("?graphFixture=10000")).toBe(10000);
     expect(parseGraphFixture("?graphFixture=32")).toBeNull();
     expect(parseGraphFixture("?graphFixture=500.0")).toBeNull();
     expect(parseGraphFixture("?graphFixture=garbage")).toBeNull();
@@ -46,6 +48,18 @@ describe.each([500, 2000] as const)("generateGraphFixture(%i)", (size) => {
     expect(notes[37]?.links).toContain(graphFixtureId(size, 1));
   });
 });
+
+it.each([5000, 10000] as const)(
+  "generates the %i-node browser profile fixture without broken links",
+  (size) => {
+    const notes = generateGraphFixture(size);
+    const ids = new Set(notes.map((note) => note.id));
+    expect(notes).toHaveLength(size);
+    expect(
+      notes.every((note) => note.links.every((link) => ids.has(link))),
+    ).toBe(true);
+  },
+);
 
 it.each([
   [500, 1075],

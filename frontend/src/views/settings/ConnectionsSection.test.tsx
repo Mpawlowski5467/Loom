@@ -364,7 +364,7 @@ describe("ConnectionsSection", () => {
     });
     renderSection();
     expect(
-      await screen.findByRole("heading", { name: "GitHub bridge" }),
+      await screen.findByRole("heading", { name: "GitHub account" }),
     ).toBeInTheDocument();
     expect(screen.getByText("token saved")).toBeInTheDocument();
     expect(
@@ -817,6 +817,24 @@ describe("ConnectionsSection", () => {
     openSpy.mockRestore();
   });
 
+  it("built-in Google app is a direct sign-in with no credential form", async () => {
+    vi.mocked(getGoogleConnector).mockResolvedValue({
+      ...googleConnector,
+      builtin_app: true,
+    });
+    renderSection();
+    const card = (
+      await screen.findByRole("heading", { name: "Google" })
+    ).closest("section") as HTMLElement;
+
+    expect(
+      within(card).getByRole("button", { name: "Sign in with Google" }),
+    ).toBeEnabled();
+    expect(
+      within(card).queryByPlaceholderText("OAuth client secret"),
+    ).not.toBeInTheDocument();
+  });
+
   it("connected state shows the account and both service sections; disconnect returns to state 2", async () => {
     const user = userEvent.setup();
     const connectedAutomation: GoogleConnectorAutomation = {
@@ -1064,7 +1082,7 @@ describe("ConnectionsSection", () => {
     renderSection();
     const google = await screen.findByRole("heading", { name: "Google" });
     const outlook = screen.getByRole("heading", { name: "Outlook Calendar" });
-    const github = screen.getByRole("heading", { name: "GitHub bridge" });
+    const github = screen.getByRole("heading", { name: "GitHub account" });
     const imap = screen.getByRole("heading", { name: "Email bridge" });
     for (const later of [outlook, github, imap]) {
       expect(

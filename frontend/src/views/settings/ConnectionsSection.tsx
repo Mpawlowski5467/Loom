@@ -676,11 +676,11 @@ export function ConnectionsSection(): ReactNode {
   return (
     <div className="settings-panel">
       <div className="settings-kicker">Connections</div>
-      <h1 className="settings-title">Standup &amp; Calendar</h1>
+      <h1 className="settings-title">Accounts &amp; Automations</h1>
       <p className="settings-copy">
-        Run a daily Standup in your timezone and enrich it from a private,
-        read-only iCalendar feed. Calendar events can also become durable Inbox
-        jobs. Connectors sign in once; bridges use credentials.
+        Connect accounts once, choose what Loom may read, and turn selected
+        activity into durable Inbox captures. Loom never posts, sends, or
+        modifies anything in your connected accounts.
       </p>
 
       <section
@@ -921,7 +921,7 @@ export function ConnectionsSection(): ReactNode {
         <div className="settings-connection-head">
           <div>
             <h2 id="github-connection-title">
-              <Github size={17} aria-hidden="true" /> GitHub bridge
+              <Github size={17} aria-hidden="true" /> GitHub account
             </h2>
             <p>
               Poll GitHub repos for new commits, issues, and PRs — activity

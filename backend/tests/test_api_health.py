@@ -4,6 +4,33 @@ from unittest.mock import MagicMock, PropertyMock, patch
 
 from starlette.testclient import TestClient
 
+
+def test_live_is_healthy_before_onboarding(client: TestClient) -> None:
+    """Liveness reflects the HTTP process, not vault/provider readiness."""
+    with (
+        patch("index.indexer.get_indexer", return_value=None),
+        patch("agents.runner.get_runner", return_value=None),
+        patch("core.watcher._observer", None),
+        patch("agents.chat.get_chat_history", return_value=None),
+    ):
+        response = client.get("/api/live")
+
+    assert response.status_code == 200
+    assert response.json() == {"live": True}
+
+
+def test_diagnostics_include_redaction_safe_security_posture(client: TestClient) -> None:
+    response = client.get("/api/diagnostics")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["local_only"] is True
+    assert data["api_token_configured"] is False
+    assert "localhost" in data["allowed_hosts"]
+    assert data["secret_storage"] == "machine-local encrypted file"
+    assert data["security_warnings"] == []
+
+
 # ---------------------------------------------------------------------------
 # GET /api/health — structured shape
 # ---------------------------------------------------------------------------

@@ -7,6 +7,7 @@ import {
   titleMapFromRecords,
   notePathOf,
   loadAllNotes,
+  loadNoteSummaries,
   archiveNote,
   updateNote,
   type NoteRecord,
@@ -32,6 +33,42 @@ function mkRecord(overrides: Partial<NoteRecord> = {}): NoteRecord {
     ...overrides,
   };
 }
+
+it("loads metadata pages and graph edges without requesting any note body", async () => {
+  const get = vi.spyOn(apiClient, "get").mockImplementation(async (path) => {
+    if (path === "/api/graph")
+      return { edges: [{ source: "n0", target: "n200" }] };
+    const offset = new URL(path, "http://localhost").searchParams.get("offset");
+    const start = Number(offset);
+    expect(path).toContain("limit=200");
+    return {
+      notes: Array.from({ length: start === 0 ? 200 : 1 }, (_, i) => {
+        const record = mkRecord({ id: `n${start + i}`, body: "" });
+        return Object.fromEntries(
+          Object.entries(record).filter(
+            ([key]) => key !== "body" && key !== "wikilinks",
+          ),
+        );
+      }),
+      total: 201,
+    };
+  });
+  try {
+    const notes = await loadNoteSummaries();
+    expect(notes).toHaveLength(201);
+    expect(notes[0]?.links).toEqual(["n200"]);
+    expect(
+      notes.every((note) => note.body === "" && note.bodyLoaded === false),
+    ).toBe(true);
+    expect(get.mock.calls.map((call) => call[0]).sort()).toEqual([
+      "/api/graph",
+      "/api/notes?offset=0&limit=200",
+      "/api/notes?offset=200&limit=200",
+    ]);
+  } finally {
+    get.mockRestore();
+  }
+});
 
 describe("backendNoteToFrontend", () => {
   it("maps core fields and derives folder/filename from the path", () => {
@@ -163,7 +200,7 @@ describe("titleMapFromRecords", () => {
     expect(map.get("caching")).toBe("thr_1"); // title (same here)
   });
 
-  it("keeps the first id for a duplicated key", () => {
+  it("refuses an ambiguous duplicated key", () => {
     const map = titleMapFromRecords([
       mkRecord({
         id: "first",
@@ -176,7 +213,7 @@ describe("titleMapFromRecords", () => {
         file_path: "/v/threads/topics/other.md",
       }),
     ]);
-    expect(map.get("dup")).toBe("first");
+    expect(map.get("dup")).toBeUndefined();
   });
 });
 

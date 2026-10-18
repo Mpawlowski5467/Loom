@@ -93,7 +93,8 @@ export interface AppContextValue {
   settingsSection: SettingsSection;
   setSettingsSection: (s: SettingsSection) => void;
   currentNoteId: NoteId | null;
-  openNote: (id: NoteId) => void;
+  openNote: (id: NoteId, heading?: string) => void;
+  noteHeading?: string;
 
   graphFocusId: NoteId | null;
   setGraphFocusId: (id: NoteId | null) => void;
@@ -124,6 +125,8 @@ export interface AppContextValue {
 
   paletteOpen: boolean;
   setPaletteOpen: (b: boolean) => void;
+  quickCaptureOpen: boolean;
+  setQuickCaptureOpen: (b: boolean) => void;
 
   toasts: Toast[];
   pushToast: (toast: Omit<Toast, "id">) => void;
@@ -147,6 +150,7 @@ export interface AppContextValue {
   appendNote: (note: Note) => void;
   updateNote: (note: Note) => void;
   removeNote: (id: string) => void;
+  reloadNoteBody?: (id: string) => Promise<void>;
 
   extraFolders: string[];
   addFolder: (path: string) => void;

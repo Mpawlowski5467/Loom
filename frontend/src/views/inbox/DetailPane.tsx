@@ -7,6 +7,7 @@ import { toNodeType, type CardData, type CardLink } from "./types";
 import type { CaptureJob, CapturePreview } from "../../api/captures";
 import type { Capture, Note } from "../../data/types";
 import { formatDateTime } from "../../data/formatDate";
+import { CaptureReview } from "./CaptureReview";
 
 /** Per-capture state of the lazily-fetched Weaver preview. */
 export type PreviewState =
@@ -28,6 +29,7 @@ interface Props {
   onRetryJob: () => void;
   onCancelJob: () => void;
   onOpenDraft?: () => void;
+  onMerged?: () => void;
 }
 
 function Loading({ label }: { label: string }): ReactNode {
@@ -62,9 +64,12 @@ export function DetailPane({
   onRetryJob,
   onCancelJob,
   onOpenDraft,
+  onMerged = () => undefined,
 }: Props): ReactNode {
   const actions = { onAccept, onEdit, onSkip };
   const provenance = Object.entries(capture.provenance ?? {});
+  const persistedCoverage = capture.sourceCoverage;
+  const sourceWasOverLimit = persistedCoverage?.complete === false;
 
   const renderSuggestion = (): ReactNode => {
     // Demo captures carry a seed suggestion; real ones use the fetched preview.
@@ -162,6 +167,24 @@ export function DetailPane({
         </dl>
       )}
       {renderMarkdown(capture.body, { bodyClass: "inbox-detail-body" })}
+      {sourceWasOverLimit && (
+        <div className="inbox-review" role="alert">
+          <div className="inbox-review-h">Source needs review</div>
+          <p>
+            This capture is larger than Weaver&apos;s safe extraction limit. The
+            original source is preserved, but no tail content was omitted
+            silently.
+          </p>
+        </div>
+      )}
+      {preview?.status === "ready" && (
+        <CaptureReview
+          capture={capture}
+          proposedBody={preview.preview.body}
+          onMerged={onMerged}
+          onSeparate={onAccept}
+        />
+      )}
 
       {(capture.status === "processing" || job?.status === "running") && (
         <Loading label="Weaver is filing this capture…" />
@@ -208,9 +231,9 @@ export function DetailPane({
         <div className="inbox-review" role="alert">
           <div className="inbox-review-h">Needs review</div>
           <p>
-            A draft note exists, but Sentinel could not safely finish this
-            capture. Retry the idempotent pipeline after reviewing the reason,
-            or skip it to archive the source capture.
+            Sentinel kept this capture in Inbox because it could not safely
+            publish it. Review the reason, then retry the idempotent pipeline or
+            skip it to archive the source capture.
           </p>
           {capture.validationReasons &&
             capture.validationReasons.length > 0 && (
@@ -251,6 +274,11 @@ export function DetailPane({
           {(job?.error || capture.lastError) && (
             <p className="inbox-review-error">
               {job?.error || capture.lastError}
+            </p>
+          )}
+          {job?.recommended_action && (
+            <p className="inbox-review-guidance">
+              <strong>Next:</strong> {job.recommended_action}
             </p>
           )}
           <div className="inbox-suggest-actions">

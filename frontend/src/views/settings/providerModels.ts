@@ -6,6 +6,7 @@ import {
   GeminiIcon,
   GroqIcon,
   MistralIcon,
+  MoonshotIcon,
   OllamaIcon,
   OpenAIIcon,
   OpenRouterIcon,
@@ -24,7 +25,8 @@ export type ProviderName =
   | "deepseek"
   | "together"
   | "mistral"
-  | "gemini";
+  | "gemini"
+  | "moonshot";
 
 /** Inline-SVG icon component used for a provider (tinted via currentColor). */
 export type ProviderIcon = (props: {
@@ -157,6 +159,22 @@ export const PROVIDERS: ProviderMeta[] = [
     defaultBaseUrl: "https://openrouter.ai/api/v1",
     authMode: "oauth_pkce",
     credentialUrl: "https://openrouter.ai/settings/keys",
+  },
+  {
+    name: "moonshot",
+    label: "Moonshot (Kimi)",
+    type: "cloud",
+    icon: MoonshotIcon,
+    defaultChat: "kimi-k2.6",
+    defaultEmbed: "",
+    defaultHost: "",
+    chatModels: ["kimi-k2.6"],
+    embedModels: [],
+    supportsEmbed: false,
+    supportsBaseUrl: true,
+    defaultBaseUrl: "https://api.moonshot.ai/v1",
+    authMode: "api_key",
+    credentialUrl: "https://platform.moonshot.ai/console/api-keys",
   },
   {
     name: "ollama",

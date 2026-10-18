@@ -275,7 +275,7 @@ def test_failed_skip_move_restores_exact_pending_job(
     before = capture_job_store(empty_job_vault).get(job["id"])
     assert before is not None
 
-    with patch("api.routers.captures.shutil.move", side_effect=OSError("disk failure")):
+    with patch("core.capture_lifecycle.record_move", side_effect=OSError("disk failure")):
         response = client.post("/api/captures/skip", json={"capture_path": capture["file_path"]})
 
     assert response.status_code == 500
@@ -295,7 +295,7 @@ def test_failed_skip_write_restores_exact_pending_job(
     assert before is not None
 
     with patch(
-        "api.routers.captures.vault_write_note",
+        "core.capture_lifecycle.write_note",
         side_effect=VaultIOError("write failed"),
     ):
         response = client.post("/api/captures/skip", json={"capture_path": capture["file_path"]})

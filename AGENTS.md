@@ -4,9 +4,9 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 
 ## Stack
 
-- **Backend**: Python 3.11+ / FastAPI
+- **Backend**: Python 3.12 / FastAPI
 - **Agent orchestration**: LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs; nodes call Loom's own provider layer, so no LangChain provider stack is pulled in.
-- **Frontend**: React + TypeScript / Sigma.js (graph) / hand-rolled markdown renderer
+- **Frontend**: React + TypeScript / Sigma.js (graph) / `react-markdown` preview with project wikilink handling
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama); every call traced
@@ -58,12 +58,15 @@ loom/
 docker compose up        # builds + runs → open http://localhost:8000
                          # vaults persist in the `loom-data` named volume
 
-# Backend
-cd backend && pip install -e ".[dev]" --break-system-packages
-uvicorn api.main:app --reload --port 8000
+# Backend (Python 3.12, from the repository root)
+cd backend
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.lock -r requirements-dev.lock
+.venv/bin/python -m pip install --no-deps -e ".[dev]"
+.venv/bin/python -m uvicorn api.main:app --reload --port 8000
 
-# Frontend
-cd frontend && npm install
+# Frontend (Node 22, in another shell from the repository root)
+cd frontend && npm ci
 npm run dev          # dev server on localhost:5173
 
 # Lint / format
@@ -91,12 +94,13 @@ Style guide: @docs/style-guide.md
 - Outlook Calendar OAuth adapter (`backend/bridge/outlook_cal*.py`): the Microsoft connector — loopback authorization-code flow (delegated `Calendars.Read`), `enc:v1:`-encrypted auto-refreshing tokens, bounded `calendarView` window polls, `outlook-cal:` external IDs, `/api/automations/calendar/outlook/*`, and its own Connections card. Both OAuth adapters mock-verified end to end; first live connect pending user-created OAuth app registrations
 - Sentinel deterministic rule coverage: frontmatter value sanity (ISO timestamps + ordering, `status`, `author`, `id` charset, tag taxonomy), history-entry shape/chronology, empty/placeholder body/title, wikilink bracket syntax — all warning-level, with the LLM prompt's trust list kept in sync
 - Scribe daily-log phrasing: style-pinned LLM prompt (name notes as `[[wikilinks]]`, group related actions, deny-listed filler phrases, 200-word bound) and an honest deterministic fallback summary that counts notable actions and names the notes involved
-- LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Sentinel→Spider→Scribe→enforce, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict; Spider/Scribe run only on a `passed`/`warning` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
+- LangGraph orchestration: the capture pipeline (`agents/loom/pipeline_graph.py` — Weaver→Sentinel→enforce publication→Spider→Scribe, with a one-shot Sentinel-retry loop back to Weaver on a `failed` verdict; Spider/Scribe run only after successful publication following a `passed`/`warning` verdict) and the Shuttle agents (`agents/shuttle/researcher_graph.py`, `standup_graph.py`) run as `StateGraph`s. `AgentRunner.run_pipeline` drives the pipeline graph; `/api/captures/process` calls it. Graph nodes wrap the existing agent methods (read-before-write preserved) and call Loom's own providers — no LangChain models. `agents/shuttle/graph_runtime.py` holds the shared run/step bridge.
 - Custom agents: registry (`/api/agents/registry`) + Board "Add agent" modal (Shuttle-tier) with execution — running a custom agent dispatches to `agents.shuttle.custom.CustomAgent`, which writes a capture for triage
-- 4 views: GraphView (Sigma.js — constellation + orbit with 5 selectable scenes, faux-3D depth layering, edge travelers, display panel), ThreadView (markdown reader), InboxView (capture triage), BoardView (agent cards + pulse viz toggle)
-- Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig (Finish gated on a validated provider)
+- Core views: Today (recent work, pinned projects, captures/jobs, latest Standup), GraphView, ThreadView, InboxView, and BoardView. Graph keeps constellation/orbit scenes and display controls; Board keeps advanced visual controls and expandable Council contributions.
+- Thread editor: metadata-first body hydration, durable vault/note-scoped drafts with explicit discard and version-conflict recovery, tag edits, accessible wikilink completion, and revision restore/undo
+- Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker → ProviderConfig. A tested provider enables Finish; the confirmed **Skip for now** path completes offline onboarding.
 - Settings UI: Appearance, Providers (with key validation), Connections, Vault, About (diagnostics + re-run onboarding), Danger Zone
-- Backend: hybrid search (vector + keyword + graph boosting), file watcher (watchdog), rate limiting (slowapi), health/ready probes
+- Backend: hybrid search (vector + keyword fused using reciprocal-rank fusion, then filters/context boost), file watcher (watchdog), rate limiting (slowapi), health/ready probes
 - Per-agent `memory.md` summarization (every 20 actions), per-agent-per-day changelog
 - Provider system: OpenAI, Anthropic, xAI, OpenRouter, Ollama — chat + embed independently configurable
 - Streaming Loom Council chat (SSE fan-out, ≤3 concurrent) + LLM trace system (in-mem ring + disk mirror, "raw call" inspector via `/api/traces`). Traces carry a `run`/`step` tag so multi-step graph runs surface as connected runs in the Board "Runs" view (`/api/traces/runs`, `/api/traces/runs/{id}`; frontend `RunFeed`).
@@ -104,13 +108,17 @@ Style guide: @docs/style-guide.md
 - Cmd+K palette, file tree with filter bar, toasts
 - CI in `.github/workflows/`, LICENSE present
 - Bounded disk-streamed vault export/import with atomic overwrite rollback/startup recovery; lock/version/rollback-safe note archival
+- Quick Capture: text and URL ingestion goes through the same provenance-aware, durable capture ingress as agents and connectors
+- Explainable connections: Spider records deterministic evidence (identities, score/method, bounded excerpts, run/agent and state); accepting a suggestion requires an explicit version-checked write
 
 **In flight**
 - The Google connector (one union-scope sign-in covering Calendar + Gmail) and the Outlook Calendar connector are code-complete and mock-verified; the first live connect still needs the OAuth app registrations only the user can create (setup steps inline in the Connections cards). GitHub ships as token-based polling, Email as read-only IMAP polling — no webhooks (Loom is localhost-first)
 
 **Known gaps**
-- Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix, machine-local master key in `~/.loom/.secret.key`) — defense-in-depth against casual config disclosure, not a substitute for auth; no OS-keychain integration yet
+- Provider API keys are Fernet-encrypted at rest in `config.yaml` (`enc:v1:` prefix), using an optional OS-keychain-backed key or the machine-local fallback — defense-in-depth against casual config disclosure, not a substitute for auth
 - No auth layer on the API (safe on localhost; do not expose the port as-is). `TrustedHostMiddleware` (localhost hosts, override via `LOOM_ALLOWED_HOSTS`) blocks DNS-rebinding
+- Traces can contain model request and response metadata. Keep their local retention and any optional mirror within the user's privacy boundary.
+- `daily_token_limit` is an estimated **input** allowance reserved before an attempt; generated output is counted after the request, so it is not a hard provider-spending limit.
 - Local models: prefer `devstral`/`phi4` for agent work (verified); `gpt-oss:20b`/`gemma4:26b` are slower but pass; reasoning models (`deepseek-r1`, thinking Qwen) complete but are slow and often land in review. Chat streams internally, so steady generation no longer hits the 120s read window.
 - AppContext remains the compatibility shell; high-churn vault/capture loading, agent/health polling, config, and typed SSE refresh are split into domain hooks
 - Frontend test coverage is broad (views, graph logic, API clients, settings all covered) but a few board child components + `useGraph*` hooks remain untested

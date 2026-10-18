@@ -455,6 +455,28 @@
   font-size: 9.5px;
   color: var(--ink-3);
 }
+.tree-show-more {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  width: calc(100% - 8px - var(--indent, 0px));
+  margin: 4px 8px 4px 0;
+  padding: 5px 10px 5px calc(8px + var(--indent, 0px));
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--agent);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 10px;
+  text-align: left;
+}
+.tree-show-more:hover {
+  background: var(--bg-surface);
+}
+.tree-show-more span {
+  color: var(--ink-3);
+}
 
 /* ── Workspace ─────────────────────────────────────────────────── */
 .workspace {

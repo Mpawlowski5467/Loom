@@ -62,7 +62,7 @@ class OnboardingCompleteRequest(BaseModel):
     steps_done: list[str] = []
 
 
-_KNOWN_PROVIDERS = {"openai", "anthropic", "xai", "ollama", "openrouter"}
+_KNOWN_PROVIDERS = {"openai", "anthropic", "xai", "ollama", "openrouter", "moonshot"}
 
 
 @router.get("/status", response_model=OnboardingState)

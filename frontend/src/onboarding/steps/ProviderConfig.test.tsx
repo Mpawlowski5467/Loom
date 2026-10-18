@@ -51,6 +51,9 @@ describe("ProviderConfig", () => {
       screen.getByRole("button", { name: /OpenRouter/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Ollama/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: /Moonshot/ }),
+    ).toBeInTheDocument();
   });
 
   it("picking a provider adds it with defaults", async () => {

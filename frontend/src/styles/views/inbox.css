@@ -381,6 +381,24 @@
   line-height: 1.45;
   overflow-wrap: anywhere;
 }
+.inbox-job-guidance {
+  display: grid;
+  gap: 4px;
+  margin-top: 8px;
+  padding: 9px 10px;
+  border-left: 2px solid var(--agent);
+  background: color-mix(in srgb, var(--agent) 7%, var(--bg-base));
+  color: var(--ink-2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.inbox-job-guidance strong {
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 0.8px;
+  text-transform: uppercase;
+}
 .inbox-job-row-actions {
   display: flex;
   align-items: center;
@@ -849,6 +867,10 @@
   font-family: var(--mono);
   font-size: 11px;
   overflow-wrap: anywhere;
+}
+.inbox-review .inbox-review-guidance {
+  margin-top: 10px;
+  color: var(--ink);
 }
 .inbox-review ul {
   margin: 10px 0 0;

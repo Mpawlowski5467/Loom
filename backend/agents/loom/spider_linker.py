@@ -15,12 +15,15 @@ shows up in that resolved set.
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from typing import TYPE_CHECKING
 
 from agents.file_locks import path_lock
 from agents.loom.spider_lookup import build_title_map
 from core.notes import Note, now_iso, parse_note
+from core.traces import get_run
 from core.vault_io import write_note as _vault_write_note
+from core.wikilinks import link_target
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -46,7 +49,7 @@ async def apply_links(
     linked: list[str] = []
 
     for title in target_titles:
-        target_path = title_map.get(title.lower())
+        target_path = title_map.get(link_target(title))
         if target_path is None or target_path == source_path:
             continue
         if ".archive" in target_path.parts:
@@ -68,6 +71,19 @@ async def apply_links(
             ts,
             f"Spider linked to [[{title}]]",
             title_map,
+            evidence={
+                "source_id": source_note.id,
+                "target_id": parse_note(target_path).id,
+                "score": 1.0,
+                "method": "spider-resolved-title",
+                "reason": "Resolved title match; reciprocal link written.",
+                "source_excerpt": source_note.body[:280],
+                "target_excerpt": parse_note(target_path).body[:280],
+                "created": ts,
+                "agent": "spider",
+                "run_id": get_run(),
+                "state": "applied",
+            },
         )
         wrote_back = await _add_link_to_note(
             vault_root,
@@ -87,6 +103,49 @@ async def apply_links(
     return linked
 
 
+async def persist_suggestions(
+    vault_root: Path, source_path: Path, source_note: Note, candidates: Sequence[object]
+) -> None:
+    """Persist reviewable suggested candidates without changing note links."""
+    title_map = build_title_map(vault_root / "threads")
+    entries: list[dict[str, object]] = []
+    for candidate in candidates:
+        title = getattr(candidate, "title", "")
+        target_path = title_map.get(link_target(title))
+        if not title or target_path is None or not target_path.exists():
+            continue
+        target = parse_note(target_path)
+        entries.append(
+            {
+                "source_id": source_note.id,
+                "target_id": target.id,
+                "score": round(float(getattr(candidate, "score", 0)), 4),
+                "method": "spider-candidate",
+                "reason": str(getattr(candidate, "reason", "Deterministic Spider candidate."))
+                or "Deterministic Spider candidate.",
+                "source_excerpt": source_note.body[:280],
+                "target_excerpt": target.body[:280],
+                "created": now_iso(),
+                "agent": "spider",
+                "run_id": get_run(),
+                "state": "suggested",
+            }
+        )
+    if not entries:
+        return
+    async with path_lock(source_path):
+        note = parse_note(source_path)
+        meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
+        existing = [
+            item
+            for item in note.extra.get("link_evidence", [])
+            if not (isinstance(item, dict) and item.get("state") == "suggested")
+        ]
+        meta["link_evidence"] = [*existing, *entries][-100:]
+        meta["modified"] = now_iso()
+        _vault_write_note(vault_root, source_path, meta, note.body)
+
+
 async def _add_link_to_note(
     vault_root: Path,
     path: Path,
@@ -95,6 +154,7 @@ async def _add_link_to_note(
     ts: str,
     reason: str,
     title_map: dict[str, Path],
+    evidence: dict[str, object] | None = None,
 ) -> bool:
     """Append a wikilink to a note if the target isn't already linked.
 
@@ -117,17 +177,9 @@ async def _add_link_to_note(
             # or renamed mid-scan. Skip rather than fail the whole scan.
             return False
 
-        # Build a richer lookup that accepts both titles and filename slugs.
-        # ``title_map`` from the note index keys by lowercased title only,
-        # but users write ``[[alpha-topic]]`` as often as ``[[Alpha Topic]]``,
-        # and both must resolve to the same file when checking for dupes.
-        rich_map: dict[str, Path] = dict(title_map)
-        for resolved_path in title_map.values():
-            rich_map.setdefault(resolved_path.stem.lower(), resolved_path)
-        # Also index the target by its own stem so the resolve-by-path
-        # comparison below works regardless of how the existing wikilinks
-        # spell the target.
-        rich_map.setdefault(target_path.stem.lower(), target_path)
+        # The canonical map already includes unambiguous titles, slugs and
+        # paths. Reintroducing a bare stem here would select arbitrary matches.
+        rich_map = title_map
 
         # Resolve every existing wikilink in the note to a file path.
         # Anything that doesn't resolve (e.g. dangling link) stays in the
@@ -135,7 +187,7 @@ async def _add_link_to_note(
         existing_targets: set[object] = set()
         for wl in note.wikilinks:
             # Strip [[alias|target]] and [[note#anchor]] decorations.
-            key = wl.split("|", 1)[0].split("#", 1)[0].strip().lower()
+            key = link_target(wl)
             resolved = rich_map.get(key)
             if resolved is not None:
                 existing_targets.add(resolved.resolve())
@@ -148,9 +200,15 @@ async def _add_link_to_note(
         # itself is a dangling reference but matches a string we already
         # have (e.g. someone wrote [[Foo]] free-form and Spider wants to
         # add [[Foo]] again).
-        if link_title.strip().lower() in existing_targets:
+        if (
+            link_target(link_title) in existing_targets
+            and rich_map.get(link_target(link_title)) == target_path
+        ):
             return False
 
+        if rich_map.get(link_target(link_title)) != target_path:
+            canonical = target_path.relative_to(vault_root / "threads").with_suffix("")
+            link_title = f"{canonical.as_posix()}|{link_title}"
         new_body = note.body.rstrip() + f"\n\n[[{link_title}]]\n"
 
         meta = note.model_dump(exclude={"body", "wikilinks", "file_path"})
@@ -158,6 +216,9 @@ async def _add_link_to_note(
         meta["history"].append(
             {"action": "linked", "by": "agent:spider", "at": ts, "reason": reason}
         )
+        if evidence is not None:
+            prior = note.extra.get("link_evidence", [])
+            meta["link_evidence"] = [*prior, evidence][-100:]
 
         _vault_write_note(vault_root, path, meta, new_body)
         return True

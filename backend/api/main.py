@@ -30,9 +30,11 @@ from api.routers.agents_registry import router as agents_registry_router
 from api.routers.archive import router as archive_router
 from api.routers.automations import router as automations_router
 from api.routers.calendar_outlook import router as calendar_outlook_router
+from api.routers.capture_review import router as capture_review_router
 from api.routers.captures import router as captures_router
 from api.routers.chat import router as chat_router
 from api.routers.config import router as config_router
+from api.routers.connections import router as connections_router
 from api.routers.diagnostics import router as diagnostics_router
 from api.routers.email_bridge import router as email_bridge_router
 from api.routers.events import router as events_router
@@ -41,13 +43,17 @@ from api.routers.github_sign_in import router as github_sign_in_router
 from api.routers.google_bridge import router as google_bridge_router
 from api.routers.graph import router as graph_router
 from api.routers.hardware import router as hardware_router
+from api.routers.imports import router as imports_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
 from api.routers.onboarding import router as onboarding_router
+from api.routers.policy import router as policy_router
 from api.routers.provider_auth import router as provider_auth_router
 from api.routers.providers import router as providers_router
+from api.routers.revisions import router as revisions_router
 from api.routers.search import router as search_router
 from api.routers.settings import router as settings_router
+from api.routers.sources import router as sources_router
 from api.routers.traces import router as traces_router
 from api.routers.tree import router as tree_router
 from api.routers.vaults import (
@@ -59,15 +65,11 @@ from api.routers.vaults import (
 from api.runtime import initialize_vault_runtime
 from core.config import GlobalConfig, settings
 from core.rate_limit import limiter, rate_limit_exceeded_handler
+from core.security_posture import inspect_security_posture, resolve_allowed_hosts
 from core.vault import get_vault_manager
 from core.watcher import stop_watcher
 
 logger = logging.getLogger(__name__)
-
-# Localhost-only hosts the API answers to by default. ``testserver`` is the
-# Host header Starlette's TestClient sends, so it must stay in the default set
-# or every test would 400 on the TrustedHostMiddleware check.
-_DEFAULT_ALLOWED_HOSTS = ["localhost", "127.0.0.1", "*.localhost", "testserver"]
 
 # Security headers applied to every response. Kept deliberately minimal: no CSP,
 # which would risk breaking the SPA's inline/hashed bundles.
@@ -81,6 +83,7 @@ _SECURITY_HEADERS = {
 # probes (and the Docker smoke test) keep working with no credentials.
 _TOKEN_GATE_OPEN_PATHS = frozenset(
     {
+        "/api/live",
         "/api/health",
         "/api/ready",
         # OpenRouter redirects the browser here and cannot attach Loom's
@@ -120,20 +123,6 @@ def _extract_bearer_token(request: Request) -> str | None:
     return shorthand or None
 
 
-def _allowed_hosts() -> list[str]:
-    """Resolve the allowed Host headers for TrustedHostMiddleware.
-
-    Defaults to localhost-style hosts plus ``testserver`` (TestClient). A user
-    exposing the port can override via the ``LOOM_ALLOWED_HOSTS`` env var, a
-    comma-separated list (e.g. ``"loom.example.com,localhost"``).
-    """
-    raw = os.environ.get("LOOM_ALLOWED_HOSTS")
-    if not raw:
-        return list(_DEFAULT_ALLOWED_HOSTS)
-    hosts = [h.strip() for h in raw.split(",") if h.strip()]
-    return hosts or list(_DEFAULT_ALLOWED_HOSTS)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Start file watcher and agents on startup, stop on shutdown."""
@@ -143,6 +132,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     from core.traces import get_trace_store
 
     app.state.started_at = datetime.now(UTC)
+    posture = inspect_security_posture(api_token=settings.api_token)
+    for warning in posture.warnings:
+        logger.warning("Security posture: %s", warning)
     vm = get_vault_manager()
     # Resolve an interrupted overwrite before the watcher, index, or workers
     # open handles against a missing or half-promoted active vault.
@@ -281,7 +273,7 @@ app.add_middleware(
 # DNS-rebinding defense: reject requests whose Host header is not a known
 # localhost-style host (or a user-configured one). Without this, a malicious
 # page could rebind DNS and reach the unauthenticated localhost API.
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=_allowed_hosts())
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=resolve_allowed_hosts())
 
 
 @app.middleware("http")
@@ -360,6 +352,11 @@ register_exception_handlers(app)
 
 app.include_router(vaults_router)
 app.include_router(notes_router)
+app.include_router(revisions_router)
+app.include_router(imports_router)
+app.include_router(policy_router)
+app.include_router(connections_router)
+app.include_router(sources_router)
 app.include_router(archive_router)
 app.include_router(automations_router)
 app.include_router(github_bridge_router)
@@ -371,6 +368,7 @@ app.include_router(tree_router)
 app.include_router(graph_router)
 app.include_router(search_router)
 app.include_router(captures_router)
+app.include_router(capture_review_router)
 app.include_router(index_router)
 app.include_router(agents_router)
 app.include_router(agents_registry_router)
@@ -385,6 +383,12 @@ app.include_router(providers_router)
 app.include_router(diagnostics_router)
 app.include_router(traces_router)
 app.include_router(events_router)
+
+
+@app.get("/api/live")
+async def liveness_check() -> dict[str, bool]:
+    """Process liveness probe, independent of onboarding and providers."""
+    return {"live": True}
 
 
 @app.get("/api/health")

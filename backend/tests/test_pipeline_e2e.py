@@ -111,6 +111,8 @@ class TestPipelineEndToEnd:
         assert note.title == "Raft Consensus"
         assert "consensus" in note.tags
         assert note.source == f"capture:{capture_id}"
+        assert note.extra["source_coverage"]["complete"] is True
+        assert note.extra["source_coverage"]["source_link"] == "manual"
         assert result.capture_archived is True
         assert not capture_path.exists()  # archived
 
@@ -148,6 +150,60 @@ class TestPipelineEndToEnd:
             if ".archive" not in md.parts and _safe_source(md) == f"capture:{capture_id}"
         ]
         assert len(notes_from_capture) == 1
+
+    @pytest.mark.asyncio
+    async def test_over_limit_capture_is_reviewable_and_preserves_source(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An oversized source stays durable and records incomplete coverage."""
+        root = _build_vault(tmp_path)
+        _scaffold_all_agents(root)
+        get_note_index().build(root / "threads")
+        init_weaver(root, None)
+        init_spider(root, None)
+        init_scribe(root, None)
+        init_sentinel(root, None)
+        runner = init_runner(root)
+
+        from agents.loom import weaver_llm
+        from core.notes import build_frontmatter, parse_note
+
+        last_fact = "LAST FACT: keep this complete and review the source."
+        body = "context " * 40 + last_fact
+        capture_path = root / "threads" / "captures" / "oversized.md"
+        capture_path.write_text(
+            build_frontmatter(
+                {
+                    "id": "thr_overlimit",
+                    "title": "Oversized source",
+                    "type": "capture",
+                    "tags": ["inbox"],
+                    "created": "2026-03-15T10:00:00+00:00",
+                    "modified": "2026-03-15T10:00:00+00:00",
+                    "author": "user",
+                    "source": "manual",
+                    "provenance": {"url": "https://example.test/source"},
+                    "status": "active",
+                }
+            )
+            + "\n"
+            + body,
+            encoding="utf-8",
+        )
+        monkeypatch.setattr(weaver_llm, "_MAX_SOURCE_TOKENS", 10)
+
+        result = await runner.run_pipeline(capture_path)
+
+        assert result.note is None
+        assert result.review_required is True
+        assert result.capture_archived is False
+        assert capture_path.exists()
+        retained = parse_note(capture_path)
+        assert retained.body == body
+        coverage = retained.extra["source_coverage"]
+        assert coverage["complete"] is False
+        assert coverage["source_link"] == "https://example.test/source"
+        assert "review required" in " ".join(result.errors)
 
 
 def _safe_source(path: Path) -> str:

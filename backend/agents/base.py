@@ -126,7 +126,9 @@ class BaseAgent(ABC):
         self._agent_dir = vault_root / "agents" / self.name
         self._config = AgentConfig.load(self._agent_dir / "config.yaml")
         self._state = AgentState(self._agent_dir / "state.json")
-        self._chain = ReadChain(vault_root, note_index=get_note_index())
+        self._chain = ReadChain(
+            vault_root, note_index=get_note_index(), chat_provider=chat_provider
+        )
         self._memory_cadence = self._load_memory_cadence()
 
     @property

@@ -2,6 +2,9 @@ import { defineConfig } from "@playwright/test";
 
 export default defineConfig({
   testDir: "./e2e",
+  // This suite uses an offline fixture server. The FastAPI lifecycle suite
+  // starts its own isolated backend through playwright.backend.config.ts.
+  testIgnore: "**/backend/**",
   fullyParallel: false,
   workers: 1,
   timeout: 180_000,

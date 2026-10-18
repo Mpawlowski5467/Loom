@@ -100,6 +100,23 @@ describe("JobHistory", () => {
     expect(screen.queryByText("running")).not.toBeInTheDocument();
   });
 
+  it("shows a concrete recovery action for categorized failures", async () => {
+    const user = userEvent.setup();
+    renderHistory([
+      job({
+        status: "failed",
+        error: "Invalid API key",
+        failure_kind: "provider_configuration",
+        recommended_action:
+          "Fix the provider credentials or model in Settings, then retry.",
+      }),
+    ]);
+
+    await user.click(screen.getByRole("tab", { name: /Review 1/ }));
+    expect(screen.getByText("Provider setup needs attention")).toBeVisible();
+    expect(screen.getByText(/Fix the provider credentials/)).toBeVisible();
+  });
+
   it("filters the current segment by both status and source", async () => {
     const user = userEvent.setup();
     renderHistory([

@@ -33,6 +33,15 @@ const DIAG: DiagnosticsResponse = {
   started_at: "2026-05-30T10:00:00Z",
   build_date: null,
   log_path: "/home/u/.loom/logs",
+  cache_configured: false,
+  cache_connected: false,
+  database_configured: false,
+  database_connected: false,
+  allowed_hosts: ["localhost", "127.0.0.1"],
+  local_only: true,
+  api_token_configured: false,
+  secret_storage: "machine-local encrypted file",
+  security_warnings: [],
 };
 
 const HEALTH: HealthResponse = {
@@ -89,6 +98,24 @@ describe("AboutSection", () => {
     expect(screen.getByText("3.12.0")).toBeInTheDocument();
     expect(screen.getByText("openai, ollama")).toBeInTheDocument();
     expect(screen.getByText("/home/u/.loom/vaults/main")).toBeInTheDocument();
+    expect(screen.getByText("Localhost only")).toBeInTheDocument();
+    expect(
+      screen.getByText("machine-local encrypted file"),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces unsafe network exposure guidance", async () => {
+    getDiagnostics.mockResolvedValue({
+      ...DIAG,
+      local_only: false,
+      allowed_hosts: ["*"],
+      security_warnings: [
+        "Non-local hosts are allowed without LOOM_API_TOKEN.",
+      ],
+    });
+    renderSection();
+    expect(await screen.findByText("Custom hosts enabled")).toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("LOOM_API_TOKEN");
   });
 
   it("shows the backend health pill and per-component status", async () => {

@@ -3,11 +3,12 @@
 from __future__ import annotations
 
 import logging
-import shutil
-from typing import TYPE_CHECKING
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from agents.changelog import log_action
 from agents.loom.weaver_helpers import build_meta
+from core.capture_lifecycle import archive_capture as archive_inbox_capture
 from core.note_index import get_note_index
 from core.notes import (
     Note,
@@ -17,14 +18,38 @@ from core.notes import (
     parse_note,
 )
 from core.notes_helpers import to_kebab
+from core.revisions import record_move
 from core.vault_io import write_note as _vault_write_note
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     from core.notes import NoteMeta
 
 logger = logging.getLogger(__name__)
+
+
+def resolve_folder(vault_root: Path, folder: str) -> Path:
+    """Resolve a user/model supplied note folder safely under ``threads/``.
+
+    Nested custom folders are valid.  Traversal, absolute paths, backslash
+    separators, and archive destinations are not.  Callers receive an error
+    instead of silently filing work into a different folder.
+    """
+    threads_dir = (vault_root / "threads").resolve()
+    raw = folder.strip()
+    candidate = Path(raw)
+    if (
+        not raw
+        or "\\" in raw
+        or candidate.is_absolute()
+        or any(part in {"", ".", "..", ".archive"} for part in candidate.parts)
+    ):
+        raise ValueError(f"Invalid folder: {folder!r}")
+    try:
+        target = (threads_dir / candidate).resolve()
+        target.relative_to(threads_dir)
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"Invalid folder: {folder!r}") from exc
+    return target
 
 
 def find_note_by_capture_source(vault_root: Path, capture_id: str) -> NoteMeta | None:
@@ -80,25 +105,15 @@ def write_note(
     body: str,
     source: str = "manual",
     author: str = "agent:weaver",
+    coverage: dict[str, Any] | None = None,
 ) -> Note:
-    """Write a note file to the vault and return the parsed Note."""
-    threads_dir = vault_root / "threads"
+    """Write a note file to the vault and return the parsed Note.
 
-    if ".." in folder or folder.startswith("/") or "/" in folder.strip("/") or "\\" in folder:
-        logger.warning(
-            "Weaver: suspicious folder '%s' from classification — falling back to captures/",
-            folder,
-        )
-        folder = "captures"
-
-    target_dir = (threads_dir / folder).resolve()
-    if not str(target_dir).startswith(str(threads_dir.resolve())):
-        logger.warning(
-            "Weaver: folder '%s' escapes threads/ — falling back to captures/",
-            folder,
-        )
-        folder = "captures"
-        target_dir = threads_dir / folder
+    ``coverage`` records how much of an originating capture was presented to
+    the classifier and generator. It is optional so modal/manual callers and
+    older integrations keep the same frontmatter shape.
+    """
+    target_dir = resolve_folder(vault_root, folder)
 
     target_dir.mkdir(parents=True, exist_ok=True)
 
@@ -110,6 +125,13 @@ def write_note(
         file_path = target_dir / f"{stem}-{note_id}.md"
 
     meta = build_meta(note_id, title, note_type, tags, source, author)
+    if source.startswith("capture:"):
+        # This write can wake the filesystem watcher before Sentinel runs.
+        # The draft must remain outside normal retrieval until enforcement
+        # has accepted and archived its source capture.
+        meta["publication_state"] = "pending"
+    if coverage:
+        meta["source_coverage"] = coverage
     # Store canonical wikilink targets: local models sometimes emit unicode
     # dash/space variants inside [[...]] that silently break link resolution.
     _vault_write_note(vault_root, file_path, meta, normalize_wikilinks_in_body(body))
@@ -148,7 +170,7 @@ def archive_note(
     if dest.exists():
         safe_ts = ts.replace(":", "-")
         dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
-    shutil.move(str(note_path), str(dest))
+    record_move(vault_root, note_path, dest)
     get_note_index().remove_file(note_path)
 
     log_action(
@@ -170,29 +192,12 @@ def archive_capture(vault_root: Path, agent_name: str, capture_path: Path) -> Pa
     before moving the file, and records the action in the changelog. On a
     destination filename collision, the timestamp is appended to the stem.
     """
-    archive_dir = vault_root / "threads" / ".archive"
-    archive_dir.mkdir(parents=True, exist_ok=True)
-
-    capture = parse_note(capture_path)
-    ts = now_iso()
-    meta = capture.model_dump(exclude={"body", "wikilinks", "file_path"})
-    meta["status"] = "archived"
-    meta["modified"] = ts
-    meta.setdefault("history", []).append(
-        {
-            "action": "archived",
-            "by": f"agent:{agent_name}",
-            "at": ts,
-            "reason": "Archived after Weaver processing",
-        },
+    dest = archive_inbox_capture(
+        vault_root,
+        capture_path,
+        by=f"agent:{agent_name}",
+        reason="Archived after Weaver processing",
     )
-    _vault_write_note(vault_root, capture_path, meta, capture.body)
-
-    dest = archive_dir / capture_path.name
-    if dest.exists():
-        safe_ts = ts.replace(":", "-")
-        dest = dest.with_stem(f"{dest.stem}-{safe_ts}")
-    shutil.move(str(capture_path), str(dest))
 
     log_action(
         vault_root,

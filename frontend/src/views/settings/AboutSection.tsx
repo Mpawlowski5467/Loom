@@ -90,6 +90,36 @@ export function AboutSection(): ReactNode {
           value={diagnostics?.providers_configured.join(", ") || "None"}
         />
       </div>
+      <div className="settings-kicker">Security</div>
+      <h1 className="settings-title">Local access boundary</h1>
+      <div className="settings-diagnostics-grid">
+        <InfoRow
+          label="Network scope"
+          value={
+            diagnostics
+              ? diagnostics.local_only
+                ? "Localhost only"
+                : "Custom hosts enabled"
+              : "…"
+          }
+        />
+        <InfoRow
+          label="API token"
+          value={
+            diagnostics?.api_token_configured ? "Configured" : "Not configured"
+          }
+        />
+        <InfoRow label="Secrets" value={diagnostics?.secret_storage ?? "…"} />
+        <InfoRow
+          label="Allowed hosts"
+          value={diagnostics?.allowed_hosts.join(", ") ?? "…"}
+        />
+      </div>
+      {diagnostics?.security_warnings.map((warning) => (
+        <div className="settings-security-warning" role="status" key={warning}>
+          {warning}
+        </div>
+      ))}
       <div className="settings-about-card">
         <div>
           <div className="settings-field-label">Backend</div>

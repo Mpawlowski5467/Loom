@@ -315,7 +315,12 @@ class OutlookCalendarSyncService:
             config = GlobalConfig.load(settings.config_path)
             outlook = config.outlook_calendar
             interval_s = max(5, outlook.interval_minutes) * 60
-            if outlook.enabled and outlook_app(outlook) is not None and load_outlook_tokens():
+            if (
+                not config.automation_policy.paused
+                and outlook.enabled
+                and outlook_app(outlook) is not None
+                and load_outlook_tokens()
+            ):
                 try:
                     result = await sync_outlook_calendar()
                     self._last_run = result["synced_at"]

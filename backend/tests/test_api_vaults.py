@@ -248,6 +248,12 @@ class TestExportVault:
         assert "test/agents/weaver/config.yaml" in names
         assert "test/rules/prime.md" in names
         assert "test/prompts/shared/system-preamble.md" in names
+        status = client.get("/api/vaults/test/backup-status")
+        assert status.status_code == 200
+        payload = status.json()
+        assert payload["last_exported_at"] is not None
+        assert payload["last_export_size"] > 0
+        assert payload["reminder_due"] is False
         # FileResponse removes its on-disk spool only after the response body
         # has finished streaming.
         assert not list(vault_manager._settings.loom_home.glob(".loom-export-*"))

@@ -8,6 +8,8 @@ export interface ChangelogFeedEvent {
   target: string;
   chain: "ok" | "warn" | "fail";
   sentinel: "ok" | "warn" | "fail";
+  /** Vault-history commit this action produced, when there is one. */
+  commit?: string | null;
 }
 
 export function fetchChangelogFeed(

@@ -166,7 +166,7 @@
 }
 .changelog-row {
   display: grid;
-  grid-template-columns: 78px 90px 1fr auto;
+  grid-template-columns: 78px 90px 1fr auto auto;
   gap: 12px;
   align-items: center;
   padding: 8px 0;
@@ -201,6 +201,16 @@
 }
 .changelog-verdict.fail {
   color: var(--danger);
+}
+.changelog-undo {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 2px 8px;
+}
+.changelog-undone {
+  font-family: var(--mono);
+  font-size: 10px;
+  color: var(--ink-3);
 }
 
 /* ── Pulse mode ────────────────────────────────────────────────── */

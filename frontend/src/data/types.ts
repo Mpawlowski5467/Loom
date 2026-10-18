@@ -150,6 +150,8 @@ export interface AgentEvent {
   target: string;
   chain: "ok" | "fail";
   sentinel: SentinelVerdict;
+  /** Vault-history commit this action produced; enables Board undo. */
+  commit?: string | null;
 }
 
 export type CouncilWho = "you" | "summary" | `agent:${string}`;

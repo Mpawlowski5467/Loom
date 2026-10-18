@@ -65,6 +65,7 @@ export function useAgentPolling(
               target: e.target,
               chain: e.chain === "ok" ? "ok" : "fail",
               sentinel: e.sentinel as AgentEvent["sentinel"],
+              commit: e.commit ?? null,
             })),
           );
         } catch {

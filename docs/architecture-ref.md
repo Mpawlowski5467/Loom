@@ -131,8 +131,8 @@ script before the bundle loads; per-vault persistence through
 
 ## Search, graph, and links
 
-The metadata index holds note summaries and supports the file tree, Today,
-and fast navigation. LanceDB stores chunk embeddings. Search combines keyword
+The metadata index holds note summaries and supports the vault tree and fast
+navigation. LanceDB stores chunk embeddings. Search combines keyword
 and semantic candidate ranks with reciprocal-rank fusion (RRF). Type/tag filters
 apply during candidate retrieval, with an optional graph-context boost afterward. Without an embedding
 provider, keyword retrieval remains available.
@@ -145,12 +145,23 @@ their neighbors and settling only those, so the camera and the rest of the
 layout stay put. ForceAtlas2 runs on the main thread only for a fresh build;
 a large batch in the force layout (more new nodes than survivors, or over 50)
 also gets a bounded ForceAtlas2 run in a web worker with the survivors pinned
-(`graph/batchSettle.ts`). Spider can
-write deterministic link evidence: source and target identities, method/score,
-bounded excerpts, timestamp/run/agent, and a state such as `suggested`,
-`applied`, or `user_accepted`. Clicking a graph edge, using a neighbor's Evidence button, or opening Thread context exposes this evidence and its
-explicitly labeled legacy fallback; a suggested relation is only accepted by a
-version-checked, locked write.
+(`graph/batchSettle.ts`).
+
+The Graph view colors nodes by community. Louvain runs in the browser over the
+link graph with a fixed seed (`graph/communities.ts`), so a vault always groups
+the same way; the four largest communities get a theme color and the rest a
+neutral tone. The backend has no community data yet (see
+`docs/ui-backend-gaps.md` §3). A single node filter (folder, community,
+superseded, creation-date cutoff) drives visibility for rendering, physics,
+hit-testing and export alike. Selecting a node opens the note beside the graph
+in a compact editor with Archivist's warnings and its recent commits; undo
+there is the same Sentinel-checked revert as the Thread history.
+
+Spider can write deterministic link evidence: source and target identities,
+method/score, bounded excerpts, timestamp/run/agent, and a state such as
+`suggested`, `applied`, or `user_accepted`. The note's History sheet and
+context rail expose this evidence and its explicitly labeled legacy fallback; a
+suggested relation is only accepted by a version-checked, locked write.
 
 ## Captures and agents
 

@@ -26,7 +26,7 @@ rebuild phase, no client yet.
 | 5 | Related notes for a note | Notes context rail | mocked; derived from search |
 | 6 | Dismiss a Spider link suggestion | Notes | mocked; remembered locally |
 | 7 | Weaver drafts a section | Notes slash menu | mocked |
-| 8 | Persisted Archivist findings per note | Graph note panel | planned |
+| 8 | Persisted Archivist findings per note | Graph note panel | mocked; superseded warning derived |
 | 9 | Agent stats and scheduled/watching states | Board | planned (derived where possible) |
 | 10 | Council with note context, proposed changes | Notes, Board | planned (Ask Council prefills the composer) |
 | 11 | Stored capture proposals with a Sentinel pre-check | Inbox | planned |
@@ -96,7 +96,8 @@ real vaults and are exercised through mocks.
 `GET /api/graph` nodes carry `id, title, type, tags, link_count` only.
 
 **Today:** the UI computes communities in the browser with
-`graphology-communities-louvain` (seeded, so it's deterministic). The four
+`graphology-communities-louvain` (`frontend/src/graph/communities.ts`, seeded,
+so it's deterministic), recomputed only when notes or links change. The four
 largest communities get `--community-1..4`; the rest are drawn in a neutral
 tone, and each is named after its most-linked note. The backend version
 should return `community: <id>` per node plus
@@ -153,7 +154,11 @@ normal save path writes it).
 created}]`. Archivist issues are currently only returned by
 `POST /api/agents/archivist/run`.
 
-**Today:** the Graph note panel's warning card is mocked.
+**Today:** the Graph note panel's Archivist card shows two things. "Superseded
+by …" is derived from frontmatter (§2). Findings come from `getNoteFindings`
+(`frontend/src/api/findings.ts`), which is mocked under `VITE_LOOM_MOCKS` with
+stale/orphan findings derived from the note itself. Without mocks a 404 means
+"no findings", so the card only appears for superseded notes.
 
 ## 9. Agent stats and states
 

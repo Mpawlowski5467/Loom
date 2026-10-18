@@ -69,9 +69,9 @@
 - `src/styles/views/*.css` and `legacy-tokens.css` exist only for screens not yet rebuilt; don't add new rules there
 
 ### Project Patterns
-- Views go in `frontend/src/views/` — one file per view (GraphView, BoardView, InboxView, ThreadView)
+- Views go in `frontend/src/views/` — one entry file per view (GraphView, NotesView, BoardView, InboxView, ThreadsView); a rebuilt view's parts live in a folder beside it (`views/graph/`, `views/notes/`)
 - Reusable components go in `frontend/src/components/`
-- Sigma.js graph logic isolated in `frontend/src/graph/`
+- Sigma.js graph logic isolated in `frontend/src/graph/`; translucent colors handed to Sigma go through `glColor()` (its WebGL blending is premultiplied)
 - Markdown preview lives in `frontend/src/editor/Markdown.tsx` and uses `react-markdown`; editor-specific helpers live beside it
 - API calls go through clients in `frontend/src/api/` (one file per resource, shared error handling in `client.ts`)
 - Use `fetch` via the shared client — no axios

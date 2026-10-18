@@ -3,18 +3,10 @@ LOOM THIRD-PARTY FONT NOTICES
 The following unmodified font software is bundled through Fontsource and
 licensed under the SIL Open Font License, Version 1.1:
 
-- Inter: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
-- Fraunces: Google Inc.
-- JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors
-  (https://github.com/JetBrains/JetBrainsMono)
-- Manrope: Copyright 2019 The Manrope Project Authors
-  (https://github.com/sharanda/manrope)
+- Geist and Geist Mono: Copyright 2024 The Geist Project Authors
+  (https://github.com/vercel/geist-font)
 - Newsreader: Copyright 2020 The Newsreader Project Authors
   (https://github.com/productiontype/Newsreader)
-- Atkinson Hyperlegible Next: Copyright 2020-2024 The Atkinson Hyperlegible
-  Next Project Authors
-  (https://github.com/googlefonts/atkinson-hyperlegible-next)
-- Source Sans 3, Source Serif 4, and Source Code Pro: Google Inc.
 
 -----------------------------------------------------------
 SIL OPEN FONT LICENSE Version 1.1 - 26 February 2007

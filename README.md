@@ -530,7 +530,7 @@ The backend exposes a REST API on `:8000`. The most-used endpoints:
 | `GET` `PATCH` | `/api/automations/standup` | Daily Standup schedule and redacted Calendar connection state |
 | `POST` | `/api/automations/calendar/test` / `/sync` | Test a read-only iCalendar feed or sync events into Inbox |
 | `GET` `PATCH` | `/api/automations/github` | Redacted GitHub connection state (repos, interval, poller status) |
-| `POST` `GET` | `/api/automations/github/oauth/start`, `/api/automations/github/oauth/status` | Start and complete GitHub browser/device authorization |
+| `POST` | `/api/automations/github/device/start` / `/device/poll` | "Sign in with GitHub" via the OAuth device flow (needs a built-in app, see [docs/oauth-apps.md](docs/oauth-apps.md)) |
 | `POST` | `/api/automations/github/test` / `/sync` | Validate repos/token or poll activity into Inbox |
 | `GET` `PATCH` | `/api/automations/email` | Redacted IMAP connection state (host, folder, poller status) |
 | `POST` | `/api/automations/email/test` / `/sync` | Test the mailbox login/folder or poll new mail into Inbox |

@@ -39,6 +39,8 @@ export interface OAuthCalendarState {
   config: OAuthCardConfig;
   connection: OAuthCalendarConnection;
   status: OAuthCalendarStatus;
+  /** Loom ships its own app for this provider (one-click connect). */
+  builtinApp?: boolean;
 }
 
 export interface OAuthCalendarCardApi {
@@ -172,6 +174,7 @@ export function OAuthCalendarCard({
         onSaveCreds={saveCreds}
         onConnect={connect}
         onDisconnect={disconnect}
+        builtinApp={automation?.builtinApp ?? false}
       >
         {automation && (
           <ServiceSection

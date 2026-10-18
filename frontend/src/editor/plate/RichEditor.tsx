@@ -19,6 +19,8 @@ interface RichEditorProps {
   /** Loaded once per mount; the parent remounts (key) on outside changes. */
   markdown: string;
   onChange: (markdown: string) => void;
+  /** Smaller type for side panels. */
+  compact?: boolean;
 }
 
 /** An off-screen editor that parses markdown with the note plugins. */
@@ -48,7 +50,12 @@ function sectionAt(editor: PlateEditor, index: number) {
  * The WYSIWYG note body (Plate). Markdown in, markdown out through the
  * lossless bridge, so untouched blocks are saved exactly as written.
  */
-export function RichEditor({ noteId, markdown, onChange }: RichEditorProps) {
+export function RichEditor({
+  noteId,
+  markdown,
+  onChange,
+  compact = false,
+}: RichEditorProps) {
   const { pushToast } = useApp();
   const [loaded] = useState(() => loadNote(markdownParser(), markdown));
   const editor = usePlateEditor({ plugins: notePlugins, value: loaded.value });
@@ -96,7 +103,7 @@ export function RichEditor({ noteId, markdown, onChange }: RichEditorProps) {
     >
       <EditorContainer variant="note">
         <Editor
-          variant="note"
+          variant={compact ? "noteCompact" : "note"}
           placeholder="Write, or type / for commands…"
           aria-label="Note body"
         />

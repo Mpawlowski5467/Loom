@@ -1,5 +1,5 @@
 import { FileQuestion } from "lucide-react";
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ConfirmModal } from "@/components/ConfirmModal";
 import { EmptyState } from "@/components/EmptyState";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -11,21 +11,17 @@ import { listDraftNoteIds } from "@/editor/noteDraftStorage";
 import { NoteAnchorScroll } from "@/editor/NoteAnchorScroll";
 import { ConflictBanner } from "./ConflictBanner";
 import { HistorySheet } from "./HistorySheet";
+import { NoteBody } from "./NoteBody";
 import { NoteProperties } from "./NoteProperties";
 import { NoteTitle } from "./NoteTitle";
 import { NoteTopBar } from "./NoteTopBar";
 import { ContextRail } from "./rail/ContextRail";
-import { SourceEditor } from "./SourceEditor";
 import { SuggestionCards } from "./SuggestionCards";
 import { SupersessionBanner } from "./SupersessionBanner";
 import { useNoteActions } from "./useNoteActions";
 import { useNoteDraft } from "./useNoteDraft";
 import { useNoteSuggestions } from "./useNoteSuggestions";
 import { VaultTree } from "./VaultTree";
-
-const RichEditor = lazy(() =>
-  import("@/editor/plate/RichEditor").then((m) => ({ default: m.RichEditor })),
-);
 
 const SOURCE_MODE_KEY = "loom.notes.sourceMode";
 
@@ -253,64 +249,5 @@ function NoNote({
         </Button>
       }
     />
-  );
-}
-
-function NoteBody({
-  note,
-  draft,
-  sourceMode,
-}: {
-  note: NonNullable<ReturnType<ReturnType<typeof useApp>["noteById"]>>;
-  draft: ReturnType<typeof useNoteDraft>;
-  sourceMode: boolean;
-}) {
-  const { notes, reloadNoteBody } = useApp();
-  if (!draft.bodyLoaded)
-    return note.bodyError ? (
-      <Alert variant="warning">
-        <AlertDescription className="text-warning-foreground">
-          <p>Could not load this note: {note.bodyError}</p>
-          {reloadNoteBody && (
-            <Button
-              size="xs"
-              variant="outline"
-              className="mt-2"
-              onClick={() => void reloadNoteBody(note.id)}
-            >
-              Retry
-            </Button>
-          )}
-        </AlertDescription>
-      </Alert>
-    ) : (
-      <div
-        className="flex flex-col gap-3"
-        role="status"
-        aria-label="Loading note"
-      >
-        <Skeleton className="h-4 w-full" />
-        <Skeleton className="h-4 w-11/12" />
-        <Skeleton className="h-4 w-4/5" />
-      </div>
-    );
-  if (sourceMode)
-    return (
-      <SourceEditor
-        key={`${note.id}:${draft.revision}`}
-        value={draft.draft}
-        notes={notes}
-        onChange={draft.setDraft}
-      />
-    );
-  return (
-    <Suspense fallback={<Skeleton className="h-40 w-full" />}>
-      <RichEditor
-        key={`${note.id}:${draft.revision}`}
-        noteId={note.id}
-        markdown={draft.draft}
-        onChange={draft.setDraft}
-      />
-    </Suspense>
   );
 }

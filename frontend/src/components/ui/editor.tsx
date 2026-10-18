@@ -85,6 +85,9 @@ const editorVariants = cva(
         none: "",
         // Loom note body: the user's editor font, 16px at 1.7 line height.
         note: "w-full pb-16 font-editor text-[16px] leading-[1.7] text-secondary-foreground",
+        // Graph note panel: same editor, tighter type.
+        noteCompact:
+          "w-full pb-6 font-editor text-[14px] leading-[1.65] text-secondary-foreground",
         select: "px-3 py-2 text-base data-readonly:w-fit",
       },
     },

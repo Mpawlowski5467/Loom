@@ -18,13 +18,25 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
+
+# typing_extensions, not typing: Pydantic rejects typing.TypedDict as a
+# response model on Python < 3.12, and these shapes are FastAPI response_models.
+from typing_extensions import TypedDict
 
 from agents.sanitize import scrub_untrusted
 from bridge.oauth import OAuthTokens, clear_tokens, load_tokens, save_tokens
+from bridge.oauth_apps import (
+    OAuthApp,
+    app_for_tokens,
+    builtin_microsoft_app,
+    choose_app,
+    custom_app,
+    find_app,
+)
 from bridge.outlook_cal import OutlookCalendarClient, OutlookCalendarError
 from core.capture_ingress import ingest_capture
-from core.config import GlobalConfig, settings
+from core.config import GlobalConfig, OutlookCalendarConfig, settings
 
 if TYPE_CHECKING:
     from bridge.calendar import CalendarEvent
@@ -95,6 +107,25 @@ def save_outlook_tokens(tokens: OAuthTokens) -> None:
     save_tokens(_tokens_path(), tokens)
 
 
+def outlook_app(outlook: OutlookCalendarConfig) -> OAuthApp | None:
+    """The app a new Outlook sign-in uses: the user's own, else Loom's."""
+    return choose_app(custom_app(outlook.client_id, outlook.client_secret), builtin_microsoft_app())
+
+
+def outlook_app_for(outlook: OutlookCalendarConfig, tokens: OAuthTokens) -> OAuthApp | None:
+    """The app that issued the stored Outlook tokens (refreshes must use it)."""
+    return app_for_tokens(
+        tokens, custom_app(outlook.client_id, outlook.client_secret), builtin_microsoft_app()
+    )
+
+
+def outlook_app_by_id(outlook: OutlookCalendarConfig, client_id: str) -> OAuthApp | None:
+    """The configured Outlook app with ``client_id`` (to finish a started flow)."""
+    return find_app(
+        client_id, custom_app(outlook.client_id, outlook.client_secret), builtin_microsoft_app()
+    )
+
+
 def clear_outlook_connection() -> None:
     """Wipe tokens and sync bookkeeping (disconnect / fresh re-connect)."""
     clear_tokens(_tokens_path())
@@ -129,16 +160,21 @@ async def sync_outlook_calendar(
 
     config = GlobalConfig.load(vm.config_path())
     outlook = config.outlook_calendar
-    if not outlook.client_id or not outlook.client_secret:
+    if outlook_app(outlook) is None:
         raise OutlookCalendarError("Add your Microsoft app's client ID and secret first")
     tokens = load_outlook_tokens()
     if tokens is None:
         raise OutlookCalendarError("Connect your Outlook account first")
+    app = outlook_app_for(outlook, tokens)
+    if app is None:
+        raise OutlookCalendarError(
+            "Reconnect Outlook: the app this account was connected with is gone"
+        )
 
     owns_client = client is None
     client = client or OutlookCalendarClient(
-        client_id=outlook.client_id,
-        client_secret=str(outlook.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_outlook_tokens,
     )
@@ -282,8 +318,7 @@ class OutlookCalendarSyncService:
             if (
                 not config.automation_policy.paused
                 and outlook.enabled
-                and outlook.client_id
-                and outlook.client_secret
+                and outlook_app(outlook) is not None
                 and load_outlook_tokens()
             ):
                 try:

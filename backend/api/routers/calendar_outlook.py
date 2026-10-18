@@ -16,7 +16,8 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from api.routers.oauth_support import loopback_redirect_uri, oauth_result_page
-from bridge.oauth import FLOW_TTL_SECONDS, consume_flow_state, new_flow_state
+from bridge.oauth import FLOW_TTL_SECONDS, consume_flow, new_flow_state, pkce_pair
+from bridge.oauth_apps import builtin_microsoft_app
 from bridge.outlook_cal import (
     OutlookCalendarClient,
     OutlookCalendarError,
@@ -28,6 +29,9 @@ from bridge.outlook_cal_service import (
     clear_outlook_connection,
     get_outlook_calendar_sync_service,
     load_outlook_tokens,
+    outlook_app,
+    outlook_app_by_id,
+    outlook_app_for,
     save_outlook_tokens,
     sync_outlook_calendar,
 )
@@ -66,6 +70,8 @@ class OutlookCalendarAutomationResponse(BaseModel):
     outlook: OAuthCalendarConfigPublic
     connection: OAuthCalendarConnection
     status: dict[str, Any]
+    # Loom ships its own Microsoft app, so users can connect without creating one.
+    builtin_app: bool = False
 
 
 class OutlookCalendarConnectResponse(BaseModel):
@@ -88,6 +94,7 @@ def _response(config: GlobalConfig) -> OutlookCalendarAutomationResponse:
             account=tokens.account if tokens is not None else "",
         ),
         status=get_outlook_calendar_sync_service().status(),
+        builtin_app=builtin_microsoft_app() is not None,
     )
 
 
@@ -105,7 +112,8 @@ def _validation_detail(exc: ValidationError) -> str:
 
 
 def _incomplete(config: OutlookCalendarConfig) -> bool:
-    return not (config.client_id and config.client_secret)
+    """No app to sign in with: neither the user's own nor a built-in one."""
+    return outlook_app(config) is None
 
 
 def _require_app_credentials(config: GlobalConfig) -> OutlookCalendarConfig:
@@ -162,16 +170,20 @@ async def connect_outlook_calendar(
 ) -> OutlookCalendarConnectResponse:
     """Create a short-lived OAuth flow and return the Microsoft consent URL."""
     outlook = _require_app_credentials(GlobalConfig.load(vm.config_path()))
+    app = outlook_app(outlook)
+    assert app is not None  # _require_app_credentials guarantees one
     try:
         redirect_uri = loopback_redirect_uri(request, _CALLBACK_ROUTE)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    state = new_flow_state(_ADAPTER)
+    verifier, challenge = pkce_pair()
+    state = new_flow_state(_ADAPTER, code_verifier=verifier, client_id=app.client_id)
     return OutlookCalendarConnectResponse(
         authorization_url=authorization_url(
-            client_id=outlook.client_id,
+            client_id=app.client_id,
             redirect_uri=redirect_uri,
             state=state,
+            code_challenge=challenge,
         ),
         expires_in=FLOW_TTL_SECONDS,
     )
@@ -189,21 +201,21 @@ async def outlook_calendar_oauth_callback(
     # in its normal structured validation response.
     if not state or not code or len(state) > 256 or len(code) > 4096:
         return oauth_result_page("Outlook Calendar", success=False)
-    if not consume_flow_state(_ADAPTER, state):
+    flow = consume_flow(_ADAPTER, state)
+    if flow is None:
         return oauth_result_page("Outlook Calendar", success=False)
 
     config = GlobalConfig.load(vm.config_path())
-    outlook = config.outlook_calendar
-    if _incomplete(outlook):
+    # Finish with the app the flow started with; it may have been removed since.
+    app = outlook_app_by_id(config.outlook_calendar, flow.client_id)
+    if app is None:
         return oauth_result_page("Outlook Calendar", success=False, error_status=409)
-    client = OutlookCalendarClient(
-        client_id=outlook.client_id,
-        client_secret=str(outlook.client_secret),
-    )
+    client = OutlookCalendarClient(client_id=app.client_id, client_secret=app.client_secret)
     try:
         tokens = await client.exchange_code(
             code,
             redirect_uri=str(request.url_for(_CALLBACK_ROUTE)),
+            code_verifier=flow.code_verifier,
         )
         try:
             tokens.account = await client.fetch_account()
@@ -252,9 +264,15 @@ async def test_outlook_calendar_connection(
     tokens = load_outlook_tokens()
     if tokens is None:
         raise HTTPException(status_code=409, detail="Connect your Outlook account first")
+    app = outlook_app_for(outlook, tokens)
+    if app is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconnect Outlook: the app this account was connected with is gone",
+        )
     client = OutlookCalendarClient(
-        client_id=outlook.client_id,
-        client_secret=str(outlook.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_outlook_tokens,
     )

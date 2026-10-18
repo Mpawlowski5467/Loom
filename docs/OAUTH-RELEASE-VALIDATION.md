@@ -12,7 +12,9 @@ gate.
   - `http://localhost:8000/api/automations/google/callback`
   - `http://localhost:8000/api/automations/calendar/outlook/callback`
 - GitHub uses device authorization rather than a callback. Enable Device Flow
-  on the GitHub App or OAuth App and set `LOOM_GITHUB_OAUTH_CLIENT_ID`.
+  on the OAuth App and set `LOOM_GITHUB_CLIENT_ID`. Built-in Google and
+  Microsoft apps use `LOOM_GOOGLE_CLIENT_ID`, `LOOM_GOOGLE_CLIENT_SECRET`, and
+  `LOOM_MICROSOFT_CLIENT_ID`; see [oauth-apps.md](oauth-apps.md).
 - Configure at least one dedicated GitHub test repository in Loom. Grant only
   the read permissions needed for repository metadata, commits, issues, and
   pull requests.
@@ -68,7 +70,9 @@ For GitHub specifically:
   the connected GitHub username after approval.
 - Exercise one public and one private test repository when possible. Confirm
   inaccessible repositories fail independently without blocking other repos.
-- Confirm the GitHub App cannot write repository contents, comments, issues,
+- Confirm a default sign-in requests no OAuth scope. Opting in to private
+  repositories requests `repo`, which GitHub does not offer read-only, so
+  confirm Loom itself never writes repository contents, comments, issues,
   pull requests, or workflow state.
 - Confirm the one-time device code and access token do not appear in API
   responses after connection or in normal application logs.

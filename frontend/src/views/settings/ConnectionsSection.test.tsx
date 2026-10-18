@@ -8,7 +8,6 @@ import {
   disconnectOutlookCalendar,
   getEmailAutomation,
   getGitHubAutomation,
-  getGitHubOAuthStatus,
   getGoogleConnector,
   getOutlookCalendarAutomation,
   getStandupAutomation,
@@ -18,7 +17,6 @@ import {
   syncGmail,
   syncGoogleCalendar,
   syncOutlookCalendar,
-  startGitHubOAuth,
   testCalendar,
   testEmail,
   testGitHub,
@@ -44,11 +42,11 @@ vi.mock("../../api/automations", () => ({
   testCalendar: vi.fn(),
   syncCalendar: vi.fn(),
   getGitHubAutomation: vi.fn(),
-  getGitHubOAuthStatus: vi.fn(),
-  startGitHubOAuth: vi.fn(),
   updateGitHubAutomation: vi.fn(),
   testGitHub: vi.fn(),
   syncGitHub: vi.fn(),
+  startGitHubSignIn: vi.fn(),
+  pollGitHubSignIn: vi.fn(),
   getEmailAutomation: vi.fn(),
   updateEmailAutomation: vi.fn(),
   testEmail: vi.fn(),
@@ -206,16 +204,6 @@ describe("ConnectionsSection", () => {
       capture_ids: ["thr_one"],
     });
     vi.mocked(getGitHubAutomation).mockResolvedValue(githubAutomation);
-    vi.mocked(getGitHubOAuthStatus).mockResolvedValue({
-      status: "pending",
-      error: "",
-    });
-    vi.mocked(startGitHubOAuth).mockResolvedValue({
-      verification_uri: "https://github.com/login/device",
-      user_code: "ABCD-EFGH",
-      expires_in: 900,
-      interval: 5,
-    });
     vi.mocked(updateGitHubAutomation).mockResolvedValue(githubAutomation);
     vi.mocked(testGitHub).mockResolvedValue({ repos: [] });
     vi.mocked(syncGitHub).mockResolvedValue({
@@ -384,28 +372,40 @@ describe("ConnectionsSection", () => {
     ).toHaveValue("");
   });
 
-  it("starts browser GitHub authorization and shows the one-time code", async () => {
-    const user = userEvent.setup();
-    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+  it("offers Sign in with GitHub first when Loom ships a GitHub app", async () => {
     vi.mocked(getGitHubAutomation).mockResolvedValue({
       ...githubAutomation,
-      oauth_available: true,
+      builtin_app: true,
     });
-    const { unmount } = renderSection();
+    renderSection();
 
-    await user.click(
-      await screen.findByRole("button", { name: "Connect GitHub" }),
-    );
+    expect(
+      await screen.findByRole("button", { name: "Sign in with GitHub" }),
+    ).toBeInTheDocument();
+    // The token field is still there, tucked behind a disclosure.
+    expect(
+      screen.getByText("Use a personal access token instead"),
+    ).toBeInTheDocument();
+  });
 
-    await waitFor(() => expect(startGitHubOAuth).toHaveBeenCalledOnce());
-    expect(openSpy).toHaveBeenCalledWith(
-      "https://github.com/login/device",
-      "_blank",
-      "noopener,noreferrer",
-    );
-    expect(await screen.findByText(/ABCD-EFGH/)).toBeInTheDocument();
-    unmount();
-    openSpy.mockRestore();
+  it("shows the signed-in GitHub account instead of the token field", async () => {
+    vi.mocked(getGitHubAutomation).mockResolvedValue({
+      ...githubAutomation,
+      builtin_app: true,
+      github: {
+        ...githubAutomation.github,
+        token_set: true,
+        account: "ada-dev",
+      },
+    });
+    renderSection();
+
+    expect(
+      await screen.findByText("Signed in as @ada-dev"),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText("Use a personal access token instead"),
+    ).not.toBeInTheDocument();
   });
 
   it("saves GitHub settings with repos serialized from lines", async () => {
@@ -817,18 +817,16 @@ describe("ConnectionsSection", () => {
     openSpy.mockRestore();
   });
 
-  it("managed Google OAuth is a direct sign-in with no credential form", async () => {
+  it("built-in Google app is a direct sign-in with no credential form", async () => {
     vi.mocked(getGoogleConnector).mockResolvedValue({
       ...googleConnector,
-      managed_oauth: true,
-      google: { ...googleConnector.google, client_secret_set: true },
+      builtin_app: true,
     });
     renderSection();
     const card = (
       await screen.findByRole("heading", { name: "Google" })
     ).closest("section") as HTMLElement;
 
-    expect(within(card).getByText(/OAuth is ready/)).toBeInTheDocument();
     expect(
       within(card).getByRole("button", { name: "Sign in with Google" }),
     ).toBeEnabled();

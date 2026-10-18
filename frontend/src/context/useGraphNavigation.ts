@@ -127,7 +127,7 @@ export interface GraphNavigationState {
 
 export function useGraphNavigation(
   graphFixture: GraphFixtureSize | null,
-  setTab: Dispatch<SetStateAction<Tab>>,
+  setTab: (tab: Tab) => void,
 ): GraphNavigationState {
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
   const [graphSelectedId, setGraphSelectedId] = useState<NoteId | null>(null);

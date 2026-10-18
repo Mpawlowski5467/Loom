@@ -10,18 +10,24 @@ export type NodeType =
 
 export type NoteStatus = "active" | "archived";
 
-export type Tab = "today" | "graph" | "thread" | "inbox" | "board" | "settings";
+/** Top-level views; each maps to a route (see app/routes.ts). */
+export type Tab =
+  | "graph"
+  | "notes"
+  | "board"
+  | "inbox"
+  | "threads"
+  | "settings";
 
+/** Settings sections, in nav order; each is `/settings/<section>`. */
 export type SettingsSection =
+  | "general"
   | "appearance"
-  | "providers"
-  | "connections"
-  | "hardware"
-  | "policy"
-  | "vault"
-  | "archived"
-  | "about"
-  | "danger";
+  | "agents"
+  | "models"
+  | "privacy"
+  | "integrations"
+  | "vault";
 
 export type GraphLayout =
   | "force"

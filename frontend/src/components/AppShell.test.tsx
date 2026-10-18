@@ -1,6 +1,6 @@
 /*
 Frontend testing conventions: render, assert visible output; prefer getByRole.
-Mock heavy children (MainShell pulls Sigma/WebGL) so we can test phase logic.
+Mock heavy children (AppLayout pulls Sigma/WebGL) so we can test phase logic.
 */
 import {
   act,
@@ -13,8 +13,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { decidePhase, useBootTimeout, BOOT_TIMEOUT_MS } from "./useBootTimeout";
 
 // Stub the heavy phase targets so importing AppShell doesn't pull Sigma/WebGL.
-vi.mock("./MainShell", () => ({
-  MainShell: () => <div>main-shell</div>,
+vi.mock("./shell/AppLayout", () => ({
+  AppLayout: () => <div>main-shell</div>,
 }));
 vi.mock("../onboarding/OnboardingFlow", () => ({
   OnboardingFlow: () => <div>onboarding</div>,

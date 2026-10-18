@@ -3,8 +3,18 @@ import { fetchAgentActivity, type AgentActivity } from "../api/activity";
 import { fetchChangelogFeed } from "../api/changelog";
 import type { AgentEvent } from "../data/types";
 
-const ACTIVITY_INTERVAL_MS = 1000;
+/** Board cadence: live cards and pulse lines. */
+export const BOARD_ACTIVITY_MS = 1000;
+/** Header cadence: just enough for the "Weaver running…" status. */
+export const HEADER_ACTIVITY_MS = 5000;
 const CHANGELOG_INTERVAL_MS = 3000;
+
+export interface AgentPollingOptions {
+  /** Activity poll interval, or null to stop polling activity. */
+  activityMs: number | null;
+  /** Poll the changelog feed (only the Board needs it). */
+  changelog: boolean;
+}
 
 export interface AgentPolling {
   changelog: AgentEvent[];
@@ -12,15 +22,15 @@ export interface AgentPolling {
 }
 
 /**
- * Poll agent activity (1s) and the changelog feed (3s) — but only while
- * ``enabled``. The caller passes ``true`` only when the Board (the sole
- * consumer of this data) is the active tab, the app is online, and it's not
- * demo mode; toggling it off tears the timers down. Fetches are also skipped
- * while the browser tab is hidden, so a backgrounded window does no network
- * work. ``demoChangelog`` seeds the feed in demo mode (no backend to poll).
+ * Poll agent activity and the changelog feed. The caller picks the cadence:
+ * the Board polls activity every second plus the changelog every 3s; other
+ * views poll activity slowly for the header's agent status. Pass
+ * `activityMs: null, changelog: false` (offline, demo) to stop everything.
+ * Fetches are skipped while the browser tab is hidden, so a backgrounded
+ * window does no network work. ``demoChangelog`` seeds the feed in demo mode.
  */
 export function useAgentPolling(
-  enabled: boolean,
+  { activityMs, changelog: pollFeed }: AgentPollingOptions,
   demoChangelog: AgentEvent[],
 ): AgentPolling {
   const [changelog, setChangelog] = useState<AgentEvent[]>(demoChangelog);
@@ -29,7 +39,7 @@ export function useAgentPolling(
   >({});
 
   useEffect(() => {
-    if (!enabled) return;
+    if (activityMs === null && !pollFeed) return;
     let cancelled = false;
     let activityTimer: number | null = null;
     let changelogTimer: number | null = null;
@@ -47,7 +57,7 @@ export function useAgentPolling(
         }
       }
       if (!cancelled) {
-        activityTimer = window.setTimeout(pollActivity, ACTIVITY_INTERVAL_MS);
+        activityTimer = window.setTimeout(pollActivity, activityMs ?? 0);
       }
     };
 
@@ -81,15 +91,15 @@ export function useAgentPolling(
       }
     };
 
-    void pollActivity();
-    void pollChangelog();
+    if (activityMs !== null) void pollActivity();
+    if (pollFeed) void pollChangelog();
 
     return () => {
       cancelled = true;
       if (activityTimer !== null) window.clearTimeout(activityTimer);
       if (changelogTimer !== null) window.clearTimeout(changelogTimer);
     };
-  }, [enabled]);
+  }, [activityMs, pollFeed]);
 
   return { changelog, agentActivity };
 }

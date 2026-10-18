@@ -7,7 +7,7 @@ export function NoteAnchorScroll() {
   const { tab, currentNoteId, noteHeading, noteById } = useApp();
   const note = currentNoteId ? noteById(currentNoteId) : undefined;
   useEffect(() => {
-    if (tab !== "thread" || !noteHeading || !note || note.bodyLoaded === false)
+    if (tab !== "notes" || !noteHeading || !note || note.bodyLoaded === false)
       return;
     const normalize = (text: string) =>
       text

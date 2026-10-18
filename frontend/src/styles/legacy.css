@@ -15,11 +15,9 @@
 @import "./views/splash.css";
 @import "./views/graph.css";
 @import "./views/thread.css";
-@import "./views/today.css";
 @import "./views/inbox.css";
 @import "./views/board.css";
 @import "./views/palette.css";
-@import "./views/toasts.css";
 @import "./views/onboarding.css";
 @import "./views/settings.css";
 @import "./views/note-modal.css";

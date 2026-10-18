@@ -13,6 +13,7 @@ import type { AppContextValue } from "./app-ctx";
 import type { UseLoomConfigResult } from "./useLoomConfig";
 import { AppProvider } from "./AppContext";
 import { useApp } from "./app-ctx";
+import { MemoryRouter } from "react-router";
 
 const { mockConfig } = vi.hoisted(() => ({
   mockConfig: {
@@ -61,6 +62,8 @@ vi.mock("../api/agentsRegistry", () => ({
   listAgentRegistry: vi.fn(() => Promise.resolve([])),
 }));
 vi.mock("./useAgentPolling", () => ({
+  BOARD_ACTIVITY_MS: 1000,
+  HEADER_ACTIVITY_MS: 5000,
   useAgentPolling: vi.fn(() => ({ changelog: EMPTY, agentActivity: EMPTY })),
 }));
 vi.mock("./useHealthPolling", () => ({
@@ -82,9 +85,11 @@ function Probe(): ReactNode {
 describe("AppContext", () => {
   it("exposes default tab graph", () => {
     render(
-      <AppProvider>
-        <Probe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <Probe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("tab:graph")).toBeInTheDocument();
@@ -93,9 +98,11 @@ describe("AppContext", () => {
   it("setTab updates value", async () => {
     const user = userEvent.setup();
     render(
-      <AppProvider>
-        <Probe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <Probe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "Open settings" }));
@@ -106,9 +113,11 @@ describe("AppContext", () => {
   it("keeps persistent graph selection in context", async () => {
     const user = userEvent.setup();
     render(
-      <AppProvider>
-        <Probe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <Probe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "Select node" }));
@@ -130,10 +139,12 @@ describe("AppContext", () => {
     function Harness(): ReactNode {
       const [, setN] = useState(0);
       return (
-        <AppProvider>
-          <Capture />
-          <button onClick={() => setN((n) => n + 1)}>bump</button>
-        </AppProvider>
+        <MemoryRouter>
+          <AppProvider>
+            <Capture />
+            <button onClick={() => setN((n) => n + 1)}>bump</button>
+          </AppProvider>
+        </MemoryRouter>
       );
     }
 
@@ -168,9 +179,11 @@ describe("AppContext", () => {
     }
 
     render(
-      <AppProvider>
-        <Capture />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <Capture />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     await user.click(screen.getByRole("button", { name: "change tab" }));
@@ -197,9 +210,11 @@ describe("AppContext — persistence", () => {
         );
       }
       render(
-        <AppProvider>
-          <Probe />
-        </AppProvider>,
+        <MemoryRouter>
+          <AppProvider>
+            <Probe />
+          </AppProvider>
+        </MemoryRouter>,
       );
       const displayWrites = () =>
         setSpy.mock.calls.filter((c) => c[0] === "loom.graphDisplay").length;
@@ -254,9 +269,11 @@ describe("AppContext — council streams", () => {
 
     const user = userEvent.setup();
     render(
-      <AppProvider>
-        <Probe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <Probe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     // First send: one pending reply bubble appears.

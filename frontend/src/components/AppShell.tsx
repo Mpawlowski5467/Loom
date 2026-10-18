@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
-import { MainShell } from "./MainShell";
+import { AppLayout } from "./shell/AppLayout";
 import { OnboardingFlow } from "../onboarding/OnboardingFlow";
 import { decidePhase, useBootTimeout } from "./useBootTimeout";
 
@@ -8,8 +8,8 @@ import { decidePhase, useBootTimeout } from "./useBootTimeout";
  * Phase router. While the config is in flight we paint a minimal boot screen.
  * If it never resolves (slow/wedged backend) we surface a Retry instead of an
  * infinite spinner. Once we know whether onboarding is complete we drop the
- * user into the wizard or the main shell. The post-onboarding splash lives
- * inside MainShell.
+ * user into the wizard or the app layout. The post-onboarding splash lives
+ * inside AppLayout.
  */
 export function AppShell(): ReactNode {
   const { config, configLoading, offline, onboardingComplete, refreshConfig } =
@@ -35,7 +35,7 @@ export function AppShell(): ReactNode {
   if (phase === "onboarding") {
     return <OnboardingFlow />;
   }
-  return <MainShell />;
+  return <AppLayout />;
 }
 
 function BootScreen({

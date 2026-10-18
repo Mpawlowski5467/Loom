@@ -127,9 +127,7 @@ export interface AppContextValue {
   quickCaptureOpen: boolean;
   setQuickCaptureOpen: (b: boolean) => void;
 
-  toasts: Toast[];
   pushToast: (toast: Omit<Toast, "id">) => void;
-  dismissToast: (id: string) => void;
 
   agents: Agent[];
   agentActivity: Record<string, AgentActivity>;

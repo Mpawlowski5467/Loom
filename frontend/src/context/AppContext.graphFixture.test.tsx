@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseLoomConfigResult } from "./useLoomConfig";
 import { AppProvider } from "./AppContext";
 import { useApp } from "./app-ctx";
+import { MemoryRouter } from "react-router";
 
 const { mockConfig } = vi.hoisted(() => ({
   mockConfig: {
@@ -86,9 +87,11 @@ describe("AppProvider graph fixture mode", () => {
     const storedFilters = localStorage.getItem("loom.graphFilters");
     const storedDisplay = localStorage.getItem("loom.graphDisplay");
     render(
-      <AppProvider>
-        <FixtureProbe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <FixtureProbe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("500")).toBeInTheDocument();

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { ReactNode } from "react";
-import type { Agent, NoteId, SettingsSection, Tab, Toast } from "../data/types";
+import type { Agent, Toast } from "../data/types";
 import { agents as agentsSeed } from "../data/agents";
 import { captures as capturesSeed } from "../data/captures";
 import { changelogSeed } from "../data/changelog";
@@ -15,13 +16,17 @@ import { readDemoMode } from "../data/demoMode";
 import { AppCtx } from "./app-ctx";
 import type { AppContextValue } from "./app-ctx";
 import { useLoomConfig } from "./useLoomConfig";
-import { useAgentPolling } from "./useAgentPolling";
+import {
+  BOARD_ACTIVITY_MS,
+  HEADER_ACTIVITY_MS,
+  useAgentPolling,
+} from "./useAgentPolling";
 import { useHealthPolling } from "./useHealthPolling";
 import { useVaultContent } from "./useVaultContent";
 import { useCouncil } from "./useCouncil";
 import { useCustomAgents } from "./useCustomAgents";
 import { useGraphNavigation } from "./useGraphNavigation";
-import { readNavigation, useNavigationHistory } from "./useNavigationHistory";
+import { useNoteRouting, useRoute } from "./useRouteNavigation";
 
 const TREE_VISIBLE_KEY = "loom.treeVisible";
 
@@ -63,21 +68,19 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   );
   const initialCaptures = useMemo(() => (demo ? capturesSeed : []), [demo]);
 
-  const [tab, setTab] = useState<Tab>(() => readNavigation().tab);
-  const [settingsSection, setSettingsSection] =
-    useState<SettingsSection>("appearance");
-  const [currentNoteId, setCurrentNoteId] = useState<NoteId | null>(
-    () => readNavigation().noteId ?? "thr_t001",
-  );
-  const [noteHeading, setNoteHeading] = useState<string>(
-    () => readNavigation().heading,
-  );
-
-  const openNote = useCallback((id: NoteId, heading = "") => {
-    setCurrentNoteId(id);
-    setNoteHeading(heading);
-    setTab("thread");
-  }, []);
+  // Navigation lives in the URL (react-router); these are derived from it.
+  const routeApi = useRoute();
+  const {
+    route,
+    setTab,
+    setSettingsSection,
+    openNote,
+    lastNoteId,
+    setLastNoteId,
+  } = routeApi;
+  const tab = route.tab;
+  const settingsSection = route.settingsSection;
+  const noteHeading = route.heading;
 
   const {
     graphFocusId,
@@ -124,27 +127,17 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
 
-  const [toasts, setToasts] = useState<Toast[]>([]);
-  const pushToast = useCallback((toast: Omit<Toast, "id">) => {
-    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-    setToasts((prev) => [...prev.slice(-2), { ...toast, id }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 4000);
-  }, []);
-  const dismissToast = useCallback((id: string) => {
-    setToasts((prev) => prev.filter((t) => t.id !== id));
+  // Toasts render through Sonner (<Toaster /> in the app layout). The agent,
+  // when present, is shown as the toast's description.
+  const pushToast = useCallback((t: Omit<Toast, "id">) => {
+    toast(t.body, {
+      description: t.agent
+        ? t.agent.charAt(0).toUpperCase() + t.agent.slice(1)
+        : undefined,
+    });
   }, []);
 
   const liveLoomConfig = useLoomConfig();
-  useNavigationHistory({
-    tab,
-    noteId: currentNoteId,
-    heading: noteHeading,
-    setTab,
-    setNoteId: setCurrentNoteId,
-    setHeading: setNoteHeading,
-  });
   // A graph fixture must render immediately even with no backend. The config
   // hook still owns config loading, while these read-only shell fields place
   // the app in its existing standalone/offline-ready phase.
@@ -188,12 +181,13 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   } = useVaultContent({
     enabled: !demo && loomConfig.onboardingComplete && !loomConfig.offline,
     activeVault: loomConfig.config?.active_vault,
-    currentNoteId: tab === "thread" ? currentNoteId : graphSelectedId,
+    currentNoteId: tab === "notes" ? lastNoteId : graphSelectedId,
     initialNotes,
     initialCaptures,
-    setCurrentNoteId,
+    setCurrentNoteId: setLastNoteId,
     onLoadError: reportVaultContentError,
   });
+  const currentNoteId = useNoteRouting(routeApi, notes, notesLoaded);
 
   // Agents are part of the program (Weaver, Spider, …). Identities always
   // show; runtime stats / lastAction are only populated in demo mode.
@@ -207,14 +201,21 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
           lastAction: "",
         })),
   );
-  // Agent activity (1s) + changelog (3s) feed only the Board, so poll only
-  // while it's the active tab, online, and not demo — never in the background.
-  // Avoids 1s/3s network chatter when the user is on another view.
+  // The Board polls agent activity every second plus the changelog; every
+  // other view polls activity slowly for the header's agent status. Nothing
+  // polls offline, in demo mode, or before onboarding.
+  const pollAgents =
+    !demo && loomConfig.onboardingComplete && !loomConfig.offline;
+  const onBoard = tab === "board";
   const { changelog, agentActivity } = useAgentPolling(
-    !demo &&
-      loomConfig.onboardingComplete &&
-      !loomConfig.offline &&
-      tab === "board",
+    {
+      activityMs: !pollAgents
+        ? null
+        : onBoard
+          ? BOARD_ACTIVITY_MS
+          : HEADER_ACTIVITY_MS,
+      changelog: pollAgents && onBoard,
+    },
     demo ? changelogSeed : [],
   );
   // Index-drift signal — slow poll (8s), independent of the active tab so the
@@ -303,9 +304,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       quickCaptureOpen,
       setQuickCaptureOpen,
 
-      toasts,
       pushToast,
-      dismissToast,
 
       agents: agentsState,
       agentActivity,
@@ -367,7 +366,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       treeVisible,
       paletteOpen,
       quickCaptureOpen,
-      toasts,
       agentActivity,
       changelog,
       unindexedCount,
@@ -400,7 +398,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setTreeVisible,
       setPaletteOpen,
       pushToast,
-      dismissToast,
       agentsState,
       refreshCustomAgents,
       postCouncilMessage,

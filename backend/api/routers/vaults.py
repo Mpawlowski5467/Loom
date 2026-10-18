@@ -779,16 +779,35 @@ def _restore_tarball(
                 logger.warning("Failed to remove completed import backup %s", backup, exc_info=True)
 
 
+def _is_git_metadata(member_name: str) -> bool:
+    """True for anything under a ``.git`` directory (any case, Windows aliases too).
+
+    A vault's git history is local state: an archive that carries ``.git``
+    (config, hooks, alternates) could make Loom's git calls run commands, so
+    it is never imported. Case-insensitive filesystems treat ``.GIT`` as
+    ``.git``; Windows also resolves ``GIT~1`` and trailing dots or spaces.
+    """
+    parts = member_name.replace("\\", "/").split("/")
+    return any(part.lower().rstrip(". ") in {".git", "git~1"} for part in parts)
+
+
 def _validated_import_members(archive_path: Path) -> list[tarfile.TarInfo]:
-    """Preflight member count/type and expanded bytes before extraction."""
+    """Preflight member count/type and expanded bytes before extraction.
+
+    Git metadata is dropped: an imported vault always starts a fresh history.
+    """
     members: list[tarfile.TarInfo] = []
+    seen = 0
     expanded_bytes = 0
     with tarfile.open(archive_path, mode="r:gz") as tar:
         for member in tar:
-            if len(members) >= _MAX_IMPORT_MEMBERS:
+            seen += 1
+            if seen > _MAX_IMPORT_MEMBERS:
                 raise VaultImportLimitError(
                     f"Import archive contains more than {_MAX_IMPORT_MEMBERS} entries"
                 )
+            if _is_git_metadata(member.name):
+                continue
             if not (member.isfile() or member.isdir()):
                 raise VaultPathError(f"Tarball member type is not allowed: {member.name}")
             if member.size < 0:

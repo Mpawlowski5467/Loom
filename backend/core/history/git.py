@@ -23,13 +23,44 @@ from pathlib import Path
 
 ZERO_SHA = "0" * 40
 _TIMEOUT_SECONDS = 60
-# Inherited repository-selection variables would point git at another repo.
-_STRIPPED_ENV = ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_OBJECT_DIRECTORY")
+# Inherited variables could point git at another repo or inject config/programs.
+_STRIPPED_ENV = (
+    "GIT_DIR",
+    "GIT_WORK_TREE",
+    "GIT_INDEX_FILE",
+    "GIT_OBJECT_DIRECTORY",
+    "GIT_EXTERNAL_DIFF",
+    "GIT_CONFIG_PARAMETERS",
+    "GIT_CONFIG_COUNT",
+    "GIT_ATTR_SOURCE",
+)
 _GIT_ENV = {
     "GIT_TERMINAL_PROMPT": "0",
     "GIT_LITERAL_PATHSPECS": "1",
+    "GIT_CONFIG_NOSYSTEM": "1",
     "LC_ALL": "C",
 }
+# A vault's own git config is untrusted (a vault folder can come from anywhere),
+# so every command overrides each setting that would make git run a program.
+# Command-line config outranks every config file, including includes.
+_SAFE_CONFIG = (
+    "core.fsmonitor=false",
+    f"core.hooksPath={os.devnull}",
+    "core.quotepath=off",
+    "core.autocrlf=false",
+    "log.showSignature=false",
+    "protocol.allow=never",
+    "safe.bareRepository=explicit",
+)
+# Filter drivers and content conversions are chosen by attributes, which the
+# vault's files can set. This block goes last in $GIT_DIR/info/attributes,
+# which outranks every .gitattributes, so no clean/smudge/process filter runs
+# and committed bytes are exactly the bytes on disk.
+_ATTRIBUTES_BEGIN = "# >>> loom: neutral attributes (managed) >>>"
+_ATTRIBUTES_END = "# <<< loom: neutral attributes <<<"
+_NEUTRAL_ATTRIBUTES = "* -filter -text -ident -working-tree-encoding"
+# Diff drivers can name textconv/external-diff programs; never use them.
+_NO_DRIVERS = ("--no-textconv", "--no-ext-diff")
 _RECORD_SEP = "\x1e"
 _FIELD_SEP = "\x1f"
 
@@ -73,6 +104,7 @@ class GitRepo:
     def __init__(self, root: Path) -> None:
         self.root = root
         self._object_format = ""
+        self._attributes_neutral = False
 
     # -- process plumbing -------------------------------------------------
 
@@ -84,22 +116,26 @@ class GitRepo:
         check: bool = True,
     ) -> subprocess.CompletedProcess[bytes]:
         """Run one git command in the vault and return the completed process."""
+        if not self._attributes_neutral and args[0] != "init" and self.is_repo():
+            self._neutralize_attributes()
+        return self._exec(args, stdin=stdin, env=env, check=check)
+
+    def _exec(
+        self,
+        args: tuple[str, ...],
+        *,
+        stdin: bytes | None = None,
+        env: dict[str, str] | None = None,
+        check: bool = True,
+    ) -> subprocess.CompletedProcess[bytes]:
         exe = shutil.which("git")
         if exe is None:
             raise GitUnavailableError("git is not installed")
         full_env = {k: v for k, v in os.environ.items() if k not in _STRIPPED_ENV}
         full_env.update(_GIT_ENV)
         full_env.update(env or {})
-        cmd = [
-            exe,
-            "-c",
-            f"safe.directory={self.root}",
-            "-c",
-            "core.quotepath=off",
-            "-c",
-            "core.autocrlf=false",
-            *args,
-        ]
+        config = [f"safe.directory={self.root}", *_SAFE_CONFIG]
+        cmd = [exe, *(arg for item in config for arg in ("-c", item)), *args]
         try:
             proc = subprocess.run(
                 cmd,
@@ -116,6 +152,28 @@ class GitRepo:
             detail = proc.stderr.decode("utf-8", "replace").strip()
             raise GitError(f"git {args[0]} failed: {detail}")
         return proc
+
+    def _neutralize_attributes(self) -> None:
+        """Append Loom's neutral-attributes block to $GIT_DIR/info/attributes."""
+        located = self._exec(("rev-parse", "--git-path", "info/attributes")).stdout
+        path = self.root / located.decode("utf-8", "replace").strip()
+        try:
+            existing = path.read_text(encoding="utf-8") if path.exists() else ""
+            block = f"{_ATTRIBUTES_BEGIN}\n{_NEUTRAL_ATTRIBUTES}\n{_ATTRIBUTES_END}\n"
+            if not existing.endswith(block):
+                start = existing.find(_ATTRIBUTES_BEGIN)
+                end = existing.find(_ATTRIBUTES_END)
+                if start != -1 and end > start:
+                    existing = existing[:start] + existing[end + len(_ATTRIBUTES_END) :].lstrip(
+                        "\n"
+                    )
+                if existing and not existing.endswith("\n"):
+                    existing += "\n"
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(existing + block, encoding="utf-8")
+        except OSError as exc:  # never run git on a repo we couldn't make inert
+            raise GitError(f"Cannot secure vault git attributes: {exc}") from exc
+        self._attributes_neutral = True
 
     def text(
         self, *args: str, stdin: bytes | None = None, env: dict[str, str] | None = None
@@ -183,14 +241,21 @@ class GitRepo:
     def status_entries(self) -> list[tuple[str, str]]:
         """``(XY, path)`` for paths whose working tree differs from HEAD (honours .gitignore)."""
         raw = self.run(
-            "status", "--porcelain=v1", "-z", "--untracked-files=all", "--no-renames"
+            "status",
+            "--porcelain=v1",
+            "-z",
+            "--untracked-files=all",
+            "--no-renames",
+            "--ignore-submodules=all",
         ).stdout.decode("utf-8", "replace")
         entries = {entry[3:]: entry[:2] for entry in raw.split("\0") if len(entry) > 3}
         return sorted((code, path) for path, code in entries.items())
 
     def changed_files(self, sha: str) -> list[tuple[str, str]]:
         """``(status, path)`` pairs a commit changed relative to its first parent."""
-        raw = self.text("diff-tree", "-r", "--root", "--no-renames", "--name-status", "-z", sha)
+        raw = self.text(
+            "diff-tree", *_NO_DRIVERS, "-r", "--root", "--no-renames", "--name-status", "-z", sha
+        )
         parts = [p for p in raw.split("\0") if p]
         if parts and parts[0] == sha:
             parts = parts[1:]
@@ -198,7 +263,9 @@ class GitRepo:
 
     def patch(self, sha: str) -> str:
         """The unified diff a commit introduced."""
-        return self.text("show", "--format=", "--no-color", "--no-renames", "--patch", sha)
+        return self.text(
+            "show", *_NO_DRIVERS, "--format=", "--no-color", "--no-renames", "--patch", sha
+        )
 
     # -- commits ----------------------------------------------------------
 
@@ -272,7 +339,13 @@ class GitRepo:
         if self.head() is None:
             return []
         fmt = _FIELD_SEP.join(["%H", "%P", "%an", "%aI", "%B"])
-        args = ["log", f"-n{limit}", f"--format={_RECORD_SEP}{fmt}{_FIELD_SEP}", "--name-only"]
+        args = [
+            "log",
+            *_NO_DRIVERS,
+            f"-n{limit}",
+            f"--format={_RECORD_SEP}{fmt}{_FIELD_SEP}",
+            "--name-only",
+        ]
         for pattern in greps or []:
             args.append(f"--grep={pattern}")
         if greps and len(greps) > 1:

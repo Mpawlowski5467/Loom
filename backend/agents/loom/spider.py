@@ -21,6 +21,7 @@ from agents.loom.spider_candidates import find_candidates
 from agents.loom.spider_linker import apply_links, persist_suggestions
 from agents.loom.spider_lookup import build_title_map
 from agents.loom.spider_models import LinkCandidate, ScanReport, VaultScanReport
+from core.history import commit_group
 from core.notes import Note, parse_note
 
 if TYPE_CHECKING:
@@ -134,27 +135,34 @@ class Spider(BaseAgent):
     async def scan_vault(self) -> int:
         """Run scan_for_connections on all notes. Returns total new links."""
         total = 0
-        for md_path in self._iter_vault_notes():
-            try:
-                linked = await self.scan_for_connections(md_path)
-                total += len(linked)
-            except Exception:
-                logger.warning("Spider scan failed for %s", md_path, exc_info=True)
+        async with commit_group(
+            agent="spider", action="scan-vault", reason="Vault-wide connection scan"
+        ):
+            for md_path in self._iter_vault_notes():
+                try:
+                    linked = await self.scan_for_connections(md_path)
+                    total += len(linked)
+                except Exception:
+                    logger.warning("Spider scan failed for %s", md_path, exc_info=True)
         return total
 
     async def scan_vault_report(self) -> VaultScanReport:
         """Run scan_and_report on all notes. Returns full vault report."""
         vault_report = VaultScanReport()
 
-        for md_path in self._iter_vault_notes():
-            try:
-                report = await self.scan_and_report(md_path)
-                vault_report.reports.append(report)
-                vault_report.total_auto_linked += len(report.auto_linked)
-                vault_report.total_suggested += len(report.suggested)
-                vault_report.total_skipped += report.skipped
-            except Exception:
-                logger.warning("Spider scan failed for %s", md_path, exc_info=True)
+        # The whole scan is one history commit, not one per scanned note.
+        async with commit_group(
+            agent="spider", action="scan-vault", reason="Vault-wide connection scan"
+        ):
+            for md_path in self._iter_vault_notes():
+                try:
+                    report = await self.scan_and_report(md_path)
+                    vault_report.reports.append(report)
+                    vault_report.total_auto_linked += len(report.auto_linked)
+                    vault_report.total_suggested += len(report.suggested)
+                    vault_report.total_skipped += report.skipped
+                except Exception:
+                    logger.warning("Spider scan failed for %s", md_path, exc_info=True)
 
         return vault_report
 

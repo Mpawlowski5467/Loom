@@ -182,7 +182,7 @@ class AgentRunner:
                     if result.validation.status == "unavailable":
                         record.status = "error"
                         record.error = "; ".join(result.validation.reasons)
-                async with step("enforce"):
+                async with step("enforce", caller="sentinel"):
                     self._enforce_into_result(capture_path, note_path, result.validation, result)
             return result
 

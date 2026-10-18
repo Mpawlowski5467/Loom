@@ -288,7 +288,7 @@ def build_pipeline_graph(
     async def enforce_node(state: PipelineState) -> PipelineState:
         """Sentinel enforcement: archive unless failed; annotate accordingly."""
         errors = list(state.get("errors", []))
-        async with step("enforce"):
+        async with step("enforce", caller="sentinel"):
             flags = runner._enforce_verdict(
                 _resolve(state["capture_path"]),
                 _resolve(state["note_path"]) if state.get("note_path") else None,

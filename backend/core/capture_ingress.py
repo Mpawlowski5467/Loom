@@ -27,6 +27,8 @@ from core.capture_jobs import (
 from core.capture_source_index import CaptureSourceIndex
 from core.config import AutomationPolicyConfig, CaptureProcessingConfig, GlobalConfig
 from core.events import publish_capture_change
+from core.history import commit_group
+from core.history.messages import normalize_agent
 from core.note_index import NoteIndex, get_note_index
 from core.notes import Note, generate_id, now_iso, parse_note
 from core.notes_helpers import to_kebab
@@ -287,7 +289,11 @@ async def ingest_capture(
                 filename_stem=filename_stem,
                 filename_prefix=filename_prefix,
             )
-            write_note(root, capture_path, meta, body)
+            async with commit_group(
+                agent=normalize_agent(normalized_author),
+                reason=history_reason or f"Captured via {normalized_source}",
+            ):
+                write_note(root, capture_path, meta, body)
             selected_index.refresh_file(capture_path)
             # Parse before notifying a worker that may immediately claim it.
             created_note = parse_note(capture_path)

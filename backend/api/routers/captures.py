@@ -35,6 +35,7 @@ from core.capture_lifecycle import (
 )
 from core.config import CaptureProcessingConfig, GlobalConfig
 from core.events import publish_capture_change, publish_note_change
+from core.history import commit_group
 from core.note_index import NoteIndex, get_note_index
 from core.notes import _WIKILINK_RE, Note, generate_id, now_iso, parse_note
 from core.rate_limit import READ_LIMIT, WRITE_LIMIT, limiter
@@ -1429,10 +1430,13 @@ async def commit_capture(
                     tags=body.tags,
                     body=body.body,
                 )
-                note, weaver_chain = await weaver.commit_proposal(capture_path, proposal)
-                if note is None:
-                    raise HTTPException(status_code=400, detail="Failed to write note")
-                outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
+                # Filing a reviewed proposal (write, Sentinel, publish, links,
+                # index) is one vault-history commit.
+                async with commit_group(reason="Filed a reviewed capture proposal"):
+                    note, weaver_chain = await weaver.commit_proposal(capture_path, proposal)
+                    if note is None:
+                        raise HTTPException(status_code=400, detail="Failed to write note")
+                    outcome = await _finalize_note(note, weaver_chain, capture_path, vm, index)
                 # Enforcement updates the persisted publication marker. Return
                 # the final state rather than the pre-validation pending draft.
                 if Path(note.file_path).exists():

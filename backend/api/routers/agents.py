@@ -346,6 +346,7 @@ class ChangelogFeedEvent(BaseModel):
     target: str  # short, human-readable target (e.g. "topics/raft-consensus.md")
     chain: str  # "ok" | "warn" | "fail"
     sentinel: str  # "ok" | "warn" | "fail" — Sentinel verdict when known
+    commit: str | None = None  # vault-history commit this action produced, if any
 
 
 def _parse_changelog_entries(text: str, agent: str) -> list[dict[str, str]]:
@@ -379,6 +380,7 @@ def _parse_changelog_entries(text: str, agent: str) -> list[dict[str, str]]:
                 "target": fields.get("target", ""),
                 "chain": fields.get("chain", "pass"),
                 "details": fields.get("details", ""),
+                "history": fields.get("history", ""),
             }
         )
     return events
@@ -438,6 +440,7 @@ def get_changelog_feed(
             merged.extend(_parse_changelog_entries(text, agent_name))
 
     merged.sort(key=lambda e: e["ts"], reverse=True)
+    commits = _commits_by_group(vault_root, {e["history"] for e in merged[:limit] if e["history"]})
     out: list[ChangelogFeedEvent] = []
     for i, e in enumerate(merged[:limit]):
         is_sentinel = e["agent"] == "sentinel"
@@ -452,9 +455,34 @@ def get_changelog_feed(
                 target=_short_target(e["target"], vault_root),
                 chain=chain_status,
                 sentinel=sentinel_status,
+                commit=commits.get(e["history"]),
             )
         )
     return out
+
+
+_GROUP_SCAN_COMMITS = 400
+
+
+def _commits_by_group(vault_root: Path, groups: set[str]) -> dict[str, str]:
+    """Map history commit-group ids to the commits that recorded them (recent only)."""
+    from core.history import get_history
+    from core.history.git import GitError
+    from core.history.messages import parse_trailers
+
+    recorder = get_history(vault_root)
+    if not groups or recorder is None or not recorder.repo.is_repo():
+        return {}
+    try:
+        entries = recorder.repo.log(limit=_GROUP_SCAN_COMMITS)
+    except GitError:
+        return {}
+    found: dict[str, str] = {}
+    for entry in entries:
+        for group in parse_trailers(entry.message).get("Loom-Group", []):
+            if group in groups:
+                found.setdefault(group, entry.sha)
+    return found
 
 
 def _today_str() -> str:

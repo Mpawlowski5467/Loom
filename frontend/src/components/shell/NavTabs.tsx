@@ -43,13 +43,16 @@ export function NavTabs() {
         >
           {label}
           {tab === "inbox" && inboxCount > 0 && (
-            <Badge
-              variant="secondary"
-              className="h-4.5 min-w-4.5 rounded-full px-1 font-mono text-[10px] tabular-nums"
-              aria-label={`${inboxCount} in inbox`}
-            >
-              {inboxCount}
-            </Badge>
+            <>
+              <span className="sr-only">({inboxCount} waiting)</span>
+              <Badge
+                aria-hidden="true"
+                variant="secondary"
+                className="h-4.5 min-w-4.5 rounded-full px-1 font-mono text-[10px] tabular-nums"
+              >
+                {inboxCount}
+              </Badge>
+            </>
           )}
         </NavLink>
       ))}

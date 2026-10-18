@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { LoomGraphDebugHook } from "../src/graph/graphDebug";
+import { expectView } from "./nav";
 
 declare global {
   interface Window {
@@ -90,8 +91,5 @@ test("selects, isolates, keyboard-pivots, fits, clears, and opens a graph node",
 
   await graph.press("ArrowRight");
   await graph.press("Enter");
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Notes");
 });

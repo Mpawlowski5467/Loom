@@ -1,7 +1,8 @@
 import { expect, test } from "@playwright/test";
+import { expectView, openSettings, viewTab } from "../nav";
 
 async function openInbox(page: import("@playwright/test").Page) {
-  await page.getByRole("tab", { name: "Inbox" }).click();
+  await viewTab(page, "Inbox").click();
   await expect(page.getByRole("tab", { name: /Captures/ })).toBeVisible();
 }
 
@@ -48,14 +49,8 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     }
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "Inbox" })).toBeVisible();
-  await page.getByRole("tab", { name: "Today" }).click();
-  await expect(page.getByRole("heading", { name: "Today" })).toBeVisible();
-  await page.screenshot({
-    path: "/tmp/loom-review-today.png",
-    fullPage: true,
-  });
-  await page.getByRole("button", { name: "Quick capture" }).click();
+  await expect(viewTab(page, "Inbox")).toBeVisible();
+  await page.keyboard.press("ControlOrMeta+Shift+C");
   await expect(
     page.getByRole("dialog", { name: "Quick capture" }),
   ).toBeVisible();
@@ -83,10 +78,7 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     .last()
     .click();
 
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Notes");
   await expect(
     page.getByText("Browser lifecycle edited", { exact: true }),
   ).toBeVisible();
@@ -112,8 +104,8 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   const bodyInput = page.getByRole("textbox", { name: "Note body" });
   const draftMarker = "\n\nDraft survives Graph navigation.";
   await bodyInput.fill(`${await bodyInput.inputValue()}${draftMarker}`);
-  await page.getByRole("tab", { name: "Graph" }).click();
-  await page.getByRole("tab", { name: "Thread" }).click();
+  await viewTab(page, "Graph").click();
+  await viewTab(page, "Notes").click();
   // Editing state is held by AppContext while Thread is unmounted for the
   // Graph hop, so the editor is already open on return.
   await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
@@ -121,10 +113,7 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     /Draft survives Graph navigation\./,
   );
   await page.reload({ waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Notes");
   await page.getByRole("button", { name: /✎ edit/ }).click();
   await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Note body" })).toHaveValue(
@@ -139,13 +128,8 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   const archiveDialog = page.getByRole("dialog", { name: /Archive .*\?/i });
   await expect(archiveDialog).toBeVisible();
   await archiveDialog.getByRole("button", { name: "Archive" }).click();
-  await expect(page.getByRole("tab", { name: "Graph" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
-  await page.getByRole("button", { name: "Open settings" }).click();
-
-  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  await expectView(page, "Graph");
+  await openSettings(page, "Vault");
   await expect(page.getByRole("heading", { name: "Archived" })).toBeVisible();
   await expect(
     page.getByText("Browser lifecycle filed edit", { exact: true }),
@@ -159,8 +143,8 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     page.getByText(/Restored .*Browser lifecycle filed edit.*topics\//),
   ).toBeVisible();
 
-  await page.getByRole("tab", { name: "Graph" }).click();
-  await page.getByRole("tab", { name: "Thread" }).click();
+  await viewTab(page, "Graph").click();
+  await viewTab(page, "Notes").click();
   await expect(
     page.getByText("Browser lifecycle filed edit", { exact: true }),
   ).toBeVisible();
@@ -180,7 +164,7 @@ test("provider failure leaves the original capture reviewable", async ({
   page,
 }) => {
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await expect(page.getByRole("tab", { name: "Inbox" })).toBeVisible();
+  await expect(viewTab(page, "Inbox")).toBeVisible();
   await createCapture(
     page,
     "Provider failure capture",

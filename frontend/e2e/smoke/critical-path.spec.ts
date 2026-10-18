@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { expectView, openSettings, viewTab } from "../nav";
 
 const initialConfig = {
   active_vault: "",
@@ -152,18 +153,15 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     .getByRole("button", { name: "Skip for now" })
     .click();
 
-  await expect(page.getByRole("tab", { name: "Inbox" })).toBeVisible();
-  await page.getByRole("tab", { name: "Inbox" }).click();
+  await expect(viewTab(page, "Inbox")).toBeVisible();
+  await viewTab(page, "Inbox").click();
   await page
     .getByRole("button", { name: /Sigma 3 nodeReducer interpolation trick/ })
     .click();
   await expect(page.getByText("Weaver suggestion")).toBeVisible();
   await page.getByRole("button", { name: "accept & file" }).click();
 
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Notes");
   await expect(
     page.getByText("Sigma reducer pattern", { exact: true }),
   ).toBeVisible();
@@ -192,13 +190,9 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     })
     .getByRole("button", { name: "Archive" })
     .click();
-  await expect(page.getByRole("tab", { name: "Graph" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Graph");
 
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  await openSettings(page, "Vault");
   await expect(page.getByRole("heading", { name: "Archived" })).toBeVisible();
   await expect(
     page.getByText("Sigma reducer pattern — verified", { exact: true }),
@@ -309,8 +303,7 @@ test("surfaces an AI provider connection failure in Settings", async ({
     sessionStorage.setItem("loom.splash.seen", "1");
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await openSettings(page, "Models & providers");
 
   const openAI = page.getByRole("article").filter({ hasText: "OpenAI" });
   await openAI.getByRole("button", { name: "Test", exact: true }).click();

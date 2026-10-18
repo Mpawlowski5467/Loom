@@ -52,7 +52,9 @@ describe("AppHeader", () => {
 
   it("counts captures still in the inbox", () => {
     renderHeader();
-    expect(screen.getByLabelText("2 in inbox")).toHaveTextContent("2");
+    expect(
+      screen.getByRole("link", { name: "Inbox (2 waiting)" }),
+    ).toBeInTheDocument();
   });
 
   it("reports agent status", () => {
@@ -69,15 +71,27 @@ describe("AppHeader", () => {
     expect(screen.getByRole("status")).toHaveTextContent("Agents idle");
   });
 
-  it("opens the palette, new note and theme toggle", async () => {
+  it("opens the palette from the search trigger", async () => {
     const user = userEvent.setup();
-    const toggleMode = vi.fn();
-    const ctx = renderHeader({}, toggleMode);
+    const ctx = renderHeader();
     await user.click(screen.getByRole("button", { name: /search notes/i }));
     expect(ctx.setPaletteOpen).toHaveBeenCalledWith(true);
+  });
+
+  it("opens the new-note dialog", async () => {
+    const user = userEvent.setup();
+    const ctx = renderHeader();
     await user.click(screen.getByRole("button", { name: "New note" }));
     expect(ctx.setNewNoteOpen).toHaveBeenCalledWith(true);
-    await user.click(screen.getByRole("button", { name: "Switch to Paper" }));
+  });
+
+  it("flips to the light theme from the quick toggle", async () => {
+    const user = userEvent.setup();
+    const toggleMode = vi.fn();
+    renderHeader({}, toggleMode);
+    await user.click(
+      await screen.findByRole("button", { name: "Switch to Paper" }),
+    );
     expect(toggleMode).toHaveBeenCalled();
   });
 });

@@ -105,13 +105,31 @@ export function useNoteRouting(
     [route, notes],
   );
 
+  // The path the current note was last shown at. Renaming a note renames
+  // its file, so its old URL stops resolving; matching the old path lets the
+  // URL follow the note instead of turning into "not found".
+  const [shownPath, setShownPath] = useState<string | null>(route.notePath);
+  // Derived from the previous render (React's "adjust state while
+  // rendering" pattern), so it's current in the same pass.
+  if (routeNoteId && route.notePath && route.notePath !== shownPath)
+    setShownPath(route.notePath);
+
   useEffect(() => {
     if (routeNoteId && routeNoteId !== lastNoteId) setLastNoteId(routeNoteId);
   }, [routeNoteId, lastNoteId, setLastNoteId]);
 
+  const renamedNoteId =
+    route.tab === "notes" &&
+    route.notePath !== null &&
+    routeNoteId === null &&
+    route.notePath === shownPath &&
+    notes.some((n) => n.id === lastNoteId)
+      ? lastNoteId
+      : null;
+
   // Bare /notes reopens the last note, else the most recently modified one.
-  // An explicit path that matches no note shows "not found" rather than
-  // silently opening some other note.
+  // An explicit path that matches no note (and isn't a rename) shows "not
+  // found" rather than silently opening some other note.
   const fallbackNoteId = useMemo(() => {
     let latest: Note | undefined;
     for (const n of notes)
@@ -122,11 +140,14 @@ export function useNoteRouting(
     route.tab !== "notes"
       ? lastNoteId
       : route.notePath
-        ? routeNoteId
+        ? (routeNoteId ?? renamedNoteId)
         : (routeNoteId ?? lastNoteId ?? fallbackNoteId);
 
+  // Rewrite /notes, /notes?id= and a renamed note's old path to the note's
+  // canonical path.
   useEffect(() => {
-    if (route.tab !== "notes" || route.notePath || !notesLoaded) return;
+    if (route.tab !== "notes" || !notesLoaded) return;
+    if (route.notePath && !renamedNoteId) return;
     const note = notes.find((n) => n.id === currentNoteId);
     if (!note) return;
     const href = noteHref(note, route.heading);
@@ -139,7 +160,15 @@ export function useNoteRouting(
       ? `${href}${href.includes("?") ? "&" : "?"}${extra}`
       : href;
     navigate(target, { replace: true });
-  }, [route, notes, notesLoaded, currentNoteId, location.search, navigate]);
+  }, [
+    route,
+    notes,
+    notesLoaded,
+    currentNoteId,
+    renamedNoteId,
+    location.search,
+    navigate,
+  ]);
 
   return currentNoteId;
 }

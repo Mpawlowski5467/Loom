@@ -1,3 +1,4 @@
+import type { Nodes, RootContent } from "mdast";
 import remarkGfm from "remark-gfm";
 import remarkParse from "remark-parse";
 import { unified } from "unified";
@@ -7,6 +8,46 @@ export interface SourceBlock {
   text: string;
   start: number;
   end: number;
+  /**
+   * Whether the rich editor can round-trip this block. Others (reference
+   * definitions, HTML blocks, footnotes, reference-style links) are kept
+   * as raw markdown and edited in source mode.
+   */
+  editable: boolean;
+}
+
+/** Block types the rich editor represents faithfully. */
+const EDITABLE_BLOCKS = new Set([
+  "paragraph",
+  "heading",
+  "thematicBreak",
+  "blockquote",
+  "list",
+  "code",
+  "table",
+]);
+
+/** Inline syntax the rich editor would lose if the block were edited. */
+const LOSSY_INLINE = new Set([
+  "linkReference",
+  "imageReference",
+  "footnoteReference",
+  "definition",
+  "footnoteDefinition",
+  "html",
+]);
+
+function hasLossyInline(node: Nodes): boolean {
+  if (LOSSY_INLINE.has(node.type)) return true;
+  return (
+    "children" in node && node.children.some((c) => hasLossyInline(c as Nodes))
+  );
+}
+
+function isEditable(node: RootContent): boolean {
+  if (!EDITABLE_BLOCKS.has(node.type)) return false;
+  // Code blocks are opaque text; their content can't be lossy.
+  return node.type === "code" || !hasLossyInline(node);
 }
 
 export interface SourceLayout {
@@ -33,7 +74,12 @@ export function splitSourceBlocks(markdown: string): SourceLayout {
     const start = node.position?.start.offset;
     const end = node.position?.end.offset;
     if (start === undefined || end === undefined) continue;
-    blocks.push({ text: markdown.slice(start, end), start, end });
+    blocks.push({
+      text: markdown.slice(start, end),
+      start,
+      end,
+      editable: isEditable(node),
+    });
   }
   if (blocks.length === 0)
     return { lead: "", blocks: [], gaps: [], trail: markdown };

@@ -23,8 +23,9 @@ export default defineConfig([
   },
   {
     // shadcn primitives export their cva variant helpers next to the
-    // component (buttonVariants, toggleVariants, …) by design.
-    files: ['src/components/ui/**/*.tsx'],
+    // component (buttonVariants, toggleVariants, …), and Plate plugin
+    // modules export plugin objects next to their element components.
+    files: ['src/components/ui/**/*.tsx', 'src/editor/plate/**/*.tsx'],
     rules: { 'react-refresh/only-export-components': 'off' },
   },
   {

@@ -17,6 +17,10 @@ export default defineConfig({
     },
   },
   build: {
+    // The largest chunk is the rich note editor (Plate + its markdown
+    // pipeline, ~1.2 MB), loaded only when a note opens in rich mode; every
+    // chunk on the initial load is well under 300 kB.
+    chunkSizeWarningLimit: 1300,
     rolldownOptions: {
       output: {
         // Split the big, rarely-changing runtimes out of the entry chunk so

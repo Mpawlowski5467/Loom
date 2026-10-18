@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from starlette.testclient import TestClient
 
 from api.main import app
+from api.runtime import release_active_handles
 from core.capture_jobs import (
     capture_job_store,
     force_reset_capture_job_service_for_tests,
@@ -154,6 +155,10 @@ def run_drill() -> dict[str, Any]:
         finally:
             app.dependency_overrides.clear()
             force_reset_capture_job_service_for_tests()
+            # Activating the restored vault starts its git-history worker; stop
+            # it (and the watcher) before the temporary home is deleted, or its
+            # final commit races the cleanup.
+            release_active_handles()
 
 
 def main() -> None:

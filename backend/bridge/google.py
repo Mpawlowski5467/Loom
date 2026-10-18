@@ -18,7 +18,15 @@ from pathlib import Path
 from urllib.parse import urlencode
 
 from bridge.oauth import OAuthTokens, clear_tokens, load_tokens, save_tokens
-from core.config import settings
+from bridge.oauth_apps import (
+    OAuthApp,
+    app_for_tokens,
+    builtin_google_app,
+    choose_app,
+    custom_app,
+    find_app,
+)
+from core.config import GoogleConnectorConfig, settings
 
 logger = logging.getLogger(__name__)
 
@@ -30,11 +38,13 @@ GOOGLE_SCOPE_GMAIL = "https://www.googleapis.com/auth/gmail.readonly"
 GOOGLE_CONNECTOR_SCOPES = (GOOGLE_SCOPE_CALENDAR, GOOGLE_SCOPE_GMAIL)
 
 
-def authorization_url(*, client_id: str, redirect_uri: str, state: str) -> str:
+def authorization_url(*, client_id: str, redirect_uri: str, state: str, code_challenge: str) -> str:
     """Build the Google consent URL requesting BOTH service scopes at once.
 
     ``access_type=offline`` + ``prompt=consent`` guarantee a refresh token is
-    returned on every connect, including re-consents.
+    returned on every connect, including re-consents. PKCE (S256) is always
+    used; it is required for the built-in Desktop client and harmless for a
+    custom Web client.
     """
     query = urlencode(
         {
@@ -45,9 +55,32 @@ def authorization_url(*, client_id: str, redirect_uri: str, state: str) -> str:
             "access_type": "offline",
             "prompt": "consent",
             "state": state,
+            "code_challenge": code_challenge,
+            "code_challenge_method": "S256",
         }
     )
     return f"{_AUTHORIZE_URL}?{query}"
+
+
+def google_app(connector: GoogleConnectorConfig) -> OAuthApp | None:
+    """The app a new Google sign-in uses: the user's own, else Loom's."""
+    return choose_app(
+        custom_app(connector.client_id, connector.client_secret), builtin_google_app()
+    )
+
+
+def google_app_for(connector: GoogleConnectorConfig, tokens: OAuthTokens) -> OAuthApp | None:
+    """The app that issued the stored Google tokens (refreshes must use it)."""
+    return app_for_tokens(
+        tokens, custom_app(connector.client_id, connector.client_secret), builtin_google_app()
+    )
+
+
+def google_app_by_id(connector: GoogleConnectorConfig, client_id: str) -> OAuthApp | None:
+    """The configured Google app with ``client_id`` (to finish a started flow)."""
+    return find_app(
+        client_id, custom_app(connector.client_id, connector.client_secret), builtin_google_app()
+    )
 
 
 def _tokens_path() -> Path:

@@ -19,6 +19,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from starlette.testclient import TestClient
 
 from api.main import app
+from api.runtime import release_active_handles
 from core.capture_jobs import (
     capture_job_store,
     force_reset_capture_job_service_for_tests,
@@ -152,6 +153,10 @@ def run_drill() -> dict[str, Any]:
             )
             return report
         finally:
+            # Activating a vault starts the file watcher and index handles on
+            # it. Release them, as the test client fixture does, so nothing
+            # writes into the temporary home while it is being removed.
+            release_active_handles()
             app.dependency_overrides.clear()
             force_reset_capture_job_service_for_tests()
 

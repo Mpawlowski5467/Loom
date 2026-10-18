@@ -7,6 +7,7 @@ validation, and the /api/automations/google endpoints."""
 from __future__ import annotations
 
 import base64
+import dataclasses
 import json
 import time
 from datetime import UTC, datetime, timedelta
@@ -21,6 +22,7 @@ import pytest
 from starlette.testclient import TestClient
 
 import bridge.oauth as oauth
+from bridge import gcal_service
 from bridge.calendar import CalendarEvent
 from bridge.gcal import (
     GoogleCalendarAuthError,
@@ -54,6 +56,7 @@ from bridge.google import (
     save_google_tokens,
 )
 from bridge.oauth import OAuthTokens, load_tokens, save_tokens
+from core.capture_ingress import CaptureIngressError
 from core.config import (
     CaptureProcessingConfig,
     GlobalConfig,
@@ -118,6 +121,7 @@ class TestConnectorConsentUrl:
             client_id="client-id",
             redirect_uri="http://localhost:8000/api/automations/google/callback",
             state="state-123",
+            code_challenge="challenge-abc",
         )
         parsed = urlparse(url)
         query = parse_qs(parsed.query)
@@ -129,6 +133,8 @@ class TestConnectorConsentUrl:
         assert query["access_type"] == ["offline"]
         assert query["prompt"] == ["consent"]
         assert query["state"] == ["state-123"]
+        assert query["code_challenge"] == ["challenge-abc"]
+        assert query["code_challenge_method"] == ["S256"]
         scopes = set(query["scope"][0].split())
         assert scopes == {GOOGLE_SCOPE_CALENDAR, GOOGLE_SCOPE_GMAIL}
 
@@ -312,8 +318,12 @@ class TestCalendarEventListing:
         def handler(request: httpx.Request) -> httpx.Response:
             params = request.url.params
             assert params["syncToken"] == "old-token"
-            assert "timeMin" not in params
-            assert "singleEvents" not in params
+            # Forbidden with a sync token.
+            for forbidden in ("timeMin", "timeMax", "orderBy"):
+                assert forbidden not in params
+            # Must match the initial call (Google: "all other query parameters
+            # should be the same"), or recurring series stop expanding.
+            assert params["singleEvents"] == "true"
             return httpx.Response(200, json={"items": [], "nextSyncToken": "fresh-token"})
 
         client = _calendar_client(handler, tokens=_tokens())
@@ -688,6 +698,49 @@ class TestCalendarSync:
         assert len(list(captures_dir.glob("*.md"))) == 2
 
     @pytest.mark.asyncio
+    async def test_failed_ingest_keeps_the_old_sync_token(self, tmp_path, monkeypatch) -> None:
+        manager = _google_vault(tmp_path, monkeypatch)
+        events = [_event("evt-1", "Design review"), _event("evt-2", "1:1 with manager")]
+        client = _FakeCalendarClient({"primary": (events, False)})
+        real_ingest = gcal_service.ingest_capture
+
+        async def fail_second(*args, **kwargs):
+            if kwargs["title"] == "1:1 with manager":
+                raise OSError("disk busy")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", fail_second)
+        first = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+        assert first["errors"] == 1
+        # Adopting the new token here would mean Google never re-lists evt-2.
+        assert not (tmp_path / "gcal-sync.json").exists()
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", real_ingest)
+        retry = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+        assert (retry["created"], retry["deduplicated"], retry["errors"]) == (1, 1, 0)
+        cursors = json.loads((tmp_path / "gcal-sync.json").read_text(encoding="utf-8"))
+        assert cursors["calendars"]["primary"]["sync_token"] == "sync-token-2"
+
+    @pytest.mark.asyncio
+    async def test_event_rejected_by_ingress_is_skipped(self, tmp_path, monkeypatch) -> None:
+        manager = _google_vault(tmp_path, monkeypatch)
+        events = [_event("evt-1", "Design review"), _event("evt-2", "Rejected")]
+        client = _FakeCalendarClient({"primary": (events, False)})
+        real_ingest = gcal_service.ingest_capture
+
+        async def picky(*args, **kwargs):
+            if kwargs["title"] == "Rejected":
+                raise CaptureIngressError("bad event")
+            return await real_ingest(*args, **kwargs)
+
+        monkeypatch.setattr(gcal_service, "ingest_capture", picky)
+        result = await sync_google_calendar(vm=manager, client=client)  # type: ignore[arg-type]
+
+        assert (result["created"], result["errors"]) == (1, 0)
+        cursors = json.loads((tmp_path / "gcal-sync.json").read_text(encoding="utf-8"))
+        assert cursors["calendars"]["primary"]["sync_token"] == "sync-token-2"
+
+    @pytest.mark.asyncio
     async def test_external_id_includes_recurrence_start(self, tmp_path, monkeypatch) -> None:
         manager = _google_vault(tmp_path, monkeypatch)
         recurrence = datetime(2026, 7, 22, 15, 0, tzinfo=UTC)
@@ -1039,22 +1092,24 @@ class TestGoogleConnectorApi:
         assert body["connection"] == {"connected": False, "account": ""}
         assert set(body["services"]) == {"calendar", "gmail"}
 
-    def test_managed_oauth_is_click_ready_without_persisted_credentials(
+    def test_builtin_app_is_click_ready_without_persisted_credentials(
         self, client: TestClient, vault_manager, monkeypatch
     ) -> None:
         _init(vault_manager)
-        monkeypatch.setattr(settings, "google_oauth_client_id", "managed-client")
-        monkeypatch.setattr(settings, "google_oauth_client_secret", "managed-secret")
+        monkeypatch.setattr(settings, "google_client_id", "builtin-client")
+        monkeypatch.setattr(settings, "google_client_secret", "builtin-secret")
 
         response = client.get("/api/automations/google")
         assert response.status_code == 200
-        assert response.json()["managed_oauth"] is True
-        assert response.json()["google"]["client_secret_set"] is True
+        assert response.json()["builtin_app"] is True
+        # The built-in app is never reported as the user's own credentials.
+        assert response.json()["google"]["client_secret_set"] is False
+        assert "builtin-secret" not in response.text
 
         response = client.post("/api/automations/google/connect", headers=_LOOPBACK_HEADERS)
         assert response.status_code == 200
         query = parse_qs(urlparse(response.json()["authorization_url"]).query)
-        assert query["client_id"] == ["managed-client"]
+        assert query["client_id"] == ["builtin-client"]
 
         response = client.patch("/api/automations/google", json={"gmail": {"enabled": True}})
         assert response.status_code == 200
@@ -1159,7 +1214,10 @@ class TestGoogleConnectorApi:
         _connect_config(client)
         state = _start_connect(client)
         with oauth._FLOWS_LOCK:
-            oauth._FLOWS[f"google:{state}"] = time.monotonic() - 1
+            key = f"google:{state}"
+            oauth._FLOWS[key] = dataclasses.replace(
+                oauth._FLOWS[key], deadline=time.monotonic() - 1
+            )
         response = client.get(
             "/api/automations/google/callback",
             params={"state": state, "code": "expired-code"},

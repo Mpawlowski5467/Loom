@@ -197,6 +197,7 @@ class GoogleCalendarClient:
     def _adopt_tokens(self, tokens: OAuthTokens) -> OAuthTokens:
         account = self._tokens.account if self._tokens is not None else ""
         tokens.account = tokens.account or account
+        tokens.client_id = self._client_id  # refreshes must use the issuing app
         self._tokens = tokens
         if self._on_tokens is not None:
             self._on_tokens(tokens)
@@ -231,17 +232,20 @@ class GoogleCalendarClient:
             + (f": {error}" if error else "")
         )
 
-    async def exchange_code(self, code: str, *, redirect_uri: str) -> OAuthTokens:
-        """Trade an authorization code for tokens at the token endpoint."""
-        data = await self._post_token(
-            {
-                "client_id": self._client_id,
-                "client_secret": self._client_secret,
-                "code": code,
-                "grant_type": "authorization_code",
-                "redirect_uri": redirect_uri,
-            }
-        )
+    async def exchange_code(
+        self, code: str, *, redirect_uri: str, code_verifier: str = ""
+    ) -> OAuthTokens:
+        """Trade an authorization code (plus its PKCE verifier) for tokens."""
+        form = {
+            "client_id": self._client_id,
+            "client_secret": self._client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": redirect_uri,
+        }
+        if code_verifier:
+            form["code_verifier"] = code_verifier
+        data = await self._post_token(form)
         return self._adopt_tokens(_tokens_from_response(data))
 
     async def ensure_fresh_token(self) -> OAuthTokens:
@@ -331,7 +335,11 @@ class GoogleCalendarClient:
         for _ in range(_MAX_PAGES):
             params: dict[str, Any]
             if sync_token:
-                params = {"syncToken": sync_token, "maxResults": _PAGE_SIZE}
+                # Google forbids the window/order parameters with a sync token
+                # but requires every other one to match the initial call.
+                # Without singleEvents a changed recurring series comes back
+                # as one master event instead of its instances.
+                params = {"syncToken": sync_token, "singleEvents": "true", "maxResults": _PAGE_SIZE}
             else:
                 params = {
                     "timeMin": _rfc3339(time_min),

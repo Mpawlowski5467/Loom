@@ -136,7 +136,7 @@ class VaultHistory:
         explicit = explicit_human_action(caller)
         changes: list[FileChange] = []
         data: dict[str, bytes | None] = {}
-        existed: dict[str, bool] = {}
+        prior: dict[str, bytes | None] = {}
         for rel, text in after.items():
             path = f"threads/{rel}"
             previous = before.get(rel)
@@ -148,13 +148,13 @@ class VaultHistory:
                 writer = "loom"  # inside an automated run, never a person
             changes.append(FileChange(path, writer, explicit or action, reason))
             data[path] = None if text is None else disk_bytes(text)
-            existed[path] = previous is not None
+            prior[path] = None if previous is None else disk_bytes(previous)
         _label_move(changes, before, after)
 
         group = active_group()
         if group is not None:
             self._hold(dict.fromkeys(data, 1))
-            group.add(self, data, changes, existed, run_id)
+            group.add(self, data, changes, prior, run_id)
             return
         if not explicit and all(c.agent == HUMAN for c in changes):
             self.schedule_sweep()
@@ -162,7 +162,7 @@ class VaultHistory:
         spec = CommitSpec(changes=changes, action=explicit, run_id=run_id)
         holds = dict.fromkeys(data, 1)
         self._hold(holds)
-        self.submit(lambda: self._commit(data, spec, holds))
+        self.submit(lambda: self._commit(data, spec, holds, prior))
 
     def submit_part(
         self, group: CommitGroup, part: GroupPart
@@ -188,7 +188,8 @@ class VaultHistory:
             ),
         )
         data = part.net_data()
-        return self.submit(lambda: self._commit(data, spec, part.holds))
+        prior = {path: part.prior[path] for path in data}
+        return self.submit(lambda: self._commit(data, spec, part.holds, prior))
 
     def schedule_sweep(self) -> None:
         """(Re)start the quiet-period timer for committing human edits."""
@@ -224,15 +225,48 @@ class VaultHistory:
     # -- worker jobs --------------------------------------------------------
 
     def _commit(
-        self, data: dict[str, bytes | None], spec: CommitSpec, holds: dict[str, int]
+        self,
+        data: dict[str, bytes | None],
+        spec: CommitSpec,
+        holds: dict[str, int],
+        prior: dict[str, bytes | None],
     ) -> str | None:
         try:
             if not data:
                 return None
             writer = spec.agents[0] if spec.agents else spec.changes[0].agent
+            self._commit_unsaved_edits(prior, writer)
             return self.repo.commit_changes(data, build_message(spec), identity_for(writer))
         finally:
             self._release(holds)
+
+    def _commit_unsaved_edits(self, prior: dict[str, bytes | None], writer: str) -> None:
+        """Commit edits a write built on that history doesn't have yet, as human edits.
+
+        An edit made within the human quiet period, then changed by an agent,
+        must not be folded into the agent's commit: commit the exact content
+        the agent started from first.
+        """
+        head = self.repo.head_blob_ids(set(prior))
+        stale = {
+            path: data
+            for path, data in prior.items()
+            if head.get(path) != (None if data is None else self.repo.object_id(data))
+        }
+        if not stale or self.repo.head() is None:
+            return
+        changes = [
+            FileChange(
+                path,
+                HUMAN,
+                "deleted" if data is None else "edited" if path in head else "created",
+            )
+            for path, data in stale.items()
+        ]
+        spec = CommitSpec(
+            changes=changes, reason=f"Saved before {writer} changed it", agents=[HUMAN]
+        )
+        self.repo.commit_changes(stale, build_message(spec), identity_for(HUMAN))
 
     def sweep_now(self, reason: str) -> str | None:
         """Commit pending human edits immediately (runs on the worker)."""

@@ -30,12 +30,12 @@ class GroupPart:
     data: dict[str, bytes | None] = field(default_factory=dict)
     first: dict[str, FileChange] = field(default_factory=dict)
     last: dict[str, FileChange] = field(default_factory=dict)
-    existed: dict[str, bool] = field(default_factory=dict)
+    prior: dict[str, bytes | None] = field(default_factory=dict)
     holds: dict[str, int] = field(default_factory=dict)
 
     def _kept(self) -> list[str]:
         # A path created and removed inside one group never reaches history.
-        return [p for p in self.first if self.existed[p] or self.data[p] is not None]
+        return [p for p in self.first if self.prior[p] is not None or self.data[p] is not None]
 
     def net_changes(self) -> list[FileChange]:
         # Who first touched a path, but how it ended: a removed path reports its removal.
@@ -76,7 +76,7 @@ class CommitGroup:
         recorder: VaultHistory,
         data: dict[str, bytes | None],
         changes: list[FileChange],
-        existed: dict[str, bool],
+        prior: dict[str, bytes | None],
         run_id: str,
     ) -> None:
         """Merge one write into the group (first writer/action per path wins)."""
@@ -85,7 +85,7 @@ class CommitGroup:
             for change in changes:
                 part.first.setdefault(change.path, change)
                 part.last[change.path] = change
-                part.existed.setdefault(change.path, existed[change.path])
+                part.prior.setdefault(change.path, prior[change.path])
                 part.holds[change.path] = part.holds.get(change.path, 0) + 1
             part.data.update(data)
             if run_id and not self.run_id:

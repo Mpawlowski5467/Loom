@@ -11,6 +11,7 @@ Loom drives git through plumbing commands so that:
 
 from __future__ import annotations
 
+import hashlib
 import os
 import shutil
 import subprocess
@@ -71,6 +72,7 @@ class GitRepo:
 
     def __init__(self, root: Path) -> None:
         self.root = root
+        self._object_format = ""
 
     # -- process plumbing -------------------------------------------------
 
@@ -151,6 +153,32 @@ class GitRepo:
         """Return a file's bytes at ``rev``, or None when it doesn't exist there."""
         proc = self.run("cat-file", "blob", f"{rev}:{path}", check=False)
         return proc.stdout if proc.returncode == 0 else None
+
+    def object_id(self, data: bytes) -> str:
+        """The blob id git would give ``data`` (computed locally, no subprocess)."""
+        if not self._object_format:
+            fmt = self.run("rev-parse", "--show-object-format", check=False).stdout
+            self._object_format = fmt.decode().strip() or "sha1"
+        digest = hashlib.new(self._object_format)
+        digest.update(b"blob %d\0" % len(data))
+        digest.update(data)
+        return digest.hexdigest()
+
+    def head_blob_ids(self, paths: set[str]) -> dict[str, str]:
+        """Blob ids at HEAD for those of ``paths`` it contains."""
+        if not paths or self.head() is None:
+            return {}
+        # Name a handful of paths directly; list the whole tree for big batches.
+        scope = ["--", *sorted(paths)] if len(paths) <= 200 else []
+        raw = self.run("ls-tree", "-r", "-z", "--full-tree", "HEAD", *scope).stdout.decode(
+            "utf-8", "replace"
+        )
+        found = {}
+        for entry in raw.split("\0"):
+            meta, _, path = entry.partition("\t")
+            if path in paths:
+                found[path] = meta.split()[2]
+        return found
 
     def status_entries(self) -> list[tuple[str, str]]:
         """``(XY, path)`` for paths whose working tree differs from HEAD (honours .gitignore)."""

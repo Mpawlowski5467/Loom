@@ -170,6 +170,29 @@ def test_agent_commit_keeps_its_bytes_when_a_human_edits_right_after(
     assert _subjects(history)[0] == "human: edited threads/topics/a.md"
 
 
+def test_unsaved_human_edit_is_committed_before_an_agent_builds_on_it(
+    history: VaultHistory, vault_root: Path
+) -> None:
+    path = vault_root / "threads" / "topics" / "mine.md"
+    write_note(vault_root, path, note_meta("m", "Mine", by="user"), "my draft\n")  # debounced
+
+    async def run() -> None:
+        async with commit_group():
+            meta = note_meta("m", "Mine", by="agent:spider", action="linked")
+            write_note(vault_root, path, meta, "my draft\n\n[[Other]]\n")
+
+    asyncio.run(run())
+    history.flush()
+    log = history.repo.log(limit=5)
+    assert [e.message.splitlines()[0] for e in log[:2]] == [
+        "spider: linked threads/topics/mine.md",
+        "human: created threads/topics/mine.md",
+    ]
+    assert parse_trailers(log[1].message)["Reason"] == ["Saved before spider changed it"]
+    human_version = history.repo.blob(log[1].sha, "threads/topics/mine.md") or b""
+    assert b"[[Other]]" not in human_version and b"my draft" in human_version
+
+
 def test_sweep_skips_paths_an_open_group_is_writing(
     history: VaultHistory, vault_root: Path
 ) -> None:

@@ -28,8 +28,13 @@ function renderInline(text: string): ReactNode {
 }
 
 export function Council(): ReactNode {
-  const { council, postCouncilMessage } = useApp();
-  const [text, setText] = useState("");
+  const { council, postCouncilMessage, councilPrefill, setCouncilPrefill } =
+    useApp();
+  // "Ask Council" from a note opens the Board with the composer prefilled.
+  const [text, setText] = useState(() => councilPrefill ?? "");
+  useEffect(() => {
+    if (councilPrefill !== null) setCouncilPrefill(null);
+  }, [councilPrefill, setCouncilPrefill]);
   const [openTraceId, setOpenTraceId] = useState<string | null>(null);
   const [expandedContributions, setExpandedContributions] = useState<
     Set<string>

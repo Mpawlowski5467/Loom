@@ -1,18 +1,11 @@
 import type { ReactNode } from "react";
 import type { AgentActivity } from "../../api/activity";
 import type { Agent, AgentState } from "../../data/types";
+import { formatRelative } from "../../data/formatDate";
 
 /** Relative timestamp like "5m ago". Falls back to the raw string if unparseable. */
 export function formatRelativeTime(iso: string): string {
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return iso;
-  const secs = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (secs < 60) return `${secs}s ago`;
-  const mins = Math.floor(secs / 60);
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
+  return formatRelative(iso);
 }
 
 /** Relative label from an "age in seconds" value (e.g. activity timestamps). */

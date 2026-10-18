@@ -143,6 +143,9 @@ export interface AppContextValue {
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;
   newNoteTitle: string | null;
+  /** Text to start the Council composer with (set by "Ask Council"). */
+  councilPrefill: string | null;
+  setCouncilPrefill: (text: string | null) => void;
   setNewNoteTitle: (t: string | null) => void;
   appendNote: (note: Note) => void;
   updateNote: (note: Note) => void;

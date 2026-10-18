@@ -231,6 +231,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
 
   const [newNoteOpen, setNewNoteOpen] = useState(false);
   const [newNoteTitle, setNewNoteTitle] = useState<string | null>(null);
+  const [councilPrefill, setCouncilPrefill] = useState<string | null>(null);
 
   const [extraFolders, setExtraFolders] = useState<string[]>([]);
   const addFolder = useCallback((path: string) => {
@@ -320,6 +321,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setNewNoteOpen,
       newNoteTitle,
       setNewNoteTitle,
+      councilPrefill,
+      setCouncilPrefill,
       appendNote,
       updateNote,
       removeNote,
@@ -373,6 +376,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       council,
       newNoteOpen,
       newNoteTitle,
+      councilPrefill,
       captures,
       capturesLoaded,
       capturesError,

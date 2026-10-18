@@ -54,6 +54,7 @@ vi.mock("@/theme/useThemeColors", () => ({
     key: "graphite|theme|theme",
     background: "#09090b",
     foreground: "#fafafa",
+    secondaryForeground: "#d4d4d8",
     mutedForeground: "#a1a1aa",
     border: "#27272a",
     borderStrong: "#3f3f46",

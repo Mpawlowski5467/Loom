@@ -7,6 +7,7 @@ export interface ThemeColors {
   key: string;
   background: string;
   foreground: string;
+  secondaryForeground: string;
   mutedForeground: string;
   border: string;
   borderStrong: string;
@@ -19,6 +20,7 @@ function readThemeColors(key: string): ThemeColors {
     key,
     background: readCssVar("--background", "#09090b"),
     foreground: readCssVar("--foreground", "#fafafa"),
+    secondaryForeground: readCssVar("--secondary-foreground", "#d4d4d8"),
     mutedForeground: readCssVar("--muted-foreground", "#a1a1aa"),
     border: readCssVar("--border", "#27272a"),
     borderStrong: readCssVar("--border-strong", "#3f3f46"),

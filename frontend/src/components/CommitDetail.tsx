@@ -6,6 +6,7 @@ import {
   type RevertResult,
 } from "../api/history";
 import { ConfirmModal } from "./ConfirmModal";
+import { Button } from "./ui/button";
 import { TextDiff } from "./TextDiff";
 
 interface CommitDetailProps {
@@ -44,43 +45,67 @@ export function CommitDetail({
     };
   }, [sha]);
 
-  if (error) return <p role="alert">{error}</p>;
-  if (!diff) return <p role="status">Loading change…</p>;
-  return (
-    <div className="commit-detail">
-      <p className="commit-meta">
-        <strong>{diff.subject}</strong>
-        <br />
-        {diff.agents.join(", ")} · {new Date(diff.date).toLocaleString()} ·{" "}
-        <code>{diff.short_sha}</code>
-        {diff.sentinel && <> · Sentinel: {diff.sentinel}</>}
+  if (error)
+    return (
+      <p role="alert" className="text-sm text-danger-foreground">
+        {error}
       </p>
-      {diff.reason && <p className="commit-reason">{diff.reason}</p>}
+    );
+  if (!diff)
+    return (
+      <p role="status" className="text-sm text-muted-foreground">
+        Loading change…
+      </p>
+    );
+  return (
+    <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+      <div className="text-sm">
+        <p className="font-medium text-foreground">{diff.subject}</p>
+        <p className="font-mono text-xs text-muted-foreground">
+          {diff.agents.join(", ")} · {new Date(diff.date).toLocaleString()} ·{" "}
+          {diff.short_sha}
+          {diff.sentinel && <> · Sentinel: {diff.sentinel}</>}
+        </p>
+      </div>
+      {diff.reason && (
+        <p className="text-sm text-secondary-foreground">{diff.reason}</p>
+      )}
       {diff.file_diffs.map((file) => (
-        <section key={file.path}>
-          <h4>
+        <section key={file.path} className="flex flex-col gap-1">
+          <h4 className="font-mono text-xs text-secondary-foreground">
             {file.path}{" "}
-            <span className="commit-file-status">{file.status}</span>
+            <span className="text-muted-foreground">{file.status}</span>
           </h4>
           <TextDiff before={file.before ?? ""} after={file.after ?? ""} />
-          {file.truncated && <p>Large file: showing the first 200 KB.</p>}
+          {file.truncated && (
+            <p className="text-xs text-muted-foreground">
+              Large file: showing the first 200 KB.
+            </p>
+          )}
         </section>
       ))}
-      {diff.files_truncated && <p>Only the first 100 files are shown.</p>}
+      {diff.files_truncated && (
+        <p className="text-xs text-muted-foreground">
+          Only the first 100 files are shown.
+        </p>
+      )}
       {done ? (
-        <p role="status">
-          Undone in commit <code>{done.sha?.slice(0, 10) ?? "—"}</code>{" "}
+        <p role="status" className="text-sm text-ok-foreground">
+          Undone in commit{" "}
+          <code className="font-mono">{done.sha?.slice(0, 10) ?? "—"}</code>{" "}
           (Sentinel: {done.sentinel.status}).
         </p>
       ) : (
         diff.revertible && (
-          <button
-            className="btn btn-sm"
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-fit"
             disabled={disabled}
             onClick={() => setConfirm(true)}
           >
             Undo this change
-          </button>
+          </Button>
         )
       )}
       {confirm && (

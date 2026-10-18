@@ -67,3 +67,21 @@ export function removeNoteDraft(vaultId: string, noteId: string): boolean {
     return false;
   }
 }
+
+/** Ids of notes in this vault with a local recovery draft. */
+export function listDraftNoteIds(vaultId: string): Set<string> {
+  const ids = new Set<string>();
+  const target = storage();
+  if (!target) return ids;
+  const prefix = `${PREFIX}:${encodeURIComponent(vaultId)}:`;
+  try {
+    for (let i = 0; i < target.length; i++) {
+      const k = target.key(i);
+      if (k?.startsWith(prefix))
+        ids.add(decodeURIComponent(k.slice(prefix.length)));
+    }
+  } catch {
+    // Storage unavailable: no markers.
+  }
+  return ids;
+}

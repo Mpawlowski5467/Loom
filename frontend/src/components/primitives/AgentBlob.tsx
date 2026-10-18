@@ -72,7 +72,7 @@ export function AgentBlob({
     alignItems: "center",
     justifyContent: "center",
     fontSize: glyphSize,
-    color: "#ffffff",
+    color: "white",
     filter: "grayscale(1) brightness(2.4) contrast(1.2)",
     pointerEvents: "none",
     userSelect: "none",

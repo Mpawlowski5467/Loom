@@ -107,11 +107,18 @@ and retains version-conflicted text while offering compare, reload, or an
 explicit overwrite. Tag edits and accessible wikilink completion use the same
 version-checked note APIs.
 
-Today is a user-selectable home alongside Graph. It gathers recent notes,
-pinned projects, outstanding captures and jobs, and the latest Standup. Quick
-Capture is available from the shell shortcut and sends text or a URL through
-the shared capture ingress, so it has the same provenance, limits, and durable
-job behavior as other capture sources.
+Navigation is URL-based (React Router): `/graph` (home), `/notes/<folder>/<slug>`,
+`/board`, `/inbox`, `/threads/:id?` and `/settings/:section?`; older
+`?view=` links redirect. Quick Capture is available from the shell shortcut and
+sends text or a URL through the shared capture ingress, so it has the same
+provenance, limits, and durable job behavior as other capture sources.
+
+Appearance (theme, accent, fonts, graph palette) is a set of CSS variables
+keyed by `data-*` attributes on `<html>`, owned by the frontend's
+`ThemeProvider`. It is cached in browser storage and painted by an inline boot
+script before the bundle loads; per-vault persistence through
+`/api/settings/appearance` is designed but not yet implemented by the backend
+(see [UI backend gaps](ui-backend-gaps.md)).
 
 ## Search, graph, and links
 

@@ -59,9 +59,14 @@
 - CSS classes: kebab-case
 
 ### Styling
-- CSS Modules (`.module.css`) for component-scoped styles where they exist; view-level styles under `frontend/src/styles/views/`
-- All colors come from `tokens.css` CSS variables — never hardcode hex values
-- Paper is the default; Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember complete the final set. New colors must be added to every public theme block.
+- Tailwind v4 utilities on shadcn/ui primitives (`src/components/ui/`, added with the shadcn CLI, new-york style). Merge class names with `cn()` from `@/lib/utils`; reach for an existing primitive (Button, Select, Dialog, Popover, Tooltip, ToggleGroup, …) before writing markup
+- All colors come from the theme tokens in `src/styles/themes.css` — never hardcode hex (eslint enforces this in UI code). Tailwind's default palette is disabled, so use token utilities: `bg-background`, `text-muted-foreground`, `bg-brand`, `border-border-strong`, `bg-chip`
+- Graphite is the default theme; Paper, Midnight, Forest, Linen and High contrast complete the set. A new token goes into every theme block and must pass `src/theme/contrast.test.ts` (WCAG AA)
+- Code that can't read CSS (Sigma.js) gets colors from `useThemeColors()`
+- Fonts: Geist (`font-sans`, UI), Geist Mono (`font-mono`, paths, hashes, keyboard hints, timestamps), and `font-editor` for note text (the user's editor font)
+- Icons from lucide-react; no emoji in the UI
+- Every control is keyboard-reachable with a visible `--ring` focus ring
+- `src/styles/views/*.css` and `legacy-tokens.css` exist only for screens not yet rebuilt; don't add new rules there
 
 ### Project Patterns
 - Views go in `frontend/src/views/` — one file per view (GraphView, BoardView, InboxView, ThreadView)
@@ -77,13 +82,16 @@
 - No Redux, no Zustand — keep it simple until complexity demands it
 
 ### File Structure Per Component
+One component per file, grouped by area, with its test beside it:
 ```
 components/
-├── FileTree/
-│   ├── FileTree.tsx
-│   ├── FileTree.module.css
-│   └── index.ts          # re-export
+├── ui/                   # shadcn primitives (generated; edit sparingly)
+├── shell/
+│   ├── AppHeader.tsx
+│   ├── AppHeader.test.tsx
+│   └── useGlobalShortcuts.ts
 ```
+Import from `src` with the `@/` alias (`@/components/ui/button`).
 
 ### Frontend Testing
 - Test files colocated next to source: `Foo.tsx` -> `Foo.test.tsx`

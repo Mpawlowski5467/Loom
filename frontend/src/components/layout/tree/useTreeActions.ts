@@ -244,10 +244,17 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
     }
   };
 
-  const performDelete = async (path: string, noteId?: string) => {
+  /** Archive a note or folder; `confirmed` skips the browser prompt when the
+   *  caller already asked (the Notes tree uses its own dialog). */
+  const performDelete = async (
+    path: string,
+    noteId?: string,
+    confirmed = false,
+  ) => {
     setInteraction(null);
     const last = path.split("/").pop() ?? path;
     if (
+      !confirmed &&
       !window.confirm(
         `Archive '${last}'?\n\nIt will move to threads/.archive/ and be removed from the workspace.`,
       )

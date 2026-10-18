@@ -130,7 +130,13 @@ function setup(initial: Harness, graph: Graph) {
       }),
     { initialProps: initial },
   );
-  return { ...view, animate, setCustomBBox, sigmaRef: args.sigmaRef };
+  return {
+    ...view,
+    animate,
+    setCustomBBox,
+    sigmaRef: args.sigmaRef,
+    activeTweenRef: args.activeTweenRef,
+  };
 }
 
 describe("useGraphScene — relayout stability on notes identity change", () => {
@@ -389,6 +395,28 @@ describe("useGraphScene — layout selection & auto-cycle", () => {
       ORBIT_SCENES[(ORBIT_SCENES.indexOf("spiral") + 1) % ORBIT_SCENES.length];
     expect(result.current).toBe(after);
     expect(orbitMock).toHaveBeenCalledWith(graph, "a", after);
+  });
+
+  it("cancels a large-batch settle when switching to a scene layout", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+    const { rerender, activeTweenRef } = setup(
+      { layout: "force", graphFocusId: null, notes, sigmaReady: 1 },
+      graph,
+    );
+    // A worker settle in flight owns the live positions (useGraphInstance).
+    const settle = { cancel: vi.fn() };
+    activeTweenRef.current = settle;
+
+    rerender({
+      layout: "rings",
+      graphFocusId: "a" as NoteId,
+      notes,
+      sigmaReady: 1,
+    });
+
+    expect(settle.cancel).toHaveBeenCalledTimes(1);
+    expect(activeTweenRef.current).not.toBe(settle);
   });
 
   it("does NOT kick a force relayout when focus or cycle toggles change in force layout", () => {

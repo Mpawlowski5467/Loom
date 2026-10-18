@@ -1,5 +1,7 @@
 import type Graph from "graphology";
-import forceAtlas2 from "graphology-layout-forceatlas2";
+import forceAtlas2, {
+  type ForceAtlas2Settings,
+} from "graphology-layout-forceatlas2";
 import { resolveOverlaps } from "./overlap";
 import { measureLayoutFrame, placeNewNodes } from "./placement";
 import { relaxNewNodes } from "./localRelax";
@@ -69,19 +71,25 @@ function layoutFromScratch(graph: Graph, ids: string[]): void {
   });
   forceAtlas2.assign(graph, {
     iterations: FULL_ITERATIONS,
-    settings: {
-      ...forceAtlas2.inferSettings(graph),
-      gravity: 0.6,
-      scalingRatio: 8,
-      slowDown: 8,
-      // Hubs push their satellites outward instead of swallowing them —
-      // spreads the inevitable hairball around well-linked notes.
-      outboundAttractionDistribution: true,
-      barnesHutOptimize: graph.order > BARNES_HUT_THRESHOLD,
-    },
+    settings: constellationFA2Settings(graph),
   });
   // FA2 has no collision term; relax any disks it left stacked.
   resolveOverlaps(graph);
+}
+
+/** The constellation's ForceAtlas2 forces. The worker batch settle uses them
+ * too, so a settled batch lands at the same scale as the fresh layout. */
+export function constellationFA2Settings(graph: Graph): ForceAtlas2Settings {
+  return {
+    ...forceAtlas2.inferSettings(graph),
+    gravity: 0.6,
+    scalingRatio: 8,
+    slowDown: 8,
+    // Hubs push their satellites outward instead of swallowing them —
+    // spreads the inevitable hairball around well-linked notes.
+    outboundAttractionDistribution: true,
+    barnesHutOptimize: graph.order > BARNES_HUT_THRESHOLD,
+  };
 }
 
 /** Place unseeded nodes beside their seeded neighbors, then settle only

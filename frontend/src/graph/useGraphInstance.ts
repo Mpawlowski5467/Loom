@@ -14,6 +14,7 @@ import {
   type GraphSyncResult,
 } from "./graphSync";
 import { attachDrag } from "./dragHandlers";
+import { startBatchSettle } from "./batchSettle";
 import { createFrameLoop, type FrameLoop } from "./frameLoop";
 import {
   computeEdgeExtremities,
@@ -45,6 +46,9 @@ export interface GraphInstance {
   baseSizesRef: Ref<Map<string, number>>;
   basePositionsRef: Ref<Map<string, XY>>;
   orbitTargetsRef: Ref<Map<string, XY>>;
+  /** The layout motion that owns live positions: a scene tween or a
+   * large-batch worker settle. A drag, a layout switch, the next structural
+   * sync, fit view and teardown all cancel it. */
   activeTweenRef: Ref<TweenHandle | null>;
   breathingRemoveRef: Ref<(() => void) | null>;
   /** Halts the active drag sim (scene staging calls it before a tween). */
@@ -302,6 +306,15 @@ export function useGraphInstance(args: {
               activeTweenRef.current?.cancel();
               activeTweenRef.current = null;
             },
+            settleBatch: (ids) => {
+              activeTweenRef.current = startBatchSettle({
+                graph,
+                sigma,
+                frameLoop,
+                ids,
+                homesRef: basePositionsRef,
+              });
+            },
           },
           next,
         );
@@ -379,8 +392,9 @@ export function useGraphInstance(args: {
 
   // Structure sync: a node or link was added or removed. Diff it onto the
   // live graph (no sigma.kill(), no ForceAtlas2 on the main thread, camera
-  // untouched). Before the deferred build has run there is nothing to patch
-  // — the build reads the latest notes itself.
+  // untouched); a large batch settles in a worker (batchSettle.ts). Before
+  // the deferred build has run there is nothing to patch — the build reads
+  // the latest notes itself.
   useEffect(() => {
     const sync = syncRef.current;
     if (!sync || liveKeyRef.current === structKey) return;

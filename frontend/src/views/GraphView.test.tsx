@@ -49,6 +49,18 @@ function refs() {
   };
 }
 
+vi.mock("@/theme/useThemeColors", () => ({
+  useThemeColors: () => ({
+    key: "graphite|theme|theme",
+    background: "#09090b",
+    foreground: "#fafafa",
+    mutedForeground: "#a1a1aa",
+    border: "#27272a",
+    borderStrong: "#3f3f46",
+    brand: "#60a5fa",
+    community: ["#60a5fa", "#f59e0b", "#2dd4bf", "#a78bfa"],
+  }),
+}));
 vi.mock("../graph/useGraphInstance", () => ({
   PERF_BUDGET_NODES: 500,
   useGraphInstance: () => refs(),
@@ -118,7 +130,6 @@ function renderGraph(
     toggleGraphFilter: vi.fn(),
     clearGraphFilters: vi.fn(),
     graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS, layout },
-    theme: "paper",
     pushToast: vi.fn(),
   } as unknown as AppContextValue;
 

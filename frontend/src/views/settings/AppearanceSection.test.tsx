@@ -1,195 +1,123 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import type { ReactNode } from "react";
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { AppCtx, type AppContextValue } from "../../context/app-ctx";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  appearanceEndpointUnsupported,
+  getAppearance,
+  putAppearance,
+} from "@/api/appearance";
+import { stubPrefersDark } from "@/test/matchMedia";
+import { ThemeProvider } from "@/theme/ThemeProvider";
 import { AppearanceSection } from "./AppearanceSection";
 
-function renderSection(
-  theme = "paper",
-  opts: { followOsTheme?: boolean } = {},
-) {
-  const setTheme = vi.fn().mockResolvedValue(undefined);
-  const setFollowOsTheme = vi.fn();
-  const value = {
-    theme,
-    setTheme,
-    followOsTheme: opts.followOsTheme ?? false,
-    setFollowOsTheme,
-  } as unknown as AppContextValue;
-  function Harness(): ReactNode {
-    return (
-      <AppCtx.Provider value={value}>
-        <AppearanceSection />
-      </AppCtx.Provider>
-    );
-  }
-  render(<Harness />);
-  return { setTheme, setFollowOsTheme };
-}
+vi.mock("@/api/appearance", () => ({
+  getAppearance: vi.fn(),
+  putAppearance: vi.fn(),
+  appearanceEndpointUnsupported: vi.fn(),
+}));
 
-beforeEach(() => {
-  window.localStorage.clear();
-});
+const html = () => document.documentElement;
 
-describe("AppearanceSection", () => {
-  it("shows the current theme in the status line", () => {
-    renderSection("porcelain");
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Current theme: porcelain",
-    );
-  });
-
-  it("updates the font-scale selection and reflects it via aria-pressed", async () => {
-    const user = userEvent.setup();
-    renderSection();
-    const large = screen.getByRole("button", { name: "Large" });
-    expect(large).toHaveAttribute("aria-pressed", "false");
-    await user.click(large);
-    expect(large).toHaveAttribute("aria-pressed", "true");
-    // The previously-pressed default (Normal) is now off.
-    expect(screen.getByRole("button", { name: "Normal" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-  });
-
-  it("updates the font style and applies its root class", async () => {
-    const user = userEvent.setup();
-    renderSection();
-    const literary = screen.getByRole("button", { name: /Literary/ });
-    await user.click(literary);
-    expect(literary).toHaveAttribute("aria-pressed", "true");
-    expect(document.documentElement).toHaveClass("font-preset-literary");
-  });
-
-  it("offers six independent font presets", () => {
-    renderSection();
-    const group = screen.getByRole("group", { name: "Font style" });
-    expect(group.querySelectorAll("button")).toHaveLength(6);
-  });
-
-  it("updates the density selection", async () => {
-    const user = userEvent.setup();
-    renderSection();
-    const compact = screen.getByRole("button", { name: "Compact" });
-    await user.click(compact);
-    expect(compact).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("updates the motion selection", async () => {
-    const user = userEvent.setup();
-    renderSection();
-    const reduce = screen.getByRole("button", { name: "Reduce motion" });
-    await user.click(reduce);
-    expect(reduce).toHaveAttribute("aria-pressed", "true");
-  });
-
-  it("renders all typography/spacing groups", () => {
-    renderSection();
-    expect(screen.getByText("Font style")).toBeInTheDocument();
-    expect(screen.getByText("Font size")).toBeInTheDocument();
-    expect(screen.getByText("UI density")).toBeInTheDocument();
-    expect(screen.getByText("Motion")).toBeInTheDocument();
-  });
-
-  it("groups themes into Light and Dark sections", () => {
-    renderSection();
-    expect(screen.getByText("Light")).toBeInTheDocument();
-    expect(screen.getByText("Dark")).toBeInTheDocument();
-  });
-});
-
-describe("AppearanceSection — reset to defaults", () => {
-  it("disables the reset button while appearance is at defaults", () => {
-    renderSection();
-    expect(
-      screen.getByRole("button", { name: /Reset to defaults/ }),
-    ).toBeDisabled();
-  });
-
-  it("restores defaults after a change", async () => {
-    const user = userEvent.setup();
-    renderSection();
-    await user.click(screen.getByRole("button", { name: /Modern/ }));
-    await user.click(screen.getByRole("button", { name: "Large" }));
-    const reset = screen.getByRole("button", { name: /Reset to defaults/ });
-    expect(reset).toBeEnabled();
-
-    await user.click(reset);
-    // Back to the default "Normal" font size.
-    expect(screen.getByRole("button", { name: "Normal" })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    expect(screen.getByRole("button", { name: "Large" })).toHaveAttribute(
-      "aria-pressed",
-      "false",
-    );
-    expect(
-      screen.getByRole("button", { name: /Loom Editorial/ }),
-    ).toHaveAttribute("aria-pressed", "true");
-    expect(reset).toBeDisabled();
-  });
-});
-
-describe("AppearanceSection — follow OS appearance", () => {
-  it("starts unchecked when not following the OS", () => {
-    renderSection();
-    expect(screen.getByLabelText("Follow OS appearance")).not.toBeChecked();
-  });
-
-  it("reflects the following state from context", () => {
-    renderSection("midnight", { followOsTheme: true });
-    expect(screen.getByLabelText("Follow OS appearance")).toBeChecked();
-    expect(screen.getByRole("status")).toHaveTextContent("Following OS");
-  });
-
-  it("enabling the toggle asks the app to follow the OS", async () => {
-    const user = userEvent.setup();
-    const { setFollowOsTheme } = renderSection("paper");
-    await user.click(screen.getByLabelText("Follow OS appearance"));
-    expect(setFollowOsTheme).toHaveBeenCalledWith(true);
-  });
-
-  it("disabling the toggle asks the app to stop following the OS", async () => {
-    const user = userEvent.setup();
-    const { setFollowOsTheme } = renderSection("midnight", {
-      followOsTheme: true,
-    });
-    await user.click(screen.getByLabelText("Follow OS appearance"));
-    expect(setFollowOsTheme).toHaveBeenCalledWith(false);
-  });
-
-  it("locks the theme grid while following the OS", () => {
-    const { container } = renderWithContainer("midnight", {
-      followOsTheme: true,
-    });
-    expect(container.querySelector(".settings-theme-locked")).not.toBeNull();
-  });
-
-  it("picking a theme manually routes through setTheme (which clears follow-OS)", async () => {
-    const user = userEvent.setup();
-    const { setTheme } = renderSection("paper");
-    await user.click(screen.getAllByRole("radio")[0]!);
-    expect(setTheme).toHaveBeenCalled();
-  });
-});
-
-/** Variant that also returns the container for class-based assertions. */
-function renderWithContainer(
-  theme: string,
-  opts: { followOsTheme?: boolean } = {},
-) {
-  const value = {
-    theme,
-    setTheme: vi.fn().mockResolvedValue(undefined),
-    followOsTheme: opts.followOsTheme ?? false,
-    setFollowOsTheme: vi.fn(),
-  } as unknown as AppContextValue;
+function renderPage() {
   return render(
-    <AppCtx.Provider value={value}>
+    <ThemeProvider>
       <AppearanceSection />
-    </AppCtx.Provider>,
+    </ThemeProvider>,
   );
 }
+
+describe("AppearanceSection", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    localStorage.clear();
+    vi.mocked(getAppearance).mockResolvedValue(null);
+    vi.mocked(putAppearance).mockResolvedValue(true);
+    vi.mocked(appearanceEndpointUnsupported).mockReturnValue(false);
+    stubPrefersDark(true);
+  });
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("offers the six themes with Graphite selected by default", () => {
+    renderPage();
+    const group = screen.getByRole("radiogroup", { name: "Theme" });
+    const cards = Array.from(group.querySelectorAll('[role="radio"]'));
+    expect(cards.map((c) => c.getAttribute("aria-label"))).toEqual([
+      "Graphite",
+      "Paper",
+      "Midnight",
+      "Forest",
+      "Linen",
+      "High contrast",
+    ]);
+    expect(screen.getByRole("radio", { name: "Graphite" })).toBeChecked();
+  });
+
+  it("applies a theme to the whole app when its card is clicked", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("radio", { name: "Linen" }));
+    expect(html()).toHaveAttribute("data-theme", "linen");
+    expect(screen.getByRole("radio", { name: "Linen" })).toBeChecked();
+  });
+
+  it("follows the system with a theme per mode", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const toggle = screen.getByRole("switch", {
+      name: "Follow system appearance",
+    });
+    await user.click(toggle);
+    expect(toggle).toBeChecked();
+    // The OS is dark, so the dark-mode choice (Graphite) is on screen.
+    expect(html()).toHaveAttribute("data-theme", "graphite");
+    expect(
+      screen.getByRole("combobox", { name: "When the system is light" }),
+    ).toHaveTextContent("Paper");
+  });
+
+  it("sets and names the accent override", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("radio", { name: "Teal" }));
+    expect(html()).toHaveAttribute("data-brand", "teal");
+    expect(screen.getByText("Teal", { selector: "span" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("radio", { name: "Theme default" }));
+    expect(html()).not.toHaveAttribute("data-brand");
+  });
+
+  it("switches the editor font, graph palette and text size", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.click(screen.getByRole("radio", { name: "Newsreader" }));
+    expect(html()).toHaveAttribute("data-editor-font", "serif");
+
+    await user.click(screen.getByRole("radio", { name: "Colorblind-safe" }));
+    expect(html()).toHaveAttribute("data-graph-palette", "colorblind");
+
+    await user.click(screen.getByRole("radio", { name: "Large" }));
+    expect(html()).toHaveAttribute("data-text-size", "lg");
+  });
+
+  it("resets everything to the defaults", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    const reset = screen.getByRole("button", { name: /reset to defaults/i });
+    expect(reset).toBeDisabled();
+
+    await user.click(screen.getByRole("radio", { name: "Forest" }));
+    await user.click(screen.getByRole("radio", { name: "Rose" }));
+    await user.click(reset);
+    expect(html()).toHaveAttribute("data-theme", "graphite");
+    expect(html()).not.toHaveAttribute("data-brand");
+  });
+
+  it("says where settings are saved", async () => {
+    vi.mocked(appearanceEndpointUnsupported).mockReturnValue(true);
+    renderPage();
+    await waitFor(() =>
+      expect(screen.getByText(/saved on this device/i)).toBeInTheDocument(),
+    );
+  });
+});

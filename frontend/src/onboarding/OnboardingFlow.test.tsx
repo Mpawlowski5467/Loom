@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { vaultExists } from "../api/vault";
 import { OnboardingFlow } from "./OnboardingFlow";
+import { TestAppearanceProvider } from "@/test/appearance";
 
 const { completeOnboardingMock } = vi.hoisted(() => ({
   completeOnboardingMock: vi.fn(),
@@ -10,7 +11,6 @@ const { completeOnboardingMock } = vi.hoisted(() => ({
 
 vi.mock("../context/app-ctx", () => ({
   useApp: () => ({
-    theme: "paper",
     completeOnboarding: completeOnboardingMock,
   }),
 }));
@@ -35,7 +35,7 @@ describe("OnboardingFlow", () => {
   });
 
   it("renders Welcome first", () => {
-    render(<OnboardingFlow />);
+    render(<OnboardingFlow />, { wrapper: TestAppearanceProvider });
 
     expect(
       screen.getByRole("heading", { name: "Welcome to Loom" }),
@@ -44,7 +44,7 @@ describe("OnboardingFlow", () => {
 
   it("forward arrows step through and Back returns", async () => {
     const user = userEvent.setup();
-    render(<OnboardingFlow />);
+    render(<OnboardingFlow />, { wrapper: TestAppearanceProvider });
 
     await user.click(screen.getByRole("button", { name: "Begin →" }));
     expect(
@@ -64,10 +64,11 @@ describe("OnboardingFlow", () => {
 
   it("submit calls completeOnboarding with the right payload", async () => {
     const user = userEvent.setup();
-    render(<OnboardingFlow />);
+    render(<OnboardingFlow />, { wrapper: TestAppearanceProvider });
 
     await user.click(screen.getByRole("button", { name: "Begin →" }));
     await user.click(screen.getByRole("button", { name: "Next →" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(6);
     await user.click(screen.getByRole("button", { name: "Next →" }));
     // "Skip for now" opens a confirm dialog (it replaced window.confirm); the
     // dialog's confirm button reuses the label, so click the last match.
@@ -77,7 +78,8 @@ describe("OnboardingFlow", () => {
 
     await waitFor(() =>
       expect(completeOnboardingMock).toHaveBeenCalledWith({
-        theme: "paper",
+        // Graphite (the default) maps to the backend's legacy "midnight".
+        theme: "midnight",
         vault_name: "default",
         overwrite_existing_vault: false,
         seed_demo: false,
@@ -91,7 +93,7 @@ describe("OnboardingFlow", () => {
 
   it("'Try the demo vault' seeds the demo and names the vault demo", async () => {
     const user = userEvent.setup();
-    render(<OnboardingFlow />);
+    render(<OnboardingFlow />, { wrapper: TestAppearanceProvider });
 
     await user.click(screen.getByRole("button", { name: "Begin →" }));
     await user.click(

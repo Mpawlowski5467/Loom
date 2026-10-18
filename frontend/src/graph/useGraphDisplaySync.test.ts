@@ -87,7 +87,7 @@ describe("useGraphDisplaySync — filters", () => {
       tuningRef,
       graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS } satisfies GraphDisplay,
       graphMode: "constellation" as const,
-      theme: "paper" as const,
+      themeKey: "paper|theme|theme",
       sigmaReady: 1,
       stopDragSimRef: ref<(() => void) | null>(stopDrag),
     };

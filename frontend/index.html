@@ -1,10 +1,80 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-theme="graphite" data-theme-mode="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Loom</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <script>
+      // Paint the saved appearance before the bundle loads, so a reload never
+      // flashes the wrong theme. A hand-written mirror of normalizeAppearance +
+      // appearanceAttributes (src/theme/appearance.ts) and the legacy-key
+      // migration (src/theme/appearanceStorage.ts); src/theme/boot.test.ts
+      // runs this script against the TypeScript to keep them in sync.
+      (function () {
+        var DARK = ["graphite", "midnight", "forest", "high-contrast"];
+        var LIGHT = ["paper", "linen"];
+        var LEGACY = {
+          paper: "linen", porcelain: "paper", herbarium: "linen",
+          midnight: "midnight", lagoon: "forest", ember: "graphite",
+          slate: "paper", foundry: "linen", dune: "linen", carbon: "midnight",
+          obsidian: "midnight", nocturne: "midnight", mulberry: "graphite",
+        };
+        var BRANDS = {
+          "#3b82f6": "blue", "#14b8a6": "teal", "#f59e0b": "amber",
+          "#8b5cf6": "violet", "#f43f5e": "rose",
+        };
+        function has(list, v) { return list.indexOf(v) >= 0; }
+        function pick(v, list, fallback) { return has(list, v) ? v : fallback; }
+        function json(raw) { try { return raw ? JSON.parse(raw) : null; } catch (e) { return null; } }
+
+        var s = null;
+        try {
+          s = json(localStorage.getItem("loom.appearance.v2"));
+          if (!s) {
+            var old = json(localStorage.getItem("loom.appearance")) || {};
+            s = {
+              theme: LEGACY[localStorage.getItem("loom.theme")],
+              followSystem: localStorage.getItem("loom.theme.followOs") === "1",
+              editorFont: old.fontPreset
+                ? (old.fontPreset === "editorial" || old.fontPreset === "literary" ? "serif" : "geist")
+                : undefined,
+              textSize: old.fontScale, density: old.density, motion: old.motion,
+            };
+          }
+        } catch (e) {}
+        s = s && typeof s === "object" ? s : {};
+
+        var theme = pick(s.theme, DARK.concat(LIGHT), "graphite");
+        var dark = has(DARK, s.darkTheme) ? s.darkTheme : has(DARK, theme) ? theme : "graphite";
+        var light = has(LIGHT, s.lightTheme) ? s.lightTheme : has(LIGHT, theme) ? theme : "paper";
+        var prefersDark = false;
+        try { prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches; } catch (e) {}
+        var shown = s.followSystem === true ? (prefersDark ? dark : light) : theme;
+        try {
+          var q = new URLSearchParams(location.search).get("theme");
+          if (has(DARK, q) || has(LIGHT, q)) shown = q;
+          else if (q && LEGACY[q]) shown = LEGACY[q];
+        } catch (e) {}
+
+        var brand = typeof s.brandOverride === "string" ? BRANDS[s.brandOverride.toLowerCase()] : null;
+        var attrs = {
+          "data-theme": shown,
+          "data-theme-mode": has(LIGHT, shown) ? "light" : "dark",
+          "data-brand": brand || null,
+          "data-graph-palette": s.graphPalette === "colorblind" ? "colorblind" : null,
+          "data-editor-font": pick(s.editorFont, ["geist", "mono", "serif"], "geist"),
+          "data-text-size": pick(s.textSize, ["sm", "md", "lg"], "md"),
+          "data-density": pick(s.density, ["compact", "cozy", "comfortable"], "cozy"),
+          "data-motion": pick(s.motion, ["auto", "on", "off"], "auto"),
+        };
+        var root = document.documentElement;
+        for (var name in attrs) {
+          if (attrs[name] === null) root.removeAttribute(name);
+          else root.setAttribute(name, attrs[name]);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

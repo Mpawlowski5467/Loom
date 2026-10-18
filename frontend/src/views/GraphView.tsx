@@ -31,6 +31,7 @@ import {
 } from "../graph/keyboardNavigation";
 import { spacingToCameraRatio } from "../graph/reducers";
 import type { NodeType } from "../data/types";
+import { useThemeColors } from "@/theme/useThemeColors";
 
 export function GraphView(): ReactNode {
   const {
@@ -47,9 +48,9 @@ export function GraphView(): ReactNode {
     toggleGraphFilter,
     clearGraphFilters,
     graphDisplay,
-    theme,
     pushToast,
   } = useApp();
+  const themeColors = useThemeColors();
 
   // Internal render-path mode derived from the selected layout: "force" is the
   // constellation branch; every other layout renders as an orbit scene.
@@ -172,7 +173,7 @@ export function GraphView(): ReactNode {
     graphFilters,
     selectedNodeId: graphSelectedId,
     isolateNeighbors,
-    theme,
+    themeKey: themeColors.key,
     sigmaReady,
     stopDragSimRef,
   });

@@ -38,6 +38,7 @@ vi.mock("./primitives/LoomRibbon", () => ({ LoomRibbon: () => null }));
 vi.mock("./UnindexedBanner", () => ({ UnindexedBanner: () => null }));
 
 import { MainShell } from "./MainShell";
+import { TestAppearanceProvider } from "@/test/appearance";
 
 function appState(over: Record<string, unknown> = {}) {
   return {
@@ -88,7 +89,7 @@ afterEach(() => {
 
 describe("MainShell ErrorBoundary coverage", () => {
   it("renders all chrome regions when nothing throws", async () => {
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.getByText("nav-region")).toBeInTheDocument();
     expect(screen.getByText("tree-region")).toBeInTheDocument();
     expect(await screen.findByText("graph-view")).toBeInTheDocument();
@@ -99,7 +100,7 @@ describe("MainShell ErrorBoundary coverage", () => {
     Nav.mockImplementation(() => {
       throw new Error("nav boom");
     });
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
 
     // Nav fell back to the boundary message...
     expect(
@@ -115,7 +116,7 @@ describe("MainShell ErrorBoundary coverage", () => {
     Tree.mockImplementation(() => {
       throw new Error("tree boom");
     });
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
 
     expect(
       screen.getByText(/Something went wrong rendering the file tree/),
@@ -128,7 +129,7 @@ describe("MainShell ErrorBoundary coverage", () => {
     Toasts.mockImplementation(() => {
       throw new Error("toast boom");
     });
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
 
     expect(
       screen.getByText(/Something went wrong rendering notifications/),
@@ -141,41 +142,41 @@ describe("MainShell ErrorBoundary coverage", () => {
 describe("MainShell file-tree visibility", () => {
   it("renders the tree on the graph tab", () => {
     useApp.mockReturnValue(appState({ tab: "graph" }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.getByText("tree-region")).toBeInTheDocument();
   });
 
   it("renders the tree on the board tab", async () => {
     useApp.mockReturnValue(appState({ tab: "board" }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.getByText("tree-region")).toBeInTheDocument();
     expect(await screen.findByText("board")).toBeInTheDocument();
   });
 
   it("omits the tree on the thread tab (full-width view)", async () => {
     useApp.mockReturnValue(appState({ tab: "thread" }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
     expect(await screen.findByText("thread")).toBeInTheDocument();
   });
 
   it("omits the tree on the inbox tab (full-width view)", async () => {
     useApp.mockReturnValue(appState({ tab: "inbox" }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
     expect(await screen.findByText("inbox")).toBeInTheDocument();
   });
 
   it("omits the tree on the settings tab", async () => {
     useApp.mockReturnValue(appState({ tab: "settings" }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
     expect(await screen.findByText("settings")).toBeInTheDocument();
   });
 
   it("omits the tree on graph when treeVisible is false", () => {
     useApp.mockReturnValue(appState({ tab: "graph", treeVisible: false }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     expect(screen.queryByText("tree-region")).not.toBeInTheDocument();
     expect(screen.getByText("graph-view")).toBeInTheDocument();
   });
@@ -183,14 +184,16 @@ describe("MainShell file-tree visibility", () => {
   it("Cmd/Ctrl+B toggles the tree on graph but is inert on thread", () => {
     const setTreeVisible = vi.fn();
     useApp.mockReturnValue(appState({ tab: "graph", setTreeVisible }));
-    const { unmount } = render(<MainShell />);
+    const { unmount } = render(<MainShell />, {
+      wrapper: TestAppearanceProvider,
+    });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     expect(setTreeVisible).toHaveBeenCalledWith(false);
     unmount();
 
     setTreeVisible.mockClear();
     useApp.mockReturnValue(appState({ tab: "thread", setTreeVisible }));
-    render(<MainShell />);
+    render(<MainShell />, { wrapper: TestAppearanceProvider });
     fireEvent.keyDown(window, { key: "b", ctrlKey: true });
     expect(setTreeVisible).not.toHaveBeenCalled();
   });

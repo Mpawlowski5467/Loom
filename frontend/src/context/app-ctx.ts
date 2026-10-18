@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react";
 import type { AgentActivity } from "../api/activity";
 import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
-import type { ThemeName } from "../theme/themes";
 import type {
   Agent,
   AgentEvent,
@@ -163,10 +162,6 @@ export interface AppContextValue {
   setCaptureStatus: (id: string, s: CaptureStatus) => void;
   removeCapture: (id: string) => void;
 
-  theme: ThemeName;
-  setTheme: (t: ThemeName) => Promise<void>;
-  followOsTheme: boolean;
-  setFollowOsTheme: (on: boolean) => void;
   config: LoomConfigPublic | null;
   configLoading: boolean;
   configError: string | null;

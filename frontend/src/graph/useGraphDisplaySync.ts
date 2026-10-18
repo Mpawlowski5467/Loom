@@ -1,7 +1,6 @@
 import { useEffect } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import type { ThemeName } from "../theme/themes";
 import type { GraphDisplay } from "../context/app-ctx";
 import type { NodeType } from "../data/types";
 import { applyPaletteToGraph } from "./sigma-setup";
@@ -40,7 +39,8 @@ export function useGraphDisplaySync(args: {
   graphFilters: Set<NodeType>;
   selectedNodeId?: string | null;
   isolateNeighbors?: boolean;
-  theme: ThemeName;
+  /** From useThemeColors(): changes when the theme, accent or palette does. */
+  themeKey: string;
   sigmaReady: number;
   stopDragSimRef: Ref<(() => void) | null>;
 }): void {
@@ -55,7 +55,7 @@ export function useGraphDisplaySync(args: {
     graphFilters,
     selectedNodeId = null,
     isolateNeighbors = false,
-    theme,
+    themeKey,
     sigmaReady,
     stopDragSimRef,
   } = args;
@@ -214,5 +214,5 @@ export function useGraphDisplaySync(args: {
     const graph = graphRef.current;
     if (!sigma || !graph) return;
     applyPaletteToGraph(sigma, graph, tuningRef.current);
-  }, [theme, tuningRef, sigmaRef, graphRef]);
+  }, [themeKey, tuningRef, sigmaRef, graphRef]);
 }

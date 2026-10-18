@@ -10,6 +10,8 @@ import { Toasts } from "../views/Toasts";
 import { LoomRibbon } from "./primitives/LoomRibbon";
 import { UnindexedBanner } from "./UnindexedBanner";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { useAppearance } from "@/theme/appearance-ctx";
+import { themeMeta } from "@/theme/registry";
 
 const GraphView = lazy(() =>
   import("../views/GraphView").then((module) => ({
@@ -104,6 +106,7 @@ export function MainShell(): ReactNode {
     unindexedCount,
     pushToast,
   } = useApp();
+  const { resolvedTheme } = useAppearance();
   const [showSplash, setShowSplash] = useState<boolean>(() =>
     shouldShowSplash(),
   );
@@ -160,7 +163,7 @@ export function MainShell(): ReactNode {
     document.title = `Loom — ${vault} — ${view}`;
   }, [tab, config?.active_vault]);
 
-  const themeLabel = config?.ui.theme ?? "paper";
+  const themeLabel = themeMeta(resolvedTheme).label;
   const providerMissing = computeProviderMissing(config);
 
   return (

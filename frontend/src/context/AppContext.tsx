@@ -136,7 +136,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setToasts((prev) => prev.filter((t) => t.id !== id));
   }, []);
 
-  const liveLoomConfig = useLoomConfig(pushToast);
+  const liveLoomConfig = useLoomConfig();
   useNavigationHistory({
     tab,
     noteId: currentNoteId,
@@ -146,7 +146,7 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setHeading: setNoteHeading,
   });
   // A graph fixture must render immediately even with no backend. The config
-  // hook still owns theme behavior, while these read-only shell fields place
+  // hook still owns config loading, while these read-only shell fields place
   // the app in its existing standalone/offline-ready phase.
   const loomConfig =
     graphFixture === null
@@ -243,19 +243,15 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
   // returns a FRESH object literal every render, so a `[loomConfig]` dep (or
   // spreading `...loomConfig` so eslint demands it as a dep) would defeat the
   // memo entirely. We destructure its fields into locals here and depend on
-  // those individually — the primitives that actually change (theme/config/etc.)
+  // those individually — the primitives that actually change (config, onboarding, …)
   // and its useCallback-stable callbacks. Everything else is changing state or a
   // stable useCallback / raw React setter (setters are guaranteed stable).
   const {
-    theme: cfgTheme,
-    followOsTheme: cfgFollowOsTheme,
     config: cfgConfig,
     configLoading: cfgConfigLoading,
     configError: cfgConfigError,
     offline: cfgOffline,
     onboardingComplete: cfgOnboardingComplete,
-    setTheme: cfgSetTheme,
-    setFollowOsTheme: cfgSetFollowOsTheme,
     refreshConfig: cfgRefreshConfig,
     completeOnboarding: cfgCompleteOnboarding,
   } = loomConfig;
@@ -342,15 +338,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       addFolder,
 
       // loomConfig fields (destructured into locals above, never the raw object)
-      theme: cfgTheme,
-      followOsTheme: cfgFollowOsTheme,
       config: cfgConfig,
       configLoading: cfgConfigLoading,
       configError: cfgConfigError,
       offline: cfgOffline,
       onboardingComplete: cfgOnboardingComplete,
-      setTheme: cfgSetTheme,
-      setFollowOsTheme: cfgSetFollowOsTheme,
       refreshConfig: cfgRefreshConfig,
       completeOnboarding: cfgCompleteOnboarding,
     }),
@@ -423,15 +415,11 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       removeCapture,
       addFolder,
       // loomConfig fields enumerated individually (NOT the raw object)
-      cfgTheme,
-      cfgFollowOsTheme,
       cfgConfig,
       cfgConfigLoading,
       cfgConfigError,
       cfgOffline,
       cfgOnboardingComplete,
-      cfgSetTheme,
-      cfgSetFollowOsTheme,
       cfgRefreshConfig,
       cfgCompleteOnboarding,
     ],

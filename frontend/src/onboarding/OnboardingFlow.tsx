@@ -5,7 +5,8 @@ import type {
   OnboardingCompleteRequest,
   OnboardingProviderPayload,
 } from "../api/types";
-import type { ThemeName } from "../theme/themes";
+import { useAppearance } from "../theme/appearance-ctx";
+import { backendThemeName } from "../theme/backendTheme";
 import { Welcome } from "./steps/Welcome";
 import { VaultSetup } from "./steps/VaultSetup";
 import { ThemePicker } from "./steps/ThemePicker";
@@ -15,7 +16,6 @@ type StepName = "welcome" | "vault" | "theme" | "provider";
 const STEP_ORDER: StepName[] = ["welcome", "vault", "theme", "provider"];
 
 interface OnboardingDraft {
-  theme: ThemeName;
   vaultName: string;
   overwriteExistingVault: boolean;
   seedDemo: boolean;
@@ -25,10 +25,10 @@ interface OnboardingDraft {
 }
 
 export function OnboardingFlow(): ReactNode {
-  const { theme, completeOnboarding } = useApp();
+  const { completeOnboarding } = useApp();
+  const { resolvedTheme } = useAppearance();
   const [step, setStep] = useState<StepName>("welcome");
   const [draft, setDraft] = useState<OnboardingDraft>({
-    theme,
     vaultName: "default",
     overwriteExistingVault: false,
     seedDemo: false,
@@ -60,7 +60,8 @@ export function OnboardingFlow(): ReactNode {
     setSubmitting(true);
     try {
       const payload: OnboardingCompleteRequest = {
-        theme: draft.theme,
+        // The backend only knows the old theme names; see backendTheme.ts.
+        theme: backendThemeName(resolvedTheme),
         vault_name: draft.vaultName.trim() || "default",
         overwrite_existing_vault: draft.overwriteExistingVault,
         seed_demo: draft.seedDemo,
@@ -77,7 +78,7 @@ export function OnboardingFlow(): ReactNode {
     } finally {
       setSubmitting(false);
     }
-  }, [completeOnboarding, draft]);
+  }, [completeOnboarding, draft, resolvedTheme]);
 
   return (
     <div className="onb-root" role="dialog" aria-labelledby="onb-title">
@@ -120,14 +121,7 @@ export function OnboardingFlow(): ReactNode {
             onBack={back}
           />
         )}
-        {step === "theme" && (
-          <ThemePicker
-            selected={draft.theme}
-            onChange={(t) => updateDraft({ theme: t })}
-            onNext={next}
-            onBack={back}
-          />
-        )}
+        {step === "theme" && <ThemePicker onNext={next} onBack={back} />}
         {step === "provider" && (
           <ProviderConfig
             providers={draft.providers}

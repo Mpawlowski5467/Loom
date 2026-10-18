@@ -571,7 +571,11 @@
 .banner-provider {
   background: var(--warning-bg);
   color: var(--legacy-warning);
-  border-bottom-color: color-mix(in srgb, var(--legacy-warning) 40%, transparent);
+  border-bottom-color: color-mix(
+    in srgb,
+    var(--legacy-warning) 40%,
+    transparent
+  );
 }
 .banner-offline {
   background: var(--agent-bg);

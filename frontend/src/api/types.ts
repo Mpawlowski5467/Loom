@@ -3,9 +3,18 @@
  * ``backend/core/config.py`` and the route response models.
  */
 
-import type { ThemeName } from "../theme/themes";
-
-export type { ThemeName };
+/**
+ * Theme names the backend's ``ThemeName`` enum accepts (``core/config.py``).
+ * The UI's own themes live in ``theme/registry.ts``; see
+ * ``theme/backendTheme.ts`` for the mapping used by onboarding.
+ */
+export type BackendThemeName =
+  | "paper"
+  | "porcelain"
+  | "herbarium"
+  | "midnight"
+  | "lagoon"
+  | "ember";
 
 export interface ProviderConfigPublic {
   api_key_set: boolean;
@@ -15,7 +24,7 @@ export interface ProviderConfigPublic {
 }
 
 export interface UIState {
-  theme: ThemeName;
+  theme: BackendThemeName;
 }
 
 export interface OnboardingState {
@@ -128,7 +137,7 @@ export interface OnboardingProviderPayload {
 }
 
 export interface OnboardingCompleteRequest {
-  theme: ThemeName;
+  theme: BackendThemeName;
   vault_name: string;
   overwrite_existing_vault?: boolean;
   /** Seed a brand-new vault from the bundled demo template. */
@@ -142,7 +151,7 @@ export interface OnboardingCompleteRequest {
 }
 
 export interface ConfigPatch {
-  theme?: ThemeName;
+  theme?: BackendThemeName;
   active_vault?: string;
   default_provider?: string;
 }

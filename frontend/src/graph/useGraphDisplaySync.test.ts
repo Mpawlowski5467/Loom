@@ -3,9 +3,10 @@ import Graph from "graphology";
 import type Sigma from "sigma";
 import { describe, expect, it, vi } from "vitest";
 import { GRAPH_DISPLAY_DEFAULTS, type GraphDisplay } from "../context/app-ctx";
-import type { NodeType } from "../data/types";
 import type { GraphTuning } from "./tuning";
 import { useGraphDisplaySync } from "./useGraphDisplaySync";
+import { DEFAULT_NODE_FILTER, type GraphNodeFilter } from "./nodeFilter";
+import { typePaint } from "./graphModel";
 
 vi.mock("./sigma-setup", () => ({
   applyPaletteToGraph: vi.fn(),
@@ -33,7 +34,9 @@ function makeTuning(): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: {
       edge: "",
       edgeHover: "",
@@ -65,6 +68,7 @@ describe("useGraphDisplaySync — filters", () => {
       y: 0,
       size: 4,
       noteType: "topic",
+      folder: "topics",
     });
     for (let index = 0; index < 500; index += 1) {
       graph.addNode(`project-${index}`, {
@@ -72,6 +76,7 @@ describe("useGraphDisplaySync — filters", () => {
         y: index % 10,
         size: 4,
         noteType: "project",
+        folder: "projects",
       });
     }
     graph.addEdge("focus", "project-0");
@@ -87,30 +92,33 @@ describe("useGraphDisplaySync — filters", () => {
       tuningRef,
       graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS } satisfies GraphDisplay,
       graphMode: "constellation" as const,
-      themeKey: "paper|theme|theme",
+      communityOf: new Map<string, number | null>(),
+      communityKey: "0:x",
+      nodeColor: typePaint(),
+      paintKey: "paper|off",
       sigmaReady: 1,
       stopDragSimRef: ref<(() => void) | null>(stopDrag),
     };
 
     const { rerender } = renderHook(
       ({
-        filters,
+        filter,
         selected,
         isolate,
       }: {
-        filters: Set<NodeType>;
+        filter: GraphNodeFilter;
         selected: string | null;
         isolate: boolean;
       }) =>
         useGraphDisplaySync({
           ...args,
-          graphFilters: filters,
+          graphFilter: filter,
           selectedNodeId: selected,
           isolateNeighbors: isolate,
         }),
       {
         initialProps: {
-          filters: new Set<NodeType>(),
+          filter: DEFAULT_NODE_FILTER,
           selected: null,
           isolate: false,
         },
@@ -121,7 +129,7 @@ describe("useGraphDisplaySync — filters", () => {
     expect(sigma.setCustomBBox).toHaveBeenCalledWith(null);
 
     rerender({
-      filters: new Set<NodeType>(["topic"]),
+      filter: { ...DEFAULT_NODE_FILTER, folder: "topics" },
       selected: null,
       isolate: false,
     });
@@ -140,7 +148,7 @@ describe("useGraphDisplaySync — filters", () => {
     expect(stopDrag).toHaveBeenCalled();
 
     rerender({
-      filters: new Set<NodeType>(),
+      filter: DEFAULT_NODE_FILTER,
       selected: "focus",
       isolate: true,
     });

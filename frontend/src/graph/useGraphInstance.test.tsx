@@ -31,6 +31,8 @@ import { createTravelers } from "./travelers";
 import { createLens } from "./lens";
 import { installGraphDebugHook } from "./graphDebug";
 import type { GraphTuning } from "./tuning";
+import { DEFAULT_NODE_FILTER } from "./nodeFilter";
+import { typePaint } from "./graphModel";
 
 type Handler = (...args: unknown[]) => void;
 
@@ -308,7 +310,9 @@ function makeTuning(): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: {
       edge: "#000",
       edgeHover: "#000",

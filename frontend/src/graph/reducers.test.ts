@@ -10,6 +10,8 @@ import {
 } from "./reducers";
 import type { EdgePalette } from "./sigma-setup";
 import type { GraphTuning } from "./tuning";
+import { DEFAULT_NODE_FILTER } from "./nodeFilter";
+import { typePaint } from "./graphModel";
 
 const PALETTE: EdgePalette = {
   edge: "edge",
@@ -27,7 +29,9 @@ function mkTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: PALETTE,
     graphMode: "constellation",
     sizeScale: 1,
@@ -120,14 +124,29 @@ describe("makeNodeReducer", () => {
     return g;
   }
 
-  it("hides nodes whose type is filtered out", () => {
+  it("hides nodes the filter excludes", () => {
     const g = mkGraph();
-    const tuning = mkTuning({ filters: new Set(["project"]) });
+    const tuning = mkTuning({
+      filter: { ...DEFAULT_NODE_FILTER, folder: "projects" },
+    });
     const reducer = makeNodeReducer(g, tuning);
-    expect(reducer("b", { noteType: "topic", label: "B" }).hidden).toBe(true);
     expect(
-      reducer("a", { noteType: "project", label: "A" }).hidden,
+      reducer("b", { noteType: "topic", folder: "topics", label: "B" }).hidden,
+    ).toBe(true);
+    expect(
+      reducer("a", { noteType: "project", folder: "projects", label: "A" })
+        .hidden,
     ).toBeUndefined();
+  });
+
+  it("hides superseded nodes unless they're shown", () => {
+    const g = mkGraph();
+    const attrs = { noteType: "topic", superseded: true, label: "B" };
+    expect(makeNodeReducer(g, mkTuning())("b", attrs).hidden).toBe(true);
+    const shown = mkTuning({
+      filter: { ...DEFAULT_NODE_FILTER, showSuperseded: true },
+    });
+    expect(makeNodeReducer(g, shown)("b", attrs).hidden).toBeUndefined();
   });
 
   it("honors materialized neighborhood visibility", () => {
@@ -136,6 +155,15 @@ describe("makeNodeReducer", () => {
     expect(
       reducer("c", { noteType: "topic", label: "C", hidden: true }).hidden,
     ).toBe(true);
+  });
+
+  it("labels every neighbor in Local only, whatever its degree", () => {
+    const g = mkGraph();
+    const base = { selected: "a", cameraRatio: 1, labelThreshold: 18 };
+    const neighbor = { noteType: "topic", label: "B" };
+    expect(makeNodeReducer(g, mkTuning(base))("b", neighbor).label).toBe("");
+    const local = mkTuning({ ...base, isolateNeighbors: true });
+    expect(makeNodeReducer(g, local)("b", neighbor).label).toBe("B");
   });
 
   it("keeps persistent selection emphasized after pointer hover ends", () => {
@@ -365,7 +393,8 @@ describe("makeEdgeReducer", () => {
       const reducer = makeEdgeReducer(g, tuning, ext, nodeZ);
       const out = reducer(hit, { size: 1 });
       // avg z = 1 → alpha scaled by (1 - DEPTH_EDGE_FADE) = 0.45.
-      expect(out.color).toBe("rgba(26,24,21,0.081)");
+      // Faded to 0.081 alpha, then premultiplied for Sigma's blending.
+      expect(out.color).toBe("rgba(2,2,2,0.081)");
       expect(out.size).toBe(1);
     });
 
@@ -381,7 +410,7 @@ describe("makeEdgeReducer", () => {
         ext,
         zZero,
       );
-      expect(on(hit, { size: 1 }).color).toBeUndefined();
+      expect(on(hit, { size: 1 }).color).toBe(PALETTE.edge);
       const off = makeEdgeReducer(
         g,
         mkTuning({ depthEnabled: false }),
@@ -391,7 +420,7 @@ describe("makeEdgeReducer", () => {
           ["b", 1],
         ]),
       );
-      expect(off(hit, { size: 1 }).color).toBeUndefined();
+      expect(off(hit, { size: 1 }).color).toBe(PALETTE.edge);
     });
 
     it("hover styling wins over the depth fade", () => {

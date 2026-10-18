@@ -10,11 +10,12 @@ import type {
   GraphLayout,
   Note,
   NoteId,
-  NodeType,
   SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
+import type { CommunityResult } from "../graph/communities";
+import type { GraphNodeFilter } from "../graph/nodeFilter";
 
 export const GRAPH_LAYOUTS: readonly GraphLayout[] = [
   "force",
@@ -103,9 +104,11 @@ export interface AppContextValue {
   /** Bumped to ask the graph to fly its camera to a node (e.g. from search). */
   graphFlyTo: { id: NoteId; nonce: number } | null;
   flyToNode: (id: NoteId) => void;
-  graphFilters: Set<NodeType>;
-  toggleGraphFilter: (t: NodeType) => void;
-  clearGraphFilters: () => void;
+  graphFilter: GraphNodeFilter;
+  setGraphFilter: (patch: Partial<GraphNodeFilter>) => void;
+  resetGraphFilter: () => void;
+  /** Louvain communities over the vault's links (see graph/communities). */
+  communities: CommunityResult;
 
   graphDisplay: GraphDisplay;
   setGraphDisplay: (patch: Partial<GraphDisplay>) => void;

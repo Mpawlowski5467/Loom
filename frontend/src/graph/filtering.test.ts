@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import Graph from "graphology";
 import type { Note, NodeType } from "../data/types";
 import {
-  NODE_TYPES,
-  applyGraphFilters,
   applyGraphVisibility,
   computePositionBBox,
   computeVisibleGraphBBox,
@@ -11,9 +9,8 @@ import {
   computeVisibleGraphStats,
   computeVisibleNeighborIds,
   isGraphNodeVisible,
-  isNodeTypeVisible,
-  sanitizeGraphFilters,
 } from "./filtering";
+import { DEFAULT_NODE_FILTER, type GraphNodeFilter } from "./nodeFilter";
 
 function note(id: string, type: NodeType, links: string[] = []): Note {
   return {
@@ -32,49 +29,62 @@ function note(id: string, type: NodeType, links: string[] = []): Note {
   };
 }
 
-describe("sanitizeGraphFilters", () => {
-  it("exports every canonical node type", () => {
-    expect(NODE_TYPES).toEqual([
-      "project",
-      "topic",
-      "people",
-      "daily",
-      "capture",
-      "custom",
-    ]);
-  });
-
-  it("keeps valid values, deduplicates, and migrates person to people", () => {
-    expect([
-      ...sanitizeGraphFilters(["topic", "person", "topic", " DAILY "]),
-    ]).toEqual(["topic", "people", "daily"]);
-  });
-
-  it("rejects malformed containers and unknown values", () => {
-    expect(sanitizeGraphFilters("topic")).toEqual(new Set());
-    expect(sanitizeGraphFilters([null, 4, "bogus"])).toEqual(new Set());
-  });
+const ALL = DEFAULT_NODE_FILTER;
+const only = (patch: Partial<GraphNodeFilter>): GraphNodeFilter => ({
+  ...DEFAULT_NODE_FILTER,
+  ...patch,
 });
 
 describe("graph visibility", () => {
-  it("treats an empty set as all visible and a non-empty set as inclusion", () => {
-    expect(isNodeTypeVisible("topic", new Set())).toBe(true);
-    expect(isNodeTypeVisible("topic", new Set(["topic"]))).toBe(true);
-    expect(isNodeTypeVisible("project", new Set(["topic"]))).toBe(false);
-  });
-
   it("materializes hidden attributes and reports visible nodes", () => {
     const graph = new Graph();
-    graph.addNode("p", { noteType: "project" });
-    graph.addNode("t", { noteType: "topic", hidden: true });
+    graph.addNode("p", { folder: "projects" });
+    graph.addNode("t", { folder: "topics", hidden: true });
 
-    expect(applyGraphFilters(graph, new Set(["topic"]))).toBe(1);
+    expect(
+      applyGraphVisibility(graph, { filter: only({ folder: "topics" }) })
+        .visibleCount,
+    ).toBe(1);
     expect(isGraphNodeVisible(graph, "p")).toBe(false);
     expect(isGraphNodeVisible(graph, "t")).toBe(true);
 
-    expect(applyGraphFilters(graph, new Set())).toBe(2);
+    expect(applyGraphVisibility(graph, { filter: ALL }).visibleCount).toBe(2);
     expect(isGraphNodeVisible(graph, "p")).toBe(true);
     expect(isGraphNodeVisible(graph, "t")).toBe(true);
+  });
+
+  it("hides superseded notes and later notes on the timeline", () => {
+    const graph = new Graph();
+    graph.addNode("old", { superseded: true, created: 100 });
+    graph.addNode("early", { created: 100 });
+    graph.addNode("late", { created: 300 });
+
+    const result = applyGraphVisibility(graph, {
+      filter: only({ createdBefore: 200 }),
+    });
+    expect(result).toMatchObject({ visibleCount: 1, restricted: true });
+    expect(isGraphNodeVisible(graph, "early")).toBe(true);
+    expect(isGraphNodeVisible(graph, "old")).toBe(false);
+    expect(isGraphNodeVisible(graph, "late")).toBe(false);
+
+    applyGraphVisibility(graph, { filter: only({ showSuperseded: true }) });
+    expect(isGraphNodeVisible(graph, "old")).toBe(true);
+  });
+
+  it("filters by community slot or the Other bucket", () => {
+    const graph = new Graph();
+    graph.addNode("a", { community: 0 });
+    graph.addNode("b", { community: 1 });
+    graph.addNode("c", { community: null });
+
+    applyGraphVisibility(graph, { filter: only({ community: 1 }) });
+    expect(
+      ["a", "b", "c"].filter((id) => isGraphNodeVisible(graph, id)),
+    ).toEqual(["b"]);
+    applyGraphVisibility(graph, { filter: only({ community: "other" }) });
+    expect(
+      ["a", "b", "c"].filter((id) => isGraphNodeVisible(graph, id)),
+    ).toEqual(["c"]);
   });
 
   it("computes degree only through visible endpoints", () => {
@@ -94,18 +104,19 @@ describe("graph visibility", () => {
     );
   });
 
-  it("intersects direct-neighbor isolation with type filters", () => {
+  it("intersects direct-neighbor isolation with the filter", () => {
     const graph = new Graph();
-    graph.addNode("selected", { noteType: "project" });
-    graph.addNode("direct", { noteType: "topic" });
-    graph.addNode("second-hop", { noteType: "topic" });
-    graph.addNode("filtered-direct", { noteType: "daily" });
+    graph.addNode("selected", { folder: "projects" });
+    graph.addNode("direct", { folder: "projects" });
+    graph.addNode("second-hop", { folder: "projects" });
+    graph.addNode("filtered-direct", { folder: "daily" });
     graph.addEdge("selected", "direct");
     graph.addEdge("direct", "second-hop");
     graph.addEdge("filtered-direct", "selected");
+    const filter = only({ folder: "projects" });
 
     const result = applyGraphVisibility(graph, {
-      typeFilters: new Set(["project", "topic"]),
+      filter,
       selectedId: "selected",
       isolateNeighbors: true,
     });
@@ -116,31 +127,28 @@ describe("graph visibility", () => {
       isolationActive: true,
       restricted: true,
     });
-    expect(isGraphNodeVisible(graph, "selected")).toBe(true);
     expect(isGraphNodeVisible(graph, "direct")).toBe(true);
     expect(isGraphNodeVisible(graph, "second-hop")).toBe(false);
     expect(graph.getNodeAttribute("second-hop", "hiddenByIsolation")).toBe(
       true,
     );
-    expect(graph.getNodeAttribute("filtered-direct", "hiddenByType")).toBe(
+    expect(graph.getNodeAttribute("filtered-direct", "hiddenByFilter")).toBe(
       true,
     );
 
-    applyGraphVisibility(graph, {
-      typeFilters: new Set(["project", "topic"]),
-    });
+    applyGraphVisibility(graph, { filter });
     expect(isGraphNodeVisible(graph, "second-hop")).toBe(true);
     expect(isGraphNodeVisible(graph, "filtered-direct")).toBe(false);
   });
 
-  it("does not activate isolation when filters hide the selected node", () => {
+  it("does not activate isolation when the filter hides the selected node", () => {
     const graph = new Graph();
-    graph.addNode("selected", { noteType: "project" });
-    graph.addNode("topic", { noteType: "topic" });
+    graph.addNode("selected", { folder: "projects" });
+    graph.addNode("topic", { folder: "topics" });
     graph.addEdge("selected", "topic");
 
     const result = applyGraphVisibility(graph, {
-      typeFilters: new Set(["topic"]),
+      filter: only({ folder: "topics" }),
       selectedId: "selected",
       isolateNeighbors: true,
     });
@@ -183,40 +191,42 @@ describe("computeVisibleGraphStats", () => {
   ];
 
   it("matches buildGraph's valid, unique undirected edge semantics", () => {
-    expect(computeVisibleGraphStats(notes, new Set())).toEqual({
+    expect(computeVisibleGraphStats(notes, ALL)).toEqual({
       nodes: 4,
       edges: 3,
     });
   });
 
   it("counts only edges in the visible induced subgraph", () => {
-    expect(computeVisibleGraphStats(notes, new Set(["topic"]))).toEqual({
-      nodes: 2,
-      edges: 0,
-    });
+    expect(computeVisibleGraphStats(notes, only({ folder: "topics" }))).toEqual(
+      { nodes: 2, edges: 0 },
+    );
+    const slotOf = new Map([
+      ["a", 0],
+      ["b", 0],
+      ["c", 0],
+      ["d", null],
+    ]);
     expect(
-      computeVisibleGraphStats(notes, new Set(["topic", "project"])),
+      computeVisibleGraphStats(notes, only({ community: 0 }), {}, slotOf),
     ).toEqual({ nodes: 3, edges: 2 });
   });
 
   it("counts only the selected node and its direct visible neighbors", () => {
     const scoped = [
       note("selected", "project", ["out"]),
-      note("out", "topic", ["second-hop"]),
-      note("in", "topic", ["selected"]),
-      note("second-hop", "topic"),
+      note("out", "project", ["second-hop"]),
+      note("in", "project", ["selected"]),
+      note("second-hop", "project"),
       note("filtered", "daily", ["selected"]),
     ];
+    const filter = only({ folder: "projects" });
 
+    expect(computeVisibleNeighborIds(scoped, filter, "selected")).toEqual(
+      new Set(["out", "in"]),
+    );
     expect(
-      computeVisibleNeighborIds(
-        scoped,
-        new Set(["project", "topic"]),
-        "selected",
-      ),
-    ).toEqual(new Set(["out", "in"]));
-    expect(
-      computeVisibleGraphStats(scoped, new Set(["project", "topic"]), {
+      computeVisibleGraphStats(scoped, filter, {
         selectedId: "selected",
         isolateNeighbors: true,
       }),

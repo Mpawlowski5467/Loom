@@ -40,6 +40,7 @@
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "graphology": "^0.26.0",
+    "graphology-communities-louvain": "^2.0.2",
     "graphology-layout": "^0.6.1",
     "graphology-layout-forceatlas2": "^0.10.1",
     "lowlight": "^3.3.0",

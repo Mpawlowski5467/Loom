@@ -27,6 +27,8 @@ import { useCouncil } from "./useCouncil";
 import { useCustomAgents } from "./useCustomAgents";
 import { useGraphNavigation } from "./useGraphNavigation";
 import { useNoteRouting, useRoute } from "./useRouteNavigation";
+import { detectCommunities } from "../graph/communities";
+import { structuralKey } from "../graph/graphKeys";
 
 const TREE_VISIBLE_KEY = "loom.treeVisible";
 
@@ -89,9 +91,9 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     setGraphSelectedId,
     graphFlyTo,
     flyToNode,
-    graphFilters,
-    toggleGraphFilter,
-    clearGraphFilters,
+    graphFilter,
+    setGraphFilter,
+    resetGraphFilter,
     graphDisplay,
     setGraphDisplay,
     resetGraphDisplay,
@@ -179,6 +181,15 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     onLoadError: reportVaultContentError,
   });
   const currentNoteId = useNoteRouting(routeApi, notes, notesLoaded);
+
+  // Communities depend only on the link structure, so renames and body
+  // edits don't re-run Louvain.
+  const structure = useMemo(() => structuralKey(notes), [notes]);
+  const communities = useMemo(
+    () => detectCommunities(notes),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [structure],
+  );
 
   // Agents are part of the program (Weaver, Spider, …). Identities always
   // show; runtime stats / lastAction are only populated in demo mode.
@@ -273,9 +284,10 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setGraphSelectedId,
       graphFlyTo,
       flyToNode,
-      graphFilters,
-      toggleGraphFilter,
-      clearGraphFilters,
+      graphFilter,
+      communities,
+      setGraphFilter,
+      resetGraphFilter,
 
       graphDisplay,
       setGraphDisplay,
@@ -345,7 +357,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       graphFocusId,
       graphSelectedId,
       graphFlyTo,
-      graphFilters,
+      graphFilter,
+      communities,
       graphDisplay,
       treeVisible,
       paletteOpen,
@@ -373,8 +386,8 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setGraphFocusId,
       setGraphSelectedId,
       flyToNode,
-      toggleGraphFilter,
-      clearGraphFilters,
+      setGraphFilter,
+      resetGraphFilter,
       setGraphDisplay,
       resetGraphDisplay,
       setTreeVisible,

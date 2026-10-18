@@ -4,7 +4,8 @@ import type { Settings } from "sigma/settings";
 import { readCssVar } from "../theme/readCssVar";
 import type { NodeType } from "../data/types";
 import { depthColorFor } from "./depth";
-import { readNodePalette } from "./graphModel";
+import { glColor } from "./glColor";
+import { typePaint, type NodePaint } from "./graphModel";
 
 export interface EdgePalette {
   edge: string;
@@ -17,7 +18,8 @@ export interface EdgePalette {
 export function readEdgePalette(): EdgePalette {
   return {
     edge: readCssVar("--edge-color", "rgba(26,24,21,0.18)"),
-    edgeHover: readCssVar("--edge-color-hover", "rgba(168,58,44,0.55)"),
+    // Edges of the hovered/selected node are drawn in the brand color.
+    edgeHover: readCssVar("--brand", "#60a5fa"),
     edgeFaint: readCssVar("--edge-color-faint", "rgba(26,24,21,0.05)"),
     label: readCssVar("--label-color", "#5c5851"),
     nodeDimmed: readCssVar("--node-dimmed", "rgba(140,135,125,0.18)"),
@@ -32,7 +34,7 @@ export function defaultSettings(): Partial<Settings> {
     labelSize: 11,
     labelFont: readCssVar("--font", "Inter, system-ui, sans-serif"),
     labelWeight: "500",
-    defaultEdgeColor: palette.edge,
+    defaultEdgeColor: glColor(palette.edge),
     renderEdgeLabels: false,
     // Label visibility is owned by GraphView's nodeReducer (zoom-tiered by
     // degree). Disable Sigma's density-based hide/show: it competes with the
@@ -72,9 +74,9 @@ export function applyPaletteToGraph(
   /** When given, ``tuning.palette`` is swapped BEFORE any reducer re-run —
    * ``setSetting``/``refresh`` below re-run the reducers synchronously, and
    * the edge depth fade reads the live palette. */
-  tuning?: { palette: EdgePalette },
+  tuning?: { palette: EdgePalette; nodeColor?: NodePaint },
 ): EdgePalette {
-  const nodePalette = readNodePalette();
+  const paint = tuning?.nodeColor ?? typePaint();
   const edgePalette = readEdgePalette();
   if (tuning) tuning.palette = edgePalette;
   const bg = readCssVar("--bg-base", "#f5f1e8");
@@ -83,16 +85,13 @@ export function applyPaletteToGraph(
       | NodeType
       | undefined;
     if (!noteType) return;
-    graph.setNodeAttribute(id, "color", nodePalette[noteType]);
+    const color = paint(id, noteType);
+    graph.setNodeAttribute(id, "color", color);
     const z = (graph.getNodeAttribute(id, "z") as number | undefined) ?? 0;
-    graph.setNodeAttribute(
-      id,
-      "depthColor",
-      depthColorFor(nodePalette[noteType], bg, z),
-    );
+    graph.setNodeAttribute(id, "depthColor", depthColorFor(color, bg, z));
   });
   sigma.setSetting("labelColor", { color: edgePalette.label });
-  sigma.setSetting("defaultEdgeColor", edgePalette.edge);
+  sigma.setSetting("defaultEdgeColor", glColor(edgePalette.edge));
   sigma.refresh({ skipIndexation: true });
   return edgePalette;
 }

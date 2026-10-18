@@ -3,6 +3,7 @@ import { readCssVar } from "../theme/readCssVar";
 import type { Note, NodeType } from "../data/types";
 import { depthColorFor, zForNode } from "./depth";
 import { desiredStructure } from "./graphDiff";
+import { createdAt } from "./nodeFilter";
 
 /*
  * The graphology model behind the graph view: node colors, sizes and depth
@@ -24,6 +25,25 @@ export function readNodePalette(): Record<NodeType, string> {
     capture: readCssVar("--node-capture", "#a8722a"),
     custom: readCssVar("--node-custom", "#2d6b6b"),
   };
+}
+
+/** A node's fill color, given its id and note type. */
+export type NodePaint = (id: string, type: NodeType) => string;
+
+/** Color by note type from the legacy `--node-*` tokens (tests, fallback). */
+export function typePaint(): NodePaint {
+  const palette = readNodePalette();
+  return (_id, type) => palette[type];
+}
+
+/** How nodes are colored and which community each belongs to. */
+export interface NodeContext {
+  paint: NodePaint;
+  communityOf: ReadonlyMap<string, number | null>;
+}
+
+export function defaultNodeContext(): NodeContext {
+  return { paint: typePaint(), communityOf: new Map() };
 }
 
 export interface BuiltGraph {
@@ -58,17 +78,29 @@ export interface NodeVisuals {
  * (Sigma sorts when the zIndex setting is on). */
 export function nodeVisualsFor(
   id: string,
-  type: NodeType,
+  color: string,
   connections: number,
-  palette: Record<NodeType, string>,
   bg: string,
 ): NodeVisuals {
   const z = zForNode(id, connections);
   return {
     size: baseSizeFor(connections),
     z,
-    depthColor: depthColorFor(palette[type], bg, z),
+    depthColor: depthColorFor(color, bg, z),
     zIndex: 1 - z,
+  };
+}
+
+/** The attributes the graph filter reads (see nodeFilter.ts). */
+export function filterAttributesFor(
+  note: Note,
+  communityOf: ReadonlyMap<string, number | null>,
+): Record<string, unknown> {
+  return {
+    folder: note.folder,
+    created: createdAt(note),
+    superseded: note.status === "superseded",
+    community: communityOf.get(note.id) ?? null,
   };
 }
 
@@ -76,25 +108,29 @@ export function nodeVisualsFor(
 export function nodeAttributesFor(
   note: Note,
   connections: number,
-  palette: Record<NodeType, string>,
+  ctx: NodeContext,
   bg: string,
 ): Record<string, unknown> & NodeVisuals {
+  const color = ctx.paint(note.id, note.type);
   return {
     label: note.title,
-    color: palette[note.type],
+    color,
     noteType: note.type,
-    ...nodeVisualsFor(note.id, note.type, connections, palette, bg),
+    ...filterAttributesFor(note, ctx.communityOf),
+    ...nodeVisualsFor(note.id, color, connections, bg),
   };
 }
 
-export function buildGraph(notes: Note[]): BuiltGraph {
+export function buildGraph(
+  notes: Note[],
+  ctx: NodeContext = defaultNodeContext(),
+): BuiltGraph {
   const graph = new Graph({ multi: false, type: "directed" });
   const baseSizes = new Map<string, number>();
-  const palette = readNodePalette();
   const conn = connectionCounts(notes);
   const bg = readCssVar("--bg-base", "#f5f1e8");
   for (const n of notes) {
-    const attrs = nodeAttributesFor(n, conn.get(n.id) ?? 0, palette, bg);
+    const attrs = nodeAttributesFor(n, conn.get(n.id) ?? 0, ctx, bg);
     baseSizes.set(n.id, attrs.size);
     graph.addNode(n.id, {
       x: Math.random() * 100 - 50,

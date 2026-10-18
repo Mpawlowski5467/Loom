@@ -1,7 +1,8 @@
 import type Graph from "graphology";
 import type { Settings } from "sigma/settings";
 import { DEPTH_EDGE_FADE, depthSizeFactor, makeEdgeFader } from "./depth";
-import { isNodeTypeVisible } from "./filtering";
+import { glColor } from "./glColor";
+import { nodePassesFilter } from "./nodeFilter";
 import type { GraphTuning } from "./tuning";
 
 /** Spacing slider → camera ratio. Sigma auto-fits node bbox, so the perceived
@@ -57,11 +58,7 @@ export function makeNodeReducer(
     const hovered = tuning.hovered;
     const selected = tuning.selected;
     const focus = hovered ?? selected;
-    const filters = tuning.filters;
-    if (
-      data.hidden ||
-      !isNodeTypeVisible(String(data["noteType"] ?? "custom"), filters)
-    ) {
+    if (data.hidden || !nodePassesFilter(data, tuning.filter)) {
       return { ...data, hidden: true };
     }
 
@@ -92,13 +89,15 @@ export function makeNodeReducer(
         return out;
       }
       const isNeighbor = graph.hasEdge(focus, id) || graph.hasEdge(id, focus);
-      if (!isNeighbor) out.color = tuning.palette.nodeDimmed;
+      if (!isNeighbor) out.color = glColor(tuning.palette.nodeDimmed);
       if (!isNeighbor || hovered) {
         out.label = "";
         return out;
       }
-      // Direct neighbors of a persistent selection continue through the
-      // normal zoom/degree label rules instead of creating a label hairball.
+      // Local only shows just the selection's neighborhood: name all of it.
+      if (tuning.isolateNeighbors && tuning.labelsEnabled) return out;
+      // Otherwise direct neighbors of a persistent selection continue through
+      // the normal zoom/degree label rules instead of creating a label hairball.
     }
 
     if (!tuning.labelsEnabled) {
@@ -134,21 +133,27 @@ export function makeEdgeReducer(
     const ext = extremities.get(id) ?? graph.extremities(id);
     if (focus) {
       if (ext[0] === focus || ext[1] === focus) {
-        return { ...data, color: tuning.palette.edgeHover, size: 1.4 * k };
+        return {
+          ...data,
+          color: glColor(tuning.palette.edgeHover),
+          size: 1.4 * k,
+        };
       }
-      return { ...data, color: tuning.palette.edgeFaint, size: baseSize };
+      return {
+        ...data,
+        color: glColor(tuning.palette.edgeFaint),
+        size: baseSize,
+      };
     }
+    const base = (data.color as string | undefined) ?? tuning.palette.edge;
     // Depth fade: edges recede with the average depth of their endpoints.
     if (tuning.depthEnabled && nodeZ) {
       const z = ((nodeZ.get(ext[0]) ?? 0) + (nodeZ.get(ext[1]) ?? 0)) / 2;
       if (z > 0) {
-        const color = fade(
-          (data.color as string | undefined) ?? tuning.palette.edge,
-          1 - DEPTH_EDGE_FADE * z,
-        );
+        const color = glColor(fade(base, 1 - DEPTH_EDGE_FADE * z));
         return { ...data, color, size: baseSize };
       }
     }
-    return { ...data, size: baseSize };
+    return { ...data, color: glColor(base), size: baseSize };
   };
 }

@@ -1,5 +1,6 @@
 import type { EdgePalette } from "./sigma-setup";
-import type { NodeType } from "../data/types";
+import type { NodePaint } from "./graphModel";
+import type { GraphNodeFilter } from "./nodeFilter";
 
 /**
  * Internal render-path mode derived from the selected layout: "force" renders
@@ -25,11 +26,16 @@ export interface GraphTuning {
   selected: string | null;
   /** Whether visibility is narrowed to selected + direct neighbors. */
   isolateNeighbors: boolean;
-  /** Type filters and/or neighborhood isolation currently restrict the graph. */
+  /** Filters and/or neighborhood isolation currently restrict the graph. */
   visibilityRestricted: boolean;
   /** True from pointer-down through spring settling. Decorative work pauses. */
   dragging: boolean;
-  filters: Set<NodeType>;
+  /** Folder/community/superseded/timeline filter (see nodeFilter.ts). */
+  filter: GraphNodeFilter;
+  /** Node fill color: community slot (or neutral) from the theme. */
+  nodeColor: NodePaint;
+  /** Note id → community slot, mirrored onto node attributes. */
+  communityOf: ReadonlyMap<string, number | null>;
   palette: EdgePalette;
   graphMode: GraphMode;
 

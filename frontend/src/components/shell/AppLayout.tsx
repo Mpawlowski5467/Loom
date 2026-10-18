@@ -59,7 +59,10 @@ export function AppLayout(): ReactNode {
   const { mode } = useAppearance();
   const navigate = useNavigate();
   const [showSplash, setShowSplash] = useState(shouldShowSplash);
+  // Graph draws its own sidebar; the legacy tree stays beside Board until
+  // that view is rebuilt. ⌘B toggles either.
   const treeAvailable = tab === "graph" || tab === "board";
+  const legacyTree = tab === "board";
 
   useGlobalShortcuts({
     togglePalette: () => app.setPaletteOpen(!app.paletteOpen),
@@ -103,7 +106,7 @@ export function AppLayout(): ReactNode {
           <UnindexedBanner count={unindexedCount} />
         )}
         <div className="flex min-h-0 flex-1">
-          {treeAvailable && treeVisible && (
+          {legacyTree && treeVisible && (
             <ErrorBoundary label="the file tree">
               <Tree />
             </ErrorBoundary>

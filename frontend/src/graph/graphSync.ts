@@ -20,9 +20,10 @@ import type { EdgeExtremities } from "./reducers";
 import {
   baseSizeFor,
   connectionCounts,
+  filterAttributesFor,
   nodeAttributesFor,
   nodeVisualsFor,
-  readNodePalette,
+  type NodeContext,
 } from "./graphModel";
 import { GRAPH_LABEL_BUDGET_NODES, type GraphTuning } from "./tuning";
 
@@ -196,17 +197,15 @@ function addNew(
   placed: Placement,
 ): void {
   const { graph, tuning, edgeExtremities } = target;
-  const palette = readNodePalette();
+  const ctx: NodeContext = {
+    paint: tuning.nodeColor,
+    communityOf: tuning.communityOf,
+  };
   const bg = readCssVar("--bg-base", "#f5f1e8");
   const conn = connectionCounts(notes);
   const byId = new Map(notes.map((n) => [n.id, n]));
   for (const id of diff.addedNodes) {
-    const attrs = nodeAttributesFor(
-      byId.get(id)!,
-      conn.get(id) ?? 0,
-      palette,
-      bg,
-    );
+    const attrs = nodeAttributesFor(byId.get(id)!, conn.get(id) ?? 0, ctx, bg);
     const home = placed.homes.get(id)!;
     const live = placed.live.get(id) ?? home;
     // Sigma indexes a node the moment it is added, so it must arrive with
@@ -232,7 +231,6 @@ function addNew(
 function restyleConnections(target: GraphSyncTarget, notes: Note[]): void {
   const { graph, tuning, nodeZ } = target;
   const baseSizes = target.baseSizesRef.current;
-  const palette = readNodePalette();
   const bg = readCssVar("--bg-base", "#f5f1e8");
   const conn = connectionCounts(notes);
   for (const n of notes) {
@@ -242,7 +240,7 @@ function restyleConnections(target: GraphSyncTarget, notes: Note[]): void {
       baseSizes.get(n.id) === baseSizeFor(c) &&
       nodeZ.get(n.id) === zForNode(n.id, c);
     if (unchanged) continue;
-    const v = nodeVisualsFor(n.id, n.type, c, palette, bg);
+    const v = nodeVisualsFor(n.id, tuning.nodeColor(n.id, n.type), c, bg);
     baseSizes.set(n.id, v.size);
     nodeZ.set(n.id, v.z);
     graph.mergeNodeAttributes(n.id, {
@@ -257,7 +255,7 @@ function restyleConnections(target: GraphSyncTarget, notes: Note[]): void {
 function applyDerived(target: GraphSyncTarget): void {
   const { graph, sigma, tuning } = target;
   const visibility = applyGraphVisibility(graph, {
-    typeFilters: tuning.filters,
+    filter: tuning.filter,
     selectedId: tuning.selected,
     isolateNeighbors: tuning.isolateNeighbors,
   });
@@ -272,14 +270,15 @@ function applyDerived(target: GraphSyncTarget): void {
 }
 
 /**
- * Patch title and type changes onto existing nodes. Returns whether anything
- * changed, and whether a type change requires visibility to be recomputed.
+ * Patch content changes (title, type, folder, status, dates) onto existing
+ * nodes. Returns whether anything changed, and whether a change can affect
+ * visibility (so the filter must be re-applied).
  */
 export function patchGraphContent(
   graph: Graph,
   notes: Note[],
+  ctx: NodeContext,
 ): { changed: boolean; typeChanged: boolean } {
-  const palette = readNodePalette();
   const bg = readCssVar("--bg-base", "#f5f1e8");
   let changed = false;
   let typeChanged = false;
@@ -289,12 +288,19 @@ export function patchGraphContent(
       graph.setNodeAttribute(n.id, "label", n.title);
       changed = true;
     }
-    if (graph.getNodeAttribute(n.id, "noteType") !== n.type) {
-      const z = (graph.getNodeAttribute(n.id, "z") as number | undefined) ?? 0;
+    const filterAttrs = filterAttributesFor(n, ctx.communityOf);
+    const attrs = graph.getNodeAttributes(n.id);
+    const filterChanged = Object.entries(filterAttrs).some(
+      ([k, v]) => !Object.is(attrs[k], v),
+    );
+    if (graph.getNodeAttribute(n.id, "noteType") !== n.type || filterChanged) {
+      const z = (attrs["z"] as number | undefined) ?? 0;
+      const color = ctx.paint(n.id, n.type);
       graph.mergeNodeAttributes(n.id, {
+        ...filterAttrs,
         noteType: n.type,
-        color: palette[n.type],
-        depthColor: depthColorFor(palette[n.type], bg, z),
+        color,
+        depthColor: depthColorFor(color, bg, z),
       });
       changed = true;
       typeChanged = true;

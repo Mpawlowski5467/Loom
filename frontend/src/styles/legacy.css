@@ -13,7 +13,6 @@
 @import "./primitives.css";
 @import "./layout.css";
 @import "./views/splash.css";
-@import "./views/graph.css";
 @import "./views/thread.css";
 @import "./views/inbox.css";
 @import "./views/board.css";

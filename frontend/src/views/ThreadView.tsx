@@ -32,6 +32,7 @@ import {
   writeNoteDraft,
 } from "../editor/noteDraftStorage";
 import { ConfirmModal } from "../components/ConfirmModal";
+import { NoteHistory } from "../components/NoteHistory";
 import { RevisionHistory } from "../components/RevisionHistory";
 import { ConnectionEvidence } from "../components/ConnectionEvidence";
 import { SourceCapture } from "../components/SourceCapture";
@@ -554,6 +555,13 @@ export function ThreadView(): ReactNode {
         </header>
 
         <div className="thread-recovery-tools">
+          <NoteHistory
+            key={`git-history:${vaultId}:${note.id}`}
+            noteId={note.id}
+            folder={note.folder}
+            filename={note.filename}
+            disabled={dirty || !noteBodyLoaded}
+          />
           <RevisionHistory
             key={`history:${vaultId}:${note.id}`}
             noteId={note.id}

@@ -17,6 +17,7 @@ from watchdog.observers.api import BaseObserver
 
 from core.capture_source_index import CaptureSourceIndex
 from core.graph import build_graph, save_graph
+from core.history import notify_external_change
 from core.note_index import get_note_index
 from core.notes import parse_note_meta
 
@@ -287,6 +288,10 @@ class _VaultEventHandler(FileSystemEventHandler):
 
     def _schedule_rebuild(self) -> None:
         """Debounce graph rebuilds — wait for changes to settle."""
+        # Any note change (re)starts vault history's human-edit timer. Loom's
+        # own writes are committed exactly when made, so the eventual sweep
+        # finds them clean; only edits made outside the agents are committed.
+        notify_external_change(self._threads_dir.parent)
         with self._timer_lock:
             if self._stop_event.is_set():
                 return

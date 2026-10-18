@@ -1,7 +1,11 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AgentEvent } from "../../data/types";
 import { RecentActivity } from "./RecentActivity";
+
+const history = vi.hoisted(() => ({ revertCommit: vi.fn() }));
+vi.mock("../../api/history", () => history);
 
 function event(index: number): AgentEvent {
   return {
@@ -38,5 +42,57 @@ describe("RecentActivity", () => {
     expect(container.querySelectorAll(".board-wikilink")).toHaveLength(15);
     expect(screen.getAllByText("✓").length).toBeGreaterThan(0);
     expect(screen.getAllByText("⚠").length).toBeGreaterThan(0);
+  });
+});
+
+describe("RecentActivity undo", () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it("offers undo only for actions that produced a history commit", () => {
+    render(
+      <RecentActivity
+        changelog={[{ ...event(1), commit: "c".repeat(40) }, event(2)]}
+      />,
+    );
+    expect(screen.getAllByRole("button", { name: /^Undo / })).toHaveLength(1);
+  });
+
+  it("marks actions whose commit was already undone", () => {
+    render(
+      <RecentActivity
+        changelog={[{ ...event(1), commit: "c".repeat(40), reverted: true }]}
+      />,
+    );
+    expect(screen.getByText("undone")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Undo / })).toBeNull();
+  });
+
+  it("reverts the action's commit after confirmation", async () => {
+    history.revertCommit.mockResolvedValue({ sha: "d".repeat(40) });
+    const user = userEvent.setup();
+    render(
+      <RecentActivity changelog={[{ ...event(1), commit: "c".repeat(40) }]} />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Undo weaver/ }));
+    expect(screen.getByRole("dialog")).toHaveTextContent("cccccccccc");
+    await user.click(screen.getByRole("button", { name: "Undo action" }));
+    expect(await screen.findByText("undone")).toBeVisible();
+    expect(history.revertCommit).toHaveBeenCalledWith("c".repeat(40));
+  });
+
+  it("shows why an undo was refused and keeps the action undoable", async () => {
+    history.revertCommit.mockRejectedValue(
+      new Error("Sentinel blocked this revert (failed)."),
+    );
+    const user = userEvent.setup();
+    render(
+      <RecentActivity changelog={[{ ...event(1), commit: "c".repeat(40) }]} />,
+    );
+    await user.click(screen.getByRole("button", { name: /^Undo weaver/ }));
+    await user.click(screen.getByRole("button", { name: "Undo action" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Sentinel blocked",
+    );
+    expect(screen.queryByText("undone")).toBeNull();
   });
 });

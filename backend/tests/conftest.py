@@ -44,6 +44,10 @@ def _hermetic_globals():
     get_trace_store().set_pg_mirror(None)
     yield
     force_reset_capture_job_service_for_tests()
+    # Vault switches inside a test start git history for that temp vault.
+    from core.history import stop_history
+
+    stop_history()
 
 
 @pytest.fixture()

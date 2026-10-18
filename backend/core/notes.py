@@ -180,7 +180,11 @@ def _split_known_extra(meta: dict[str, Any]) -> tuple[dict[str, Any], dict[str, 
 
 def parse_note(path: Path) -> Note:
     """Parse a markdown file into a Note model."""
-    text = path.read_text(encoding="utf-8")
+    return parse_note_text(path.read_text(encoding="utf-8"), path)
+
+
+def parse_note_text(text: str, path: Path) -> Note:
+    """Parse note ``text`` as if it were the file at ``path``."""
     meta: dict[str, Any] = {}
     body = text
 

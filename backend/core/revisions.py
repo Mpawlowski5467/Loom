@@ -21,6 +21,7 @@ from typing import Any, TypeVar
 import yaml
 
 from core.archive_paths import ARCHIVE_ORIGINAL_PATH_FIELD
+from core.history import on_mutation
 from core.notes import atomic_write_text, note_to_file_content, now_iso
 from core.traces import get_caller, get_run
 
@@ -160,12 +161,14 @@ def record_mutation(
         if before == after:
             return action()
         revision_id = "rev_" + uuid.uuid4().hex
+        effective_run = get_run() if run_id is None else run_id
+        effective_caller = caller or get_caller()
         conn.execute(
             "INSERT INTO revisions(id,run_id,caller,created,state,before_json,after_json) VALUES(?,?,?,?,?,?,?)",
             (
                 revision_id,
-                get_run() if run_id is None else run_id,
-                caller or get_caller() or "user",
+                effective_run,
+                effective_caller or "user",
                 now_iso(),
                 "prepared",
                 json.dumps(before),
@@ -184,6 +187,7 @@ def record_mutation(
             raise
         conn.execute("UPDATE revisions SET state='applied' WHERE id=?", (revision_id,))
         conn.commit()
+        on_mutation(vault, before, after, caller=effective_caller, run_id=effective_run)
         return result
 
 
@@ -275,40 +279,52 @@ def undo(vault: Path, change: dict[str, Any], expected_hashes: dict[str, str]) -
             raise RevisionConflict(
                 "A file changed after this run or preview. No changes were applied."
             )
-        target = dict(change["before"])
-        # Run-created notes move to the ordinary archive instead of disappearing.
-        archive_id = uuid.uuid4().hex[:12]
-        for rel, text in current.items():
-            if target[rel] is None and text is not None and not rel.startswith(".archive/"):
-                parts = text.split("---", 2)
-                if len(parts) < 3:
-                    raise RevisionConflict(
-                        f"Cannot undo created non-note file '{rel}'; archive it manually first."
-                    )
-                meta = yaml.safe_load(parts[1])
-                if not isinstance(meta, dict):
-                    raise RevisionConflict(
-                        f"Cannot undo created non-note file '{rel}'; archive it manually first."
-                    )
-                ts = now_iso()
-                meta[ARCHIVE_ORIGINAL_PATH_FIELD] = rel
-                meta["status"] = "archived"
-                meta["modified"] = ts
-                meta.setdefault("history", []).append(
-                    {
-                        "action": "archived",
-                        "by": "user",
-                        "at": ts,
-                        "reason": f"Undid run {change.get('run_id', '')}",
-                    }
-                )
-                target[f".archive/undo-{archive_id}/{rel}"] = note_to_file_content(
-                    meta, parts[2].lstrip("\n")
-                )
-        changes = {_path(vault, rel): text for rel, text in target.items()}
-        record_mutation(
-            vault, changes, lambda: _restore_files(vault, target), caller="user:undo", run_id=""
+        target = archive_removed_notes(
+            dict(change["before"]),
+            current,
+            f"undo-{uuid.uuid4().hex[:12]}",
+            f"Undid run {change.get('run_id', '')}",
         )
+        apply_contents(vault, target, caller="user:undo")
+
+
+def archive_removed_notes(
+    target: dict[str, str | None],
+    current: dict[str, str | None],
+    archive_dir: str,
+    reason: str,
+) -> dict[str, str | None]:
+    """Turn removals of existing notes into moves under ``.archive/<archive_dir>/``.
+
+    Deletion is archival in Loom: a note an undo or revert would remove is kept
+    as an archived copy carrying its original path and an audit entry.
+    """
+    result = dict(target)
+    for rel, text in current.items():
+        if result.get(rel, text) is None and text is not None and not rel.startswith(".archive/"):
+            parts = text.split("---", 2)
+            meta = yaml.safe_load(parts[1]) if len(parts) == 3 else None
+            if not isinstance(meta, dict):
+                raise RevisionConflict(
+                    f"Cannot remove non-note file '{rel}'; archive it manually first."
+                )
+            ts = now_iso()
+            meta[ARCHIVE_ORIGINAL_PATH_FIELD] = rel
+            meta["status"] = "archived"
+            meta["modified"] = ts
+            meta.setdefault("history", []).append(
+                {"action": "archived", "by": "user", "at": ts, "reason": reason}
+            )
+            result[f".archive/{archive_dir}/{rel}"] = note_to_file_content(
+                meta, parts[2].lstrip("\n")
+            )
+    return result
+
+
+def apply_contents(vault: Path, target: dict[str, str | None], *, caller: str) -> None:
+    """Journal and write threads-relative contents (None removes) as one revision."""
+    changes = {_path(vault, rel): text for rel, text in target.items()}
+    record_mutation(vault, changes, lambda: _restore_files(vault, target), caller=caller, run_id="")
 
 
 def restore(vault: Path, path: Path, content: str, expected_hash: str) -> None:

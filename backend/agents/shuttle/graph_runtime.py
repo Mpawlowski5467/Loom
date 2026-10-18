@@ -21,6 +21,7 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from core.history import commit_group
 from core.notes import generate_id, now_iso
 from core.traces import (
     clear_run,
@@ -105,7 +106,9 @@ async def run_scope(agent: str) -> AsyncIterator[RunRecorder]:
     rec_token = _recorder_var.set(recorder)
     set_run(recorder.run_id)
     try:
-        yield recorder
+        # One vault-history commit per run, however many agents write in it.
+        async with commit_group():
+            yield recorder
     finally:
         recorder.ended = now_iso()
         try:

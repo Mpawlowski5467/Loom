@@ -39,6 +39,54 @@ version through a version-checked operation, so restoring a revision does not
 silently replace a newer note. Pending and rejected capture drafts remain out
 of normal note listings, graph construction, and retrieval until publication.
 
+### Vault history (git)
+
+The SQLite revision journal (`.loom/revisions.sqlite3`) remains the
+crash-safe write path. On top of it, the active vault is a git repository:
+`core.revisions.record_mutation` reports every applied write to a per-vault
+recorder (`core/history/`), and one worker thread per vault commits them in
+order, so writes never wait on git. Commits are built with plumbing in a
+private temporary index from the exact bytes a write produced; repository
+hooks and signing never run, and a user's own staged changes are never swept
+in. Vaults are initialized on activation with a `.gitignore` for `.loom/`
+(LanceDB `index.db`, SQLite stores, `graph.json`, changelogs), `agents/`
+runtime state, and `attachments/`, followed by a `loom: initialize vault
+history` snapshot.
+
+- **Agent writes** commit as `<agent>: <action> <path>` with `Agent`,
+  `Action`, `Reason`, and `Sentinel` trailers. Attribution comes from the trace
+  caller, then from the note's new frontmatter history entry.
+- **Commit groups** batch writes: one `execute_with_chain` action, one
+  `run_scope` run (the capture pipeline, Researcher, Standup), Spider's vault
+  scan, and the reviewed-capture flow each become one commit; nested groups
+  merge outward. Grouped commits list every writer (`Agent:` per writer) and
+  carry `Loom-Run` / `Loom-Group`. Sentinel stamps its verdict on the open
+  group (`Sentinel: passed (weaver created)`); writes Sentinel did not review
+  say `not-reviewed`.
+- **Human edits** (the editor, files changed on disk) are committed together
+  as `Agent: human` after `history.human_debounce_seconds` of quiet. The
+  watcher only restarts that timer. Loom's own commits leave the tree clean, so
+  they never loop back. An edit an agent then changes is committed first, as
+  the human's version. Edits made while Loom was stopped are committed on
+  startup.
+- **Undo never rewrites history.** `POST /api/history/{sha}/revert` computes
+  the inverse with git's three-way merge and has Sentinel validate the reverted
+  notes before any file changes (`history.revert_block_on`). It then applies
+  them through the journal and commits `Revert "<subject>"` with a `Reverts`
+  trailer. Notes the revert would remove are archived. Overlapping later edits
+  return 409; only `threads/*.md` changes can be reverted from Loom. Reverted
+  notes are reindexed (metadata now, embeddings queued).
+- **API**: `GET /api/history?path=&agent=&group=&limit=`,
+  `GET /api/history/status`, `GET /api/history/{sha}/diff`, and the revert
+  endpoint. The Thread view's *Change history* lists a note's commits with
+  diffs and undo. Board *Recent activity* links each changelog entry to its
+  commit (via a `History:` group id in the changelog) and offers Undo.
+
+Configuration lives in `vault.yaml` under `history:` (`enabled`,
+`human_debounce_seconds`, `revert_block_on`, `ignore`). History is off when
+git is not installed (the Docker image installs it). Vault export does not
+include `.git`; an imported vault starts a fresh history.
+
 Vault export and import are disk-streamed and bounded: imports cap the archive
 at 256 MiB compressed, 2 GiB expanded, and 50,000 members. Import stages an
 overwrite and restores the prior vault if the swap fails. Capture originals are
@@ -146,6 +194,7 @@ those gates have passed.
 | --- | --- |
 | FastAPI routers | `backend/api/routers/` |
 | Vault, policy, jobs, and events | `backend/core/` |
+| Git-backed vault history | `backend/core/history/`, `backend/api/routers/history.py` |
 | Loom and Shuttle agents | `backend/agents/` |
 | Indexing and retrieval | `backend/index/` |
 | React views and components | `frontend/src/views/`, `frontend/src/components/` |

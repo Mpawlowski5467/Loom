@@ -19,6 +19,7 @@ from agents.changelog import log_action
 from agents.memory import summarize_memory
 from core.activity import get_activity
 from core.exceptions import ReadChainError
+from core.history import commit_group
 from core.note_index import get_note_index
 from core.notes import now_iso
 
@@ -175,7 +176,10 @@ class BaseAgent(ABC):
         activity = get_activity()
         activity.begin(self.name)
         try:
-            return await self._execute_with_chain_inner(target_path, action_fn)
+            # Every vault write this action makes lands in one history commit;
+            # inside a run (pipeline, vault scan) it joins that run's commit.
+            async with commit_group():
+                return await self._execute_with_chain_inner(target_path, action_fn)
         finally:
             activity.end(self.name)
 

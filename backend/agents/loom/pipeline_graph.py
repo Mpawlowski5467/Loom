@@ -288,7 +288,7 @@ def build_pipeline_graph(
     async def enforce_node(state: PipelineState) -> PipelineState:
         """Sentinel enforcement: archive unless failed; annotate accordingly."""
         errors = list(state.get("errors", []))
-        async with step("enforce"):
+        async with step("enforce", caller="sentinel"):
             # Coverage rides along with the verdict so it is stamped before an
             # accepted capture is archived. Publication recovery restores the
             # pre-enforcement snapshot, so a recovered source stays pristine.

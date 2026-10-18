@@ -109,3 +109,48 @@
     grid-template-columns: 1fr;
   }
 }
+.history-list {
+  list-style: none;
+  margin: 0 0 12px;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 220px;
+  overflow: auto;
+}
+.history-entry {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+}
+.history-entry.active {
+  border-color: var(--agent);
+}
+.history-date,
+.history-sentinel {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--ink-3);
+}
+.history-who {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-2);
+}
+.commit-detail {
+  border-top: 1px solid var(--rule);
+  padding-top: 12px;
+}
+.commit-meta code,
+.commit-file-status {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--ink-3);
+}
+.commit-reason {
+  font-style: italic;
+}

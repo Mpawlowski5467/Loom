@@ -43,6 +43,7 @@ from api.routers.github_sign_in import router as github_sign_in_router
 from api.routers.google_bridge import router as google_bridge_router
 from api.routers.graph import router as graph_router
 from api.routers.hardware import router as hardware_router
+from api.routers.history import router as history_router
 from api.routers.imports import router as imports_router
 from api.routers.index import router as index_router
 from api.routers.notes import router as notes_router
@@ -247,6 +248,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     except Exception:
         logger.warning("Gmail sync service shutdown failed", exc_info=True)
     stop_watcher()
+    from core.history import stop_history
+
+    await asyncio.to_thread(stop_history)
     await retention.aclose()
     await shutdown_optional_services()
     try:
@@ -353,6 +357,7 @@ register_exception_handlers(app)
 app.include_router(vaults_router)
 app.include_router(notes_router)
 app.include_router(revisions_router)
+app.include_router(history_router)
 app.include_router(imports_router)
 app.include_router(policy_router)
 app.include_router(connections_router)

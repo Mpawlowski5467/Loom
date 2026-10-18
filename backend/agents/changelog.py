@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
+from core.history import current_group_id
 from core.notes import now_iso
 
 if TYPE_CHECKING:
@@ -41,6 +42,9 @@ def _format_entry(
     ]
     if details:
         lines.append(f"- **Details:** {details}")
+    history_group = current_group_id()
+    if history_group:
+        lines.append(f"- **History:** {history_group}")
     lines.append("")
     return "\n".join(lines)
 

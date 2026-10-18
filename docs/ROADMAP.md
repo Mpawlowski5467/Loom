@@ -24,6 +24,37 @@ recorded evidence:
 4. Confirm one version across Python, JavaScript, API, UI, changelog, and tag.
    Refresh screenshots and release notes if the shipped interface changed.
 
+## Feature phases (October 2026)
+
+Seven phases, each on its own `feat/` branch with tests. Status is updated as
+each phase lands.
+
+1. **Git-backed time travel**: done on `feat/git-time-travel`. Every vault
+   write is an attributed commit, human edits commit after a quiet period, and
+   undo is a Sentinel-validated revert. See
+   [vault history](architecture-ref.md#vault-history-git). Follow-ups:
+   - Make an undone Spider link stick: a later vault scan currently
+     re-suggests and re-applies it.
+   - Retire the journal-backed Version history and run undo once the git
+     history covers their restore cases.
+   - Optionally include `.git` in vault export.
+   - Commit agent `memory.md` and chat transcripts (now ignored, so they are
+     never misattributed as human edits).
+2. **Retrieval eval harness**: planned. A fictional fixture vault, golden
+   queries, recall@k/MRR per query type, a config-hashed baseline, and
+   `--compare`.
+3. **Contradiction and supersession**: planned. `status: superseded`,
+   supersession links, history-aware ranking, an Archivist audit, a Sentinel
+   rule, and a minimal prompt-template loader.
+4. **Privacy layer**: planned. A pluggable masker wrapping every cloud
+   provider call.
+5. **MCP server**: planned. Read-only by default; capture goes through the
+   Inbox.
+6. **Graph communities and timeline**: planned. Builds on the incremental
+   graph and worker layout branches.
+7. **Capture from anywhere**: planned. A capture-scoped token, an optional
+   Telegram bridge, and Tailscale/LXC and iOS Shortcut docs.
+
 ## Reliability and performance
 
 - Gather repeatable 5k/10k browser-profile data on representative hardware and

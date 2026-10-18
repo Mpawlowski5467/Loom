@@ -119,9 +119,11 @@ def initialize_vault_runtime(
     if not vault_dir.exists():
         return
     threads_dir = vault_dir / "threads"
+    from core.history import start_history
     from core.revisions import recover
 
     recover(vault_dir)
+    start_history(vault_dir)
     (note_index or get_note_index()).build(threads_dir)
     init_vector_index(vault_dir)
     init_agents(vault_dir)
@@ -150,11 +152,13 @@ def _reconcile_index_drift() -> None:
 
 
 def release_active_handles() -> None:
-    """Release watcher, searcher, and indexer handles for the current vault."""
+    """Release watcher, history, searcher, and indexer handles for the current vault."""
+    from core.history import stop_history
     from index.indexer import reset_indexer
     from index.searcher import reset_searcher
 
     stop_watcher()
+    stop_history()
     reset_searcher()
     reset_indexer()
 

@@ -23,7 +23,8 @@ from agents.loom.schema_sections import expected_sections
 from agents.loom.weaver_tags import normalise_tag
 from agents.sanitize import scrub_untrusted
 from core.exceptions import ProviderConfigError, ProviderError
-from core.notes import Note, parse_note
+from core.history import set_sentinel_result
+from core.notes import Note, parse_note, parse_note_text
 from core.tokens import truncate_to_tokens
 
 # Token budgets for content embedded in the Sentinel validation prompt
@@ -235,15 +236,59 @@ class Sentinel(BaseAgent):
             ),
             chain_status="pass",
         )
+        set_sentinel_result(f"{validation.status} ({agent_name} {action})")
 
         return validation
 
-    def _check_note_compliance(self, note_path: Path, chain_result: ReadChainResult) -> list[str]:
-        """Check a note against required fields and its type schema."""
+    def validate_content(
+        self,
+        agent_name: str,
+        action: str,
+        target: Path,
+        content: str,
+        chain_result: ReadChainResult,
+    ) -> ValidationResult:
+        """Deterministically validate note text *before* it is written.
+
+        Used to gate history reverts: the reverted version is checked against
+        the read chain, required fields, and the type schema, so a revert that
+        Sentinel rejects never touches the vault.
+        """
+        validation = ValidationResult(agent_name=agent_name, action=action, target=str(target))
+        validation.modes.append("deterministic")
+        if not chain_result.success:
+            failed = [s.name for s in chain_result.failed_required]
+            validation.status = "failed"
+            validation.reasons.append(f"Read chain incomplete: missing {', '.join(failed)}")
+        issues = self._check_note_compliance(target, chain_result, text=content)
+        validation.reasons.extend(issues)
+        if issues and validation.status == "passed":
+            validation.status = "warning"
+        if not validation.reasons:
+            validation.reasons.append("All checks passed")
+        from agents.changelog import log_action
+
+        log_action(
+            self._vault_root,
+            self.name,
+            "validated",
+            str(target),
+            details=(
+                f"[{validation.status}|{validation.mode_summary}] "
+                f"{agent_name}/{action}: {'; '.join(validation.reasons)}"
+            ),
+            chain_status="pass",
+        )
+        return validation
+
+    def _check_note_compliance(
+        self, note_path: Path, chain_result: ReadChainResult, *, text: str | None = None
+    ) -> list[str]:
+        """Check a note (on disk, or ``text`` destined for it) against fields and schema."""
         issues: list[str] = []
 
         try:
-            note = parse_note(note_path)
+            note = parse_note(note_path) if text is None else parse_note_text(text, note_path)
         except (OSError, yaml.YAMLError, ValidationError, ValueError) as exc:
             return [f"Failed to parse note: {exc}"]
 

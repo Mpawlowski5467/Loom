@@ -10,6 +10,7 @@ from collections.abc import Coroutine
 from pathlib import Path
 from typing import Any
 
+import yaml
 from watchdog.events import FileSystemEvent, FileSystemEventHandler
 from watchdog.observers import Observer
 from watchdog.observers.api import BaseObserver
@@ -67,6 +68,21 @@ class _VaultEventHandler(FileSystemEventHandler):
         self._stop_event = threading.Event()
         self._worker = threading.Thread(target=self._worker_loop, daemon=True)
         self._worker.start()
+
+    def dispatch(self, event: FileSystemEvent) -> None:
+        """Route one event to its handler, never letting an error escape.
+
+        Watchdog's dispatcher thread only catches ``queue.Empty``: an exception
+        raised here would end the observer thread for good, silently stopping
+        live indexing and ``vault-changed`` events until a restart. Log and
+        drop the offending event instead.
+        """
+        try:
+            super().dispatch(event)
+        except Exception:
+            logger.exception(
+                "Watcher failed to handle %s event for %s", event.event_type, event.src_path
+            )
 
     def _is_md(self, event: FileSystemEvent) -> bool:
         return str(event.src_path).endswith(".md")
@@ -128,7 +144,7 @@ class _VaultEventHandler(FileSystemEventHandler):
             elif src.endswith(".md"):
                 try:
                     meta = parse_note_meta(Path(dest))
-                except (OSError, ValueError):
+                except (OSError, ValueError, yaml.YAMLError):
                     meta = None
                 if meta is not None and meta.id:
                     self._vector_remove_note(meta.id)
@@ -257,8 +273,16 @@ class _VaultEventHandler(FileSystemEventHandler):
     # -- Lifecycle ----------------------------------------------------------
 
     def stop(self) -> None:
-        """Signal the worker thread to exit. Best-effort."""
+        """Signal the worker thread to exit and drop any pending rebuild.
+
+        A debounced rebuild left armed would still write ``graph.json`` into
+        a vault that has been switched away from or is being deleted.
+        """
         self._stop_event.set()
+        with self._timer_lock:
+            if self._rebuild_timer is not None:
+                self._rebuild_timer.cancel()
+                self._rebuild_timer = None
         with contextlib.suppress(Exception):
             self._worker.join(timeout=2.0)
 
@@ -269,6 +293,8 @@ class _VaultEventHandler(FileSystemEventHandler):
         # finds them clean; only edits made outside the agents are committed.
         notify_external_change(self._threads_dir.parent)
         with self._timer_lock:
+            if self._stop_event.is_set():
+                return
             if self._rebuild_timer is not None:
                 self._rebuild_timer.cancel()
             self._rebuild_timer = threading.Timer(

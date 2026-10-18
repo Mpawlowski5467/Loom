@@ -125,9 +125,8 @@ class TestGraphRuntime:
     async def test_step_error_marks_status_and_reraises(self, tmp_path) -> None:
         get_trace_store().set_disk_dir(tmp_path)
         with pytest.raises(ValueError):
-            async with run_scope("researcher") as rec:
-                async with step("boom"):
-                    raise ValueError("kaboom")
+            async with run_scope("researcher") as rec, step("boom"):
+                raise ValueError("kaboom")
         assert rec.summary()["status"] == "error"
         assert rec.summary()["steps"][0]["status"] == "error"
 

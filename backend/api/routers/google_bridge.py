@@ -39,10 +39,14 @@ from bridge.gmail_service import (
 from bridge.google import (
     authorization_url,
     clear_google_tokens,
+    google_app,
+    google_app_by_id,
+    google_app_for,
     load_google_tokens,
     save_google_tokens,
 )
-from bridge.oauth import FLOW_TTL_SECONDS, OAuthTokens, consume_flow_state, new_flow_state
+from bridge.oauth import FLOW_TTL_SECONDS, OAuthTokens, consume_flow, new_flow_state, pkce_pair
+from bridge.oauth_apps import OAuthApp, builtin_google_app
 from core.capture_jobs import CaptureJobsBusyError
 from core.config import (
     GlobalConfig,
@@ -50,8 +54,6 @@ from core.config import (
     GoogleConnectorConfig,
     GoogleConnectorConfigPublic,
     GoogleServiceConfig,
-    effective_google_connector,
-    settings,
 )
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
@@ -99,9 +101,10 @@ class GoogleServicesStatus(BaseModel):
 
 class GoogleConnectorResponse(BaseModel):
     google: GoogleConnectorConfigPublic
+    # Loom ships its own Google app, so users can connect without creating one.
+    builtin_app: bool = False
     connection: OAuthConnection
     services: GoogleServicesStatus
-    managed_oauth: bool = False
 
 
 class GoogleConnectResponse(BaseModel):
@@ -122,9 +125,9 @@ class GoogleTestResponse(BaseModel):
 
 def _response(config: GlobalConfig) -> GoogleConnectorResponse:
     tokens = load_google_tokens()
-    connector = effective_google_connector(config)
     return GoogleConnectorResponse(
-        google=connector.to_public(),
+        google=config.google.to_public(),
+        builtin_app=builtin_google_app() is not None,
         connection=OAuthConnection(
             connected=tokens is not None,
             account=tokens.account if tokens is not None else "",
@@ -133,7 +136,6 @@ def _response(config: GlobalConfig) -> GoogleConnectorResponse:
             calendar=get_google_calendar_sync_service().status(),
             gmail=get_gmail_sync_service().status(),
         ),
-        managed_oauth=bool(settings.google_oauth_client_id and settings.google_oauth_client_secret),
     )
 
 
@@ -151,17 +153,29 @@ def _validation_detail(exc: ValidationError) -> str:
 
 
 def _incomplete(connector: GoogleConnectorConfig) -> bool:
-    return not (connector.client_id and connector.client_secret)
+    """No app to sign in with: neither the user's own nor a built-in one."""
+    return google_app(connector) is None
 
 
 def _require_app_credentials(config: GlobalConfig) -> GoogleConnectorConfig:
-    connector = effective_google_connector(config)
+    connector = config.google
     if _incomplete(connector):
         raise HTTPException(
             status_code=409,
             detail="Add your Google OAuth client ID and secret first",
         )
     return connector
+
+
+def _app_for_stored_tokens(connector: GoogleConnectorConfig, tokens: OAuthTokens) -> OAuthApp:
+    """The app the stored tokens came from, or a 409 asking to reconnect."""
+    app = google_app_for(connector, tokens)
+    if app is None:
+        raise HTTPException(
+            status_code=409,
+            detail="Reconnect Google: the app this account was connected with is gone",
+        )
+    return app
 
 
 def _notify_pollers() -> None:
@@ -212,12 +226,7 @@ async def patch_google_connector(
             )
     except ValidationError as exc:
         raise HTTPException(status_code=422, detail=_validation_detail(exc)) from exc
-    managed_oauth = bool(settings.google_oauth_client_id and settings.google_oauth_client_secret)
-    if (
-        (connector.calendar.enabled or connector.gmail.enabled)
-        and _incomplete(connector)
-        and not managed_oauth
-    ):
+    if (connector.calendar.enabled or connector.gmail.enabled) and _incomplete(connector):
         raise HTTPException(
             status_code=422,
             detail="A Google OAuth client ID and secret are required when a service is enabled",
@@ -236,26 +245,30 @@ async def connect_google(
 ) -> GoogleConnectResponse:
     """Create a short-lived OAuth flow consenting to BOTH service scopes."""
     connector = _require_app_credentials(GlobalConfig.load(vm.config_path()))
+    app = google_app(connector)
+    assert app is not None  # _require_app_credentials guarantees one
     try:
         redirect_uri = loopback_redirect_uri(request, _CALLBACK_ROUTE)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    state = new_flow_state(_ADAPTER)
+    verifier, challenge = pkce_pair()
+    state = new_flow_state(_ADAPTER, code_verifier=verifier, client_id=app.client_id)
     return GoogleConnectResponse(
         authorization_url=authorization_url(
-            client_id=connector.client_id,
+            client_id=app.client_id,
             redirect_uri=redirect_uri,
             state=state,
+            code_challenge=challenge,
         ),
         expires_in=FLOW_TTL_SECONDS,
     )
 
 
-async def _resolve_account_label(connector: GoogleConnectorConfig, tokens: OAuthTokens) -> str:
+async def _resolve_account_label(app: OAuthApp, tokens: OAuthTokens) -> str:
     """Best-effort account label: Gmail profile first, Calendar primary second."""
     gmail_client = GmailClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
     )
     try:
@@ -265,8 +278,8 @@ async def _resolve_account_label(connector: GoogleConnectorConfig, tokens: OAuth
     finally:
         await gmail_client.aclose()
     calendar_client = GoogleCalendarClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
     )
     try:
@@ -290,21 +303,22 @@ async def google_connector_oauth_callback(
     # in its normal structured validation response.
     if not state or not code or len(state) > 256 or len(code) > 4096:
         return oauth_result_page("Google", success=False)
-    if not consume_flow_state(_ADAPTER, state):
+    flow = consume_flow(_ADAPTER, state)
+    if flow is None:
         return oauth_result_page("Google", success=False)
 
     config = GlobalConfig.load(vm.config_path())
-    connector = effective_google_connector(config)
-    if _incomplete(connector):
+    connector = config.google
+    # Finish with the app the flow started with; it may have been removed since.
+    app = google_app_by_id(connector, flow.client_id)
+    if app is None:
         return oauth_result_page("Google", success=False, error_status=409)
-    client = GmailClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
-    )
+    client = GmailClient(client_id=app.client_id, client_secret=app.client_secret)
     try:
         tokens = await client.exchange_code(
             code,
             redirect_uri=str(request.url_for(_CALLBACK_ROUTE)),
+            code_verifier=flow.code_verifier,
         )
     except GmailError:
         logger.warning("Google OAuth exchange failed", exc_info=True)
@@ -312,7 +326,7 @@ async def google_connector_oauth_callback(
     finally:
         await client.aclose()
 
-    tokens.account = await _resolve_account_label(connector, tokens)
+    tokens.account = await _resolve_account_label(app, tokens)
 
     # A fresh connect replaces any prior account: wipe the old token AND both
     # services' cursors so the first sync starts from clean windows.
@@ -350,10 +364,11 @@ async def test_google_connection(
     tokens = load_google_tokens()
     if tokens is None:
         raise HTTPException(status_code=409, detail="Connect your Google account first")
+    app = _app_for_stored_tokens(connector, tokens)
 
     calendar_client = GoogleCalendarClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_google_tokens,
     )
@@ -373,8 +388,8 @@ async def test_google_connection(
         await calendar_client.aclose()
 
     gmail_client = GmailClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=fresh,
         on_tokens=save_google_tokens,
     )

@@ -217,6 +217,20 @@ class TestScheduleRebuild:
 
         timer.cancel()
 
+    def test_stop_cancels_pending_rebuild(self, tmp_path: Path) -> None:
+        """A stopped handler neither fires nor re-arms a debounced rebuild."""
+        mock_index = MagicMock(spec=NoteIndex)
+        handler = _make_handler(tmp_path, note_index=mock_index)
+
+        handler._schedule_rebuild()
+        timer = handler._rebuild_timer
+        assert timer is not None
+
+        handler.stop()
+        assert timer.finished.is_set()
+        handler._schedule_rebuild()
+        assert handler._rebuild_timer is None
+
 
 # ---------------------------------------------------------------------------
 # _rebuild triggers graph build

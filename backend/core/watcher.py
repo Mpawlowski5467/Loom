@@ -272,14 +272,24 @@ class _VaultEventHandler(FileSystemEventHandler):
     # -- Lifecycle ----------------------------------------------------------
 
     def stop(self) -> None:
-        """Signal the worker thread to exit. Best-effort."""
+        """Signal the worker thread to exit and drop any pending rebuild.
+
+        A debounced rebuild left armed would still write ``graph.json`` into
+        a vault that has been switched away from or is being deleted.
+        """
         self._stop_event.set()
+        with self._timer_lock:
+            if self._rebuild_timer is not None:
+                self._rebuild_timer.cancel()
+                self._rebuild_timer = None
         with contextlib.suppress(Exception):
             self._worker.join(timeout=2.0)
 
     def _schedule_rebuild(self) -> None:
         """Debounce graph rebuilds — wait for changes to settle."""
         with self._timer_lock:
+            if self._stop_event.is_set():
+                return
             if self._rebuild_timer is not None:
                 self._rebuild_timer.cancel()
             self._rebuild_timer = threading.Timer(

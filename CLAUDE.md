@@ -6,7 +6,7 @@ A local-first AI memory system with a multi-agent backbone and a visual knowledg
 
 - **Backend**: Python 3.11+ / FastAPI
 - **Agent orchestration**: LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs; nodes call Loom's own provider layer, so no LangChain provider stack is pulled in.
-- **Frontend**: React 19 + TypeScript / shadcn/ui (Radix + Tailwind v4) / React Router / Sigma.js + graphology (graph) / react-markdown preview (Plate editor planned) / lucide-react icons / Sonner toasts
+- **Frontend**: React 19 + TypeScript / shadcn/ui (Radix + Tailwind v4) / React Router / Sigma.js + graphology (graph) / Plate note editor (lossless markdown bridge) + react-markdown previews / lucide-react icons / Sonner toasts
 - **Vector DB**: LanceDB
 - **Storage**: Markdown files with YAML frontmatter
 - **AI**: Provider-agnostic (OpenAI, Anthropic, xAI, OpenRouter, Ollama); every call traced
@@ -33,13 +33,13 @@ loom/
 │       ├── components/       # ui/ (shadcn primitives), shell/ (header, layout), theme/, shared components
 │       ├── context/          # AppContext, useLoomConfig, useRouteNavigation
 │       ├── data/             # Seed / sample data for dev
-│       ├── editor/           # Custom markdown renderer (wikilinks, inline marks)
+│       ├── editor/           # plate/ (note editor, lossless markdown bridge), markdown/ (block splitter, wikilink remark plugin), react-markdown previews
 │       ├── graph/            # Sigma.js setup, layout, interactions
 │       ├── onboarding/       # First-run wizard
 │       ├── lib/              # cn() and small shared helpers
 │       ├── styles/           # themes.css (all tokens) + legacy view stylesheets (being retired)
 │       ├── theme/            # ThemeProvider, registry, appearance persistence, useThemeColors
-│       └── views/            # GraphView, ThreadView (Notes), BoardView, InboxView, ThreadsView, SettingsView
+│       └── views/            # GraphView, notes/ (NotesView), BoardView, InboxView, ThreadsView, SettingsView
 ├── docs/                     # Architecture docs, reference, wireframes/
 ├── examples/                 # Example vaults, rules, schemas
 └── scripts/                  # Repo-level scripts
@@ -92,7 +92,7 @@ Style guide: @docs/style-guide.md
 - Durable Inbox processing: per-vault SQLite jobs with retry/backoff/cancel/review, Active/Review/History UI, retention controls, and typed SSE refresh domains
 - Scheduled Standup workspace with timezone-aware durable scheduling and an encrypted, read-only iCalendar Bridge that can enrich recaps and create event captures
 - App shell (React Router): header with Graph · Notes · Board · Inbox · Threads tabs, search trigger, agent status, dark/light quick toggle, settings, New note; routes `/graph`, `/notes/<folder>/<slug>`, `/board`, `/inbox`, `/threads/:id?`, `/settings/:section?` (old `?view=` URLs redirect); ⌘K palette, `g g/n/b/i/t` view chords, ⌘N, ⌘⇧C, ⌘B, ⌘;
-- Views: GraphView (Sigma.js — force layout plus five orbit scenes (rings/spiral/arms/galaxy/wave) with fluid drag physics, faux-3D depth layering, edge travelers, display panel), ThreadView at `/notes` (markdown reader/editor), InboxView (capture triage), BoardView (agent cards + pulse viz toggle; clicking a card opens a detail modal with the agent's instructions, its recent runs, and its LLM calls), ThreadsView (placeholder). The shadcn rebuild is phased (`feat/ui-*`); views not yet rebuilt keep their legacy stylesheets in a `legacy` cascade layer with old variable names aliased to the new tokens (`styles/legacy-tokens.css`)
+- Views: GraphView (Sigma.js — force layout plus five orbit scenes (rings/spiral/arms/galaxy/wave) with fluid drag physics, faux-3D depth layering, edge travelers, display panel), NotesView at `/notes/<folder>/<slug>` (shadcn: vault tree with superseded markers | Plate editor with supersession banner, properties block, Spider suggestion cards, slash menu, `[[` picker, raw-markdown mode, version-checked save and conflict compare | context rail with a Sigma local graph, related notes and agent activity; History sheet with git undo), InboxView (capture triage), BoardView (agent cards + pulse viz toggle; clicking a card opens a detail modal with the agent's instructions, its recent runs, and its LLM calls), ThreadsView (placeholder). The shadcn rebuild is phased (`feat/ui-*`); views not yet rebuilt keep their legacy stylesheets in a `legacy` cascade layer with old variable names aliased to the new tokens (`styles/legacy-tokens.css`)
 - File tree renders only on Graph and Board and can be hidden (⌘B, persisted at `loom.treeVisible`); Notes/Inbox/Settings are full-width
 - Create-note modal: segmented type chips with node-color dots, nested-folder picker, tag chip editor (own stylesheet `styles/views/note-modal.css`)
 - Onboarding wizard — 4 steps: Welcome → VaultSetup → ThemePicker (shared ThemeGrid) → ProviderConfig (Finish gated on a validated provider)

@@ -20,19 +20,19 @@ rebuild phase, no client yet.
 | # | Gap | Needed by | Status |
 |---|---|---|---|
 | 1 | Appearance settings per vault | Settings → Appearance | mocked |
-| 2 | Supersession fields and search filter | Notes, Graph, Palette, Threads | planned (roadmap 3) |
+| 2 | Supersession fields and search filter | Notes, Graph, Palette, Threads | UI reads frontmatter; demo seed only (roadmap 3) |
 | 3 | Graph communities | Graph, Palette, Inbox, Threads | derived (client Louvain; roadmap 6) |
 | 4 | Search score breakdown and timing | Palette | planned |
-| 5 | Related notes for a note | Notes context rail | planned (derived approximation) |
-| 6 | Dismiss a Spider link suggestion | Notes | planned |
-| 7 | Weaver drafts a section | Notes slash menu | planned |
+| 5 | Related notes for a note | Notes context rail | mocked; derived from search |
+| 6 | Dismiss a Spider link suggestion | Notes | mocked; remembered locally |
+| 7 | Weaver drafts a section | Notes slash menu | mocked |
 | 8 | Persisted Archivist findings per note | Graph note panel | planned |
 | 9 | Agent stats and scheduled/watching states | Board | planned (derived where possible) |
-| 10 | Council with note context, proposed changes | Notes, Board | planned |
+| 10 | Council with note context, proposed changes | Notes, Board | planned (Ask Council prefills the composer) |
 | 11 | Stored capture proposals with a Sentinel pre-check | Inbox | planned |
 | 12 | Structured daily summary | Threads | planned (derived from changelog) |
 | 13 | Vault stats and actions per day | Threads | planned (derived) |
-| 14 | Per-note agent activity feed | Notes | planned (derived) |
+| 14 | Per-note agent activity feed | Notes | derived |
 | 15 | Theme names in the config enum | Onboarding | workaround in place |
 
 ## 1. Appearance settings per vault
@@ -133,8 +133,10 @@ mark the `link_evidence` entry `state: dismissed` so later scans don't
 re-suggest it. This relates to the roadmap follow-up "make an undone Spider
 link stick".
 
-**Today:** Link works through `POST /api/connections/accept`; Dismiss is
-mocked.
+**Today:** Link works through `POST /api/connections/accept`. Dismiss calls
+`dismissConnection`; when the backend can't record it, the dismissal is kept
+in browser storage (`loom:dismissed-links:v1:<vault>`) so the card stays
+hidden on this device.
 
 ## 7. Weaver drafts a section
 
@@ -142,7 +144,7 @@ mocked.
 → `{markdown, trace_id}`, read-only (the editor inserts the text and the
 normal save path writes it).
 
-**Today:** the slash-menu item is mocked.
+**Today:** the slash-menu item calls `draftSection` (`frontend/src/api/weaver.ts`). It's mocked under `VITE_LOOM_MOCKS`; without mocks the backend's 404 shows "Drafting with Weaver needs a backend endpoint that doesn't exist yet."
 
 ## 8. Archivist findings per note
 

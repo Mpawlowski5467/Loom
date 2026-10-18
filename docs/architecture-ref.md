@@ -98,11 +98,20 @@ Vault lists load note metadata first. A selected note body is fetched on demand
 and is marked `bodyLoaded` only after hydration, which keeps large-vault
 navigation responsive without treating an empty metadata body as a real note.
 
-The editor uses `react-markdown` with the project's wikilink handling for its
-preview. It stores unsaved text in browser storage by **vault ID and note ID**,
-including the original content fingerprint (with timestamp compatibility for older clients). A draft survives a Thread view
-unmount, reload, and vault switch; it is never used to replace a newer body
-silently. The editor makes discard explicit, warns if local persistence fails,
+Notes are edited in a Plate (Slate) editor, with a raw-markdown mode beside
+it. Markdown stays the source of truth: each top-level block is loaded on its
+own, and on save every block whose content is unchanged is written back from
+its original source byte for byte, so opening a note never rewrites it and an
+edit only reformats the block it touched. Blocks the rich editor can't
+round-trip (reference definitions, HTML blocks, footnotes, reference links)
+are kept as read-only raw markdown. `[[wikilinks]]` are inline chips parsed
+and written back verbatim. Read-only previews elsewhere still use
+`react-markdown`.
+
+The editor stores unsaved text in browser storage by **vault ID and note ID**,
+including the original content fingerprint (with timestamp compatibility for
+older clients). A draft survives leaving the note, a reload, and a vault
+switch; it is never used to replace a newer body silently. The editor makes discard explicit, warns if local persistence fails,
 and retains version-conflicted text while offering compare, reload, or an
 explicit overwrite. Tag edits and accessible wikilink completion use the same
 version-checked note APIs.

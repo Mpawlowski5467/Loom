@@ -262,46 +262,43 @@
 
 /* ── Accent override. Dark themes use the swatch as-is with near-black
    text; light themes use a deeper shade of the same hue with white text
-   so the focus ring and brand text keep AA contrast on white/linen. ── */
+   so the focus ring and brand text keep AA contrast on white and linen.
+   The --swatch-* values also paint the Settings accent picker. ── */
+:root {
+  --swatch-blue: #3b82f6;
+  --swatch-teal: #14b8a6;
+  --swatch-amber: #f59e0b;
+  --swatch-violet: #8b5cf6;
+  --swatch-rose: #f43f5e;
+  --swatch-foreground: #09090b;
+}
+html[data-theme-mode="light"] {
+  --swatch-blue: #2563eb;
+  --swatch-teal: #0f766e;
+  --swatch-amber: #b45309;
+  --swatch-violet: #7c3aed;
+  --swatch-rose: #be123c;
+  --swatch-foreground: #ffffff;
+}
 html[data-brand="blue"] {
-  --brand: #3b82f6;
-  --brand-foreground: #09090b;
+  --brand: var(--swatch-blue);
+  --brand-foreground: var(--swatch-foreground);
 }
 html[data-brand="teal"] {
-  --brand: #14b8a6;
-  --brand-foreground: #09090b;
+  --brand: var(--swatch-teal);
+  --brand-foreground: var(--swatch-foreground);
 }
 html[data-brand="amber"] {
-  --brand: #f59e0b;
-  --brand-foreground: #09090b;
+  --brand: var(--swatch-amber);
+  --brand-foreground: var(--swatch-foreground);
 }
 html[data-brand="violet"] {
-  --brand: #8b5cf6;
-  --brand-foreground: #09090b;
+  --brand: var(--swatch-violet);
+  --brand-foreground: var(--swatch-foreground);
 }
 html[data-brand="rose"] {
-  --brand: #f43f5e;
-  --brand-foreground: #09090b;
-}
-html[data-theme-mode="light"][data-brand="blue"] {
-  --brand: #2563eb;
-  --brand-foreground: #ffffff;
-}
-html[data-theme-mode="light"][data-brand="teal"] {
-  --brand: #0f766e;
-  --brand-foreground: #ffffff;
-}
-html[data-theme-mode="light"][data-brand="amber"] {
-  --brand: #b45309;
-  --brand-foreground: #ffffff;
-}
-html[data-theme-mode="light"][data-brand="violet"] {
-  --brand: #7c3aed;
-  --brand-foreground: #ffffff;
-}
-html[data-theme-mode="light"][data-brand="rose"] {
-  --brand: #be123c;
-  --brand-foreground: #ffffff;
+  --brand: var(--swatch-rose);
+  --brand-foreground: var(--swatch-foreground);
 }
 
 /* ── Colorblind-safe graph palette (Okabe-Ito), every theme ───────── */

@@ -1,25 +1,10 @@
-import Graph from "graphology";
+import type Graph from "graphology";
 import Sigma from "sigma";
 import type { Settings } from "sigma/settings";
 import { readCssVar } from "../theme/readCssVar";
-import type { Note, NodeType } from "../data/types";
-import { depthColorFor, zForNode } from "./depth";
-
-/**
- * Look up node colors from the active theme. Re-read on every call so the
- * graph repaints correctly after a theme swap — Sigma re-asks for each
- * node's ``color`` attribute on ``refresh()``.
- */
-export function readNodePalette(): Record<NodeType, string> {
-  return {
-    project: readCssVar("--node-project", "#2d4a7c"),
-    topic: readCssVar("--node-topic", "#4a6b3a"),
-    people: readCssVar("--node-people", "#6b3a6b"),
-    daily: readCssVar("--node-daily", "#8c877d"),
-    capture: readCssVar("--node-capture", "#a8722a"),
-    custom: readCssVar("--node-custom", "#2d6b6b"),
-  };
-}
+import type { NodeType } from "../data/types";
+import { depthColorFor } from "./depth";
+import { readNodePalette } from "./graphModel";
 
 export interface EdgePalette {
   edge: string;
@@ -37,54 +22,6 @@ export function readEdgePalette(): EdgePalette {
     label: readCssVar("--label-color", "#5c5851"),
     nodeDimmed: readCssVar("--node-dimmed", "rgba(140,135,125,0.18)"),
   };
-}
-
-export interface BuiltGraph {
-  graph: Graph;
-  baseSizes: Map<string, number>;
-}
-
-export function buildGraph(notes: Note[]): BuiltGraph {
-  const graph = new Graph({ multi: false, type: "directed" });
-  const baseSizes = new Map<string, number>();
-  const palette = readNodePalette();
-
-  // Pre-compute connection counts.
-  const conn = new Map<string, number>();
-  for (const n of notes) {
-    conn.set(n.id, (conn.get(n.id) ?? 0) + n.links.length);
-    for (const l of n.links) conn.set(l, (conn.get(l) ?? 0) + 1);
-  }
-
-  const bg = readCssVar("--bg-base", "#f5f1e8");
-  for (const n of notes) {
-    const c = conn.get(n.id) ?? 0;
-    const size = 4 + Math.min(c, 12) * 0.8;
-    baseSizes.set(n.id, size);
-    const z = zForNode(n.id, c);
-    graph.addNode(n.id, {
-      x: Math.random() * 100 - 50,
-      y: Math.random() * 100 - 50,
-      size,
-      label: n.title,
-      color: palette[n.type],
-      noteType: n.type,
-      // Faux-3D depth: static per node; the reducers/overlays read these.
-      // zIndex draws nearer nodes over deeper ones (Sigma sorts when the
-      // zIndex setting is on).
-      z,
-      depthColor: depthColorFor(palette[n.type], bg, z),
-      zIndex: 1 - z,
-    });
-  }
-  for (const n of notes) {
-    for (const l of n.links) {
-      if (!graph.hasNode(l)) continue;
-      if (graph.hasEdge(n.id, l) || graph.hasEdge(l, n.id)) continue;
-      graph.addEdge(n.id, l);
-    }
-  }
-  return { graph, baseSizes };
 }
 
 export function defaultSettings(): Partial<Settings> {

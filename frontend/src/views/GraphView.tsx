@@ -145,6 +145,7 @@ export function GraphView(): ReactNode {
     breathingRemoveRef,
     stopDragSimRef,
     sigmaReady,
+    structureVersion,
     building,
   } = useGraphInstance({
     notes,
@@ -192,6 +193,7 @@ export function GraphView(): ReactNode {
     isolateNeighbors,
     notes,
     sigmaReady,
+    structureVersion,
     layoutAutoCycle: graphDisplay.layoutAutoCycle,
     graphFilters,
   });

@@ -104,6 +104,7 @@ interface Harness {
   selectedNodeId?: NoteId | null;
   notes: Note[];
   sigmaReady: number;
+  structureVersion?: number;
   layoutAutoCycle?: boolean;
   graphFilters?: Set<NodeType>;
 }
@@ -461,5 +462,42 @@ describe("useGraphScene — layout selection & auto-cycle", () => {
 
     // The stale-instance guard must keep late ticks from staging new tweens.
     expect(tweenMock.mock.calls.length).toBe(tweensAfterFirst);
+  });
+
+  it("restages the scene on stage without recentering after an in-place structure change", () => {
+    const notes = [note("a", ["b"]), note("b")];
+    const graph = buildGraph(notes);
+    const props = {
+      layout: "spiral" as GraphLayout,
+      graphFocusId: "a" as NoteId,
+      notes,
+      sigmaReady: 1,
+      structureVersion: 0,
+      layoutAutoCycle: true,
+    };
+    const { result, rerender } = setup(props, graph);
+    // A user-driven stage recenters the camera when its tween lands.
+    expect(tweenMock.mock.calls[0]![0].onComplete).toBeDefined();
+    act(() => {
+      vi.advanceTimersByTime(9_000);
+    });
+    const cycled = result.current;
+    expect(cycled).not.toBe("spiral");
+    const tweens = tweenMock.mock.calls.length;
+
+    graph.addNode("c", { noteType: "topic", x: 0, y: 0 });
+    graph.addEdge("a", "c");
+    rerender({
+      ...props,
+      notes: [...notes, note("c", ["a"])],
+      structureVersion: 1,
+    });
+
+    // One new tween re-slots the scene the cycle was on…
+    expect(tweenMock.mock.calls.length).toBe(tweens + 1);
+    expect(orbitMock).toHaveBeenLastCalledWith(graph, "a", cycled);
+    expect(result.current).toBe(cycled);
+    // …and leaves the camera where the user put it.
+    expect(tweenMock.mock.calls.at(-1)![0].onComplete).toBeUndefined();
   });
 });

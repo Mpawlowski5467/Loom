@@ -3,11 +3,16 @@ import type Graph from "graphology";
 import type Sigma from "sigma";
 import type { GraphDisplay } from "../context/app-ctx";
 import type { Note, NoteId } from "../data/types";
-import { buildGraph, createSigma, readNodePalette } from "./sigma-setup";
-import { readCssVar } from "../theme/readCssVar";
-import { collectNodeZ, depthColorFor } from "./depth";
+import { createSigma } from "./sigma-setup";
+import { buildGraph } from "./graphModel";
+import { collectNodeZ } from "./depth";
 import { applyConstellationLayout, easeInOutCubic, type XY } from "./layouts";
 import { structuralKey, contentKey } from "./graphKeys";
+import {
+  patchGraphContent,
+  syncGraphStructure,
+  type GraphSyncResult,
+} from "./graphSync";
 import { attachDrag } from "./dragHandlers";
 import { createFrameLoop, type FrameLoop } from "./frameLoop";
 import {
@@ -17,6 +22,7 @@ import {
   ratioToTier,
 } from "./reducers";
 import { createTravelers } from "./travelers";
+import { wireSigmaEvents } from "./sigmaEvents";
 import { createLens } from "./lens";
 import { GRAPH_LABEL_BUDGET_NODES, type GraphTuning } from "./tuning";
 import type { TweenHandle } from "./layoutTransition";
@@ -43,7 +49,10 @@ export interface GraphInstance {
   breathingRemoveRef: Ref<(() => void) | null>;
   /** Halts the active drag sim (scene staging calls it before a tween). */
   stopDragSimRef: Ref<(() => void) | null>;
+  /** Bumps on every full (re)build — the graph is freshly laid out. */
   sigmaReady: number;
+  /** Bumps when nodes/edges were added or removed in place. */
+  structureVersion: number;
   building: boolean;
 }
 
@@ -51,8 +60,11 @@ export interface GraphInstance {
  * Owns the imperative Sigma instance: builds the graph + renderer, wires the
  * reducers, node events, drag, the shared frame loop, and the travelers/lens
  * overlay, then tears it all down on cleanup. The heavy build (ForceAtlas2) is
- * deferred one frame so the loading shimmer can paint first. Returns the live
- * handles the rest of GraphView's hooks/effects read.
+ * deferred one frame so the loading shimmer can paint first. After that the
+ * instance lives for as long as there are notes: structural changes are
+ * diffed onto the live graph (graphSync.ts) instead of rebuilding, so the
+ * camera, reducers, frame loop and overlays survive. Returns the live handles
+ * the rest of GraphView's hooks/effects read.
  */
 export function useGraphInstance(args: {
   notes: Note[];
@@ -84,13 +96,20 @@ export function useGraphInstance(args: {
   const baseSizesRef = useRef<Map<string, number>>(new Map());
   const basePositionsRef = useRef<Map<string, XY>>(new Map());
   // Latest notes, readable from the deferred build closure without making
-  // ``notes`` a build-effect dependency (the structural key gates rebuilds).
+  // ``notes`` a build-effect dependency.
   const notesRef = useRef<Note[]>(notes);
   notesRef.current = notes;
+  // The lens reads note bodies from this map. It is refilled in place on
+  // every notes change, so the lens tracks additions and lazily loaded bodies.
+  const noteMapRef = useRef<Map<string, Note>>(new Map());
   // Survives rebuilds: the live node positions snapshotted before teardown,
-  // so a structural rebuild re-seeds existing nodes (incl. dragged ones)
-  // instead of reshuffling the whole graph from scratch.
+  // so a rebuild re-seeds existing nodes (incl. dragged ones) instead of
+  // reshuffling the whole graph from scratch.
   const positionCacheRef = useRef<Map<string, XY>>(new Map());
+  // Applies a structural change to the live instance; null until built.
+  const syncRef = useRef<((notes: Note[]) => GraphSyncResult) | null>(null);
+  // structuralKey of the graph currently on screen; null until built.
+  const liveKeyRef = useRef<string | null>(null);
   const orbitTargetsRef = useRef<Map<string, XY>>(new Map());
   const activeTweenRef = useRef<TweenHandle | null>(null);
   const breathingRemoveRef = useRef<(() => void) | null>(null);
@@ -99,18 +118,18 @@ export function useGraphInstance(args: {
   const stopDragSimRef = useRef<(() => void) | null>(null);
 
   const [sigmaReady, setSigmaReady] = useState(0);
+  const [structureVersion, setStructureVersion] = useState(0);
+  const [rebuildEpoch, setRebuildEpoch] = useState(0);
   const [building, setBuilding] = useState(false);
+  const hasNotes = notes.length > 0;
 
-  // Rebuild only when the graph STRUCTURE changes (nodes/edges added or
-  // removed) — not on every body/title/tag edit. structuralKey is a stable
-  // string, so an edit that leaves structure intact yields an equal dep and
-  // React skips this effect; the separate content-sync effect below patches
-  // title/type changes in place. This avoids a sigma.kill() + 220-iteration
-  // ForceAtlas2 on the main thread (and the camera reset + lost pan/zoom) on
-  // every save. Memoized on ``notes`` so unrelated context re-renders don't
-  // re-sort every node id and edge in the vault.
+  // Memoized on ``notes`` so unrelated context re-renders don't re-sort every
+  // node id and edge in the vault.
   const structKey = useMemo(() => structuralKey(notes), [notes]);
 
+  // Full build: once notes exist, and again only when an in-place sync
+  // reports it cannot patch the change (bumping rebuildEpoch). Adding or
+  // removing notes and links goes through the structure effect below.
   useEffect(() => {
     if (!hostRef.current || notesRef.current.length === 0) return;
 
@@ -135,8 +154,8 @@ export function useGraphInstance(args: {
       baseSizesRef.current = baseSizes;
       graphRef.current = graph;
       // Seed from the cached layout so existing nodes keep their positions
-      // (and any dragged placement) across a structural rebuild; only genuinely
-      // new nodes get a fresh spiral slot + a short settling pass.
+      // (and any dragged placement) across a rebuild; only genuinely new
+      // nodes are placed beside their neighbors and settled locally.
       basePositionsRef.current = applyConstellationLayout(
         graph,
         positionCacheRef.current,
@@ -185,58 +204,17 @@ export function useGraphInstance(args: {
         makeEdgeReducer(graph, tuningRef.current, edgeExtremities, nodeZ),
       );
 
-      // Camera ratio drives the label tier — refresh only when the tier flips,
-      // not on every zoom frame.
-      const onCameraUpdate = (): void => {
-        const r = sigma.getCamera().ratio;
-        const prevRatio = tuningRef.current.cameraRatio;
-        tuningRef.current.cameraRatio = r;
-        const tier = ratioToTier(r);
-        const showRatio = tuningRef.current.labelShowRatio;
-        const crossedShowRatio = prevRatio <= showRatio !== r <= showRatio;
-        if (tier !== tuningRef.current.labelTier || crossedShowRatio) {
-          tuningRef.current.labelTier = tier;
-          sigma.refresh({ skipIndexation: true });
-        }
-      };
-      sigma.getCamera().on("updated", onCameraUpdate);
-
-      sigma.on("enterNode", ({ node }) => {
-        if (isDraggingRef.current) return;
-        tuningRef.current.hovered = node;
-        sigma.refresh({ skipIndexation: true });
-      });
-      sigma.on("leaveNode", () => {
-        if (isDraggingRef.current) return;
-        tuningRef.current.hovered = null;
-        sigma.refresh({ skipIndexation: true });
-      });
-      sigma.on("clickNode", ({ node }) => {
-        if (isDraggingRef.current || justDraggedRef.current) return;
-        host.focus({ preventScroll: true });
-        setGraphSelectedId(node);
-        // Orbit selection preserves the existing focus-first scene behavior;
-        // selection remains separate so clearing the card does not reshuffle.
-        if (tuningRef.current.graphMode === "orbit") setGraphFocusId(node);
-      });
-      sigma.on("clickEdge", ({ edge }) => {
-        if (isDraggingRef.current || justDraggedRef.current) return;
-        const [source, target] = graph.extremities(edge);
-        host.focus({ preventScroll: true });
-        onEdgeClick?.(source as NoteId, target as NoteId);
-        setGraphSelectedId(source as NoteId);
-        if (tuningRef.current.graphMode === "orbit") {
-          setGraphFocusId(source as NoteId);
-        }
-      });
-      sigma.on("clickStage", () => {
-        if (isDraggingRef.current || justDraggedRef.current) return;
-        host.focus({ preventScroll: true });
-        setGraphSelectedId(null);
-      });
-      sigma.on("doubleClickNode", ({ node, event }) => {
-        event.preventSigmaDefault?.();
-        openNote(node);
+      const detachEvents = wireSigmaEvents({
+        sigma,
+        graph,
+        host,
+        tuning: tuningRef.current,
+        isDragging: isDraggingRef,
+        justDragged: justDraggedRef,
+        openNote,
+        onEdgeClick,
+        setGraphFocusId,
+        setGraphSelectedId,
       });
 
       const frameLoop = createFrameLoop(() =>
@@ -284,6 +262,7 @@ export function useGraphInstance(args: {
               tuning: tuningRef.current,
             })
           : null;
+      fillNoteMap(noteMapRef.current, notes);
       const lens =
         !heavyNow && overlay
           ? createLens({
@@ -291,7 +270,7 @@ export function useGraphInstance(args: {
               graph,
               sigma,
               host,
-              noteMap: new Map(notes.map((n) => [n.id, n])),
+              noteMap: noteMapRef.current,
               tuning: tuningRef.current,
               openNote,
             })
@@ -305,6 +284,28 @@ export function useGraphInstance(args: {
       });
       ro.observe(host);
 
+      liveKeyRef.current = structuralKey(notes);
+      syncRef.current = (next) =>
+        syncGraphStructure(
+          {
+            graph,
+            sigma,
+            tuning: tuningRef.current,
+            baseSizesRef,
+            basePositionsRef,
+            edgeExtremities,
+            nodeZ,
+            travelers,
+            heavy: heavyNow,
+            haltMotion: () => {
+              stopDragSimRef.current?.();
+              activeTweenRef.current?.cancel();
+              activeTweenRef.current = null;
+            },
+          },
+          next,
+        );
+
       const resetTimer = window.setTimeout(() => {
         sigma
           .getCamera()
@@ -312,11 +313,13 @@ export function useGraphInstance(args: {
       }, 200);
 
       teardownRef.current = () => {
+        syncRef.current = null;
+        liveKeyRef.current = null;
         // Complete/cancel any active elastic motion before caching positions.
         // Otherwise a rebuild during settle could seed the next graph from a
         // transient halfway point instead of the saved layout geometry.
         detachDrag();
-        // Snapshot positions so the next structural rebuild can re-seed
+        // Snapshot positions so the next rebuild can re-seed
         // existing nodes (preserving layout + any dragged placement). In
         // orbit mode the live attrs hold scene-ring geometry — seed from the
         // constellation base instead, so a rebuild (whose fresh-build skip
@@ -338,7 +341,7 @@ export function useGraphInstance(args: {
 
         window.clearTimeout(resetTimer);
         ro.disconnect();
-        sigma.getCamera().off("updated", onCameraUpdate);
+        detachEvents();
         breathingRemoveRef.current?.();
         breathingRemoveRef.current = null;
         activeTweenRef.current?.cancel();
@@ -372,43 +375,38 @@ export function useGraphInstance(args: {
       teardownRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasNotes, rebuildEpoch]);
+
+  // Structure sync: a node or link was added or removed. Diff it onto the
+  // live graph (no sigma.kill(), no ForceAtlas2 on the main thread, camera
+  // untouched). Before the deferred build has run there is nothing to patch
+  // — the build reads the latest notes itself.
+  useEffect(() => {
+    const sync = syncRef.current;
+    if (!sync || liveKeyRef.current === structKey) return;
+    const result = sync(notesRef.current);
+    if (result === "rebuild") {
+      setRebuildEpoch((n) => n + 1);
+      return;
+    }
+    liveKeyRef.current = structKey;
+    if (result === "applied") setStructureVersion((n) => n + 1);
   }, [structKey]);
 
-  // Content sync: when a note's title or type changes but the structure does
-  // not, patch the affected node attributes in place and refresh — far cheaper
-  // than a full rebuild. Keyed on contentKey so it only fires on real changes.
-  // Skipped on a structural change because the build effect above (which shares
-  // the same render) already rebuilds with fresh content. Memoized on
-  // ``notes`` for the same reason as structKey above.
+  useEffect(() => {
+    fillNoteMap(noteMapRef.current, notes);
+  }, [notes]);
+
+  // Content sync: when a note's title or type changes, patch the affected
+  // node attributes in place and refresh. Keyed on contentKey so it only fires
+  // on real changes; nodes added by the structure effect above already carry
+  // fresh content. Memoized on ``notes`` for the same reason as structKey.
   const contKey = useMemo(() => contentKey(notes), [notes]);
   useEffect(() => {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
-    const palette = readNodePalette();
-    const bg = readCssVar("--bg-base", "#f5f1e8");
-    let changed = false;
-    let typeChanged = false;
-    for (const n of notesRef.current) {
-      if (!graph.hasNode(n.id)) continue;
-      if (graph.getNodeAttribute(n.id, "label") !== n.title) {
-        graph.setNodeAttribute(n.id, "label", n.title);
-        changed = true;
-      }
-      if (graph.getNodeAttribute(n.id, "noteType") !== n.type) {
-        graph.setNodeAttribute(n.id, "noteType", n.type);
-        graph.setNodeAttribute(n.id, "color", palette[n.type]);
-        const z =
-          (graph.getNodeAttribute(n.id, "z") as number | undefined) ?? 0;
-        graph.setNodeAttribute(
-          n.id,
-          "depthColor",
-          depthColorFor(palette[n.type], bg, z),
-        );
-        changed = true;
-        typeChanged = true;
-      }
-    }
+    const { changed, typeChanged } = patchGraphContent(graph, notesRef.current);
     if (typeChanged) {
       // A type edit can move the node into or out of the active filter. Keep
       // materialized visibility and visible-subgraph label degrees coherent
@@ -439,6 +437,12 @@ export function useGraphInstance(args: {
     breathingRemoveRef,
     stopDragSimRef,
     sigmaReady,
+    structureVersion,
     building,
   };
+}
+
+function fillNoteMap(map: Map<string, Note>, notes: Note[]): void {
+  map.clear();
+  for (const n of notes) map.set(n.id, n);
 }

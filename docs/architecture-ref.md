@@ -74,7 +74,11 @@ apply during candidate retrieval, with an optional graph-context boost afterward
 provider, keyword retrieval remains available.
 
 Wikilinks are canonicalized against note IDs, paths, aliases, and slugs. The
-graph is derived from published notes and renders with Sigma.js. Spider can
+graph is derived from published notes and renders with Sigma.js. One graph
+and renderer live for the whole view: adding or removing notes and links is
+diffed onto them in place (`graph/graphSync.ts`), seeding new nodes beside
+their neighbors and settling only those, so the camera and the rest of the
+layout stay put; ForceAtlas2 runs only for a fresh build. Spider can
 write deterministic link evidence: source and target identities, method/score,
 bounded excerpts, timestamp/run/agent, and a state such as `suggested`,
 `applied`, or `user_accepted`. Clicking a graph edge, using a neighbor's Evidence button, or opening Thread context exposes this evidence and its

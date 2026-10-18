@@ -1,5 +1,6 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Graph from "graphology";
+import forceAtlas2 from "graphology-layout-forceatlas2";
 import {
   easeInOutCubic,
   applyConstellationLayout,
@@ -177,7 +178,38 @@ describe("applyConstellationLayout — seeding", () => {
     const fresh = pos.get("fresh")!;
     expect(Number.isFinite(fresh.x)).toBe(true);
     expect(Number.isFinite(fresh.y)).toBe(true);
-    // The new node got a real placement (not left at the origin default).
+    // The new node got a real placement (not left at the origin default)…
     expect(fresh.x !== 0 || fresh.y !== 0).toBe(true);
+    // …beside its only neighbor rather than out on the spiral.
+    expect(Math.hypot(fresh.x, fresh.y)).toBeLessThan(200);
+    // Seeded nodes are returned verbatim: no FA2 pass moved them.
+    for (const [id, xy] of seed) expect(pos.get(id)).toEqual(xy);
+  });
+
+  it("lays out from scratch when the seed shares no node with the graph", () => {
+    const fa2 = vi.spyOn(forceAtlas2, "assign");
+    applyConstellationLayout(
+      mkGraph(),
+      new Map<string, XY>([["other-vault-note", { x: 1, y: 1 }]]),
+    );
+    // A stale seed (e.g. the previous vault's layout) gets the full run.
+    expect(fa2).toHaveBeenCalledTimes(1);
+    expect(fa2.mock.calls[0]![1]).toMatchObject({ iterations: 220 });
+    fa2.mockRestore();
+  });
+
+  it("never runs ForceAtlas2 when part of the graph is seeded", () => {
+    const fa2 = vi.spyOn(forceAtlas2, "assign");
+    const g = mkGraph();
+    g.addNode("fresh", { noteType: "topic" });
+    applyConstellationLayout(
+      g,
+      new Map<string, XY>([
+        ["focus", { x: 0, y: 0 }],
+        ["n1", { x: 100, y: 0 }],
+      ]),
+    );
+    expect(fa2).not.toHaveBeenCalled();
+    fa2.mockRestore();
   });
 });

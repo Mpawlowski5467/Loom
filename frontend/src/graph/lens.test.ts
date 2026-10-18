@@ -162,4 +162,34 @@ describe("createLens", () => {
     lens.destroy();
     expect(overlay.childNodes.length).toBe(0);
   });
+
+  it("closes instead of throwing when its focused note leaves the graph", () => {
+    const overlay = makeOverlay();
+    const graph = makeGraph();
+    const lens = createLens({
+      overlay,
+      graph,
+      sigma: stubSigma(0.5),
+      host: document.createElement("div"),
+      noteMap: new Map([
+        ["a", note("a")],
+        ["b", note("b")],
+      ]),
+      tuning: makeTuning(),
+      openNote: vi.fn(),
+    });
+    for (let i = 0; i < 8; i++) lens.tick(i * 16);
+    expect(overlay.querySelector("g")!.getAttribute("display")).toBe("");
+
+    graph.dropNode("a");
+    expect(() => lens.tick(200)).not.toThrow();
+    expect(overlay.querySelector("g")!.getAttribute("display")).toBe("none");
+    // The next scan refocuses on a node that still exists.
+    expect(() => {
+      for (let i = 0; i < 8; i++) lens.tick(300 + i * 16);
+    }).not.toThrow();
+    expect(overlay.textContent).toContain("Title b");
+
+    lens.destroy();
+  });
 });

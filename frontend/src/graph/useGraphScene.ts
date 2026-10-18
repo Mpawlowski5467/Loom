@@ -32,7 +32,9 @@ const SCENE_TWEEN_MS = 1200;
  * build). Any other layout is an orbit scene (Rings / Spiral / Arms / Galaxy /
  * Wave) tweened via the shared frame loop; with auto-cycle on the five scene
  * layouts are walked from the selected one every ``SCENE_HOLD_MS``. Returns
- * the scene currently on stage for the on-canvas caption.
+ * the scene currently on stage for the on-canvas caption. When nodes are
+ * added or removed in place (``structureVersion``), the scene on stage is
+ * restaged so new nodes take a slot, without recentering the camera.
  */
 export function useGraphScene(args: {
   sigmaRef: Ref<Sigma | null>;
@@ -50,6 +52,8 @@ export function useGraphScene(args: {
   isolateNeighbors?: boolean;
   notes: Note[];
   sigmaReady: number;
+  /** Bumps when nodes/edges changed in place (no rebuild). */
+  structureVersion?: number;
   layoutAutoCycle: boolean;
   graphFilters: Set<NodeType>;
 }): OrbitScene {
@@ -68,6 +72,7 @@ export function useGraphScene(args: {
     isolateNeighbors = false,
     notes,
     sigmaReady,
+    structureVersion = 0,
     layoutAutoCycle,
     graphFilters,
   } = args;
@@ -81,6 +86,11 @@ export function useGraphScene(args: {
     layout === "force" ? "rings" : layout,
   );
   const prevReadyRef = useRef(-1);
+  // Scene-effect bookkeeping that tells a structure-only restage (same
+  // layout, focus, build, cycle and visibility) apart from a user change.
+  const stageKeyRef = useRef("");
+  const prevStructureRef = useRef(structureVersion);
+  const onStageRef = useRef<OrbitScene | null>(null);
   // Latest notes, readable from the effect without making ``notes`` a
   // dependency. The effect only needs notes for the scene-layout focus
   // fallback (notes[0]?.id); keeping the array out of the deps means a notes
@@ -143,6 +153,18 @@ export function useGraphScene(args: {
 
   // Scene branch: stage the selected scene layout, optionally cycling onward.
   useEffect(() => {
+    const stageKey = [
+      layout,
+      requestedFocusId,
+      sigmaReady,
+      layoutAutoCycle,
+      visibilityKey,
+    ].join("|");
+    const structureOnly =
+      structureVersion !== prevStructureRef.current &&
+      stageKey === stageKeyRef.current;
+    stageKeyRef.current = stageKey;
+    prevStructureRef.current = structureVersion;
     if (layout === "force") return;
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
@@ -163,12 +185,13 @@ export function useGraphScene(args: {
           )?.id;
     if (!focusId) return;
 
-    const playScene = (scene: OrbitScene): void => {
+    const playScene = (scene: OrbitScene, recenterAfter: boolean): void => {
       // The build effect can tear the instance down without bumping
       // sigmaReady (e.g. the vault emptied), leaving the auto-cycle interval
       // alive — a late tick must not drive a killed renderer.
       if (sigmaRef.current !== sigma) return;
       setStagedScene(scene);
+      onStageRef.current = scene;
       // Same as the force branch: a still-settling drag sim would write
       // positions against the tween every frame and then re-home to whatever
       // mid-tween state it stopped in — halt it before staging.
@@ -187,18 +210,22 @@ export function useGraphScene(args: {
         targets,
         frameLoop,
         duration: SCENE_TWEEN_MS,
-        onComplete: () => recenter(sigma),
+        onComplete: recenterAfter ? () => recenter(sigma) : undefined,
       });
     };
 
-    let sceneIdx = Math.max(0, ORBIT_SCENES.indexOf(layout));
-    playScene(ORBIT_SCENES[sceneIdx]!);
+    // A structure-only restage keeps the scene the cycle is on and leaves
+    // the camera where the user put it.
+    const startScene =
+      structureOnly && onStageRef.current ? onStageRef.current : layout;
+    let sceneIdx = Math.max(0, ORBIT_SCENES.indexOf(startScene));
+    playScene(ORBIT_SCENES[sceneIdx]!, !structureOnly);
 
     let interval: number | undefined;
     if (layoutAutoCycle) {
       interval = window.setInterval(() => {
         sceneIdx = (sceneIdx + 1) % ORBIT_SCENES.length;
-        playScene(ORBIT_SCENES[sceneIdx]!);
+        playScene(ORBIT_SCENES[sceneIdx]!, true);
       }, SCENE_HOLD_MS);
     }
 
@@ -209,7 +236,14 @@ export function useGraphScene(args: {
     };
     // ``notes`` is intentionally NOT a dependency — see notesRef above.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [layout, requestedFocusId, sigmaReady, layoutAutoCycle, visibilityKey]);
+  }, [
+    layout,
+    requestedFocusId,
+    sigmaReady,
+    structureVersion,
+    layoutAutoCycle,
+    visibilityKey,
+  ]);
 
   return stagedScene;
 }

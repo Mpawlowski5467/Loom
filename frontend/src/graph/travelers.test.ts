@@ -134,4 +134,35 @@ describe("createTravelers", () => {
 
     travelers.destroy();
   });
+
+  it("sync re-matches lines and node masks to an in-place graph change", () => {
+    const overlay = makeOverlay();
+    const graph = makeGraph();
+    const travelers = createTravelers({
+      overlay,
+      graph,
+      sigma: stubSigma(),
+      tuning: makeTuning(),
+    });
+    travelers.tick(0);
+    const kept = overlay.querySelector("line")!;
+
+    graph.addNode("c", { x: 0, y: 60, size: 4, z: 0 });
+    graph.addEdge("a", "c");
+    travelers.sync();
+    expect(overlay.querySelectorAll("line")).toHaveLength(2);
+    expect(overlay.querySelectorAll("mask circle")).toHaveLength(3);
+    // The surviving edge keeps its line element.
+    expect(overlay.querySelector("line")).toBe(kept);
+
+    graph.dropNode("b");
+    travelers.sync();
+    expect(overlay.querySelectorAll("line")).toHaveLength(1);
+    expect(overlay.querySelectorAll("mask circle")).toHaveLength(2);
+    // Ticking after the drop never reads the dropped node.
+    expect(() => travelers.tick(16)).not.toThrow();
+
+    travelers.destroy();
+    expect(overlay.childNodes.length).toBe(0);
+  });
 });

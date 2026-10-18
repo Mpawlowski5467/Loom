@@ -132,6 +132,11 @@ vi.mock("sigma", () => {
     setCustomBBox = vi.fn((bbox: unknown) => {
       this.customBBox = bbox;
     });
+    getSetting = vi.fn(() => undefined);
+    // In-place syncs park the renderer on an empty copy and re-attach it.
+    setGraph = vi.fn((graph: Graph) => {
+      this.graph = graph;
+    });
 
     constructor(
       public graph: Graph,

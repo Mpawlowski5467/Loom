@@ -58,9 +58,28 @@ function makeTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
 
 type BBox = { x: [number, number]; y: [number, number] };
 
-/** The Sigma surface the sync touches: frame + settings + refresh. */
+/**
+ * The Sigma surface the sync touches: frame, settings, refresh and setGraph.
+ * Graph-event wiring mirrors Sigma 3.0.2: while attached, every node or edge
+ * drop re-indexes the whole graph, and setGraph rebinds to the new graph and
+ * runs one full refresh. ``reindexes`` counts those full passes.
+ */
 function stubSigma(graph: Graph) {
   let custom: BBox | null = null;
+  let attached = graph;
+  let reindexes = 0;
+  const onDrop = (): void => {
+    reindexes++;
+  };
+  const bind = (g: Graph): void => {
+    g.on("nodeDropped", onDrop);
+    g.on("edgeDropped", onDrop);
+  };
+  const unbind = (g: Graph): void => {
+    g.removeListener("nodeDropped", onDrop);
+    g.removeListener("edgeDropped", onDrop);
+  };
+  bind(graph);
   const extent = (): BBox => {
     const xs = graph.mapNodes((_id, a) => a["x"] as number);
     const ys = graph.mapNodes((_id, a) => a["y"] as number);
@@ -76,10 +95,25 @@ function stubSigma(graph: Graph) {
     setCustomBBox: vi.fn((b: BBox | null) => {
       custom = b;
     }),
+    getSetting: vi.fn(() => undefined),
     setSetting: vi.fn(),
-    refresh: vi.fn(),
+    refresh: vi.fn(() => {
+      reindexes++;
+    }),
+    setGraph: vi.fn((g: Graph) => {
+      if (g === attached) return;
+      unbind(attached);
+      attached = g;
+      bind(g);
+      reindexes++;
+    }),
   };
-  return { sigma, frame: () => custom };
+  return {
+    sigma,
+    frame: () => custom,
+    reindexes: () => reindexes,
+    attached: () => attached,
+  };
 }
 
 /** A laid-out graph: a 5-note chain a—b—c—d—e spaced 100 apart on x. */
@@ -100,7 +134,7 @@ function setup(
     graph.mergeNodeAttributes(id, p);
     homes.set(id, { ...p });
   });
-  const { sigma, frame } = stubSigma(graph);
+  const { sigma, frame, reindexes, attached } = stubSigma(graph);
   const travelers = { sync: vi.fn() };
   const haltMotion = vi.fn();
   const settleBatch = vi.fn();
@@ -118,7 +152,17 @@ function setup(
     settleBatch,
     random: seededRandom(9),
   };
-  return { target, graph, sigma, frame, travelers, haltMotion, settleBatch };
+  return {
+    target,
+    graph,
+    sigma,
+    frame,
+    travelers,
+    haltMotion,
+    settleBatch,
+    reindexes,
+    attached,
+  };
 }
 
 function pos(graph: Graph, id: string): XY {
@@ -149,7 +193,7 @@ describe("syncGraphStructure", () => {
   });
 
   it("adds a linked note beside its neighbor and leaves the rest in place", () => {
-    const { target, graph, sigma, travelers, haltMotion } = setup();
+    const { target, graph, travelers, haltMotion, attached } = setup();
     const before = new Map(graph.mapNodes((id) => [id, pos(graph, id)]));
 
     const notes = [...chain(), note("n", ["c"], "project")];
@@ -174,7 +218,8 @@ describe("syncGraphStructure", () => {
 
     expect(haltMotion).toHaveBeenCalledTimes(1);
     expect(travelers.sync).toHaveBeenCalledTimes(1);
-    expect(sigma.refresh).toHaveBeenCalled();
+    // Sigma is back on the live graph, which repaints it.
+    expect(attached()).toBe(graph);
   });
 
   it("drops a removed note, its edges and its cache entries", () => {
@@ -193,6 +238,49 @@ describe("syncGraphStructure", () => {
     expect(target.nodeZ.has("c")).toBe(false);
     // A hover on the dropped node is released.
     expect(tuning.hovered).toBeNull();
+  });
+
+  it("re-indexes Sigma a constant number of times however many notes leave", () => {
+    // A hub with 60 leaves; each leaf links to the hub and to the next leaf.
+    const fan = (): Note[] => [
+      note("hub"),
+      ...Array.from({ length: 60 }, (_, i) =>
+        note(`l${i}`, ["hub", `l${(i + 1) % 60}`]),
+      ),
+    ];
+    const reindexesToRemove = (k: number): number => {
+      const { target, graph, reindexes, attached } = setup(fan());
+      const before = reindexes();
+      expect(syncGraphStructure(target, fan().slice(0, 61 - k))).toBe(
+        "applied",
+      );
+      expect(graph.order).toBe(61 - k);
+      expect(attached()).toBe(graph);
+      return reindexes() - before;
+    };
+    const few = reindexesToRemove(2);
+    const many = reindexesToRemove(40);
+    expect(many).toBe(few);
+    expect(many).toBeLessThanOrEqual(2);
+
+    // Sanity: the stub really charges a full pass per drop while attached,
+    // which is what dropping 40 notes inline would have cost ~160 times.
+    const { graph, reindexes } = setup(fan());
+    const before = reindexes();
+    graph.dropNode("l0");
+    // Edges to hub, to l1 and from l59, then the node itself.
+    expect(reindexes() - before).toBe(4);
+  });
+
+  it("re-attaches Sigma even when a mutation throws", () => {
+    const { target, graph, attached } = setup();
+    target.travelers.sync.mockImplementation(() => {
+      throw new Error("overlay failure");
+    });
+    expect(() => syncGraphStructure(target, [...chain(), note("n")])).toThrow(
+      "overlay failure",
+    );
+    expect(attached()).toBe(graph);
   });
 
   it("restyles both endpoints when only a link is added", () => {

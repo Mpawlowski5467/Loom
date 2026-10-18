@@ -78,7 +78,10 @@ graph is derived from published notes and renders with Sigma.js. One graph
 and renderer live for the whole view: adding or removing notes and links is
 diffed onto them in place (`graph/graphSync.ts`), seeding new nodes beside
 their neighbors and settling only those, so the camera and the rest of the
-layout stay put; ForceAtlas2 runs only for a fresh build. Spider can
+layout stay put. ForceAtlas2 runs on the main thread only for a fresh build;
+a large batch in the force layout (more new nodes than survivors, or over 50)
+also gets a bounded ForceAtlas2 run in a web worker with the survivors pinned
+(`graph/batchSettle.ts`). Spider can
 write deterministic link evidence: source and target identities, method/score,
 bounded excerpts, timestamp/run/agent, and a state such as `suggested`,
 `applied`, or `user_accepted`. Clicking a graph edge, using a neighbor's Evidence button, or opening Thread context exposes this evidence and its

@@ -5,6 +5,7 @@ import type { NodeType, Note, NoteId } from "../data/types";
 import { seededRandom } from "../test/seededRandom";
 import { buildGraph } from "./graphModel";
 import { patchGraphContent, syncGraphStructure } from "./graphSync";
+import { BATCH_SETTLE_MIN_NODES } from "./batchSettle";
 import type { XY } from "./orbitScenes";
 import { computeEdgeExtremities } from "./reducers";
 import { collectNodeZ } from "./depth";
@@ -102,6 +103,7 @@ function setup(
   const { sigma, frame } = stubSigma(graph);
   const travelers = { sync: vi.fn() };
   const haltMotion = vi.fn();
+  const settleBatch = vi.fn();
   const target = {
     graph,
     sigma: sigma as unknown as Sigma,
@@ -113,9 +115,10 @@ function setup(
     travelers,
     heavy: false,
     haltMotion,
+    settleBatch,
     random: seededRandom(9),
   };
-  return { target, graph, sigma, frame, travelers, haltMotion };
+  return { target, graph, sigma, frame, travelers, haltMotion, settleBatch };
 }
 
 function pos(graph: Graph, id: string): XY {
@@ -132,6 +135,10 @@ const chain = (): Note[] => [
   note("d", ["e"]),
   note("e"),
 ];
+
+/** A bulk import: ``count`` new notes, each linked to a chain note. */
+const imported = (count: number): Note[] =>
+  Array.from({ length: count }, (_, i) => note(`i${i}`, ["abcde"[i % 5]!]));
 
 describe("syncGraphStructure", () => {
   it("reports unchanged without touching the renderer", () => {
@@ -252,6 +259,30 @@ describe("syncGraphStructure", () => {
     expect(Math.hypot(live.x - 7000, live.y - 5000)).toBeLessThan(1000);
     // …while its home sits beside c's constellation home.
     expect(Math.hypot(home.x - 200, home.y)).toBeLessThan(200);
+  });
+
+  it("hands a batch that outnumbers the survivors to the worker settle", () => {
+    const { target, frame, settleBatch } = setup();
+    const batch = imported(BATCH_SETTLE_MIN_NODES);
+    expect(syncGraphStructure(target, [...chain(), ...batch])).toBe("applied");
+    // Placed in place first, then settled; the frame stays held.
+    expect(settleBatch).toHaveBeenCalledTimes(1);
+    expect(settleBatch).toHaveBeenCalledWith(batch.map((n) => n.id));
+    expect(frame()).toEqual({ x: [0, 400], y: [0, 0] });
+  });
+
+  it("keeps a small batch on the synchronous path", () => {
+    const { target, settleBatch } = setup();
+    const batch = imported(BATCH_SETTLE_MIN_NODES - 1);
+    syncGraphStructure(target, [...chain(), ...batch]);
+    expect(settleBatch).not.toHaveBeenCalled();
+  });
+
+  it("leaves a large batch to the scene restage in an orbit layout", () => {
+    const tuning = makeTuning({ graphMode: "orbit" });
+    const { target, settleBatch } = setup(chain(), tuning);
+    syncGraphStructure(target, [...chain(), ...imported(40)]);
+    expect(settleBatch).not.toHaveBeenCalled();
   });
 
   it("asks for a rebuild when nothing survives", () => {

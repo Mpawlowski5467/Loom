@@ -14,7 +14,9 @@ This suite guards the Sigma lifecycle contract of useGraphInstance:
   positions and new nodes land beside their neighbors;
 - a contentKey-only change patches attributes in place (NO kill, NO rebuild);
 - only an unpatchable change (no surviving node) falls back to a full rebuild,
-  seeded from the positions snapshot at teardown.
+  seeded from the positions snapshot at teardown;
+- a large batch settles in a (mocked) FA2 worker that the next sync, a drag
+  start and teardown all stop.
 */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -74,6 +76,7 @@ interface DebugHookStub {
 // here so tests can inspect instances without reaching into module internals.
 const h = vi.hoisted(() => ({
   sigmaInstances: [] as unknown[],
+  fa2Instances: [] as unknown[],
 }));
 
 function sigmaInstances(): SigmaStub[] {
@@ -168,6 +171,21 @@ vi.mock("./layouts", async (importOriginal) => {
     ),
   };
 });
+
+// The FA2 worker supervisor: records each run so tests can see it stopped.
+vi.mock("graphology-layout-forceatlas2/worker", () => ({
+  default: class {
+    start = vi.fn();
+    kill = vi.fn();
+    constructor() {
+      h.fa2Instances.push(this);
+    }
+  },
+}));
+
+function workerRuns(): Array<{ kill: ReturnType<typeof vi.fn> }> {
+  return h.fa2Instances as Array<{ kill: ReturnType<typeof vi.fn> }>;
+}
 
 // Drag, overlay animators, and the dev debug hook are imperative DOM/rAF
 // surfaces; stub each with a destroy/uninstall spy so teardown is observable.
@@ -588,5 +606,78 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     expect(rebuilt.hasEdge("x", "y")).toBe(true);
     expect(layoutMock.mock.calls[1]?.[1]?.get("a")).toEqual({ x: 111, y: 222 });
     expect(result.current.sigmaReady).toBe(2);
+  });
+});
+
+describe("useGraphInstance — large-batch worker settle", () => {
+  let clock: ReturnType<typeof installRaf>;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    h.sigmaInstances = [];
+    h.fa2Instances = [];
+    clock = installRaf();
+    vi.stubGlobal("ResizeObserver", ResizeObserverStub);
+    vi.stubGlobal("Worker", class {});
+    // The settle's budget timer must not outlive a test.
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  const base = (): Note[] => [note("a", ["b"]), note("b")];
+  /** Twelve new notes against two survivors: a large batch. */
+  const bulk = (): Note[] =>
+    Array.from({ length: 12 }, (_, i) => note(`i${i}`, ["a"]));
+
+  function settling() {
+    const view = setup(base());
+    act(() => {
+      clock.flush();
+    });
+    view.rerender({ notes: [...base(), ...bulk()] });
+    return view;
+  }
+
+  it("keeps a small batch synchronous", () => {
+    const { rerender } = setup(base());
+    act(() => {
+      clock.flush();
+    });
+    rerender({ notes: [...base(), note("c", ["a"])] });
+    expect(workerRuns()).toHaveLength(0);
+  });
+
+  it("settles a large batch in place without a rebuild or camera move", () => {
+    const { result } = settling();
+    const inst = sigmaInstances()[0]!;
+    expect(workerRuns()).toHaveLength(1);
+    expect(result.current.activeTweenRef.current).not.toBeNull();
+    expect(inst.kill).not.toHaveBeenCalled();
+    expect(inst.camera.animate).not.toHaveBeenCalled();
+    expect(result.current.structureVersion).toBe(1);
+  });
+
+  it("stops the worker on the next structural sync", () => {
+    const { rerender } = settling();
+    rerender({ notes: [...base(), ...bulk(), note("late", ["b"])] });
+    expect(workerRuns()[0]!.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops the worker when a drag starts", () => {
+    settling();
+    const { cancelTween } = attachDragMock.mock.calls[0]![0];
+    cancelTween();
+    expect(workerRuns()[0]!.kill).toHaveBeenCalledTimes(1);
+  });
+
+  it("stops the worker on teardown", () => {
+    const { unmount } = settling();
+    unmount();
+    expect(workerRuns()[0]!.kill).toHaveBeenCalledTimes(1);
+    expect(clock.queued).toBe(0);
   });
 });

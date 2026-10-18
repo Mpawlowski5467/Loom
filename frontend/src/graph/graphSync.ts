@@ -12,6 +12,7 @@ import {
   type StructureDiff,
 } from "./graphDiff";
 import { applyGraphVisibility, computeVisibleDegreeMap } from "./filtering";
+import { isLargeBatch } from "./batchSettle";
 import { relaxNewNodes } from "./localRelax";
 import type { XY } from "./orbitScenes";
 import { measureLayoutFrame, placeNewNodes } from "./placement";
@@ -45,6 +46,9 @@ export interface GraphSyncTarget {
   heavy: boolean;
   /** Halt drag sims and layout tweens before the node set changes. */
   haltMotion: () => void;
+  /** Settle a large batch of new nodes off the main thread (force layout
+   * only); every other node stays pinned. See batchSettle.ts. */
+  settleBatch?: (ids: string[]) => void;
   random?: () => number;
 }
 
@@ -56,6 +60,7 @@ export type GraphSyncResult = "unchanged" | "applied" | "rebuild";
  * Bring the live graph in line with ``notes`` without recreating Sigma. The
  * camera, reducers, frame loop and overlays survive; new nodes are placed
  * beside their neighbors and settled locally while every other node stays put.
+ * A large batch in the force layout then gets a bounded worker settle.
  */
 export function syncGraphStructure(
   target: GraphSyncTarget,
@@ -78,6 +83,11 @@ export function syncGraphStructure(
   restyleConnections(target, notes);
   holdFrame(target.sigma, frame);
   refreshDerived(target);
+  // An orbit scene restages the batch into its slots instead.
+  const force = target.tuning.graphMode === "constellation";
+  if (force && isLargeBatch(diff.addedNodes.length, survivors)) {
+    target.settleBatch?.(diff.addedNodes);
+  }
   return "applied";
 }
 

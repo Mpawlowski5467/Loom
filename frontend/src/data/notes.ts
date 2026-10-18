@@ -1,9 +1,10 @@
 import type { Note } from "./types";
+import { supersessionSeed } from "./notesSupersession";
 
 const today = "2026-05-16T09:42:00Z";
 const yesterday = "2026-05-15T18:30:00Z";
 
-export const notes: Note[] = [
+const baseNotes: Note[] = [
   {
     id: "thr_t001",
     title: "Caching",
@@ -640,3 +641,5 @@ export function noteById(id: string): Note | undefined {
 export function backlinksFor(id: string): string[] {
   return notes.filter((n) => n.links.includes(id)).map((n) => n.id);
 }
+
+export const notes: Note[] = [...baseNotes, ...supersessionSeed];

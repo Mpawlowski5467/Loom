@@ -319,8 +319,13 @@ export function backendNoteToFrontend(
     created: record.created,
     modified: record.modified,
     contentVersion: record.content_version,
-    status: record.status === "archived" ? "archived" : "active",
+    status:
+      record.status === "archived" || record.status === "superseded"
+        ? record.status
+        : "active",
     source: record.source,
+    author: record.author,
+    extra: record.extra ?? {},
   };
 }
 

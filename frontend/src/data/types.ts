@@ -8,7 +8,8 @@ export type NodeType =
   | "capture"
   | "custom";
 
-export type NoteStatus = "active" | "archived";
+/** `superseded`: replaced by a newer note (see data/supersession.ts). */
+export type NoteStatus = "active" | "archived" | "superseded";
 
 /** Top-level views; each maps to a route (see app/routes.ts). */
 export type Tab =
@@ -50,7 +51,8 @@ export type HistoryAction =
   | "linked"
   | "archived"
   | "flagged"
-  | "validated";
+  | "validated"
+  | "superseded";
 
 export type ActorTag = "you" | `agent:${string}`;
 
@@ -84,6 +86,9 @@ export interface Note {
   contentVersion?: string;
   status: NoteStatus;
   source: string;
+  author?: string;
+  /** Frontmatter fields Loom doesn't model explicitly (valid_from, …). */
+  extra?: Record<string, unknown>;
 }
 
 export type CaptureStatus =

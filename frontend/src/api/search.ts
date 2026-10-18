@@ -43,8 +43,11 @@ export async function searchNotesRemote(
   query: string,
   limit = 10,
   signal?: AbortSignal,
+  /** Note id whose linked notes the backend boosts (graph context). */
+  context?: string,
 ): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query });
+  if (context) params.set("context", context);
   const resp = await apiClient.get<BackendSearchResponse>(
     `/api/search?${params.toString()}`,
     signal,

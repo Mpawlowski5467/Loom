@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { LoomGraphDebugHook } from "../src/graph/graphDebug";
+import { viewTab } from "./nav";
 
 type LargeFixtureSize = 5000 | 10000;
 
@@ -39,7 +40,7 @@ test.describe("Large-vault browser profile", () => {
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => {
       localStorage.removeItem("loom.graphDisplay");
-      localStorage.removeItem("loom.graphFilters");
+      localStorage.removeItem("loom.graphFilter.v2");
       localStorage.removeItem("loom.demoMode");
       localStorage.setItem("loom.treeVisible", "false");
       sessionStorage.setItem("loom.splash.seen", "1");
@@ -56,23 +57,26 @@ test.describe("Large-vault browser profile", () => {
       const readyAtMs = await waitForGraph(page, size);
 
       expect(readyAtMs).toBeLessThan(BUILD_BUDGET_MS[size]);
-      await expect(page.locator(".graph-stats")).toContainText(`${size} nodes`);
-      await expect(page.locator(".graph-perf-note")).toContainText(
-        "animations paused",
-      );
+      await expect(page.getByText(`${size} notes ·`)).toBeVisible();
+      await expect(page.getByText(/animations paused/)).toBeVisible();
 
-      await page.getByRole("button", { name: "Toggle file tree" }).click();
-      const topics = page
-        .locator(".tree-section")
-        .filter({ hasText: "topics" });
-      await topics.getByRole("button", { name: "Expand folder" }).click();
-
-      await expect(page.locator(".tree-row")).toHaveCount(200);
-      await expect(page.locator(".tree-show-more")).toBeVisible();
+      // The Notes tree pages large folders.
+      await viewTab(page, "Notes").click();
+      const vault = page.getByRole("navigation", { name: "Vault" });
+      await vault.getByRole("button", { name: /^topics/ }).click();
+      const topics = vault.getByRole("listitem").filter({
+        has: page.getByRole("button", { name: /^topics/ }),
+      });
+      await expect(topics.getByRole("link")).toHaveCount(200);
+      await expect(
+        topics.getByRole("button", { name: /^Show \d+ more$/ }),
+      ).toBeVisible();
       const metrics = await page.evaluate(() => ({
         readyAtMs: window.__loomGraph?.readyAt ?? null,
         graphNodes: window.__loomGraph?.graph.order ?? 0,
-        renderedTreeRows: document.querySelectorAll(".tree-row").length,
+        renderedTreeRows: document.querySelectorAll(
+          'nav[aria-label="Vault"] [data-tree-row]',
+        ).length,
       }));
       await testInfo.attach(`large-vault-${size}.json`, {
         body: JSON.stringify(metrics, null, 2),

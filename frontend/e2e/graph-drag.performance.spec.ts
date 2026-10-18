@@ -198,7 +198,9 @@ async function installProbe(
   await page.evaluate(
     ({ targetId, homes, matchTolerance, returnEpsilon }) => {
       const debug = window.__loomGraph;
-      const host = document.querySelector<HTMLElement>(".sigma-container");
+      const host = document.querySelector<HTMLElement>(
+        '[aria-label="Knowledge graph"]',
+      );
       if (!debug?.ready || !host) {
         throw new Error("graph debug hook is not ready");
       }
@@ -578,7 +580,7 @@ test.describe("Graph drag performance", () => {
         return state / 0x1_0000_0000;
       };
       localStorage.removeItem("loom.graphDisplay");
-      localStorage.removeItem("loom.graphFilters");
+      localStorage.removeItem("loom.graphFilter.v2");
       localStorage.removeItem("loom.demoMode");
       localStorage.setItem("loom.treeVisible", "false");
       sessionStorage.setItem("loom.splash.seen", "1");
@@ -604,7 +606,7 @@ test.describe("Graph drag performance", () => {
         return point ? (debug.nodeAtViewport(point) ?? requested) : requested;
       }, requestedNodeId);
 
-      const host = page.locator(".sigma-container");
+      const host = page.getByRole("application", { name: "Knowledge graph" });
       const bounds = await host.boundingBox();
       expect(bounds).not.toBeNull();
       const startLocal = await page.evaluate(

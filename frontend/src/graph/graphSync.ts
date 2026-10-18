@@ -69,16 +69,40 @@ export function syncGraphStructure(
   if (survivors === 0 || heavy !== target.heavy) return "rebuild";
 
   target.haltMotion();
-  const hovered = target.tuning.hovered;
-  if (hovered && !desired.ids.has(hovered)) target.tuning.hovered = null;
   const frame = target.sigma.getCustomBBox() ?? target.sigma.getBBox();
   const placed = placeAddedNodes(target, desired, diff);
-  dropRemoved(target, diff);
-  addNew(target, notes, diff, placed);
-  restyleConnections(target, notes);
-  holdFrame(target.sigma, frame);
-  refreshDerived(target);
+  withSigmaDetached(target.sigma, target.graph, () => {
+    dropRemoved(target, diff);
+    addNew(target, notes, diff, placed);
+    restyleConnections(target, notes);
+    applyDerived(target);
+    holdFrame(target.sigma, frame);
+  });
+  // Detaching resets Sigma's hover target, so it would never emit leaveNode
+  // for ours. Release it too; the next pointer move hovers afresh.
+  target.tuning.hovered = null;
   return "applied";
+}
+
+/**
+ * Run graph mutations with Sigma parked on an empty copy of the graph, then
+ * re-attach. In Sigma 3, every nodeDropped/edgeDropped event re-indexes the
+ * whole graph synchronously (a refresh with no partialGraph), so dropping K
+ * notes inline would cost O(K × (N + E)) reducer calls. The public setGraph
+ * unbinds those handlers, and re-attaching runs one synchronous full refresh
+ * with every change already in place.
+ */
+function withSigmaDetached(
+  sigma: Sigma,
+  graph: Graph,
+  mutate: () => void,
+): void {
+  sigma.setGraph(graph.emptyCopy());
+  try {
+    mutate();
+  } finally {
+    sigma.setGraph(graph);
+  }
 }
 
 type BBox = ReturnType<Sigma["getBBox"]>;
@@ -218,13 +242,10 @@ function restyleConnections(target: GraphSyncTarget, notes: Note[]): void {
   }
 }
 
-function refreshDerived(target: GraphSyncTarget): void {
+/** Visibility, label degrees and overlays for the new structure. Runs while
+ * Sigma is detached; re-attaching repaints everything once. */
+function applyDerived(target: GraphSyncTarget): void {
   const { graph, sigma, tuning } = target;
-  // Index the new nodes first. A hidden-only bulk update makes Sigma 3
-  // repaint with skipIndexation, which throws for a node that no full
-  // process has given a program slot yet. Both renders run in this task, so
-  // only the final frame reaches the screen.
-  sigma.refresh();
   const visibility = applyGraphVisibility(graph, {
     typeFilters: tuning.filters,
     selectedId: tuning.selected,
@@ -232,12 +253,12 @@ function refreshDerived(target: GraphSyncTarget): void {
   });
   tuning.visibilityRestricted = visibility.restricted;
   tuning.degree = computeVisibleDegreeMap(graph);
-  sigma.setSetting(
-    "renderLabels",
-    visibility.visibleCount <= GRAPH_LABEL_BUDGET_NODES,
-  );
+  // setSetting schedules another full refresh; only pay for it on a change.
+  const renderLabels = visibility.visibleCount <= GRAPH_LABEL_BUDGET_NODES;
+  if (sigma.getSetting("renderLabels") !== renderLabels) {
+    sigma.setSetting("renderLabels", renderLabels);
+  }
   target.travelers?.sync();
-  sigma.refresh();
 }
 
 /**

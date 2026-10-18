@@ -14,20 +14,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from bridge.github import GitHubClient, GitHubError
-from bridge.github_oauth import (
-    GitHubDeviceFlowError,
-    clear_device_flow,
-    poll_device_flow,
-    start_device_flow,
-)
 from bridge.github_service import (
     GitHubSyncConflictError,
     GitHubSyncResult,
     get_github_sync_service,
     sync_github,
 )
+from bridge.oauth_apps import github_device_client_id
 from core.capture_jobs import CaptureJobsBusyError
-from core.config import GitHubBridgeConfig, GitHubBridgeConfigPublic, GlobalConfig, settings
+from core.config import GitHubBridgeConfig, GitHubBridgeConfigPublic, GlobalConfig
 from core.rate_limit import WRITE_LIMIT, limiter
 from core.vault import VaultManager, get_vault_manager
 
@@ -51,19 +46,8 @@ class GitHubBridgePatch(BaseModel):
 class GitHubAutomationResponse(BaseModel):
     github: GitHubBridgeConfigPublic
     status: dict[str, Any]
-    oauth_available: bool = False
-
-
-class GitHubOAuthStartResponse(BaseModel):
-    verification_uri: str
-    user_code: str
-    expires_in: int
-    interval: int
-
-
-class GitHubOAuthStatusResponse(BaseModel):
-    status: str
-    error: str = ""
+    # Loom ships a GitHub app, so users can sign in instead of pasting a token.
+    builtin_app: bool = False
 
 
 class RepoTestResult(BaseModel):
@@ -84,7 +68,7 @@ def _response(config: GlobalConfig) -> GitHubAutomationResponse:
     return GitHubAutomationResponse(
         github=config.github.to_public(),
         status=get_github_sync_service().status(),
-        oauth_available=bool(settings.github_oauth_client_id),
+        builtin_app=bool(github_device_client_id()),
     )
 
 
@@ -109,47 +93,6 @@ def get_github_automation(
     return _response(GlobalConfig.load(vm.config_path()))
 
 
-@router.post("/oauth/start", response_model=GitHubOAuthStartResponse)
-@limiter.limit("5/minute")
-async def start_github_oauth(request: Request) -> GitHubOAuthStartResponse:  # noqa: ARG001
-    """Start GitHub's browser device authorization flow."""
-    if not settings.github_oauth_client_id:
-        raise HTTPException(
-            status_code=409,
-            detail="GitHub OAuth is not configured for this Loom installation",
-        )
-    try:
-        result = await start_device_flow(settings.github_oauth_client_id)
-    except GitHubDeviceFlowError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return GitHubOAuthStartResponse(**result)
-
-
-@router.get("/oauth/status", response_model=GitHubOAuthStatusResponse)
-async def github_oauth_status(
-    vm: VaultManager = Depends(get_vault_manager),  # noqa: B008
-) -> GitHubOAuthStatusResponse:
-    """Poll a pending flow and persist the approved token encrypted at rest."""
-    if not settings.github_oauth_client_id:
-        raise HTTPException(status_code=409, detail="GitHub OAuth is not configured")
-    result = await poll_device_flow(settings.github_oauth_client_id)
-    if result["status"] == "connected":
-        config = GlobalConfig.load(vm.config_path())
-        config.github.token = result["access_token"]
-        client = GitHubClient(config.github.token)
-        try:
-            config.github.account = await client.fetch_account()
-        except GitHubError:
-            # The approved credential remains useful even if the optional
-            # display-name lookup is temporarily unavailable.
-            config.github.account = ""
-        finally:
-            await client.aclose()
-        config.save(vm.config_path())
-        get_github_sync_service().notify()
-    return GitHubOAuthStatusResponse(status=result["status"], error=result["error"])
-
-
 @router.patch("", response_model=GitHubAutomationResponse)
 @limiter.limit(WRITE_LIMIT)
 async def patch_github_automation(
@@ -162,8 +105,9 @@ async def patch_github_automation(
     updates = body.model_dump(exclude_none=True, exclude={"clear_token"})
     if body.clear_token:
         updates["token"] = None
+    if "token" in updates:
+        # A pasted (or cleared) token is not the signed-in account any more.
         updates["account"] = ""
-        await clear_device_flow()
     try:
         config.github = GitHubBridgeConfig.model_validate({**config.github.model_dump(), **updates})
     except ValidationError as exc:

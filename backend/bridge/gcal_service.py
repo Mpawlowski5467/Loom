@@ -18,7 +18,11 @@ import json
 import logging
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any
+
+# typing_extensions, not typing: Pydantic rejects typing.TypedDict as a
+# response model on Python < 3.12, and these shapes are FastAPI response_models.
+from typing_extensions import TypedDict
 
 from agents.sanitize import scrub_untrusted
 from bridge.gcal import (
@@ -26,9 +30,9 @@ from bridge.gcal import (
     GoogleCalendarError,
     GoogleSyncTokenExpired,
 )
-from bridge.google import load_google_tokens, save_google_tokens
-from core.capture_ingress import ingest_capture
-from core.config import GlobalConfig, effective_google_connector, settings
+from bridge.google import google_app, google_app_for, load_google_tokens, save_google_tokens
+from core.capture_ingress import CaptureIngressError, ingest_capture
+from core.config import GlobalConfig, settings
 
 if TYPE_CHECKING:
     from bridge.calendar import CalendarEvent
@@ -120,18 +124,23 @@ async def sync_google_calendar(
         raise GoogleCalendarSyncConflictError("No active vault is available for calendar sync")
 
     config = GlobalConfig.load(vm.config_path())
-    connector = effective_google_connector(config)
+    connector = config.google
     gcal = connector.calendar
-    if not connector.client_id or not connector.client_secret:
+    if google_app(connector) is None:
         raise GoogleCalendarError("Add your Google OAuth client ID and secret first")
     tokens = load_google_tokens()
     if tokens is None:
         raise GoogleCalendarError("Connect your Google account first")
+    app = google_app_for(connector, tokens)
+    if app is None:
+        raise GoogleCalendarError(
+            "Reconnect Google: the app this account was connected with is gone"
+        )
 
     owns_client = client is None
     client = client or GoogleCalendarClient(
-        client_id=connector.client_id,
-        client_secret=str(connector.client_secret),
+        client_id=app.client_id,
+        client_secret=app.client_secret,
         tokens=tokens,
         on_tokens=save_google_tokens,
     )
@@ -180,13 +189,13 @@ async def sync_google_calendar(
                         time_max=time_max,
                         default_tz=timezone,
                     )
-                try:
-                    for event in events:
-                        if vm.active_vault_dir().resolve() != vault_root:
-                            raise GoogleCalendarSyncConflictError(
-                                "The active vault changed; retry calendar sync"
-                            )
-                        result["fetched"] += 1
+                for event in events:
+                    if vm.active_vault_dir().resolve() != vault_root:
+                        raise GoogleCalendarSyncConflictError(
+                            "The active vault changed; retry calendar sync"
+                        )
+                    result["fetched"] += 1
+                    try:
                         ingested = await ingest_capture(
                             vault_root,
                             title=scrub_untrusted(event.title) or "Untitled event",
@@ -205,20 +214,25 @@ async def sync_google_calendar(
                                 "event_url": event.url,
                             },
                         )
-                        result["created"] += int(ingested.created)
-                        result["deduplicated"] += int(ingested.deduplicated)
-                finally:
-                    # Advance the sync token once listing succeeded so a poison
-                    # event cannot stall the calendar; ingress dedup covers the
-                    # re-listed remainder on the next poll.
-                    if next_token:
-                        cursor["sync_token"] = next_token
-                    cursor["synced_at"] = datetime.now(UTC).isoformat()
-                    cursors[calendar_id] = cursor
-                    try:
-                        _save_cursors(cursors)
-                    except OSError:
-                        logger.warning("Could not persist Google Calendar cursors", exc_info=True)
+                    except CaptureIngressError:
+                        # Permanently invalid: skip it so it cannot stall the calendar.
+                        logger.warning("Skipping calendar event %s rejected by ingress", event.uid)
+                        continue
+                    result["created"] += int(ingested.created)
+                    result["deduplicated"] += int(ingested.deduplicated)
+                # Adopt the new sync token only once every listed event was
+                # handled. Google never re-lists changes older than a token, so
+                # saving it after a failed ingest would drop the rest of this
+                # batch for good; keeping the old one re-lists it next poll,
+                # and ingress dedup skips what was already filed.
+                if next_token:
+                    cursor["sync_token"] = next_token
+                cursor["synced_at"] = datetime.now(UTC).isoformat()
+                cursors[calendar_id] = cursor
+                try:
+                    _save_cursors(cursors)
+                except OSError:
+                    logger.warning("Could not persist Google Calendar cursors", exc_info=True)
             except GoogleCalendarSyncConflictError:
                 raise
             except Exception as exc:  # one calendar down must not sink the rest
@@ -289,14 +303,13 @@ class GoogleCalendarSyncService:
     async def _loop(self) -> None:
         while not self._stop.is_set():
             config = GlobalConfig.load(settings.config_path)
-            connector = effective_google_connector(config)
+            connector = config.google
             gcal = connector.calendar
             interval_s = max(5, gcal.interval_minutes) * 60
             if (
                 not config.automation_policy.paused
                 and gcal.enabled
-                and connector.client_id
-                and connector.client_secret
+                and google_app(connector) is not None
                 and load_google_tokens()
             ):
                 try:

@@ -538,10 +538,10 @@ export function ConnectorFlowShell({
   connected,
   account,
   loaded,
-  managedOAuth = false,
   onSaveCreds,
   onConnect,
   onDisconnect,
+  builtinApp = false,
   children,
 }: {
   title: string;
@@ -556,15 +556,17 @@ export function ConnectorFlowShell({
   connected: boolean;
   account: string;
   loaded: boolean;
-  managedOAuth?: boolean;
   onSaveCreds: (clientId: string, clientSecret: string) => Promise<void>;
   onConnect: () => Promise<void>;
   onDisconnect: () => Promise<void>;
+  /** Loom ships its own app: sign in directly, own app is optional. */
+  builtinApp?: boolean;
   children?: ReactNode;
 }): ReactNode {
   const [clientId, setClientId] = useState(savedClientId);
   const [clientSecret, setClientSecret] = useState("");
   const [editing, setEditing] = useState(false);
+  const [ownApp, setOwnApp] = useState(false);
   const [busy, setBusy] = useState<"save" | "connect" | "disconnect" | null>(
     null,
   );
@@ -576,21 +578,25 @@ export function ConnectorFlowShell({
     setClientId(savedClientId);
   }, [savedClientId]);
 
-  const hasSavedCreds =
-    managedOAuth || (savedClientId.trim() !== "" && clientSecretSet);
+  const hasSavedCreds = savedClientId.trim() !== "" && clientSecretSet;
   const credsDirty =
-    !managedOAuth &&
-    (clientSecret.trim() !== "" || clientId.trim() !== savedClientId.trim());
+    clientSecret.trim() !== "" || clientId.trim() !== savedClientId.trim();
+  // One-click: Loom's built-in app signs in, so no setup is needed unless
+  // the user opts to bring their own app (which then wins, as saved creds).
+  const oneClick = builtinApp && !hasSavedCreds;
   // setup: no saved creds (form always). ready: saved + collapsed. Edit
   // re-opens the form; connect stays disabled while drafts diverge.
-  const showForm = !managedOAuth && (!hasSavedCreds || editing);
-  const signInEnabled =
-    loaded && !connected && hasSavedCreds && !credsDirty && busy === null;
-  const signInHint = !hasSavedCreds
-    ? "Save your client ID and secret above first."
-    : credsDirty
-      ? "Save your changes first."
-      : undefined;
+  const showForm = oneClick ? ownApp : !hasSavedCreds || editing;
+  const canSignIn = oneClick
+    ? !(ownApp && credsDirty)
+    : hasSavedCreds && !credsDirty;
+  const signInEnabled = loaded && !connected && canSignIn && busy === null;
+  const signInHint =
+    !oneClick && !hasSavedCreds
+      ? "Save your client ID and secret above first."
+      : credsDirty
+        ? "Save your changes first."
+        : undefined;
 
   const saveCreds = async () => {
     setBusy("save");
@@ -612,6 +618,7 @@ export function ConnectorFlowShell({
     setClientId(savedClientId);
     setClientSecret("");
     setEditing(false);
+    setOwnApp(false);
     setError(null);
   };
 
@@ -653,15 +660,23 @@ export function ConnectorFlowShell({
         </div>
       </div>
 
-      {!managedOAuth && !hasSavedCreds && <SetupChecklist steps={steps} />}
-
-      {managedOAuth && !connected && (
-        <p className="settings-connection-status" role="status">
-          OAuth is ready — sign in to choose your Google account.
+      {!connected && oneClick && !ownApp && (
+        <p className="settings-connection-status">
+          <button
+            type="button"
+            className="connector-edit"
+            onClick={() => setOwnApp(true)}
+          >
+            Use your own OAuth app instead
+          </button>
         </p>
       )}
 
-      {showForm ? (
+      {!hasSavedCreds && (!oneClick || ownApp) && (
+        <SetupChecklist steps={steps} />
+      )}
+
+      {oneClick && !ownApp ? null : showForm ? (
         <CredentialsForm
           clientId={clientId}
           clientSecret={clientSecret}
@@ -671,14 +686,14 @@ export function ConnectorFlowShell({
           onClientIdChange={setClientId}
           onClientSecretChange={setClientSecret}
           onSave={() => void saveCreds()}
-          onCancel={hasSavedCreds ? cancelEdit : undefined}
+          onCancel={hasSavedCreds || oneClick ? cancelEdit : undefined}
         />
-      ) : !managedOAuth ? (
+      ) : (
         <CollapsedCredentials
           clientId={savedClientId}
           onEdit={() => setEditing(true)}
         />
-      ) : null}
+      )}
 
       {!connected && (
         <SignInButton

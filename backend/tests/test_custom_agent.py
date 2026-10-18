@@ -168,11 +168,17 @@ class TestCustomContextSort:
 
 class TestRunnerDispatch:
     @pytest.mark.asyncio
-    async def test_runner_dispatches_a_registered_custom_agent(self, tmp_path: Path):
+    async def test_runner_dispatches_a_registered_custom_agent(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ):
         root = _setup_vault(tmp_path)
         (root / "agents.yaml").write_text(
             yaml.safe_dump({"agents": [_record(id="digest")]}), encoding="utf-8"
         )
+        # Dispatch only: never resolve a real provider from the process-global
+        # registry, which an earlier test can leave holding a live client bound
+        # to its (now closed) event loop.
+        monkeypatch.setattr("agents.runner._get_chat_provider", lambda *_a, **_k: None)
         runner = AgentRunner(root)
 
         result = await runner.run_scheduled("digest")

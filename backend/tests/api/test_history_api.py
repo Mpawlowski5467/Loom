@@ -111,4 +111,7 @@ def test_changelog_feed_links_entries_to_their_commit(
     sha = _agent_write(history, root, "topics/a.md", "alpha\n", log=True)
     events = client.get("/api/changelog/feed").json()
     linked = [e for e in events if e["agent"] == "weaver"]
-    assert linked and linked[0]["commit"] == sha
+    assert linked and linked[0]["commit"] == sha and linked[0]["reverted"] is False
+    assert client.post(f"/api/history/{sha}/revert").status_code == 200
+    events = client.get("/api/changelog/feed").json()
+    assert [e["reverted"] for e in events if e["agent"] == "weaver"] == [True]

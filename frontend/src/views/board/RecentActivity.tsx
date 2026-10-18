@@ -30,7 +30,7 @@ export function RecentActivity({ changelog }: RecentActivityProps): ReactNode {
             {ev.sentinel === "ok" ? "✓" : ev.sentinel === "warn" ? "⚠" : "✕"}
           </span>
           {ev.commit &&
-            (undone[ev.commit] ? (
+            (ev.reverted || undone[ev.commit] ? (
               <span className="changelog-undone" role="status">
                 undone
               </span>

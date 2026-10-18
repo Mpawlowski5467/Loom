@@ -347,6 +347,7 @@ class ChangelogFeedEvent(BaseModel):
     chain: str  # "ok" | "warn" | "fail"
     sentinel: str  # "ok" | "warn" | "fail" — Sentinel verdict when known
     commit: str | None = None  # vault-history commit this action produced, if any
+    reverted: bool = False  # that commit has since been undone by a revert commit
 
 
 def _parse_changelog_entries(text: str, agent: str) -> list[dict[str, str]]:
@@ -440,7 +441,9 @@ def get_changelog_feed(
             merged.extend(_parse_changelog_entries(text, agent_name))
 
     merged.sort(key=lambda e: e["ts"], reverse=True)
-    commits = _commits_by_group(vault_root, {e["history"] for e in merged[:limit] if e["history"]})
+    commits, reverted = _commits_by_group(
+        vault_root, {e["history"] for e in merged[:limit] if e["history"]}
+    )
     out: list[ChangelogFeedEvent] = []
     for i, e in enumerate(merged[:limit]):
         is_sentinel = e["agent"] == "sentinel"
@@ -456,6 +459,7 @@ def get_changelog_feed(
                 chain=chain_status,
                 sentinel=sentinel_status,
                 commit=commits.get(e["history"]),
+                reverted=commits.get(e["history"]) in reverted,
             )
         )
     return out
@@ -464,25 +468,28 @@ def get_changelog_feed(
 _GROUP_SCAN_COMMITS = 400
 
 
-def _commits_by_group(vault_root: Path, groups: set[str]) -> dict[str, str]:
-    """Map history commit-group ids to the commits that recorded them (recent only)."""
+def _commits_by_group(vault_root: Path, groups: set[str]) -> tuple[dict[str, str], set[str]]:
+    """Map history group ids to their commits, plus the commits since reverted (recent only)."""
     from core.history import get_history
     from core.history.git import GitError
     from core.history.messages import parse_trailers
 
     recorder = get_history(vault_root)
     if not groups or recorder is None or not recorder.repo.is_repo():
-        return {}
+        return {}, set()
     try:
         entries = recorder.repo.log(limit=_GROUP_SCAN_COMMITS)
     except GitError:
-        return {}
+        return {}, set()
     found: dict[str, str] = {}
+    reverted: set[str] = set()
     for entry in entries:
-        for group in parse_trailers(entry.message).get("Loom-Group", []):
+        trailers = parse_trailers(entry.message)
+        reverted.update(trailers.get("Reverts", []))
+        for group in trailers.get("Loom-Group", []):
             if group in groups:
                 found.setdefault(group, entry.sha)
-    return found
+    return found, reverted
 
 
 def _today_str() -> str:

@@ -152,6 +152,8 @@ export interface AgentEvent {
   sentinel: SentinelVerdict;
   /** Vault-history commit this action produced; enables Board undo. */
   commit?: string | null;
+  /** That commit has since been undone by a revert. */
+  reverted?: boolean;
 }
 
 export type CouncilWho = "you" | "summary" | `agent:${string}`;

@@ -10,6 +10,8 @@ export interface ChangelogFeedEvent {
   sentinel: "ok" | "warn" | "fail";
   /** Vault-history commit this action produced, when there is one. */
   commit?: string | null;
+  /** That commit has since been undone. */
+  reverted?: boolean;
 }
 
 export function fetchChangelogFeed(

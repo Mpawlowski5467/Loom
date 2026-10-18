@@ -57,6 +57,16 @@ describe("RecentActivity undo", () => {
     expect(screen.getAllByRole("button", { name: /^Undo / })).toHaveLength(1);
   });
 
+  it("marks actions whose commit was already undone", () => {
+    render(
+      <RecentActivity
+        changelog={[{ ...event(1), commit: "c".repeat(40), reverted: true }]}
+      />,
+    );
+    expect(screen.getByText("undone")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /^Undo / })).toBeNull();
+  });
+
   it("reverts the action's commit after confirmation", async () => {
     history.revertCommit.mockResolvedValue({ sha: "d".repeat(40) });
     const user = userEvent.setup();

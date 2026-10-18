@@ -1042,6 +1042,29 @@ class GlobalConfigPublic(BaseModel):
     onboarding: OnboardingState
 
 
+DEFAULT_HISTORY_IGNORE = [".loom/", "agents/", "attachments/", "*.tmp", ".DS_Store"]
+
+
+class VaultHistoryConfig(BaseModel):
+    """Git-backed vault history (``history:`` in vault.yaml)."""
+
+    enabled: bool = Field(default=True, description="Commit every vault write to a git repo")
+    human_debounce_seconds: float = Field(
+        default=30.0,
+        ge=1.0,
+        le=3600.0,
+        description="Quiet period before human/external edits are committed together",
+    )
+    revert_block_on: Literal["failed", "warning"] = Field(
+        default="failed",
+        description="Lowest Sentinel verdict on a reverted note that blocks the revert",
+    )
+    ignore: list[str] = Field(
+        default_factory=lambda: list(DEFAULT_HISTORY_IGNORE),
+        description="Patterns written to a new vault's .gitignore (indexes, caches, agent state)",
+    )
+
+
 class VaultConfig(BaseModel):
     """Maps to a vault's vault.yaml."""
 
@@ -1055,6 +1078,7 @@ class VaultConfig(BaseModel):
         default=20,
         description="Number of agent actions between memory summarizations",
     )
+    history: VaultHistoryConfig = Field(default_factory=VaultHistoryConfig)
 
     @classmethod
     def load(cls, path: Path) -> Self:

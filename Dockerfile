@@ -44,6 +44,12 @@ ENV PYTHONUNBUFFERED=1 \
     # baked in below.
     LOOM_DEMO_VAULT_DIR=/app/examples/demo-vault
 
+# Vault history commits every write to a git repo inside the vault (see
+# history: in vault.yaml); without git it stays off and Loom still runs.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 # Install the pinned third-party dependencies first: requirements.lock changes
 # far less often than the source tree, so this expensive layer actually stays
 # cached across code-only edits. The lock is regenerated from a venv where the

@@ -10,6 +10,7 @@ landed) that reconciliation finds no drift and a re-run creates no duplicate.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from unittest.mock import AsyncMock
 
@@ -204,6 +205,37 @@ class TestPipelineEndToEnd:
         assert coverage["complete"] is False
         assert coverage["source_link"] == "https://example.test/source"
         assert "review required" in " ".join(result.errors)
+
+    @pytest.mark.asyncio
+    async def test_archived_capture_keeps_coverage_without_post_archive_write(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Coverage is stamped before the archive move, not on the vanished path."""
+        root = _build_vault(tmp_path)
+        _scaffold_all_agents(root)
+        get_note_index().build(root / "threads")
+        init_weaver(root, _stub_chat())
+        init_spider(root, None)
+        init_scribe(root, None)
+        init_sentinel(root, None)
+        runner = init_runner(root)
+        capture_path = _write_capture(
+            root, "cap-raft.md", "Raft notes", "Notes on the Raft consensus protocol.\n"
+        )
+
+        with caplog.at_level(logging.WARNING):
+            result = await runner.run_pipeline(capture_path)
+
+        assert result.success, result.errors
+        assert result.capture_archived is True
+        assert not any("Failed to annotate" in r.getMessage() for r in caplog.records)
+        from core.notes import parse_note
+
+        archived = parse_note(root / "threads" / ".archive" / "cap-raft.md")
+        assert archived.status == "archived"
+        assert archived.extra["enforcement_outcome"] == "filed"
+        assert archived.extra["source_coverage"] == result.source_coverage
+        assert archived.extra["source_coverage"]["complete"] is True
 
 
 def _safe_source(path: Path) -> str:

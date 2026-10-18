@@ -176,7 +176,8 @@ def test_publication_annotation_failure_restores_exact_inbox_capture(
 
     monkeypatch.setattr(enforcement, "annotate_frontmatter", fail_publication)
 
-    outcome = enforce_verdict(root, capture, note, "passed", [])
+    # Coverage is stamped pre-move; recovery must still restore pristine bytes.
+    outcome = enforce_verdict(root, capture, note, "passed", [], source_coverage={"complete": True})
 
     assert outcome.capture_archived is False
     assert outcome.review_required is True
@@ -188,6 +189,27 @@ def test_publication_annotation_failure_restores_exact_inbox_capture(
     assert parse_note(note).extra.get("publication_state") == "pending"
     changelog = next((root / ".loom" / "changelog" / "weaver").glob("*.md"))
     assert "Publication could not be completed" in changelog.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    ("verdict", "location"),
+    [("passed", ".archive"), ("warning", ".archive"), ("failed", "captures")],
+)
+def test_source_coverage_is_stamped_on_the_capture_before_any_move(
+    vault_with_capture: tuple[Path, Path, Path],
+    caplog: pytest.LogCaptureFixture,
+    verdict: str,
+    location: str,
+) -> None:
+    """The capture keeps its coverage wherever enforcement leaves it."""
+    root, capture, note = vault_with_capture
+    coverage = {"complete": True, "source_link": "manual"}
+
+    enforce_verdict(root, capture, note, verdict, ["r"], source_coverage=coverage)
+
+    assert not any("Failed to annotate" in r.getMessage() for r in caplog.records)
+    stored = parse_note(root / "threads" / location / "cap.md")
+    assert stored.extra.get("source_coverage") == coverage
 
 
 @pytest.mark.parametrize("verdict", ["", "unavailable", "bogus"])

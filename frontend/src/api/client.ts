@@ -211,3 +211,10 @@ export const apiClient = {
       timeoutMs: 60_000,
     }),
 };
+
+/** A user-facing message for a failed request, with a plain offline case. */
+export function describeApiError(err: unknown, fallback: string): string {
+  if (err instanceof ApiError && err.offline)
+    return "Unavailable while the backend is offline.";
+  return err instanceof Error ? err.message : fallback;
+}

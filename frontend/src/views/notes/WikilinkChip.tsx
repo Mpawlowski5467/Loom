@@ -20,7 +20,7 @@ export function WikilinkChip({ target, alias, className }: WikilinkChipProps) {
   const ambiguous = !id && wikilinkCandidates(notes, path).length > 1;
   const label = alias ?? target;
   const base =
-    "inline-flex items-center rounded-sm px-1.5 py-px align-baseline font-medium leading-snug";
+    "inline rounded-sm px-1.5 py-px align-baseline font-medium leading-snug [box-decoration-break:clone]";
   if (!id)
     return (
       <span

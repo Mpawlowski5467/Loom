@@ -8,8 +8,10 @@ const lazyView = <K extends string>(
 ) => lazy(() => load().then((m) => ({ default: m[name] })));
 
 const GraphView = lazyView(() => import("../views/GraphView"), "GraphView");
-// The note reader/editor; rebuilt as the Notes view in a later phase.
-const ThreadView = lazyView(() => import("../views/ThreadView"), "ThreadView");
+const NotesView = lazyView(
+  () => import("../views/notes/NotesView"),
+  "NotesView",
+);
 const BoardView = lazyView(() => import("../views/BoardView"), "BoardView");
 const InboxView = lazyView(() => import("../views/InboxView"), "InboxView");
 const ThreadsView = lazyView(
@@ -41,7 +43,7 @@ export function AppRoutes() {
     <Routes>
       <Route index element={<HomeRedirect />} />
       <Route path="graph" element={<GraphView />} />
-      <Route path="notes/*" element={<ThreadView />} />
+      <Route path="notes/*" element={<NotesView />} />
       <Route path="board" element={<BoardView />} />
       <Route path="inbox" element={<InboxView />} />
       <Route path="threads/:id?" element={<ThreadsView />} />

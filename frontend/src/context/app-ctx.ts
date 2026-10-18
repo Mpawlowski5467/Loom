@@ -111,13 +111,6 @@ export interface AppContextValue {
   setGraphDisplay: (patch: Partial<GraphDisplay>) => void;
   resetGraphDisplay: () => void;
 
-  primaryOpen: boolean;
-  secondaryOpen: boolean;
-  editing: boolean;
-  setPrimaryOpen: (b: boolean) => void;
-  setSecondaryOpen: (b: boolean) => void;
-  setEditing: (b: boolean) => void;
-
   /** Left file-tree visibility (graph/board tabs only), persisted. */
   treeVisible: boolean;
   setTreeVisible: (b: boolean) => void;

@@ -125,6 +125,20 @@ describe("useNoteDraft", () => {
     expect(result.current.conflict).toBeNull();
   });
 
+  it("follows a version bump without a body change (rename) while clean", async () => {
+    vi.mocked(apiUpdateNote).mockResolvedValue(record("Mine.", "v3"));
+    const { result, rerender } = setup();
+    const rev = result.current.revision;
+    rerender({ n: { ...base, title: "Renamed", contentVersion: "v2" } });
+    expect(result.current.revision).toBe(rev);
+    act(() => result.current.setDraft("Mine."));
+    await act(() => result.current.save());
+    expect(apiUpdateNote).toHaveBeenCalledWith("n1", {
+      body: "Mine.",
+      base_modified: "v2",
+    });
+  });
+
   it("keeps a dirty draft through a remote refresh and reports a conflict", () => {
     const { result, rerender } = setup();
     act(() => result.current.setDraft("Mine."));

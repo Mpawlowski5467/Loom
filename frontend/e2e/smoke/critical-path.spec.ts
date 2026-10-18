@@ -163,7 +163,7 @@ test("onboards without a provider and files a reviewed demo capture", async ({
 
   await expectView(page, "Notes");
   await expect(
-    page.getByText("Sigma reducer pattern", { exact: true }),
+    page.getByRole("heading", { level: 1, name: "Sigma reducer pattern" }),
   ).toBeVisible();
 
   await page
@@ -178,7 +178,8 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Archive note" }).click();
+  await page.getByRole("button", { name: "More note actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive note" }).click();
   await expect(
     page.getByRole("dialog", {
       name: 'Archive "Sigma reducer pattern — verified"?',

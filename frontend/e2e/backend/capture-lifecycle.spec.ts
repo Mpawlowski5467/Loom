@@ -11,7 +11,8 @@ async function createCapture(
   title: string,
   body: string,
 ) {
-  await page.getByRole("button", { name: "Quick capture" }).click();
+  // The header has no capture button; ⌘⇧C (Ctrl+Shift+C) opens it anywhere.
+  await page.keyboard.press("ControlOrMeta+Shift+C");
   await page.getByLabel("Capture content").fill(body);
   await page.getByLabel("Capture title").fill(title);
   await page
@@ -80,7 +81,7 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
 
   await expectView(page, "Notes");
   await expect(
-    page.getByText("Browser lifecycle edited", { exact: true }),
+    page.getByRole("heading", { level: 1, name: "Browser lifecycle edited" }),
   ).toBeVisible();
 
   await expect.poll(() => committedNoteId, { timeout: 5_000 }).toMatch(/^thr_/);
@@ -95,36 +96,32 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   await titleInput.fill("Browser lifecycle filed edit");
   await titleInput.press("Enter");
   await expect(
-    page.getByText("Browser lifecycle filed edit", { exact: true }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Browser lifecycle filed edit",
+    }),
   ).toBeVisible();
 
   // Leave a dirty draft while moving through Graph and back. The editor
   // persists that draft locally, so this also covers accidental navigation.
-  await page.getByRole("button", { name: /✎ edit/ }).click();
-  const bodyInput = page.getByRole("textbox", { name: "Note body" });
+  // Markdown mode gives a plain textarea; the choice persists across views.
+  await page.getByRole("button", { name: "Edit as markdown" }).click();
+  const bodyInput = page.getByRole("textbox", { name: "Note body (markdown)" });
   const draftMarker = "\n\nDraft survives Graph navigation.";
   await bodyInput.fill(`${await bodyInput.inputValue()}${draftMarker}`);
   await viewTab(page, "Graph").click();
   await viewTab(page, "Notes").click();
-  // Editing state is held by AppContext while Thread is unmounted for the
-  // Graph hop, so the editor is already open on return.
-  await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Note body" })).toHaveValue(
-    /Draft survives Graph navigation\./,
-  );
+  await expect(bodyInput).toHaveValue(/Draft survives Graph navigation\./);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expectView(page, "Notes");
-  await page.getByRole("button", { name: /✎ edit/ }).click();
-  await expect(page.getByRole("textbox", { name: "Note body" })).toBeVisible();
-  await expect(page.getByRole("textbox", { name: "Note body" })).toHaveValue(
-    /Draft survives Graph navigation\./,
-  );
-  await page.getByRole("button", { name: /Save note/ }).click();
+  await expect(bodyInput).toHaveValue(/Draft survives Graph navigation\./);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(
     page.getByText(/Saved .*Browser lifecycle filed edit/),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Archive note" }).click();
+  await page.getByRole("button", { name: "More note actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive note" }).click();
   const archiveDialog = page.getByRole("dialog", { name: /Archive .*\?/i });
   await expect(archiveDialog).toBeVisible();
   await archiveDialog.getByRole("button", { name: "Archive" }).click();
@@ -146,7 +143,10 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   await viewTab(page, "Graph").click();
   await viewTab(page, "Notes").click();
   await expect(
-    page.getByText("Browser lifecycle filed edit", { exact: true }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Browser lifecycle filed edit",
+    }),
   ).toBeVisible();
   await page.screenshot({
     path: "/tmp/loom-review-browser.png",
@@ -156,7 +156,10 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   expect(requests.some((url) => url.includes("/api/notes/bulk"))).toBe(false);
   await page.reload({ waitUntil: "domcontentloaded" });
   await expect(
-    page.getByText("Browser lifecycle filed edit", { exact: true }),
+    page.getByRole("heading", {
+      level: 1,
+      name: "Browser lifecycle filed edit",
+    }),
   ).toBeVisible();
 });
 

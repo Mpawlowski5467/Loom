@@ -5,6 +5,7 @@ import {
   getConnections,
   type ConnectionEvidence as Evidence,
 } from "../api/connections";
+import { describeApiError } from "../api/client";
 
 export function ConnectionEvidence({
   noteId,
@@ -36,10 +37,7 @@ export function ConnectionEvidence({
           setResult({
             noteId,
             items: [],
-            error:
-              err instanceof Error
-                ? err.message
-                : "Could not load connection evidence",
+            error: describeApiError(err, "Could not load connection evidence"),
           });
         }
       });

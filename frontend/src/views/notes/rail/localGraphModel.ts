@@ -40,7 +40,9 @@ export function buildLocalGraph(
   });
   const ids = new Set(neighbors.map((n) => n.id));
   neighbors.forEach((n, i) => {
-    const angle = (2 * Math.PI * i) / neighbors.length - Math.PI / 2;
+    // Offset by half a step so no label sits on the centre label's row.
+    const step = (2 * Math.PI) / neighbors.length;
+    const angle = step * i - Math.PI / 2 + step / 2;
     graph.addNode(n.id, {
       x: Math.cos(angle),
       y: Math.sin(angle),

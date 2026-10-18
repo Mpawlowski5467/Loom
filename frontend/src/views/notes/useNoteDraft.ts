@@ -102,16 +102,20 @@ export function useNoteDraft({
   } else if (
     note &&
     bodyLoaded &&
-    note.body !== state.synced &&
-    state.draft === state.synced
+    state.draft === state.synced &&
+    (note.body !== state.synced || state.base !== versionOf(note))
   ) {
-    // Same note refreshed (SSE) while clean: follow the remote body.
+    // Same note changed while the draft is clean (an agent edit over SSE,
+    // or a rename/tag change that bumps the version): follow it, so the
+    // next save is checked against the version actually on screen. The
+    // editor only re-seeds when the body itself changed.
+    const bodyChanged = note.body !== state.synced;
     current = {
       ...state,
       draft: note.body,
       base: versionOf(note),
       synced: note.body,
-      revision: state.revision + 1,
+      revision: bodyChanged ? state.revision + 1 : state.revision,
       notice: null,
     };
     setState(current);

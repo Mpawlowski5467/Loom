@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Sigma from "sigma";
+import type Sigma from "sigma";
 import { useApp } from "@/context/app-ctx";
 import type { Note } from "@/data/types";
 import { useThemeColors } from "@/theme/useThemeColors";
@@ -39,26 +39,40 @@ export function LocalGraph({ note }: { note: Note }) {
     const host = hostRef.current;
     if (!host || !webgl) return;
     let sigma: Sigma | null = null;
-    try {
-      sigma = new Sigma(buildLocalGraph(note, neighbors, colors), host, {
-        renderEdgeLabels: false,
-        labelFont: "Geist Variable, ui-sans-serif, sans-serif",
-        labelSize: 11,
-        labelColor: { color: colors.secondaryForeground },
-        labelRenderedSizeThreshold: 0,
-        defaultEdgeColor: colors.borderStrong,
-        stagePadding: 24,
-        zoomingRatio: 1.3,
-      });
-      sigma.on("clickNode", ({ node }) => {
-        if (node !== note.id) openNote(node);
-      });
-      sigma.on("enterNode", () => host.style.setProperty("cursor", "pointer"));
-      sigma.on("leaveNode", () => host.style.removeProperty("cursor"));
-    } catch {
-      // Sigma couldn't start; the empty frame stays, links are in Related.
-    }
-    return () => sigma?.kill();
+    let cancelled = false;
+    // Loaded on demand: sigma touches WebGL globals at import time.
+    void import("sigma").then(({ default: SigmaRenderer }) => {
+      if (cancelled) return;
+      try {
+        sigma = new SigmaRenderer(
+          buildLocalGraph(note, neighbors, colors),
+          host,
+          {
+            renderEdgeLabels: false,
+            labelFont: "Geist Variable, ui-sans-serif, sans-serif",
+            labelSize: 11,
+            labelColor: { color: colors.secondaryForeground },
+            labelRenderedSizeThreshold: 0,
+            defaultEdgeColor: colors.borderStrong,
+            stagePadding: 24,
+            zoomingRatio: 1.3,
+          },
+        );
+        sigma.on("clickNode", ({ node }) => {
+          if (node !== note.id) openNote(node);
+        });
+        sigma.on("enterNode", () =>
+          host.style.setProperty("cursor", "pointer"),
+        );
+        sigma.on("leaveNode", () => host.style.removeProperty("cursor"));
+      } catch {
+        // Sigma couldn't start; the empty frame stays, links are in Related.
+      }
+    });
+    return () => {
+      cancelled = true;
+      sigma?.kill();
+    };
   }, [note, neighbors, colors, openNote, webgl]);
 
   const openInGraph = () => {

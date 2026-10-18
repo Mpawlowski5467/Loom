@@ -97,10 +97,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
     resetGraphDisplay,
   } = useGraphNavigation(graphFixture, setTab);
 
-  const [primaryOpen, setPrimaryOpen] = useState(true);
-  const [secondaryOpen, setSecondaryOpen] = useState(false);
-  const [editing, setEditingRaw] = useState(false);
-
   const [treeVisible, setTreeVisible] = useState<boolean>(() =>
     graphFixture !== null ? false : loadTreeVisible(),
   );
@@ -118,11 +114,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       // ignore quota / serialization failures
     }
   }, [graphFixture, treeVisible]);
-
-  const setEditing = useCallback((b: boolean) => {
-    setEditingRaw(b);
-    if (b) setSecondaryOpen(false);
-  }, []);
 
   const [paletteOpen, setPaletteOpen] = useState(false);
   const [quickCaptureOpen, setQuickCaptureOpen] = useState(false);
@@ -290,13 +281,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       setGraphDisplay,
       resetGraphDisplay,
 
-      primaryOpen,
-      secondaryOpen,
-      editing,
-      setPrimaryOpen,
-      setSecondaryOpen,
-      setEditing,
-
       treeVisible,
       setTreeVisible,
 
@@ -363,9 +347,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       graphFlyTo,
       graphFilters,
       graphDisplay,
-      primaryOpen,
-      secondaryOpen,
-      editing,
       treeVisible,
       paletteOpen,
       quickCaptureOpen,
@@ -396,9 +377,6 @@ export function AppProvider({ children }: ProviderProps): ReactNode {
       clearGraphFilters,
       setGraphDisplay,
       resetGraphDisplay,
-      setPrimaryOpen,
-      setSecondaryOpen,
-      setEditing,
       setTreeVisible,
       setPaletteOpen,
       pushToast,

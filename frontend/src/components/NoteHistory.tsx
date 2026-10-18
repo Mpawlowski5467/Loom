@@ -5,6 +5,7 @@ import {
   notePath,
   type HistoryEntry,
 } from "../api/history";
+import { describeApiError } from "../api/client";
 import { useApp } from "../context/app-ctx";
 import { formatRelative } from "../data/formatDate";
 import { actorLabel } from "../data/actors";
@@ -60,9 +61,7 @@ export function NoteHistory({
         },
         (err: unknown) => {
           if (!isCancelled())
-            setMessage(
-              err instanceof Error ? err.message : "Could not load history",
-            );
+            setMessage(describeApiError(err, "Could not load history"));
         },
       ),
     [path],

@@ -26,7 +26,6 @@ export function Overlays(): ReactNode {
     notes,
     appendNote,
     openNote,
-    setEditing,
     pushToast,
     config,
   } = useApp();
@@ -55,8 +54,6 @@ export function Overlays(): ReactNode {
               );
               appendNote(note);
               openNote(note.id);
-              // A fresh note is empty: land in the editor, ready to type.
-              setEditing(true);
               setNewNoteTitle(null);
               pushToast({
                 icon: "✎",

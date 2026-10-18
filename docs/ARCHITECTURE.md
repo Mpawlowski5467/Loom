@@ -145,6 +145,12 @@ Every mutation to a note is logged in the frontmatter `history` array with:
 
 Agents should never silently delete or overwrite content. This history provides full transparency and trust.
 
+Beyond the frontmatter log, every vault is a git repository: each agent action
+or run becomes one attributed commit (`spider: linked threads/topics/raft.md`
+with `Agent`/`Action`/`Reason`/`Sentinel` trailers), human edits are committed
+after a quiet period, and undo is a Sentinel-validated revert commit, never a
+history rewrite. See the [architecture reference](architecture-ref.md#vault-history-git).
+
 ### 2.5 `_index.md` Files
 
 Every folder can have an `_index.md` — a living, auto-generated summary of what's inside that folder. Maintained by the Scribe agent and kept up to date as notes change. Serves as both a human-readable overview and context for agents operating in that folder.

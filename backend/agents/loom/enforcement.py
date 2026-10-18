@@ -60,10 +60,17 @@ def enforce_verdict(
     verdict: str,
     reasons: list[str],
     validation_mode: str = "",
+    source_coverage: dict[str, Any] | None = None,
 ) -> EnforcementOutcome:
-    """Apply Sentinel's verdict to the capture and note. See module docstring."""
+    """Apply Sentinel's verdict to the capture and note. See module docstring.
+
+    ``source_coverage`` is stamped onto the capture with its lifecycle
+    verdict, before any archive move: ``vault_io`` refuses writes under
+    ``.archive/``, so the archived source can only carry it from here.
+    """
     outcome = EnforcementOutcome()
     validation_status = verdict or "unavailable"
+    coverage_fields = {"source_coverage": source_coverage} if source_coverage else {}
     if verdict not in {"passed", "warning"}:
         if not reasons:
             reasons = ["Sentinel validation unavailable or incomplete"]
@@ -79,7 +86,7 @@ def enforce_verdict(
         }
         if note_path is not None:
             annotate_frontmatter(vault_dir, note_path, fields)
-        capture_fields = {**fields, **_draft_reference(note_path)}
+        capture_fields = {**fields, **coverage_fields, **_draft_reference(note_path)}
         annotate_frontmatter(vault_dir, capture_path, capture_fields)
         return outcome
 
@@ -101,7 +108,7 @@ def enforce_verdict(
     except OSError:
         logger.warning("Could not snapshot capture before enforcement", exc_info=True)
         original_capture = ""
-    annotate_frontmatter(vault_dir, capture_path, lifecycle_fields)
+    annotate_frontmatter(vault_dir, capture_path, {**lifecycle_fields, **coverage_fields})
     note_fields = {**lifecycle_fields, "publication_state": "published"}
     archived_capture: Path | None = None
     try:

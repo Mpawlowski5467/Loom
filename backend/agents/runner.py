@@ -251,11 +251,13 @@ class AgentRunner:
         note_path: Path | None,
         validation: ValidationResult | None,
         errors: list[str],
+        source_coverage: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Graph enforce-node hook: apply Sentinel's verdict, return flag deltas.
 
         Returns a dict the graph merges into state so run_pipeline can mirror
-        the enforcement outcome onto its PipelineResult.
+        the enforcement outcome onto its PipelineResult. ``source_coverage`` is
+        stamped onto the capture before it can be archived.
         """
         from agents.loom.enforcement import enforce_verdict
 
@@ -269,6 +271,7 @@ class AgentRunner:
             verdict,
             reasons,
             validation_mode,
+            source_coverage,
         )
         return {
             "capture_archived": outcome.capture_archived,

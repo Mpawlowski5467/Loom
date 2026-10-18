@@ -289,11 +289,15 @@ def build_pipeline_graph(
         """Sentinel enforcement: archive unless failed; annotate accordingly."""
         errors = list(state.get("errors", []))
         async with step("enforce", caller="sentinel"):
+            # Coverage rides along with the verdict so it is stamped before an
+            # accepted capture is archived. Publication recovery restores the
+            # pre-enforcement snapshot, so a recovered source stays pristine.
             flags = runner._enforce_verdict(
                 _resolve(state["capture_path"]),
                 _resolve(state["note_path"]) if state.get("note_path") else None,
                 state.get("validation"),
                 errors,
+                source_coverage=state.get("source_coverage"),
             )
             enforcement_errors = list(flags.get("errors", []))
             if enforcement_errors:
@@ -303,18 +307,6 @@ def build_pipeline_graph(
             # a rejected/pending draft from an index that a watcher had seen.
             if refresh_index is not None and state.get("note_path"):
                 refresh_index(_resolve(state["note_path"]))
-            coverage = state.get("source_coverage")
-            # Publication recovery restores the Inbox source byte-for-byte.
-            # Do not follow that recovery with an otherwise benign coverage
-            # annotation that would turn its pristine source into a new draft.
-            if coverage and not enforcement_errors:
-                from agents.loom.enforcement import annotate_frontmatter
-
-                annotate_frontmatter(
-                    runner._vault_root,
-                    _resolve(state["capture_path"]),
-                    {"source_coverage": coverage},
-                )
         return {
             "errors": errors,
             "capture_archived": flags["capture_archived"],

@@ -162,7 +162,11 @@ export function createLens(opts: {
 
   const tick: FrameTick = () => {
     tickIdx++;
-    if (tuning.dragging) {
+    // The graph is patched in place, so the focused note can disappear
+    // between frames. Its attributes are gone: close the lens immediately
+    // and let the next scan pick a new focus.
+    const focusDropped = focusId !== null && !graph.hasNode(focusId);
+    if (tuning.dragging || focusDropped) {
       const needsRefresh = tuning.lensLabelHideFor !== null;
       focusId = null;
       openness = 0;

@@ -9,10 +9,12 @@ This suite guards the Sigma lifecycle contract of useGraphInstance:
 - mount builds ONE Sigma over a graph holding every note node + link edge;
 - unmount tears it all down (sigma.kill, camera listener off, overlay animators
   destroyed + unsubscribed, frame loop stopped) — no rAF or listener leaks;
-- a structuralKey change rebuilds (old instance killed, a new one constructed);
+- adding/removing a note or link patches the live graph in place: NO kill, no
+  new Sigma, camera untouched, existing nodes (incl. dragged ones) keep their
+  positions and new nodes land beside their neighbors;
 - a contentKey-only change patches attributes in place (NO kill, NO rebuild);
-- positions snapshot at teardown re-seed the next build, so a dragged node
-  keeps its placement across a structural rebuild instead of re-randomizing.
+- only an unpatchable change (no surviving node) falls back to a full rebuild,
+  seeded from the positions snapshot at teardown.
 */
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -51,6 +53,7 @@ interface SigmaStub {
   on: ReturnType<typeof vi.fn>;
   off: ReturnType<typeof vi.fn>;
   getCamera: () => CameraStub;
+  setCustomBBox: ReturnType<typeof vi.fn>;
   graphToViewport: (p: XY) => XY;
   viewportToGraph: (p: XY) => XY;
   listenerCount: (event: string) => number;
@@ -58,6 +61,7 @@ interface SigmaStub {
 
 interface OverlayStub {
   tick: ReturnType<typeof vi.fn>;
+  sync?: ReturnType<typeof vi.fn>;
   destroy: ReturnType<typeof vi.fn>;
 }
 
@@ -119,6 +123,17 @@ vi.mock("sigma", () => {
     listenerCount = this.emitter.listenerCount;
     graphToViewport = (p: XY): XY => p;
     viewportToGraph = (p: XY): XY => p;
+    private customBBox: unknown = null;
+    getBBox = () => ({ x: [0, 100], y: [-100, 0] });
+    getCustomBBox = () => this.customBBox;
+    setCustomBBox = vi.fn((bbox: unknown) => {
+      this.customBBox = bbox;
+    });
+    getSetting = vi.fn(() => undefined);
+    // In-place syncs park the renderer on an empty copy and re-attach it.
+    setGraph = vi.fn((graph: Graph) => {
+      this.graph = graph;
+    });
 
     constructor(
       public graph: Graph,
@@ -166,7 +181,11 @@ vi.mock("./dragHandlers", () => ({
 }));
 vi.mock("./travelers", () => ({
   createTravelers: vi.fn(
-    (): OverlayStub => ({ tick: vi.fn(() => false), destroy: vi.fn() }),
+    (): OverlayStub => ({
+      tick: vi.fn(() => false),
+      sync: vi.fn(),
+      destroy: vi.fn(),
+    }),
   ),
 }));
 vi.mock("./lens", () => ({
@@ -443,22 +462,66 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     expect(inst.refresh.mock.calls.length).toBe(refreshes);
   });
 
-  it("rebuilds from scratch when structuralKey changes (note added)", () => {
-    const { rerender } = setup([note("a", ["b"]), note("b")]);
+  it("adds a note in place: no kill, same Sigma, camera untouched", () => {
+    const { rerender, result } = setup([note("a", ["b"]), note("b")]);
     build();
     expect(sigmaInstances()).toHaveLength(1);
-    const first = sigmaInstances()[0]!;
+    const inst = sigmaInstances()[0]!;
+    const frameLoop = result.current.frameLoopRef.current;
 
-    rerender({ notes: [note("a", ["b"]), note("b"), note("c")] });
-    // The old build's cleanup runs synchronously with the effect re-run…
-    expect(first.kill).toHaveBeenCalledTimes(1);
+    rerender({ notes: [note("a", ["b"]), note("b"), note("c", ["a"])] });
+
+    // Same renderer, graph, frame loop and camera — nothing was rebuilt.
+    expect(inst.kill).not.toHaveBeenCalled();
+    expect(sigmaInstances()).toHaveLength(1);
+    expect(result.current.graphRef.current).toBe(inst.graph);
+    expect(result.current.frameLoopRef.current).toBe(frameLoop);
+    expect(inst.camera.animate).not.toHaveBeenCalled();
+    expect(inst.camera.animatedReset).not.toHaveBeenCalled();
+    expect(layoutMock).toHaveBeenCalledTimes(1);
+    // The structure changed in place; no deferred build frame is pending.
+    expect(inst.graph.hasNode("c")).toBe(true);
+    expect(inst.graph.hasEdge("c", "a")).toBe(true);
+    expect(result.current.structureVersion).toBe(1);
+    expect(result.current.sigmaReady).toBe(1);
+    expect(result.current.building).toBe(false);
+    // Overlays were patched, not recreated.
+    expect(travelersMock).toHaveBeenCalledTimes(1);
+    expect(travelerStubs()[0]!.sync).toHaveBeenCalledTimes(1);
+  });
+
+  it("places a new note beside its neighbor", () => {
+    const { rerender, result } = setup([note("a", ["b"]), note("b")]);
     build();
-    // …and a fresh Sigma is constructed over the new structure.
-    expect(sigmaInstances()).toHaveLength(2);
-    const graph = sigmaInstances()[1]!.graph;
-    expect(graph.order).toBe(3);
-    expect(graph.hasNode("c")).toBe(true);
-    expect(graph.hasEdge("a", "b")).toBe(true);
+    const graph = result.current.graphRef.current!;
+    // The layout fake seeded a at (10,-10) and b at (20,-20).
+
+    rerender({ notes: [note("a", ["b"]), note("b"), note("c", ["b"])] });
+
+    const c = {
+      x: graph.getNodeAttribute("c", "x") as number,
+      y: graph.getNodeAttribute("c", "y") as number,
+    };
+    expect(Math.hypot(c.x - 20, c.y + 20)).toBeLessThan(100);
+    expect(result.current.basePositionsRef.current.get("c")).toEqual(c);
+  });
+
+  it("removes a note and its links in place", () => {
+    const { rerender, result } = setup([
+      note("a", ["b"]),
+      note("b", ["c"]),
+      note("c"),
+    ]);
+    build();
+    const inst = sigmaInstances()[0]!;
+
+    rerender({ notes: [note("a"), note("c")] });
+
+    expect(inst.kill).not.toHaveBeenCalled();
+    expect(inst.graph.hasNode("b")).toBe(false);
+    expect(inst.graph.size).toBe(0);
+    expect(result.current.basePositionsRef.current.has("b")).toBe(false);
+    expect(result.current.structureVersion).toBe(1);
   });
 
   it("patches title/type in place when only contentKey changes (no rebuild)", () => {
@@ -487,7 +550,7 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     expect(inst.refresh.mock.calls.length).toBeGreaterThan(refreshCalls);
   });
 
-  it("re-seeds dragged positions from the teardown snapshot on rebuild", () => {
+  it("keeps a dragged node's placement across a structural change", () => {
     const { rerender, result } = setup([note("a", ["b"]), note("b")]);
     build();
     // First build has an empty position cache — every node got a fresh slot.
@@ -501,14 +564,34 @@ describe("useGraphInstance — Sigma lifecycle", () => {
     });
 
     rerender({ notes: [note("a", ["b"]), note("b"), note("c")] });
+
+    // No relayout ran, so the dragged node is exactly where it was.
+    expect(layoutMock).toHaveBeenCalledTimes(1);
+    expect(graph.getNodeAttribute("a", "x")).toBe(111);
+    expect(graph.getNodeAttribute("a", "y")).toBe(222);
+  });
+
+  it("rebuilds from the teardown snapshot when no node survives", () => {
+    const { rerender, result } = setup([note("a", ["b"]), note("b")]);
+    build();
+    const first = sigmaInstances()[0]!;
+    const graph = result.current.graphRef.current!;
+    act(() => {
+      graph.setNodeAttribute("a", "x", 111);
+      graph.setNodeAttribute("a", "y", 222);
+    });
+
+    rerender({ notes: [note("x", ["y"]), note("y")] });
+    // The sync could not patch it, so the old instance is torn down…
+    expect(first.kill).toHaveBeenCalledTimes(1);
     build();
 
-    // The rebuild was handed the dragged placement as its layout seed…
-    const seed = layoutMock.mock.calls[1]?.[1];
-    expect(seed?.get("a")).toEqual({ x: 111, y: 222 });
-    // …and the new graph starts from it instead of a fresh random slot.
+    // …and a fresh Sigma is built, handed the old positions as its seed.
+    expect(sigmaInstances()).toHaveLength(2);
     const rebuilt = sigmaInstances()[1]!.graph;
-    expect(rebuilt.getNodeAttribute("a", "x")).toBe(111);
-    expect(rebuilt.getNodeAttribute("a", "y")).toBe(222);
+    expect(rebuilt.hasNode("x")).toBe(true);
+    expect(rebuilt.hasEdge("x", "y")).toBe(true);
+    expect(layoutMock.mock.calls[1]?.[1]?.get("a")).toEqual({ x: 111, y: 222 });
+    expect(result.current.sigmaReady).toBe(2);
   });
 });

@@ -3,29 +3,28 @@ import type Sigma from "sigma";
 import { depthSizeFactorFor } from "./depth";
 import type { FrameTick } from "./frameLoop";
 import type { GraphTuning } from "./tuning";
+import {
+  blankLineCache,
+  hideLine,
+  scaleSizeFor,
+  setCircleAttr,
+  setLineAttr,
+  type CircleCache,
+  type LineCache,
+} from "./travelerDom";
 
 const SVG_NS = "http://www.w3.org/2000/svg";
 const SEG_LEN = 14;
 const BASE_SPEED = 0.18;
 const NODE_MARGIN = 2;
 
-interface LineCache {
-  x1: string;
-  y1: string;
-  x2: string;
-  y2: string;
-  op: string;
-  sw: string;
-}
-
-function blankLineCache(): LineCache {
-  return { x1: "", y1: "", x2: "", y2: "", op: "", sw: "" };
-}
-
 export interface Travelers {
   /** Mutates the overlay DOM only — never needs a Sigma repaint, so returns
    * false. */
   tick: FrameTick;
+  /** Re-match lines and node masks to the live graph after nodes or edges
+   * were added or removed in place. */
+  sync: () => void;
   destroy: () => void;
 }
 
@@ -57,78 +56,46 @@ export function createTravelers(opts: {
   trMask.appendChild(maskBg);
 
   const maskCircles = new Map<string, SVGCircleElement>();
-  graph.forEachNode((id) => {
+  const addMaskCircle = (id: string): void => {
     const c = document.createElementNS(SVG_NS, "circle");
     c.setAttribute("fill", "black");
     c.setAttribute("r", "0");
     trMask.appendChild(c);
     maskCircles.set(id, c);
-  });
+  };
+  graph.forEachNode(addMaskCircle);
   defs.appendChild(trMask);
 
   const travG = document.createElementNS(SVG_NS, "g");
   travG.setAttribute("mask", `url(#${maskId})`);
-  const lines: Array<{ el: SVGLineElement; s: string; t: string }> = [];
-  graph.forEachEdge((_edgeId, _attr, source, target) => {
+  // ``offset`` staggers each dash along its edge. It is fixed at creation so
+  // a later sync does not make surviving travelers jump.
+  let lines: Array<{
+    edge: string;
+    el: SVGLineElement;
+    s: string;
+    t: string;
+    offset: number;
+  }> = [];
+  let created = 0;
+  const addLine = (edge: string, source: string, target: string): void => {
     const line = document.createElementNS(SVG_NS, "line");
     line.setAttribute("stroke", "currentColor");
     line.setAttribute("stroke-width", "2.0");
     line.setAttribute("stroke-linecap", "round");
     line.setAttribute("opacity", "0.92");
     travG.appendChild(line);
-    lines.push({ el: line, s: source, t: target });
-  });
+    lines.push({ edge, el: line, s: source, t: target, offset: created * 0.1 });
+    created++;
+  };
+  graph.forEachEdge((edge, _attr, source, target) =>
+    addLine(edge, source, target),
+  );
   overlay.appendChild(defs);
   overlay.appendChild(travG);
 
   const lineCache = new Map<SVGLineElement, LineCache>();
-  const maskCache = new Map<
-    SVGCircleElement,
-    { cx: string; cy: string; r: string }
-  >();
-
-  const setLineAttr = (
-    el: SVGLineElement,
-    cache: LineCache,
-    x1: string,
-    y1: string,
-    x2: string,
-    y2: string,
-    op: string,
-    sw: string,
-  ): void => {
-    if (cache.x1 !== x1) {
-      el.setAttribute("x1", x1);
-      cache.x1 = x1;
-    }
-    if (cache.y1 !== y1) {
-      el.setAttribute("y1", y1);
-      cache.y1 = y1;
-    }
-    if (cache.x2 !== x2) {
-      el.setAttribute("x2", x2);
-      cache.x2 = x2;
-    }
-    if (cache.y2 !== y2) {
-      el.setAttribute("y2", y2);
-      cache.y2 = y2;
-    }
-    if (cache.op !== op) {
-      el.setAttribute("opacity", op);
-      cache.op = op;
-    }
-    if (cache.sw !== sw) {
-      el.setAttribute("stroke-width", sw);
-      cache.sw = sw;
-    }
-  };
-
-  const hideLine = (el: SVGLineElement, cache: LineCache): void => {
-    if (cache.op !== "0") {
-      el.setAttribute("opacity", "0");
-      cache.op = "0";
-    }
-  };
+  const maskCache = new Map<SVGCircleElement, CircleCache>();
 
   const cacheFor = (el: SVGLineElement): LineCache => {
     let cache = lineCache.get(el);
@@ -139,16 +106,7 @@ export function createTravelers(opts: {
     return cache;
   };
 
-  // Sigma 3's scaleSize() converts logical node sizes to viewport pixels at
-  // the current camera ratio. Older versions don't expose it — fall back to
-  // its formula so the disk trim still tracks zoom.
-  const scaleSize: (size: number) => number =
-    typeof (sigma as unknown as { scaleSize?: (s: number) => number })
-      .scaleSize === "function"
-      ? (
-          sigma as unknown as { scaleSize: (s: number) => number }
-        ).scaleSize.bind(sigma)
-      : (s: number) => s / Math.sqrt(sigma.getCamera().ratio);
+  const scaleSize = scaleSizeFor(sigma);
 
   let pausedForDrag = false;
   const tick: FrameTick = () => {
@@ -175,7 +133,7 @@ export function createTravelers(opts: {
     }
 
     for (let i = 0; i < lines.length; i++) {
-      const { el, s, t } = lines[i]!;
+      const { el, s, t, offset } = lines[i]!;
       const cache = cacheFor(el);
 
       if (pace <= 0) {
@@ -239,7 +197,7 @@ export function createTravelers(opts: {
 
       const ux = dx / len;
       const uy = dy / len;
-      const phase = ((now / 1000) * BASE_SPEED * pace + i * 0.1) % 1;
+      const phase = ((now / 1000) * BASE_SPEED * pace + offset) % 1;
       const center = travStart + phase * travLen;
       const segStart = Math.max(travStart, center - SEG_LEN / 2);
       const segEnd = Math.min(travEnd, center + SEG_LEN / 2);
@@ -276,10 +234,7 @@ export function createTravelers(opts: {
         maskCache.set(c, mc);
       }
       if (attr["hidden"]) {
-        if (mc.r !== "0") {
-          c.setAttribute("r", "0");
-          mc.r = "0";
-        }
+        setCircleAttr(c, mc, mc.cx, mc.cy, "0");
         return;
       }
       const z = id === hovered ? 0 : ((attr["z"] as number | undefined) ?? 0);
@@ -290,24 +245,37 @@ export function createTravelers(opts: {
       const r =
         scaleSize((attr["size"] as number) * depthSizeFactorFor(tuning, z)) +
         NODE_MARGIN;
-      const cx = String(p.x);
-      const cy = String(p.y);
-      const rs = String(r);
-      if (mc.cx !== cx) {
-        c.setAttribute("cx", cx);
-        mc.cx = cx;
-      }
-      if (mc.cy !== cy) {
-        c.setAttribute("cy", cy);
-        mc.cy = cy;
-      }
-      if (mc.r !== rs) {
-        c.setAttribute("r", rs);
-        mc.r = rs;
-      }
+      setCircleAttr(c, mc, String(p.x), String(p.y), String(r));
     });
 
     return false;
+  };
+
+  const sync = (): void => {
+    for (const [id, c] of maskCircles) {
+      if (graph.hasNode(id)) continue;
+      c.remove();
+      maskCache.delete(c);
+      maskCircles.delete(id);
+    }
+    graph.forEachNode((id) => {
+      if (!maskCircles.has(id)) addMaskCircle(id);
+    });
+    const kept = new Set<string>();
+    lines = lines.filter((line) => {
+      if (graph.hasEdge(line.edge)) {
+        kept.add(line.edge);
+        return true;
+      }
+      line.el.remove();
+      lineCache.delete(line.el);
+      return false;
+    });
+    graph.forEachEdge((edge, _attr, source, target) => {
+      if (!kept.has(edge)) addLine(edge, source, target);
+    });
+    // New lines start visible; let the next drag frame hide them all again.
+    pausedForDrag = false;
   };
 
   const destroy = (): void => {
@@ -319,5 +287,5 @@ export function createTravelers(opts: {
     lines.length = 0;
   };
 
-  return { tick, destroy };
+  return { tick, sync, destroy };
 }

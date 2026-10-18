@@ -197,7 +197,7 @@
   color: var(--success);
 }
 .changelog-verdict.warn {
-  color: var(--warning);
+  color: var(--legacy-warning);
 }
 .changelog-verdict.fail {
   color: var(--danger);

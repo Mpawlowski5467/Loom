@@ -213,7 +213,7 @@
   color: var(--ink-3);
 }
 .onb-probe-warn {
-  color: var(--warning);
+  color: var(--legacy-warning);
 }
 
 .onb-existing {
@@ -262,9 +262,9 @@
 .onb-warn {
   font-family: var(--mono);
   font-size: 11px;
-  color: var(--warning);
+  color: var(--legacy-warning);
   background: var(--warning-bg);
-  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
+  border: 1px solid color-mix(in srgb, var(--legacy-warning) 40%, transparent);
   padding: 8px 10px;
   border-radius: var(--r-sm);
 }
@@ -570,8 +570,8 @@
 }
 .banner-provider {
   background: var(--warning-bg);
-  color: var(--warning);
-  border-bottom-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  color: var(--legacy-warning);
+  border-bottom-color: color-mix(in srgb, var(--legacy-warning) 40%, transparent);
 }
 .banner-offline {
   background: var(--agent-bg);

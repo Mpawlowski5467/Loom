@@ -1,116 +1,112 @@
-@import "./styles/tokens.css";
-@import "./styles/base.css";
-@import "./styles/motion.css";
-@import "./styles/primitives.css";
-@import "./styles/layout.css";
-@import "./styles/views/splash.css";
-@import "./styles/views/graph.css";
-@import "./styles/views/thread.css";
-@import "./styles/views/today.css";
-@import "./styles/views/inbox.css";
-@import "./styles/views/board.css";
-@import "./styles/views/palette.css";
-@import "./styles/views/toasts.css";
-@import "./styles/views/onboarding.css";
-@import "./styles/views/settings.css";
-@import "./styles/views/note-modal.css";
-@import "./styles/views/traces.css";
+/* Cascade order: Tailwind theme → preflight → legacy view CSS → utilities.
+   Theme tokens (themes.css) are unlayered custom properties. */
+@layer theme, base, legacy, components, utilities;
 
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/preflight.css" layer(base);
+@import "tailwindcss/utilities.css" layer(utilities);
+@import "tw-animate-css";
+
+@import "./styles/themes.css";
+@import "./styles/legacy-tokens.css";
+@import "./styles/legacy.css" layer(legacy);
+
+/* `dark:` follows the active theme's mode, not the OS. */
+@custom-variant dark (&:where([data-theme-mode="dark"], [data-theme-mode="dark"] *));
+
+/* Only theme tokens are colors: no default Tailwind palette, so a class
+   like bg-blue-500 can't sneak a hardcoded color past the theme system. */
+@theme {
+  --color-*: initial;
+  --color-black: #000000;
+  --color-white: #ffffff;
 }
 
-body {
-  background-color: var(--bg-base);
-  color: var(--text-primary);
-  font-family: var(--font);
-  font-size: var(--text-base);
-  line-height: 1.5;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-destructive: var(--destructive);
+  --color-chip: var(--chip);
+  --color-chip-foreground: var(--chip-foreground);
+  --color-nav-active: var(--nav-active);
+  --color-nav-active-foreground: var(--nav-active-foreground);
+  --color-banner: var(--banner);
+  --color-banner-border: var(--banner-border);
+  --color-banner-foreground: var(--banner-foreground);
+  --color-ok: var(--ok);
+  --color-ok-foreground: var(--ok-foreground);
+  --color-warning: var(--warning);
+  --color-warning-border: var(--warning-border);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-danger-foreground: var(--danger-foreground);
+  --color-community-1: var(--community-1);
+  --color-community-2: var(--community-2);
+  --color-community-3: var(--community-3);
+  --color-community-4: var(--community-4);
+
+  --font-sans: var(--font-ui);
+  --font-mono: var(--font-code);
+  --font-serif: var(--font-reading);
+  --font-editor: var(--editor-font);
+
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --shadow-overlay: var(--shadow);
 }
 
-/* ── Focus — keyboard users need to see where they are ─────────────────── */
-
-*:focus-visible {
-  outline: 2px solid var(--accent-amber);
-  outline-offset: 2px;
+/* Density scales Tailwind's spacing unit; text size scales rem. */
+:root {
+  --spacing: calc(0.25rem * var(--space-scale));
+  font-size: calc(100% * var(--font-scale));
 }
 
-/* ── Active press feedback — makes clicks feel responsive ────────────── */
-
-button:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* ── Scrollbars — visible, classic, not auto-hiding ────────────────────── */
-
-::-webkit-scrollbar {
-  width: 14px;
-  height: 14px;
-}
-
-::-webkit-scrollbar-track {
-  background: var(--bg-base);
-  border-left: 1px solid var(--border-light);
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--bg-elevated);
-  border: 2px solid var(--bg-base);
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--text-secondary);
-}
-
-::-webkit-scrollbar-corner {
-  background: var(--bg-base);
-}
-
-/* Firefox */
-* {
-  scrollbar-width: auto;
-  scrollbar-color: var(--bg-elevated) var(--bg-base);
-}
-
-/* ── Form element resets ───────────────────────────────────────────────── */
-
-input,
-button,
-select,
-textarea {
-  font-family: inherit;
-  font-size: inherit;
-  color: inherit;
-}
-
-button {
-  cursor: pointer;
-}
-
-button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
-/* ── Reduced motion ────────────────────────────────────────────────────── */
-
-@media (prefers-reduced-motion: reduce) {
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-ui);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
   }
 }

@@ -353,7 +353,7 @@
   margin-right: 4px;
 }
 .settings-banner-warn {
-  border-color: color-mix(in srgb, var(--warning) 40%, transparent);
+  border-color: color-mix(in srgb, var(--legacy-warning) 40%, transparent);
   background: var(--warning-bg);
   color: var(--ink);
 }
@@ -640,9 +640,9 @@
 .settings-security-warning {
   margin-top: 10px;
   padding: 10px 12px;
-  border: 1px solid color-mix(in srgb, var(--warning) 35%, transparent);
+  border: 1px solid color-mix(in srgb, var(--legacy-warning) 35%, transparent);
   border-radius: var(--r-md);
-  color: var(--warning);
+  color: var(--legacy-warning);
   background: var(--warning-bg);
   font-size: 12.5px;
   line-height: 1.45;
@@ -673,7 +673,7 @@
 }
 
 .settings-health-pill.warn {
-  color: var(--warning);
+  color: var(--legacy-warning);
   background: var(--warning-bg);
 }
 
@@ -702,7 +702,7 @@
   background: var(--success);
 }
 .settings-health-dot.warn {
-  background: var(--warning);
+  background: var(--legacy-warning);
 }
 .settings-health-component-name {
   color: var(--ink-2);
@@ -848,7 +848,7 @@
   color: var(--node-topic);
 }
 .settings-rating-chip.okay {
-  color: var(--warning);
+  color: var(--legacy-warning);
 }
 .settings-rating-chip.heavy {
   color: var(--danger);

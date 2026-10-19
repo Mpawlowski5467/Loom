@@ -186,6 +186,8 @@ export interface CouncilMessage {
   pending?: boolean;
   /** Per-agent contributions for ``who === "agent:council"`` messages. */
   contributions?: CouncilContribution[];
+  /** Vault commits this reply made (gap 10: the Council doesn't write yet). */
+  commits?: { sha: string; subject: string }[];
 }
 
 export interface Toast {

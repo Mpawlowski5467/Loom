@@ -40,6 +40,7 @@ describe("useCouncil", () => {
         options.onEvent({ kind: "token", chunk: "Draft" });
         options.onEvent({
           kind: "done",
+          commits: [{ sha: "abc1234def", subject: "council: linked notes" }],
           assistantText: "Final answer",
           traceId: "trace-1",
           contributions: [],
@@ -52,6 +53,7 @@ describe("useCouncil", () => {
 
     expect(result.current.council).toHaveLength(2);
     expect(result.current.council[1]).toMatchObject({
+      commits: [{ sha: "abc1234def", subject: "council: linked notes" }],
       body: "Final answer",
       pending: false,
       traceId: "trace-1",

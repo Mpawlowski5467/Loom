@@ -124,6 +124,7 @@ export function useCouncil(
             updateReply({
               body: event.assistantText,
               traceId: event.traceId || undefined,
+              commits: event.commits.length > 0 ? event.commits : undefined,
               contributions:
                 contributions.length > 0 ? contributions : undefined,
               pending: false,

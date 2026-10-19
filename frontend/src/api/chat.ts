@@ -28,6 +28,12 @@ export function loadChatHistory(
   );
 }
 
+/** A commit a Council reply produced, for Open diff / Undo. */
+export interface CouncilCommitRef {
+  sha: string;
+  subject: string;
+}
+
 /** One frame from the council SSE stream. */
 export type CouncilStreamEvent =
   | { kind: "contributions"; contributions: AgentContribution[] }
@@ -37,6 +43,8 @@ export type CouncilStreamEvent =
       assistantText: string;
       traceId: string;
       contributions: AgentContribution[];
+      /** Vault changes the Council made (gap 10; the backend sends none yet). */
+      commits: CouncilCommitRef[];
     }
   | { kind: "error"; message: string };
 
@@ -148,12 +156,14 @@ function parseSseFrame(frame: string): CouncilStreamEvent | null {
           assistant_text: string;
           trace_id: string;
           agent_contributions: AgentContribution[];
+          commits?: CouncilCommitRef[];
         };
         return {
           kind: "done",
           assistantText: parsed.assistant_text,
           traceId: parsed.trace_id,
           contributions: parsed.agent_contributions,
+          commits: Array.isArray(parsed.commits) ? parsed.commits : [],
         };
       } catch {
         return null;

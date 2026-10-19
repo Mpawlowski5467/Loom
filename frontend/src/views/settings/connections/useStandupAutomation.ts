@@ -4,11 +4,14 @@ import {
   syncCalendar,
   testCalendar,
   updateStandupAutomation,
+  type CalendarBridgeConfig,
   type CalendarTestResult,
   type StandupAutomation,
+  type StandupScheduleConfig,
 } from "@/api/automations";
 import { useApp } from "@/context/app-ctx";
 import { describeApiError } from "@/api/client";
+import type { StatusTone } from "@/views/settings/kit/StatusLine";
 
 function browserTimezone(): string {
   return Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -23,9 +26,31 @@ function localDate(): string {
   ].join("-");
 }
 
+/** The schedule fields as the Daily Standup card shows them. */
+interface ScheduleDraft {
+  enabled: boolean;
+  runTime: string;
+  timezone: string;
+}
+
+function scheduleDraft(schedule: StandupScheduleConfig): ScheduleDraft {
+  return {
+    enabled: schedule.enabled,
+    runTime: schedule.run_time,
+    // A schedule never turned on still has the backend's UTC default.
+    timezone:
+      schedule.timezone === "UTC" && !schedule.enabled
+        ? browserTimezone()
+        : schedule.timezone,
+  };
+}
+
 /**
- * The Standup schedule and the iCalendar feed: one saved config shared by
- * the Daily Standup and Calendar feed cards, saved together.
+ * The Standup schedule and the iCalendar feed. They share one saved config,
+ * but each card saves only its half: the Daily Standup card's Save sends
+ * `schedule`; the Calendar feed card's Save, Test and Sync send `calendar`.
+ * Each applies only its half of the response, so saving one card never
+ * saves or resets the other card's unsaved edits.
  */
 export function useStandupAutomation() {
   const { pushToast } = useApp();
@@ -39,31 +64,42 @@ export function useStandupAutomation() {
   const [includeInStandup, setIncludeInStandup] = useState(true);
   const [createCaptures, setCreateCaptures] = useState(true);
   const [testResult, setTestResult] = useState<CalendarTestResult | null>(null);
+  const [savedSchedule, setSavedSchedule] = useState<ScheduleDraft | null>(
+    null,
+  );
+  const [scheduleStatus, setScheduleStatus] = useState<{
+    tone: StatusTone;
+    text: string;
+  } | null>(null);
   const [busy, setBusy] = useState<
-    "save" | "test" | "sync" | "disconnect" | null
+    "schedule" | "save" | "test" | "sync" | "disconnect" | null
   >(null);
   const [error, setError] = useState<string | null>(null);
   const actionAbort = useRef<AbortController | null>(null);
 
-  const apply = useCallback((next: StandupAutomation) => {
-    setAutomation(next);
-    setScheduleEnabled(next.schedule.enabled);
-    setRunTime(next.schedule.run_time);
-    setTimezone(
-      next.schedule.timezone === "UTC" && !next.schedule.enabled
-        ? browserTimezone()
-        : next.schedule.timezone,
-    );
-    setCalendarEnabled(next.calendar.enabled);
-    setCalendarName(next.calendar.name);
-    setIncludeInStandup(next.calendar.include_in_standup);
-    setCreateCaptures(next.calendar.create_captures);
+  const applySchedule = useCallback((schedule: StandupScheduleConfig) => {
+    const draft = scheduleDraft(schedule);
+    setSavedSchedule(draft);
+    setScheduleEnabled(draft.enabled);
+    setRunTime(draft.runTime);
+    setTimezone(draft.timezone);
+  }, []);
+
+  const applyCalendar = useCallback((calendar: CalendarBridgeConfig) => {
+    setCalendarEnabled(calendar.enabled);
+    setCalendarName(calendar.name);
+    setIncludeInStandup(calendar.include_in_standup);
+    setCreateCaptures(calendar.create_captures);
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     getStandupAutomation(controller.signal)
-      .then(apply)
+      .then((next) => {
+        setAutomation(next);
+        applySchedule(next.schedule);
+        applyCalendar(next.calendar);
+      })
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
         setError(describeApiError(err, "Connections could not be loaded"));
@@ -73,16 +109,38 @@ export function useStandupAutomation() {
       actionAbort.current?.abort();
       actionAbort.current = null;
     };
-  }, [apply]);
+  }, [applyCalendar, applySchedule]);
 
+  const scheduleDirty =
+    savedSchedule !== null &&
+    (scheduleEnabled !== savedSchedule.enabled ||
+      runTime !== savedSchedule.runTime ||
+      timezone !== savedSchedule.timezone);
+
+  const saveSchedule = async () => {
+    setBusy("schedule");
+    setScheduleStatus(null);
+    try {
+      const next = await updateStandupAutomation({
+        schedule: { enabled: scheduleEnabled, run_time: runTime, timezone },
+      });
+      setAutomation(next);
+      applySchedule(next.schedule);
+      setScheduleStatus({ tone: "ok", text: "Schedule saved." });
+    } catch (err) {
+      setScheduleStatus({
+        tone: "error",
+        text: describeApiError(err, "Could not save the schedule"),
+      });
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /** Save the calendar half; schedule edits stay as typed. */
   const persist = useCallback(
     async (signal?: AbortSignal): Promise<StandupAutomation> => {
       const next = await updateStandupAutomation({
-        schedule: {
-          enabled: scheduleEnabled,
-          run_time: runTime,
-          timezone,
-        },
         calendar: {
           enabled: calendarEnabled,
           name: calendarName,
@@ -93,19 +151,17 @@ export function useStandupAutomation() {
       });
       if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
       setFeedUrl("");
-      apply(next);
+      setAutomation(next);
+      applyCalendar(next.calendar);
       return next;
     },
     [
-      apply,
+      applyCalendar,
       calendarEnabled,
       calendarName,
       createCaptures,
       feedUrl,
       includeInStandup,
-      runTime,
-      scheduleEnabled,
-      timezone,
     ],
   );
 
@@ -117,7 +173,7 @@ export function useStandupAutomation() {
       pushToast({
         icon: "✓",
         agent: "standup",
-        body: "Standup automation saved",
+        body: "Calendar feed saved",
       });
     } catch (err) {
       setError(describeApiError(err, "Could not save connection"));
@@ -189,7 +245,8 @@ export function useStandupAutomation() {
       const next = await updateStandupAutomation({
         calendar: { enabled: false, clear_feed_url: true },
       });
-      apply(next);
+      setAutomation(next);
+      applyCalendar(next.calendar);
       setFeedUrl("");
       setTestResult(null);
     } catch (err) {
@@ -207,6 +264,9 @@ export function useStandupAutomation() {
     setRunTime,
     timezone,
     setTimezone,
+    scheduleDirty,
+    scheduleStatus,
+    saveSchedule,
     calendarEnabled,
     setCalendarEnabled,
     feedUrl,

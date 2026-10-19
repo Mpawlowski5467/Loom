@@ -1,15 +1,24 @@
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Field } from "@/views/settings/kit/Field";
 import { SettingsCard } from "@/views/settings/kit/SettingsCard";
 import { SettingsGroup } from "@/views/settings/kit/SettingsGroup";
+import { StatusLine } from "@/views/settings/kit/StatusLine";
 import { AlertLine } from "./AlertLine";
 import { EnableSwitch } from "./EnableSwitch";
-import { FIELD_ROW, NOTE } from "./styles";
+import { ACTION_ROW, FIELD_ROW, NOTE } from "./styles";
 import type { StandupAutomationState } from "./useStandupAutomation";
 
-/** The daily Standup schedule: on/off, run time and timezone. */
+/** Beside Save: a failed save, else unsaved edits, else the last save. */
+function saveStatus({ scheduleStatus, scheduleDirty }: StandupAutomationState) {
+  if (scheduleStatus?.tone === "error" || !scheduleDirty) return scheduleStatus;
+  return { tone: "warn", text: "Unsaved changes" } as const;
+}
+
+/** The daily Standup schedule: on/off, run time and timezone, saved here. */
 export function StandupCard({ standup }: { standup: StandupAutomationState }) {
   const status = standup.automation?.status;
+  const saved = saveStatus(standup);
   return (
     <SettingsGroup
       title="Daily Standup"
@@ -41,6 +50,18 @@ export function StandupCard({ standup }: { standup: StandupAutomationState }) {
               spellCheck={false}
             />
           </Field>
+        </div>
+        <div className={ACTION_ROW}>
+          <Button
+            type="button"
+            size="sm"
+            aria-label="Save Standup schedule"
+            onClick={() => void standup.saveSchedule()}
+            disabled={!standup.automation || standup.busy !== null}
+          >
+            {standup.busy === "schedule" ? "Saving…" : "Save"}
+          </Button>
+          {saved && <StatusLine tone={saved.tone}>{saved.text}</StatusLine>}
         </div>
         {status?.next_run_at && (
           <p className={NOTE}>

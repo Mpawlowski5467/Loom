@@ -294,7 +294,40 @@ describe("ConnectionsSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("saves schedule and private feed settings", async () => {
+  it("saves the schedule from the Standup card", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateStandupAutomation).mockResolvedValue({
+      ...automation,
+      schedule: { enabled: true, run_time: "07:30", timezone: "Europe/Warsaw" },
+    });
+    renderSection();
+    const timezone = await screen.findByDisplayValue("America/Chicago");
+    await user.click(
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
+    );
+    await user.clear(screen.getByLabelText("Run time"));
+    await user.type(screen.getByLabelText("Run time"), "07:30");
+    await user.clear(timezone);
+    await user.type(timezone, "Europe/Warsaw");
+    await user.clear(screen.getByLabelText("Calendar name"));
+    await user.type(screen.getByLabelText("Calendar name"), "Work");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Save Standup schedule" }),
+    );
+
+    expect(await screen.findByText("Schedule saved.")).toBeInTheDocument();
+    expect(updateStandupAutomation).toHaveBeenCalledTimes(1);
+    expect(updateStandupAutomation).toHaveBeenCalledWith({
+      schedule: { enabled: true, run_time: "07:30", timezone: "Europe/Warsaw" },
+    });
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    // The calendar card's unsaved edit is neither sent nor reset.
+    expect(screen.getByLabelText("Calendar name")).toHaveValue("Work");
+  });
+
+  it("saves the private feed and keeps unsaved schedule edits", async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByDisplayValue("America/Chicago");
@@ -308,18 +341,21 @@ describe("ConnectionsSection", () => {
       screen.getByPlaceholderText("webcal://… or https://…"),
       "https://calendar.example/private.ics",
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(updateStandupAutomation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          schedule: expect.objectContaining({ enabled: true }),
-          calendar: expect.objectContaining({
-            enabled: true,
-            feed_url: "https://calendar.example/private.ics",
-          }),
-        }),
-      ),
+    await user.click(
+      screen.getByRole("button", { name: "Save calendar feed settings" }),
     );
+    await waitFor(() =>
+      expect(updateStandupAutomation).toHaveBeenCalledWith({
+        calendar: expect.objectContaining({
+          enabled: true,
+          feed_url: "https://calendar.example/private.ics",
+        }),
+      }),
+    );
+    expect(
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
+    ).toBeChecked();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
   it("tests the feed and renders its event preview", async () => {

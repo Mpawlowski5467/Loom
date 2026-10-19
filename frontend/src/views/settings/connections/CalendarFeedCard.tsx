@@ -105,6 +105,7 @@ export function CalendarFeedCard({
           <Button
             type="button"
             size="sm"
+            aria-label="Save calendar feed settings"
             onClick={() => void standup.save()}
             disabled={!automation || busy !== null}
           >

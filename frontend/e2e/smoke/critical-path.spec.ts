@@ -156,10 +156,19 @@ test("onboards without a provider and files a reviewed demo capture", async ({
   await expect(viewTab(page, "Inbox")).toBeVisible();
   await viewTab(page, "Inbox").click();
   await page
+    .getByRole("list", { name: "Captures" })
     .getByRole("button", { name: /Sigma 3 nodeReducer interpolation trick/ })
     .click();
-  await expect(page.getByText("Weaver suggestion")).toBeVisible();
-  await page.getByRole("button", { name: "accept & file" }).click();
+  await expect(
+    page.getByRole("region", { name: "Weaver's proposal" }),
+  ).toBeVisible();
+  const inboxAxe = await new AxeBuilder({ page }).analyze();
+  expect(
+    inboxAxe.violations.filter(({ impact }) =>
+      ["serious", "critical"].includes(impact ?? ""),
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Approve and file" }).click();
 
   await expectView(page, "Notes");
   await expect(

@@ -23,8 +23,11 @@ async function createCapture(
     page.getByRole("dialog", { name: "Quick capture" }),
   ).toBeHidden();
   await openInbox(page);
-  await expect(page.getByRole("button", { name: title })).toBeVisible();
-  await page.getByRole("button", { name: title }).click();
+  const row = page
+    .getByRole("list", { name: "Captures" })
+    .getByRole("button", { name: new RegExp(title) });
+  await expect(row).toBeVisible();
+  await row.click();
 }
 
 test("real backend capture preview, edit, file, archive, restore, and reload", async ({
@@ -66,9 +69,11 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     "Browser lifecycle capture",
     "A real backend fixture capture for lifecycle smoke testing.",
   );
-  await expect(page.getByText("Weaver suggestion")).toBeVisible();
-  await page.getByRole("button", { name: "edit suggestion" }).click();
-  const editDialog = page.getByRole("dialog", { name: /Edit suggestion/i });
+  await expect(
+    page.getByRole("region", { name: "Weaver's proposal" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Edit first" }).click();
+  const editDialog = page.getByRole("dialog", { name: /Edit the proposal/i });
   await expect(editDialog).toBeVisible();
   await editDialog
     .getByRole("textbox")
@@ -211,8 +216,10 @@ test("provider failure leaves the original capture reviewable", async ({
     "Provider failure capture",
     "BROWSER_PROVIDER_FAILURE — preserve this source for review.",
   );
-  await expect(page.getByText("Weaver suggestion")).toBeVisible();
-  await page.getByRole("button", { name: "accept & file" }).click();
+  await expect(
+    page.getByRole("region", { name: "Weaver's proposal" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Approve and file" }).click();
   await expect(
     page.getByRole("alert").filter({ hasText: "Needs review" }),
   ).toBeVisible();

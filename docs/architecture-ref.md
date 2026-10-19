@@ -175,9 +175,12 @@ suggested relation is only accepted by a version-checked, locked write.
 All capture producers call `core.capture_ingress.ingest_capture`. It validates
 provenance, deduplicates external sources, writes the capture, indexes it, and
 creates a per-vault SQLite job. Inbox exposes active, review, failed, and
-history states with retry and cancellation. Capture review can compare proposed
-text, identify duplicate candidates using deterministic similarity evidence,
-and perform an explicitly approved, version-checked merge.
+history states with retry and cancellation. Selecting a capture shows Weaver's
+proposal (a lazy, cached preview), the links Spider would add, and a pre-check
+estimated in the browser until the backend stores proposals with Sentinel's
+own pre-check. Capture review can compare proposed text, identify duplicate
+candidates using deterministic similarity evidence, and perform an explicitly
+approved, version-checked merge.
 
 The Loom layer contains Weaver, Spider, Archivist, Scribe, and Sentinel. The
 Shuttle layer contains Researcher and Standup plus user-defined Shuttle agents.

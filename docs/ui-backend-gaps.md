@@ -29,7 +29,7 @@ rebuild phase, no client yet.
 | 8 | Persisted Archivist findings per note | Graph note panel | mocked; superseded warning derived |
 | 9 | Agent stats and scheduled/watching states | Board | derived |
 | 10 | Council with note context, proposed changes | Notes, Board | Ask Council prefills; diff/undo wired, waiting on `commits` |
-| 11 | Stored capture proposals with a Sentinel pre-check | Inbox | planned |
+| 11 | Stored capture proposals with a Sentinel pre-check | Inbox | mocked; pre-check estimated in the browser otherwise |
 | 12 | Structured daily summary | Threads | planned (derived from changelog) |
 | 13 | Vault stats and actions per day | Threads | planned (derived) |
 | 14 | Per-note agent activity feed | Notes | derived |
@@ -222,11 +222,27 @@ The backend sends none, so those buttons don't appear yet.
 - A Sentinel pre-check in it. `POST /api/captures/preview` is an on-demand LLM
   dry run with no Sentinel step.
 
-**Today:** previews load lazily on selection and are cached per capture for
-the session, and the pre-check list is mocked. MCP and Telegram sources
-(roadmap items 5 and 7) don't exist; source badges map the real `source`
-strings (`manual:clipper` → Web clip, `bridge:email`/`bridge:gmail` → Email,
-and so on).
+**Shape the UI reads** (`frontend/src/api/proposals.ts`):
+`GET /api/captures/proposals` → `[{capture_id, ready, precheck: [{rule,
+status: pass|warn|fail, message}]}]`.
+
+**Today:** without that endpoint (a 404 reads as "unsupported"):
+
+- Weaver's proposal loads lazily when a capture is selected
+  (`POST /api/captures/preview`, an LLM dry run) and is cached for the session.
+  A row reads "Proposal ready" once its preview has loaded, or for demo seeds;
+  otherwise "New".
+- The Sentinel pre-check is estimated in the browser from that preview
+  (`views/inbox/precheck.ts`: title clash, new folder, no tags, no links,
+  close duplicate, oversized source) and labelled as an estimate. Sentinel
+  still validates on filing.
+- Under `VITE_LOOM_MOCKS` a mock adapter marks every waiting capture ready
+  with a server-style pre-check.
+
+MCP and Telegram sources (roadmap items 5 and 7) don't exist; source badges
+map the real `source` strings (`manual:clipper` → Web clip,
+`bridge:email`/`bridge:gmail` → Email, `bridge:*cal*` → Calendar,
+`agent:<name>` → the agent, and so on, in `views/inbox/captureSource.ts`).
 
 ## 12. Structured daily summary
 

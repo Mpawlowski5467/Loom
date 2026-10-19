@@ -8,10 +8,6 @@ import type {
   VaultListResponse,
 } from "./types";
 
-export function getVault(signal?: AbortSignal): Promise<ActiveVaultResponse> {
-  return apiClient.get<ActiveVaultResponse>("/api/vaults/active", signal);
-}
-
 export function listVaults(signal?: AbortSignal): Promise<VaultListResponse> {
   return apiClient.get<VaultListResponse>("/api/vaults", signal);
 }

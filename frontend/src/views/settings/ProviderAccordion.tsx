@@ -1,64 +1,61 @@
 import type { ReactNode } from "react";
-import {
-  CheckCircle2,
-  ExternalLink,
-  Link2,
-  Plus,
-  TestTube2,
-  Trash2,
-} from "lucide-react";
-import type { TestProviderResponse } from "../../api/types";
-import { ModelCombobox } from "./ModelCombobox";
-import type { ProviderForm, ProviderMeta } from "./providerModels";
+import { CheckCircle2, ChevronDown, Link2, Plus } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { ConnectNote } from "./models/ConnectNote";
+import type { ProviderAccordionProps } from "./models/providerCardProps";
+import { ProviderFormFields } from "./models/ProviderFormFields";
 
-interface Props {
-  meta: ProviderMeta;
-  provider?: ProviderForm;
-  open: boolean;
-  count: number;
-  test?: TestProviderResponse;
-  testing: boolean;
-  authBusy?: boolean;
-  connectionLabel?: string;
-  chatOptions?: string[];
-  embedOptions?: string[];
-  onToggle: () => void;
-  onAdd: () => void;
-  onPatch: (patch: Partial<ProviderForm>) => void;
-  onRemove: () => void;
-  onTest: () => void;
-  onConnect?: () => void;
-}
-
-export function ProviderAccordion(props: Props): ReactNode {
+/** One provider's card: a header that opens it, then its setup or form. */
+export function ProviderAccordion(props: ProviderAccordionProps): ReactNode {
+  const { meta, open } = props;
   const configured = Boolean(props.provider);
-  const deleteDisabled = props.count <= 1;
   return (
-    <article className="settings-provider-card">
+    <article className="overflow-hidden rounded-lg border border-border bg-card text-card-foreground">
       <button
-        className="settings-provider-head"
+        className="flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-accent/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none focus-visible:ring-inset"
         type="button"
-        aria-expanded={props.open}
+        aria-expanded={open}
         onClick={props.onToggle}
       >
-        <span className="settings-provider-icon" aria-hidden="true">
-          <props.meta.icon size={18} />
+        <span
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-brand"
+          aria-hidden="true"
+        >
+          <meta.icon size={18} />
         </span>
-        <span>
-          <strong>{props.meta.label}</strong>
-          <small>
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <strong className="text-sm font-semibold text-foreground">
+            {meta.label}
+          </strong>
+          <small className="truncate font-mono text-xs text-muted-foreground">
             {props.connectionLabel ??
               (configured ? "Account connected" : "Account not connected")}
           </small>
         </span>
-        {configured && <CheckCircle2 size={15} aria-hidden="true" />}
+        {configured && (
+          <CheckCircle2
+            className="size-4 shrink-0 text-ok-foreground"
+            aria-hidden="true"
+          />
+        )}
+        <ChevronDown
+          className={cn(
+            "size-4 shrink-0 text-muted-foreground transition-transform",
+            open && "rotate-180",
+          )}
+          aria-hidden="true"
+        />
       </button>
-      {props.open && (
-        <div className="settings-provider-body">
-          <p className="settings-provider-usage">
-            <strong>Used in Loom:</strong> agents, Council chat, Researcher,
-            Standup, capture processing, and summaries.
-            {props.meta.supportsEmbed
+      {open && (
+        <div className="flex flex-col gap-4 px-4 pt-1 pb-4">
+          <p className="text-sm text-muted-foreground">
+            <strong className="font-medium text-foreground">
+              Used in Loom:
+            </strong>{" "}
+            agents, Council chat, Researcher, Standup, capture processing, and
+            summaries.
+            {meta.supportsEmbed
               ? " It can also power semantic search and graph linking."
               : " Pair it with an embedding provider for semantic search and graph linking."}
           </p>
@@ -66,57 +63,10 @@ export function ProviderAccordion(props: Props): ReactNode {
             <ProviderFormFields
               {...props}
               provider={props.provider}
-              deleteDisabled={deleteDisabled}
+              deleteDisabled={props.count <= 1}
             />
           ) : (
-            <>
-              {(props.meta.authMode === "codex" ||
-                props.meta.authMode === "oauth_pkce") &&
-              props.onConnect ? (
-                <div className="settings-provider-connect-note" role="note">
-                  <strong>Connect {props.meta.label}</strong>
-                  <span>
-                    {props.meta.authMode === "codex"
-                      ? "Sign in with ChatGPT through the local Codex credential store."
-                      : "Approve Loom in your browser; the resulting key is encrypted locally."}
-                  </span>
-                  <button
-                    className="btn btn-md btn-active"
-                    type="button"
-                    onClick={props.onConnect}
-                    disabled={props.authBusy}
-                  >
-                    <Link2 size={14} aria-hidden="true" />
-                    {props.authBusy
-                      ? "Opening…"
-                      : `Connect ${props.meta.label}`}
-                  </button>
-                </div>
-              ) : (
-                <div className="settings-provider-connect-note" role="note">
-                  <strong>
-                    {props.meta.authMode === "api_key"
-                      ? `Connect ${props.meta.label}`
-                      : `Add ${props.meta.label}`}
-                  </strong>
-                  <span>
-                    {props.meta.authMode === "api_key"
-                      ? `${props.meta.label}'s developer account connects with a one-time API key. Loom encrypts it locally and never returns it.`
-                      : "Configure this local provider to make it available to Loom."}
-                  </span>
-                  <button
-                    className="btn btn-md btn-active"
-                    type="button"
-                    onClick={props.onAdd}
-                  >
-                    <Plus size={14} aria-hidden="true" />
-                    {props.meta.authMode === "api_key"
-                      ? "Connect with API key"
-                      : "Add provider"}
-                  </button>
-                </div>
-              )}
-            </>
+            <ProviderSetupNote {...props} />
           )}
         </div>
       )}
@@ -124,158 +74,48 @@ export function ProviderAccordion(props: Props): ReactNode {
   );
 }
 
-function ProviderFormFields(
-  props: Props & { provider: ProviderForm; deleteDisabled: boolean },
-): ReactNode {
+/** How an unconfigured provider connects: delegated sign-in or a key/host. */
+function ProviderSetupNote(props: ProviderAccordionProps) {
+  const { meta } = props;
+  if (
+    (meta.authMode === "codex" || meta.authMode === "oauth_pkce") &&
+    props.onConnect
+  ) {
+    return (
+      <ConnectNote
+        title={`Connect ${meta.label}`}
+        action={
+          <Button
+            size="sm"
+            type="button"
+            onClick={props.onConnect}
+            disabled={props.authBusy}
+          >
+            <Link2 aria-hidden="true" />
+            {props.authBusy ? "Opening…" : `Connect ${meta.label}`}
+          </Button>
+        }
+      >
+        {meta.authMode === "codex"
+          ? "Sign in with ChatGPT through the local Codex credential store."
+          : "Approve Loom in your browser; the resulting key is encrypted locally."}
+      </ConnectNote>
+    );
+  }
+  const apiKey = meta.authMode === "api_key";
   return (
-    <>
-      {props.meta.authMode === "codex" && (
-        <div className="settings-provider-connect-note" role="note">
-          <strong>Local Codex integration</strong>
-          <span>
-            Uses Codex's own ChatGPT sign-in and credential store. Loom never
-            reads or copies those tokens. Chat only; embeddings still need a
-            separate provider.
-          </span>
-          <button
-            className="btn btn-md"
-            type="button"
-            onClick={props.onConnect}
-            disabled={props.authBusy}
-          >
-            <Link2 size={14} aria-hidden="true" />
-            {props.authBusy ? "Opening…" : "Connect Codex"}
-          </button>
-        </div>
-      )}
-      {(props.meta.authMode === "api_key" ||
-        props.meta.authMode === "oauth_pkce") && (
-        <label className="settings-field">
-          <span className="settings-field-label">
-            API key
-            <a
-              className="settings-credential-link"
-              href={props.meta.credentialUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              {props.meta.authMode === "oauth_pkce"
-                ? "Create manually"
-                : "Create API key"}
-              <ExternalLink size={11} aria-hidden="true" />
-            </a>
-          </span>
-          <input
-            className="input mono"
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={props.provider.apiKey}
-            placeholder={props.provider.apiKeySet ? "Key is set" : "API key"}
-            onChange={(e) => props.onPatch({ apiKey: e.target.value })}
-          />
-        </label>
-      )}
-      {props.meta.authMode === "oauth_pkce" && (
-        <div className="settings-provider-connect-note" role="note">
-          <strong>One-click connection</strong>
-          <span>
-            OpenRouter will ask you to approve Loom, then creates a dedicated
-            API key that Loom encrypts locally.
-          </span>
-          <button
-            className="btn btn-md"
-            type="button"
-            onClick={props.onConnect}
-            disabled={props.authBusy}
-          >
-            <Link2 size={14} aria-hidden="true" />
-            {props.authBusy ? "Opening…" : "Connect OpenRouter"}
-          </button>
-        </div>
-      )}
-      {props.meta.authMode === "local" && (
-        <label className="settings-field">
-          <span className="settings-field-label">Host</span>
-          <input
-            className="input mono"
-            type="text"
-            value={props.provider.host}
-            placeholder={props.meta.defaultHost}
-            onChange={(e) => props.onPatch({ host: e.target.value })}
-          />
-        </label>
-      )}
-      {props.meta.supportsBaseUrl && (
-        <label className="settings-field">
-          <span className="settings-field-label">API base URL</span>
-          <input
-            className="input mono"
-            type="text"
-            value={props.provider.baseUrl}
-            placeholder={props.meta.defaultBaseUrl}
-            onChange={(e) => props.onPatch({ baseUrl: e.target.value })}
-          />
-          <span className="settings-field-hint">
-            Leave blank to use {props.meta.defaultBaseUrl}.
-          </span>
-        </label>
-      )}
-      <div className="settings-field-row">
-        <ModelCombobox
-          label="Chat model"
-          value={props.provider.chatModel}
-          options={props.chatOptions ?? props.meta.chatModels}
-          onChange={(chatModel) => props.onPatch({ chatModel })}
-        />
-        <ModelCombobox
-          label="Embed model"
-          value={props.provider.embedModel}
-          options={props.embedOptions ?? props.meta.embedModels}
-          disabled={!props.meta.supportsEmbed}
-          onChange={(embedModel) => props.onPatch({ embedModel })}
-        />
-      </div>
-      <div className="settings-provider-actions">
-        <button
-          className="btn btn-md"
-          type="button"
-          onClick={props.onTest}
-          disabled={props.testing}
-        >
-          <TestTube2 size={14} aria-hidden="true" />
-          {props.testing ? "Testing…" : "Test"}
-        </button>
-        <button
-          className="btn btn-md"
-          type="button"
-          onClick={props.onRemove}
-          disabled={props.deleteDisabled}
-          title={
-            props.deleteDisabled
-              ? "At least one provider must be configured."
-              : undefined
-          }
-        >
-          <Trash2 size={14} aria-hidden="true" />
-          Delete
-        </button>
-        {props.deleteDisabled && (
-          <span className="settings-hint">
-            At least one provider must be configured.
-          </span>
-        )}
-      </div>
-      {props.test && (
-        <div
-          className={`settings-test-result ${props.test.ok ? "ok" : "fail"}`}
-          role="status"
-        >
-          {props.test.ok
-            ? `OK — ${props.test.latency_ms}ms`
-            : `Failed — ${props.test.error ?? "unknown"}`}
-        </div>
-      )}
-    </>
+    <ConnectNote
+      title={apiKey ? `Connect ${meta.label}` : `Add ${meta.label}`}
+      action={
+        <Button size="sm" type="button" onClick={props.onAdd}>
+          <Plus aria-hidden="true" />
+          {apiKey ? "Connect with API key" : "Add provider"}
+        </Button>
+      }
+    >
+      {apiKey
+        ? `${meta.label}'s developer account connects with a one-time API key. Loom encrypts it locally and never returns it.`
+        : "Configure this local provider to make it available to Loom."}
+    </ConnectNote>
   );
 }

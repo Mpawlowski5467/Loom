@@ -1,11 +1,16 @@
 import { ExternalLink } from "lucide-react";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   pollGitHubSignIn,
   startGitHubSignIn,
   type GitHubSignInStart,
-} from "../../api/automations";
-import { CopyChip } from "./connector-flow";
+} from "@/api/automations";
+import { Button } from "@/components/ui/button";
+import { StatusLine } from "@/views/settings/kit/StatusLine";
+import { AlertLine } from "./connections/AlertLine";
+import { CheckboxField } from "./connections/CheckboxField";
+import { CopyChip } from "./connections/CopyChip";
+import { describeApiError } from "@/api/client";
 
 /**
  * "Sign in with GitHub" using the device flow (like `gh auth login`): Loom
@@ -29,7 +34,7 @@ export function GitHubSignIn({
   onConnected,
   onSignOut,
   disabled = false,
-}: GitHubSignInProps): ReactNode {
+}: GitHubSignInProps) {
   const [includePrivate, setIncludePrivate] = useState(false);
   const [pending, setPending] = useState<GitHubSignInStart | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,7 +75,7 @@ export function GitHubSignIn({
       } catch (err) {
         if (controller.signal.aborted) return;
         setPending(null);
-        setError(err instanceof Error ? err.message : "GitHub sign-in failed");
+        setError(describeApiError(err, "GitHub sign-in failed"));
       }
     };
     timer = window.setTimeout(() => void tick(), interval * 1000);
@@ -86,9 +91,7 @@ export function GitHubSignIn({
     try {
       setPending(await startGitHubSignIn(includePrivate));
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Could not start GitHub sign-in",
-      );
+      setError(describeApiError(err, "Could not start GitHub sign-in"));
     } finally {
       setBusy(false);
     }
@@ -100,7 +103,7 @@ export function GitHubSignIn({
     try {
       await onSignOut();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not sign out");
+      setError(describeApiError(err, "Could not sign out"));
     } finally {
       setBusy(false);
     }
@@ -108,23 +111,18 @@ export function GitHubSignIn({
 
   if (account) {
     return (
-      <div className="settings-actions connector-signin">
-        <p className="settings-connection-status" role="status">
-          Signed in as @{account}
-        </p>
-        <button
-          className="btn btn-md"
+      <div className="flex flex-wrap items-center gap-3">
+        <StatusLine>Signed in as @{account}</StatusLine>
+        <Button
           type="button"
+          variant="outline"
+          size="sm"
           onClick={() => void signOut()}
           disabled={busy || disabled}
         >
           {busy ? "Signing out…" : "Sign out"}
-        </button>
-        {error && (
-          <p className="settings-test-result fail" role="alert">
-            {error}
-          </p>
-        )}
+        </Button>
+        {error && <AlertLine className="basis-full">{error}</AlertLine>}
       </div>
     );
   }
@@ -134,71 +132,58 @@ export function GitHubSignIn({
       ? pending.verification_uri
       : "https://github.com/login/device";
     return (
-      <div className="github-device">
-        <p className="settings-connection-status">
+      <div className="flex flex-col gap-3">
+        <p className="text-sm text-muted-foreground">
           Enter this code on GitHub to connect Loom:
         </p>
-        <p className="github-device-code">
-          <code aria-label="GitHub sign-in code">{pending.user_code}</code>
+        <p className="flex flex-wrap items-center gap-3">
+          <code
+            aria-label="GitHub sign-in code"
+            className="font-mono text-2xl tracking-widest text-foreground"
+          >
+            {pending.user_code}
+          </code>
           <CopyChip text={pending.user_code} />
         </p>
-        <div className="settings-actions">
-          <a
-            className="btn btn-md btn-active"
-            href={verifyUrl}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <ExternalLink size={13} aria-hidden="true" />
-            Open GitHub
-          </a>
-          <button
-            className="btn btn-md"
+        <div className="flex flex-wrap items-center gap-2">
+          <Button asChild size="sm">
+            <a href={verifyUrl} target="_blank" rel="noreferrer">
+              <ExternalLink aria-hidden="true" />
+              Open GitHub
+            </a>
+          </Button>
+          <Button
             type="button"
+            variant="outline"
+            size="sm"
             onClick={() => setPending(null)}
           >
             Cancel
-          </button>
+          </Button>
         </div>
-        <p className="settings-connection-status" role="status">
-          Waiting for you to approve on GitHub…
-        </p>
+        <StatusLine>Waiting for you to approve on GitHub…</StatusLine>
       </div>
     );
   }
 
   return (
-    <div className="github-device">
-      <div className="settings-actions connector-signin">
-        <button
-          className="btn btn-md btn-active"
-          type="button"
-          onClick={() => void start()}
-          disabled={busy || disabled}
-        >
-          {busy ? "Starting…" : "Sign in with GitHub"}
-        </button>
-      </div>
-      <label className="settings-toggle-row">
-        <input
-          type="checkbox"
-          checked={includePrivate}
-          onChange={(event) => setIncludePrivate(event.target.checked)}
-        />
-        <span>
-          <span className="settings-toggle-label">
-            Include private repositories
-          </span>
-          <span className="settings-toggle-hint">
-            GitHub asks for full repository access for this; Loom only reads.
-          </span>
-        </span>
-      </label>
-      {error && (
-        <p className="settings-test-result fail" role="alert">
-          {error}
-        </p>
-      )}
+    <div className="flex flex-col gap-3">
+      <Button
+        type="button"
+        size="sm"
+        className="self-start"
+        onClick={() => void start()}
+        disabled={busy || disabled}
+      >
+        {busy ? "Starting…" : "Sign in with GitHub"}
+      </Button>
+      <CheckboxField
+        label="Include private repositories"
+        hint="GitHub asks for full repository access for this; Loom only reads."
+        checked={includePrivate}
+        onCheckedChange={setIncludePrivate}
+      />
+      {error && <AlertLine>{error}</AlertLine>}
     </div>
   );
 }

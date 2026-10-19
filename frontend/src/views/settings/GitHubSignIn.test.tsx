@@ -42,12 +42,17 @@ describe("GitHubSignIn", () => {
   });
 
   it("shows the code to enter on GitHub, then reports the signed-in account", async () => {
+    // GitHub reports the approval only once the code has been checked, so
+    // the 0s poll interval can't race the assertions below.
+    let approve = () => {};
+    const approved = new Promise<void>((resolve) => {
+      approve = resolve;
+    });
     vi.mocked(pollGitHubSignIn)
       .mockResolvedValueOnce({ status: "pending", interval: 0, account: "" })
-      .mockResolvedValueOnce({
-        status: "connected",
-        interval: 0,
-        account: "ada-dev",
+      .mockImplementationOnce(async () => {
+        await approved;
+        return { status: "connected", interval: 0, account: "ada-dev" };
       });
     const { onConnected } = renderSignIn();
 
@@ -62,6 +67,7 @@ describe("GitHubSignIn", () => {
       "href",
       "https://github.com/login/device",
     );
+    approve();
     await waitFor(() => expect(onConnected).toHaveBeenCalledWith("ada-dev"));
     expect(startGitHubSignIn).toHaveBeenCalledWith(false);
     expect(pollGitHubSignIn).toHaveBeenCalledWith("flow-1", expect.anything());

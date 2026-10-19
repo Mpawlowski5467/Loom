@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
@@ -163,28 +163,35 @@ describe("VaultSection — rename", () => {
 });
 
 describe("VaultSection — delete", () => {
-  it("archives only when the typed confirmation matches the name", async () => {
+  it("archives only after the vault name is typed", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "prompt").mockReturnValue("scratch");
     renderSection([vault("main", true), vault("scratch")], "main");
     await screen.findByText("scratch");
 
     // scratch is non-active so its Delete is enabled.
     const deletes = screen.getAllByRole("button", { name: /Delete/ });
     await user.click(deletes[deletes.length - 1]!);
+    const dialog = await screen.findByRole("dialog");
+    const confirm = within(dialog).getByRole("button", {
+      name: "Archive vault",
+    });
+    expect(confirm).toBeDisabled();
+    await user.type(within(dialog).getByRole("textbox"), "scratch");
+    await user.click(confirm);
     await waitFor(() => expect(archiveVault).toHaveBeenCalledWith("scratch"));
   });
 
-  it("does not archive when the confirmation does not match", async () => {
+  it("does not archive when the dialog is cancelled", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "prompt").mockReturnValue("wrong");
     renderSection([vault("main", true), vault("scratch")], "main");
     await screen.findByText("scratch");
 
     const deletes = screen.getAllByRole("button", { name: /Delete/ });
     await user.click(deletes[deletes.length - 1]!);
+    await user.type(await screen.findByRole("textbox", { name: /./ }), "wrong");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(archiveVault).not.toHaveBeenCalled();
-    expect(await screen.findByText(/did not match/)).toBeInTheDocument();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("disables delete for the active vault", async () => {

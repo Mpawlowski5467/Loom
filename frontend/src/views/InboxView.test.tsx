@@ -12,7 +12,6 @@ import { ApiError } from "../api/client";
 const {
   previewCapture,
   commitCapture,
-  processCapture,
   skipCapture,
   listCaptureJobs,
   enqueueCaptureJob,
@@ -25,7 +24,6 @@ const {
 } = vi.hoisted(() => ({
   previewCapture: vi.fn(),
   commitCapture: vi.fn(),
-  processCapture: vi.fn(),
   skipCapture: vi.fn(),
   listCaptureJobs: vi.fn(),
   enqueueCaptureJob: vi.fn(),
@@ -44,7 +42,6 @@ vi.mock("../api/captures", async (importOriginal) => {
     ...actual,
     previewCapture,
     commitCapture,
-    processCapture,
     skipCapture,
     listCaptureJobs,
     enqueueCaptureJob,
@@ -95,9 +92,14 @@ function mkNoteRecord(
   } as CommitResult["note"];
 }
 
+/** Open the auto-process popover in the Inbox header. */
+async function openAutomation() {
+  await userEvent.click(screen.getByRole("button", { name: /Auto-process:/ }));
+}
+
 /** Title text inside list rows only (the detail pane also renders the title). */
 function listTitles(): string[] {
-  return Array.from(document.querySelectorAll(".inbox-card-title")).map(
+  return Array.from(document.querySelectorAll("[data-capture-title]")).map(
     (el) => el.textContent ?? "",
   );
 }
@@ -164,6 +166,8 @@ function renderInbox(
     capturesError: opts.capturesError ?? null,
     selectedCaptureId: opts.selectedCaptureId ?? null,
     noteById: () => undefined,
+    communities: { slotOf: new Map(), communities: [], key: "" },
+    setQuickCaptureOpen: vi.fn(),
     ...spies,
   } as unknown as AppContextValue;
 
@@ -182,7 +186,6 @@ beforeEach(() => {
   window.localStorage.removeItem("loom.demoMode");
   previewCapture.mockReset();
   commitCapture.mockReset();
-  processCapture.mockReset();
   skipCapture.mockReset();
   listCaptureJobs.mockReset();
   enqueueCaptureJob.mockReset();
@@ -213,7 +216,9 @@ describe("InboxView — listing & filtering", () => {
     expect(listTitles()).toContain("Alpha");
     expect(listTitles()).toContain("Beta");
     // One of two is not done → pending count 1.
-    expect(document.querySelector(".inbox-count")?.textContent).toBe("1");
+    expect(screen.getByRole("tab", { name: /Captures/ })).toHaveTextContent(
+      /^Captures1$/,
+    );
   });
 
   it("filters the list by the search query", async () => {
@@ -241,7 +246,7 @@ describe("InboxView — listing & filtering", () => {
       { selectedCaptureId: "mail" },
     );
 
-    expect(screen.getByText("bridge:gmail")).toBeInTheDocument();
+    expect(screen.getByText("via bridge:gmail")).toBeInTheDocument();
     expect(screen.getByText("ada@example.com")).toBeInTheDocument();
     await user.type(
       screen.getByLabelText("Search captures"),
@@ -295,11 +300,12 @@ describe("InboxView — background processing", () => {
     });
     renderInbox([demoCapture], { selectedCaptureId: demoCapture.id });
 
+    await openAutomation();
     expect(
       screen.getByRole("combobox", { name: "Auto-process" }),
     ).toBeDisabled();
     expect(
-      screen.queryByRole("button", { name: "queue processing" }),
+      screen.queryByRole("button", { name: "Queue processing" }),
     ).toBeNull();
     expect(listCaptureJobs).not.toHaveBeenCalled();
     expect(getCaptureProcessingPolicy).not.toHaveBeenCalled();
@@ -322,6 +328,10 @@ describe("InboxView — background processing", () => {
     }));
     renderInbox([]);
 
+    await screen.findByRole("button", {
+      name: /Auto-process: Selected sources/,
+    });
+    await openAutomation();
     const input = await screen.findByLabelText("Auto-process source names");
     expect(input).toHaveValue("bridge:gmail");
     await user.clear(input);
@@ -346,6 +356,7 @@ describe("InboxView — background processing", () => {
     });
     renderInbox([]);
 
+    await openAutomation();
     const policy = screen.getByRole("combobox", { name: "Auto-process" });
     await waitFor(() => expect(policy).toBeEnabled());
     await user.selectOptions(policy, "all");
@@ -365,14 +376,14 @@ describe("InboxView — background processing", () => {
     retryCaptureJob.mockResolvedValue(queued);
     renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
-    const cancel = await screen.findByRole("button", { name: "cancel job" });
+    const cancel = await screen.findByRole("button", { name: "Cancel job" });
     expect(screen.getByLabelText("Select Meeting notes")).toBeDisabled();
     expect(previewCapture).not.toHaveBeenCalled();
     await user.click(cancel);
 
     await waitFor(() => expect(cancelCaptureJob).toHaveBeenCalledWith("job_1"));
     expect(await screen.findByText("Processing cancelled")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "queue again" }));
+    await user.click(screen.getByRole("button", { name: "Queue again" }));
     await waitFor(() => expect(retryCaptureJob).toHaveBeenCalledWith("job_1"));
   });
 
@@ -408,10 +419,12 @@ describe("InboxView — background processing", () => {
     ]);
     renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
-    expect(await screen.findByText("Attempt 2 of 3")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Retrying · attempt 2 of 3"),
+    ).toBeInTheDocument();
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "cancel retry" }),
+      screen.getByRole("button", { name: "Cancel retry" }),
     ).toBeInTheDocument();
   });
 
@@ -454,7 +467,7 @@ describe("InboxView — preview & accept", () => {
     );
     expect(await screen.findByText("Filed Title")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /accept & file/ }),
+      screen.getByRole("button", { name: /Approve and file/ }),
     ).toBeInTheDocument();
   });
 
@@ -464,7 +477,7 @@ describe("InboxView — preview & accept", () => {
     expect(
       await screen.findByText(/Empty capture — nothing to file/),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "retry" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
   it("commits the preview on accept, removes the filed capture, and appends the note", async () => {
@@ -485,7 +498,7 @@ describe("InboxView — preview & accept", () => {
     const spies = renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
     await screen.findByText("Filed Title");
-    await user.click(screen.getByRole("button", { name: /accept & file/ }));
+    await user.click(screen.getByRole("button", { name: /Approve and file/ }));
 
     await waitFor(() =>
       expect(commitCapture).toHaveBeenCalledWith(
@@ -512,7 +525,7 @@ describe("InboxView — preview & accept", () => {
     const spies = renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
     await screen.findByText("Filed Title");
-    await user.click(screen.getByRole("button", { name: /accept & file/ }));
+    await user.click(screen.getByRole("button", { name: /Approve and file/ }));
 
     await waitFor(() =>
       expect(spies.removeCapture).toHaveBeenCalledWith("cap_1"),
@@ -529,7 +542,7 @@ describe("InboxView — preview & accept", () => {
     const spies = renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
     await screen.findByText("Filed Title");
-    await user.click(screen.getByRole("button", { name: /accept & file/ }));
+    await user.click(screen.getByRole("button", { name: /Approve and file/ }));
 
     await waitFor(() =>
       expect(spies.setCaptureStatus).toHaveBeenCalledWith("cap_1", "pending"),
@@ -559,7 +572,7 @@ describe("InboxView — preview & accept", () => {
     const spies = renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
 
     await screen.findByText("Filed Title");
-    await user.click(screen.getByRole("button", { name: /accept & file/ }));
+    await user.click(screen.getByRole("button", { name: /Approve and file/ }));
 
     await waitFor(() =>
       expect(spies.setCaptureStatus).toHaveBeenCalledWith(
@@ -571,7 +584,7 @@ describe("InboxView — preview & accept", () => {
     expect(spies.appendNote).not.toHaveBeenCalled();
     expect(spies.openNote).not.toHaveBeenCalled();
     expect(
-      screen.queryByRole("button", { name: "open draft note" }),
+      screen.queryByRole("button", { name: "Open draft note" }),
     ).not.toBeInTheDocument();
     expect(spies.pushToast).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -676,7 +689,7 @@ describe("InboxView — bulk actions", () => {
     );
     expect(spies.setCaptureStatus).not.toHaveBeenCalledWith("a", "processing");
     expect(spies.removeCapture).not.toHaveBeenCalled();
-    expect((await screen.findAllByText("queued")).length).toBeGreaterThan(0);
+    expect((await screen.findAllByText("Queued")).length).toBeGreaterThan(0);
   });
 
   it("retries a terminal job instead of creating a duplicate", async () => {
@@ -697,7 +710,7 @@ describe("InboxView — bulk actions", () => {
     });
     renderInbox([mkCapture({ id: "a", title: "Alpha" })]);
 
-    expect(await screen.findByText("failed")).toBeInTheDocument();
+    expect(await screen.findByText("Failed")).toBeInTheDocument();
     await user.click(screen.getByLabelText("Select all"));
     await user.click(screen.getByRole("button", { name: "Queue" }));
 
@@ -764,7 +777,7 @@ describe("InboxView — selection", () => {
     renderInbox([mkCapture({ status: "done" })], {
       selectedCaptureId: "cap_1",
     });
-    const detail = screen.getByText("✓ filed");
+    const detail = screen.getByText(/This capture has been processed/);
     expect(detail).toBeInTheDocument();
     // No preview fetch for an already-done capture.
     expect(previewCapture).not.toHaveBeenCalled();
@@ -790,15 +803,15 @@ describe("InboxView — selection", () => {
     expect(previewCapture).not.toHaveBeenCalled();
 
     expect(
-      screen.queryByRole("button", { name: "open draft note" }),
+      screen.queryByRole("button", { name: "Open draft note" }),
     ).not.toBeInTheDocument();
     expect(
       screen.getByText(
-        /kept this capture in Inbox because it could not safely publish/i,
+        /kept this capture in the Inbox because it couldn.t safely publish/i,
       ),
     ).toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "retry processing" }));
+    await user.click(screen.getByRole("button", { name: "Retry processing" }));
     await waitFor(() =>
       expect(enqueueCaptureJob).toHaveBeenCalledWith("captures/cap_1.md", true),
     );
@@ -824,7 +837,7 @@ describe("InboxView — selection", () => {
     expect(screen.getByText("Provider timed out")).toBeInTheDocument();
     expect(previewCapture).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "retry processing" }));
+    await user.click(screen.getByRole("button", { name: "Retry processing" }));
     await waitFor(() =>
       expect(enqueueCaptureJob).toHaveBeenCalledWith("captures/cap_1.md", true),
     );
@@ -846,9 +859,95 @@ describe("InboxView — selection", () => {
 
     await user.click(screen.getByLabelText("Select Meeting notes"));
     expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
-    await user.click(screen.getByRole("button", { name: "skip" }));
+    await user.click(screen.getByRole("button", { name: "Discard" }));
 
     expect(spies.removeCapture).toHaveBeenCalledWith("cap_1");
     expect(screen.getByRole("button", { name: "Queue" })).toBeDisabled();
+  });
+});
+
+describe("InboxView — rebuilt list and proposal", () => {
+  it("filters to captures that need review, or ones already filed", async () => {
+    const user = userEvent.setup();
+    renderInbox([
+      mkCapture({ id: "a", title: "Waiting" }),
+      mkCapture({ id: "b", title: "Stuck", status: "needs_review" }),
+      mkCapture({ id: "c", title: "Done", status: "done" }),
+    ]);
+    expect(
+      screen.getByRole("radio", { name: /Needs review 1/ }),
+    ).toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: /Needs review/ }));
+    expect(listTitles()).toEqual(["Stuck"]);
+    await user.click(screen.getByRole("radio", { name: /Filed/ }));
+    expect(listTitles()).toEqual(["Done"]);
+  });
+
+  it("labels each row with its source and status", () => {
+    renderInbox([
+      mkCapture({ id: "a", title: "Clip", source: "manual:clipper" }),
+      mkCapture({
+        id: "b",
+        title: "Mail",
+        source: "bridge:gmail",
+        status: "needs_review",
+      }),
+    ]);
+    const rows = screen.getAllByRole("listitem");
+    expect(rows[0]).toHaveTextContent(/Web clip.*New.*Clip/);
+    expect(rows[1]).toHaveTextContent(/Email.*Needs review.*Mail/);
+  });
+
+  it("shows where the proposal files, its links and an estimated pre-check", async () => {
+    previewCapture.mockResolvedValue(
+      mkPreview({
+        title: "Filed Title",
+        links: [
+          {
+            note_id: "n1",
+            title: "Linked note",
+            score: 0.9,
+            decision: "auto-linked",
+          },
+          {
+            note_id: "n2",
+            title: "Maybe note",
+            score: 0.5,
+            decision: "suggested",
+          },
+        ],
+      }),
+    );
+    renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
+    await screen.findByText("topics/filed-title.md");
+    const card = screen.getByRole("region", { name: "Weaver's proposal" });
+    expect(card).toHaveTextContent("Linked note");
+    expect(card).toHaveTextContent("Maybe note (suggested)");
+    expect(card).toHaveTextContent(/Sentinel pre-check/);
+    expect(card).toHaveTextContent(/Checked in the browser/);
+  });
+
+  it("approves with Enter and discards from the footer", async () => {
+    previewCapture.mockResolvedValue(mkPreview());
+    commitCapture.mockResolvedValue({
+      note: mkNoteRecord(),
+      linked: [],
+      suggested: [],
+      validation: "passed",
+      validation_reasons: [],
+      outcome: "filed",
+      capture_archived: true,
+    } as unknown as CommitResult);
+    skipCapture.mockResolvedValue({
+      outcome: "skipped",
+      capture_archived: true,
+    });
+    const user = userEvent.setup();
+    renderInbox([mkCapture()], { selectedCaptureId: "cap_1" });
+    await screen.findByText("topics/filed-title.md");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(commitCapture).toHaveBeenCalled());
+    await user.click(screen.getByRole("button", { name: "Discard" }));
+    await waitFor(() => expect(skipCapture).toHaveBeenCalled());
   });
 });

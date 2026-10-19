@@ -10,6 +10,8 @@ import type { XY } from "./orbitScenes";
 import { computeEdgeExtremities } from "./reducers";
 import { collectNodeZ } from "./depth";
 import { GRAPH_LABEL_BUDGET_NODES, type GraphTuning } from "./tuning";
+import { DEFAULT_NODE_FILTER } from "./nodeFilter";
+import { defaultNodeContext, typePaint } from "./graphModel";
 
 function note(
   id: string,
@@ -20,6 +22,7 @@ function note(
     id: id as NoteId,
     title: id,
     type,
+    folder: `${type}s`,
     links: links as NoteId[],
   } as unknown as Note;
 }
@@ -31,7 +34,9 @@ function makeTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: {
       edge: "#000",
       edgeHover: "#000",
@@ -318,8 +323,10 @@ describe("syncGraphStructure", () => {
     expect(frame()).toEqual({ x: [0, 400], y: [0, 0] });
   });
 
-  it("hides a new note of a filtered-out type and counts visible degree", () => {
-    const tuning = makeTuning({ filters: new Set<NodeType>(["topic"]) });
+  it("hides a new note outside the folder filter and counts visible degree", () => {
+    const tuning = makeTuning({
+      filter: { ...DEFAULT_NODE_FILTER, folder: "topics" },
+    });
     const { target, graph } = setup(chain(), tuning);
     syncGraphStructure(target, [...chain(), note("p", ["a"], "project")]);
     expect(graph.getNodeAttribute("p", "hidden")).toBe(true);
@@ -396,7 +403,7 @@ describe("patchGraphContent", () => {
     notes[0] = { ...notes[0]!, title: "Renamed" };
     notes[1] = note("b", ["c"], "people");
 
-    const result = patchGraphContent(graph, notes);
+    const result = patchGraphContent(graph, notes, defaultNodeContext());
 
     expect(result).toEqual({ changed: true, typeChanged: true });
     expect(graph.getNodeAttribute("a", "label")).toBe("Renamed");
@@ -404,7 +411,7 @@ describe("patchGraphContent", () => {
     expect(graph.getNodeAttribute("b", "color")).not.toBe(
       graph.getNodeAttribute("c", "color"),
     );
-    expect(patchGraphContent(graph, notes)).toEqual({
+    expect(patchGraphContent(graph, notes, defaultNodeContext())).toEqual({
       changed: false,
       typeChanged: false,
     });

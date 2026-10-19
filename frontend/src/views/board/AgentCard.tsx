@@ -1,157 +1,98 @@
-import type { ReactNode } from "react";
-import { Loader2, MessageCircle, Pencil, Play, Trash2 } from "lucide-react";
-import { StatusBadge } from "../../components/primitives/StatusBadge";
-import { AgentBlob } from "../../components/primitives/AgentBlob";
-import type { AgentActivity } from "../../api/activity";
-import type { Agent, AgentEvent } from "../../data/types";
-import { boardStatus, formatAge, formatRelativeTime } from "./boardHelpers";
+import { Loader2, Play, ScrollText } from "lucide-react";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { Button } from "@/components/ui/button";
+import type { Agent, AgentEvent } from "@/data/types";
+import { AgentStateBadge } from "./AgentStateBadge";
+import type { AgentBoardState } from "./boardStats";
+import {
+  agentDisplayName,
+  formatRelativeTime,
+  renderTarget,
+} from "./boardHelpers";
 
 interface AgentCardProps {
   agent: Agent;
-  live: AgentActivity | undefined;
+  state: AgentBoardState;
   lastEvent: AgentEvent | undefined;
-  isCustom: boolean;
-  /** An agent that can be run from the board (runnable built-ins + customs). */
-  runnable: boolean;
+  /** Actions in the feed window (about a week). */
+  weekActions: number;
+  /** Why Run now is unavailable (pipeline-only agents), if it is. */
+  runBlocked?: string;
   running: boolean;
   onRun: () => void;
-  onEdit: () => void;
-  onDelete: () => void;
-  /** Optional dedicated workspace action for interactive Shuttle agents. */
-  onWorkspace?: () => void;
-  workspaceLabel?: string;
-  /** Open the agent detail modal (clicking the card body / Enter / Space). */
-  onOpen: () => void;
+  onLogs: () => void;
 }
 
-export function AgentCard({
-  agent,
-  live,
-  lastEvent,
-  isCustom,
-  runnable,
-  running,
-  onRun,
-  onEdit,
-  onDelete,
-  onWorkspace,
-  workspaceLabel = "ask",
-  onOpen,
-}: AgentCardProps): ReactNode {
-  const status = boardStatus(agent, live);
-  const runs = live?.action_count ?? agent.stats.runs;
-  const lastWhen = lastEvent
-    ? formatRelativeTime(lastEvent.ts)
-    : live?.last_finished_age_s != null
-      ? formatAge(live.last_finished_age_s)
-      : "never";
-  const lastActionText = lastEvent
-    ? `${lastEvent.action} ${lastEvent.target}`
-    : agent.lastAction || "—";
-
-  // The card body is a keyboard-operable button (a real <button> would nest
-  // the action buttons inside it, which is invalid HTML).
+/** One Loom Layer agent: identity, state, last action, a stat and actions. */
+export function AgentCard(p: AgentCardProps) {
+  const name = agentDisplayName(p.agent);
   return (
-    <div
-      className="agent-card agent-card--clickable"
-      role="button"
-      tabIndex={0}
-      aria-label={`${agent.name} details`}
-      onClick={onOpen}
-      onKeyDown={(e) => {
-        // Only when the card itself is focused: keydown on the inner action
-        // buttons bubbles here too, and Enter on "run" must not also open
-        // the modal (their click handlers stopPropagation; keydown doesn't).
-        if (e.target !== e.currentTarget) return;
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onOpen();
-        }
-      }}
+    <article
+      aria-labelledby={`agent-${p.agent.id}`}
+      className="flex flex-col gap-3 rounded-lg border border-border bg-card p-4"
     >
-      <div className="agent-card-h">
-        <AgentBlob agent={agent.id} state={status.state} size={36} />
-        <span className="agent-card-name">{agent.name}</span>
-        <StatusBadge state={status.state} label={status.label} />
-        {!isCustom && (
-          <span className="agent-card-lock" title="System agent">
-            🔒
-          </span>
-        )}
-      </div>
-      <div className="agent-card-role">{agent.role}</div>
-      <div className="agent-card-stats">
-        <span>
-          <b>{runs}</b> runs
-        </span>
-        <span title={lastEvent?.ts}>last: {lastWhen}</span>
-      </div>
-      <div className="agent-card-last" title={lastActionText}>
-        {lastActionText}
-      </div>
-      {(runnable || isCustom || onWorkspace) && (
-        <div className="agent-card-actions">
-          {onWorkspace && (
-            <button
-              type="button"
-              className="btn btn-md btn-purple"
-              onClick={(e) => {
-                e.stopPropagation();
-                onWorkspace();
-              }}
-              aria-label={`Open ${agent.name} workspace`}
-            >
-              <MessageCircle size={13} aria-hidden="true" />
-              <span>{workspaceLabel}</span>
-            </button>
-          )}
-          {runnable && (
-            <button
-              type="button"
-              className="btn btn-md"
-              onClick={(e) => {
-                e.stopPropagation();
-                onRun();
-              }}
-              disabled={running}
-              aria-label={`Run ${agent.name}`}
-            >
-              {running ? (
-                <Loader2 size={13} aria-hidden="true" className="spin" />
-              ) : (
-                <Play size={13} aria-hidden="true" />
-              )}
-              <span>run</span>
-            </button>
-          )}
-          {isCustom && (
-            <>
-              <button
-                type="button"
-                className="btn btn-md"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEdit();
-                }}
-                aria-label={`Edit ${agent.name}`}
-              >
-                <Pencil size={13} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="btn btn-md"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDelete();
-                }}
-                aria-label={`Delete ${agent.name}`}
-              >
-                <Trash2 size={13} aria-hidden="true" />
-              </button>
-            </>
-          )}
+      <header className="flex items-start gap-3">
+        <AgentAvatar actor={p.agent.id} size="lg" />
+        <div className="min-w-0 flex-1">
+          <h3
+            id={`agent-${p.agent.id}`}
+            className="font-medium text-foreground"
+          >
+            {name}
+          </h3>
+          <p
+            className="truncate text-xs text-muted-foreground"
+            title={p.agent.role}
+          >
+            {p.agent.role}
+          </p>
         </div>
-      )}
-    </div>
+        <AgentStateBadge state={p.state} />
+      </header>
+      <p className="line-clamp-2 min-h-10 text-sm text-secondary-foreground">
+        {p.lastEvent ? (
+          <>
+            {p.lastEvent.action} {renderTarget(p.lastEvent.target)}{" "}
+            <span
+              className="text-xs text-muted-foreground"
+              title={p.lastEvent.ts}
+            >
+              · {formatRelativeTime(p.lastEvent.ts)}
+            </span>
+          </>
+        ) : (
+          <span className="text-muted-foreground">No actions yet.</span>
+        )}
+      </p>
+      <p className="font-mono text-xs text-muted-foreground tabular-nums">
+        {p.weekActions} {p.weekActions === 1 ? "action" : "actions"} this week
+      </p>
+      <footer className="mt-auto flex items-center justify-end gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={p.onLogs}
+          aria-label={`${name} logs`}
+        >
+          <ScrollText aria-hidden="true" />
+          Logs
+        </Button>
+        <span title={p.runBlocked}>
+          <Button
+            size="sm"
+            onClick={p.onRun}
+            disabled={p.running || Boolean(p.runBlocked)}
+            aria-label={`Run ${name} now`}
+          >
+            {p.running ? (
+              <Loader2 aria-hidden="true" className="animate-spin" />
+            ) : (
+              <Play aria-hidden="true" />
+            )}
+            Run now
+          </Button>
+        </span>
+      </footer>
+    </article>
   );
 }

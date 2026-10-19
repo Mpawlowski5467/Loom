@@ -2,6 +2,8 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import Graph from "graphology";
 import { createBreathingTick } from "./breathing";
 import type { GraphTuning } from "./tuning";
+import { DEFAULT_NODE_FILTER } from "./nodeFilter";
+import { typePaint } from "./graphModel";
 
 function mkTuning(sizeScale: number): GraphTuning {
   return {
@@ -10,7 +12,9 @@ function mkTuning(sizeScale: number): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: {
       edge: "",
       edgeHover: "",

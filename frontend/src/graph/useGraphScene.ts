@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import type { GraphLayout, Note, NoteId, NodeType } from "../data/types";
+import type { GraphLayout, Note, NoteId } from "../data/types";
 import {
   applyConstellationLayout,
   computeOrbitScene,
@@ -55,7 +55,8 @@ export function useGraphScene(args: {
   /** Bumps when nodes/edges changed in place (no rebuild). */
   structureVersion?: number;
   layoutAutoCycle: boolean;
-  graphFilters: Set<NodeType>;
+  /** Changes when the node filter does (see nodeFilter.filterKey). */
+  graphFilterKey: string;
 }): OrbitScene {
   const {
     sigmaRef,
@@ -74,9 +75,8 @@ export function useGraphScene(args: {
     sigmaReady,
     structureVersion = 0,
     layoutAutoCycle,
-    graphFilters,
+    graphFilterKey: filterKey,
   } = args;
-  const filterKey = [...graphFilters].sort().join("|");
   const requestedFocusId = selectedNodeId ?? graphFocusId;
   const visibilityKey = `${filterKey}::${
     isolateNeighbors ? (selectedNodeId ?? "none") : "all"

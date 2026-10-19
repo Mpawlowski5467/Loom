@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   getRevision,
   listRevisions,
@@ -12,6 +13,7 @@ import { ConfirmModal } from "./ConfirmModal";
 import { TextDiff } from "./TextDiff";
 import { RunUndo } from "./RunUndo";
 
+/** The SQLite revision journal for one note: inspect a write, restore before it. */
 export function RevisionHistory({
   noteId,
   disabled = false,
@@ -56,40 +58,56 @@ export function RevisionHistory({
     }
   };
   return (
-    <section className="revision-history">
-      <button
-        className="btn btn-sm"
+    <section className="flex flex-col gap-3 text-sm">
+      <Button
+        variant="outline"
+        size="sm"
+        className="self-start"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
         Version history
-      </button>
+      </Button>
       {open && (
-        <div className="revision-panel">
-          <p>
+        <div className="flex flex-col gap-3 rounded-lg border border-border bg-card p-3">
+          <p className="text-muted-foreground">
             Revisions record vault writes from this update onward. Save or
             discard your draft before restoring a version.
           </p>
-          {error && <p role="alert">{error}</p>}
-          {!items.length && !error && <p>No recorded revisions yet.</p>}
-          <div className="revision-list">
+          {error && (
+            <p role="alert" className="text-danger-foreground">
+              {error}
+            </p>
+          )}
+          {!items.length && !error && (
+            <p className="text-muted-foreground">No recorded revisions yet.</p>
+          )}
+          <div className="flex max-h-40 flex-wrap gap-2 overflow-auto">
             {items.map((item) => (
-              <button
-                className="btn btn-sm"
+              <Button
+                variant="outline"
+                size="xs"
+                className="font-mono"
                 key={item.id}
                 disabled={loading}
                 onClick={() => void inspect(item.id)}
               >
                 {new Date(item.created).toLocaleString()} · {item.caller}
-              </button>
+              </Button>
             ))}
           </div>
-          {loading && <p role="status">Loading revision…</p>}
+          {loading && (
+            <p role="status" className="text-muted-foreground">
+              Loading revision…
+            </p>
+          )}
           {detail && (
-            <div>
+            <div className="flex flex-col gap-3">
               {Object.keys(detail.after).map((path) => (
-                <section key={path}>
-                  <h4>{path}</h4>
+                <section key={path} className="flex flex-col gap-1.5">
+                  <h4 className="font-mono text-xs text-muted-foreground">
+                    {path}
+                  </h4>
                   <TextDiff
                     before={detail.before[path] ?? ""}
                     after={detail.after[path] ?? ""}
@@ -97,13 +115,15 @@ export function RevisionHistory({
                 </section>
               ))}
               {Object.values(detail.before).some(Boolean) && (
-                <button
-                  className="btn btn-sm"
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="self-start"
                   disabled={disabled}
                   onClick={() => setConfirm(true)}
                 >
                   Restore version before this change
-                </button>
+                </Button>
               )}
               {detail.run_id && (
                 <RunUndo runId={detail.run_id} disabled={disabled} />

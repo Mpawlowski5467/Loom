@@ -147,9 +147,12 @@ export function useGraphInstance(args: {
       const notes = notesRef.current;
       const heavyNow = notes.length > PERF_BUDGET_NODES;
 
-      const { graph, baseSizes } = buildGraph(notes);
+      const { graph, baseSizes } = buildGraph(notes, {
+        paint: tuningRef.current.nodeColor,
+        communityOf: tuningRef.current.communityOf,
+      });
       const visibility = applyGraphVisibility(graph, {
-        typeFilters: tuningRef.current.filters,
+        filter: tuningRef.current.filter,
         selectedId: tuningRef.current.selected,
         isolateNeighbors: tuningRef.current.isolateNeighbors,
       });
@@ -420,13 +423,20 @@ export function useGraphInstance(args: {
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
-    const { changed, typeChanged } = patchGraphContent(graph, notesRef.current);
+    const { changed, typeChanged } = patchGraphContent(
+      graph,
+      notesRef.current,
+      {
+        paint: tuningRef.current.nodeColor,
+        communityOf: tuningRef.current.communityOf,
+      },
+    );
     if (typeChanged) {
       // A type edit can move the node into or out of the active filter. Keep
       // materialized visibility and visible-subgraph label degrees coherent
       // without rebuilding the graph.
       const visibility = applyGraphVisibility(graph, {
-        typeFilters: tuningRef.current.filters,
+        filter: tuningRef.current.filter,
         selectedId: tuningRef.current.selected,
         isolateNeighbors: tuningRef.current.isolateNeighbors,
       });

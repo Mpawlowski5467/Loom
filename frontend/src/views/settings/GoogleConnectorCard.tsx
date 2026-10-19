@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Link2 } from "lucide-react";
 import {
   connectGoogle,
   disconnectGoogle,
@@ -10,15 +9,13 @@ import {
   testGoogle,
   updateGoogleConnector,
   type GoogleConnectorAutomation,
-} from "../../api/automations";
-import { apiUrl } from "../../api/client";
-import { useApp } from "../../context/app-ctx";
-import {
-  ConnectorFlowShell,
-  CopyChip,
-  ServiceSection,
-  type ServiceSectionValues,
-} from "./connector-flow";
+} from "@/api/automations";
+import { apiUrl } from "@/api/client";
+import { useApp } from "@/context/app-ctx";
+import { ConnectorFlowShell } from "./connector-flow";
+import { CopyChip } from "./connections/CopyChip";
+import { ServiceSection } from "./connections/ServiceSection";
+import type { ServiceSectionValues } from "./connections/types";
 import { useConnectPoll } from "./useConnectPoll";
 
 /**
@@ -73,7 +70,7 @@ const GOOGLE_STEPS: ReactNode[] = [
   </>,
 ];
 
-export function GoogleConnectorCard(): ReactNode {
+export function GoogleConnectorCard() {
   const { pushToast } = useApp();
   const [automation, setAutomation] =
     useState<GoogleConnectorAutomation | null>(null);
@@ -178,71 +175,58 @@ export function GoogleConnectorCard(): ReactNode {
   const connected = automation?.connection.connected ?? false;
 
   return (
-    <section
-      className="settings-connection-card"
-      aria-labelledby="google-connector-title"
+    <ConnectorFlowShell
+      title="Google"
+      blurb="One sign-in for Google Calendar and Gmail — events and mail land in the Inbox for triage. Read-only scopes; an OAuth alternative to the IMAP Email bridge below."
+      steps={GOOGLE_STEPS}
+      signInLabel="Sign in with Google"
+      clientIdPlaceholder="….apps.googleusercontent.com"
+      savedClientId={automation?.google.client_id ?? ""}
+      clientSecretSet={automation?.google.client_secret_set ?? false}
+      connected={connected}
+      account={automation?.connection.account ?? ""}
+      loaded={automation !== null}
+      loadError={loadError}
+      onSaveCreds={saveCreds}
+      onConnect={connect}
+      onDisconnect={disconnect}
+      builtinApp={automation?.builtin_app ?? false}
     >
-      <ConnectorFlowShell
-        title="Google"
-        headingId="google-connector-title"
-        icon={<Link2 size={17} aria-hidden="true" />}
-        blurb="One sign-in for Google Calendar and Gmail — events and mail land in the Inbox for triage. Read-only scopes; an OAuth alternative to the IMAP Email bridge below."
-        steps={GOOGLE_STEPS}
-        signInLabel="Sign in with Google"
-        clientIdPlaceholder="….apps.googleusercontent.com"
-        savedClientId={automation?.google.client_id ?? ""}
-        clientSecretSet={automation?.google.client_secret_set ?? false}
-        connected={connected}
-        account={automation?.connection.account ?? ""}
-        loaded={automation !== null}
-        onSaveCreds={saveCreds}
-        onConnect={connect}
-        onDisconnect={disconnect}
-        builtinApp={automation?.builtin_app ?? false}
-      >
-        {automation && (
-          <>
-            <ServiceSection
-              title="Calendar"
-              blurb="Events from your Google calendars become Inbox captures."
-              headingId="google-calendar-service-title"
-              serviceLabel="Google Calendar"
-              savedEnabled={automation.google.calendar.enabled}
-              savedIntervalMinutes={automation.google.calendar.interval_minutes}
-              savedLookbackDays={automation.google.calendar.lookback_days}
-              savedCalendarIdsText={automation.google.calendar.calendar_ids.join(
-                "\n",
-              )}
-              status={automation.services.calendar}
-              calendarIdsPlaceholder={"primary\nteam@group.calendar.google.com"}
-              disabled={false}
-              onSave={saveService("calendar")}
-              onTest={testService("calendar")}
-              onSync={syncCalendar}
-            />
-            <ServiceSection
-              title="Gmail"
-              blurb="New mail becomes Inbox captures. Read-only: Loom never marks mail as seen."
-              headingId="gmail-service-title"
-              serviceLabel="Gmail"
-              savedEnabled={automation.google.gmail.enabled}
-              savedIntervalMinutes={automation.google.gmail.interval_minutes}
-              savedLookbackDays={automation.google.gmail.lookback_days}
-              savedCalendarIdsText=""
-              status={automation.services.gmail}
-              disabled={false}
-              onSave={saveService("gmail")}
-              onTest={testService("gmail")}
-              onSync={syncMailbox}
-            />
-          </>
-        )}
-      </ConnectorFlowShell>
-      {loadError && (
-        <p className="settings-test-result fail" role="alert">
-          {loadError}
-        </p>
+      {automation && (
+        <>
+          <ServiceSection
+            title="Calendar"
+            blurb="Events from your Google calendars become Inbox captures."
+            serviceLabel="Google Calendar"
+            savedEnabled={automation.google.calendar.enabled}
+            savedIntervalMinutes={automation.google.calendar.interval_minutes}
+            savedLookbackDays={automation.google.calendar.lookback_days}
+            savedCalendarIdsText={automation.google.calendar.calendar_ids.join(
+              "\n",
+            )}
+            status={automation.services.calendar}
+            calendarIdsPlaceholder={"primary\nteam@group.calendar.google.com"}
+            disabled={false}
+            onSave={saveService("calendar")}
+            onTest={testService("calendar")}
+            onSync={syncCalendar}
+          />
+          <ServiceSection
+            title="Gmail"
+            blurb="New mail becomes Inbox captures. Read-only: Loom never marks mail as seen."
+            serviceLabel="Gmail"
+            savedEnabled={automation.google.gmail.enabled}
+            savedIntervalMinutes={automation.google.gmail.interval_minutes}
+            savedLookbackDays={automation.google.gmail.lookback_days}
+            savedCalendarIdsText=""
+            status={automation.services.gmail}
+            disabled={false}
+            onSave={saveService("gmail")}
+            onTest={testService("gmail")}
+            onSync={syncMailbox}
+          />
+        </>
       )}
-    </section>
+    </ConnectorFlowShell>
   );
 }

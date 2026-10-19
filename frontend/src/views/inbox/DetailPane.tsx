@@ -1,359 +1,165 @@
-import type { ReactNode } from "react";
-import { Button } from "../../components/primitives/Button";
-import { AgentBlob } from "../../components/primitives/AgentBlob";
-import { renderMarkdown } from "../../editor/renderMarkdown";
-import { SuggestionCard } from "./SuggestionCard";
-import { toNodeType, type CardData, type CardLink } from "./types";
-import type { CaptureJob, CapturePreview } from "../../api/captures";
-import type { Capture, Note } from "../../data/types";
-import { formatDateTime } from "../../data/formatDate";
-import { CaptureReview } from "./CaptureReview";
+import { Check, Pencil } from "lucide-react";
+import { useState } from "react";
+import type { CaptureJob } from "@/api/captures";
+import type { CaptureProposal } from "@/api/proposals";
+import { Kbd } from "@/components/shell/Kbd";
+import { Button } from "@/components/ui/button";
+import type { Capture } from "@/data/types";
+import { cn } from "@/lib/utils";
+import { CaptureHeader } from "./CaptureHeader";
+import { JobStateCard } from "./JobStateCard";
+import { ProposalCard } from "./ProposalCard";
+import type { PreviewState } from "./usePreviews";
 
-/** Per-capture state of the lazily-fetched Weaver preview. */
-export type PreviewState =
-  | { status: "ready"; preview: CapturePreview }
-  | { status: "error"; message: string };
-
-interface Props {
+interface DetailPaneProps {
   capture: Capture;
   job?: CaptureJob;
-  jobBusy?: boolean;
-  canQueue?: boolean;
+  jobBusy: boolean;
+  canQueue: boolean;
   preview: PreviewState | undefined;
-  noteById: (id: string) => Note | undefined;
-  onAccept: () => void;
+  proposal: CaptureProposal | undefined;
+  onApprove: () => void;
   onEdit: () => void;
-  onSkip: () => void;
-  onRetry: (id: string) => void;
+  onDiscard: () => void;
+  onRetryPreview: () => void;
   onEnqueue: () => void;
   onRetryJob: () => void;
   onCancelJob: () => void;
   onOpenDraft?: () => void;
-  onMerged?: () => void;
+  onMerged: () => void;
 }
 
-function Loading({ label }: { label: string }): ReactNode {
-  return (
-    <div className="inbox-processing" role="status" aria-live="polite">
-      <div className="inbox-suggest-h">
-        <AgentBlob agent="weaver" state="running" size={22} />
-        {label}
-      </div>
-      <div className="inbox-skeleton" aria-hidden="true">
-        <span className="sk-line" />
-        <span className="sk-line short" />
-        <span className="sk-line" />
-      </div>
-    </div>
-  );
-}
+const ACTIVE = new Set([
+  "queued",
+  "running",
+  "retrying",
+  "needs_review",
+  "failed",
+  "completed",
+]);
 
-/** The right-hand reading + triage pane for the selected capture. */
-export function DetailPane({
-  capture,
-  job,
-  jobBusy = false,
-  canQueue = true,
-  preview,
-  noteById,
-  onAccept,
-  onEdit,
-  onSkip,
-  onRetry,
-  onEnqueue,
-  onRetryJob,
-  onCancelJob,
-  onOpenDraft,
-  onMerged = () => undefined,
-}: Props): ReactNode {
-  const actions = { onAccept, onEdit, onSkip };
-  const provenance = Object.entries(capture.provenance ?? {});
-  const persistedCoverage = capture.sourceCoverage;
-  const sourceWasOverLimit = persistedCoverage?.complete === false;
-
-  const renderSuggestion = (): ReactNode => {
-    // Demo captures carry a seed suggestion; real ones use the fetched preview.
-    if (capture.suggestion) {
-      const data: CardData = {
-        type: capture.suggestion.type,
-        destFolder: capture.suggestion.destFolder,
-        title: capture.suggestion.title,
-        tags: capture.suggestion.tags,
-        links: capture.suggestion.links
-          .map((id) => {
-            const n = noteById(id);
-            return n ? { key: id, title: n.title } : null;
-          })
-          .filter((x): x is CardLink => x !== null),
-      };
-      return <SuggestionCard data={data} {...actions} />;
-    }
-
-    if (!preview) return <Loading label="Weaver is reading this capture…" />;
-
-    if (preview.status === "error") {
-      return (
-        <div className="inbox-suggest" role="status">
-          <div className="inbox-suggest-h">
-            <AgentBlob agent="weaver" state="idle" size={22} />
-            Weaver suggestion
-          </div>
-          <p className="inbox-suggest-err">{preview.message}</p>
-          <div className="inbox-suggest-actions">
-            <Button size="md" onClick={() => onRetry(capture.id)}>
-              retry
-            </Button>
-          </div>
-        </div>
-      );
-    }
-
-    const p = preview.preview;
-    const data: CardData = {
-      type: toNodeType(p.note_type),
-      destFolder: p.folder,
-      title: p.title,
-      tags: p.tags,
-      links: p.links.map((l) => ({
-        key: l.note_id || l.title,
-        title: l.title,
-        decision: l.decision,
-      })),
-    };
-    return <SuggestionCard data={data} {...actions} />;
-  };
-
-  const jobActive =
-    job?.status === "queued" ||
-    job?.status === "running" ||
-    job?.status === "retrying";
-  const needsReview = job
-    ? job.status === "needs_review"
-    : capture.status === "needs_review";
-  const failed = job ? job.status === "failed" : capture.status === "failed";
-  const completed = job?.status === "completed";
-  const cancelled = job?.status === "cancelled";
-  const triaging =
-    capture.status === "pending" &&
-    !jobActive &&
-    !needsReview &&
-    !failed &&
-    !completed;
+/** The selected capture: where it came from, what it says, and the proposal. */
+export function DetailPane(p: DetailPaneProps) {
+  const { capture: c, job } = p;
+  const [full, setFull] = useState(false);
+  const triaging = c.status === "pending" && !(job && ACTIVE.has(job.status));
+  const ready = Boolean(c.suggestion) || p.preview?.status === "ready";
+  const long = c.body.length > 1200;
 
   return (
-    <div className="inbox-detail">
-      <div className="inbox-detail-title">{capture.title}</div>
-      <div className="inbox-detail-meta">
-        <span>{capture.folder}/</span>
-        {capture.source && <span>via {capture.source}</span>}
-        <span>received {formatDateTime(capture.receivedAt)}</span>
-      </div>
-      {provenance.length > 0 && (
-        <dl className="inbox-provenance" aria-label="Capture provenance">
-          {provenance.map(([key, value]) => (
-            <div className="inbox-provenance-row" key={key}>
-              <dt>{key.replaceAll("_", " ")}</dt>
-              <dd>
-                {/^https?:\/\//i.test(value) ? (
-                  <a href={value} target="_blank" rel="noreferrer">
-                    {value}
-                  </a>
-                ) : (
-                  value
-                )}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      )}
-      {renderMarkdown(capture.body, { bodyClass: "inbox-detail-body" })}
-      {sourceWasOverLimit && (
-        <div className="inbox-review" role="alert">
-          <div className="inbox-review-h">Source needs review</div>
-          <p>
-            This capture is larger than Weaver&apos;s safe extraction limit. The
-            original source is preserved, but no tail content was omitted
-            silently.
-          </p>
-        </div>
-      )}
-      {preview?.status === "ready" && (
-        <CaptureReview
-          capture={capture}
-          proposedBody={preview.preview.body}
-          onMerged={onMerged}
-          onSeparate={onAccept}
-        />
-      )}
-
-      {(capture.status === "processing" || job?.status === "running") && (
-        <Loading label="Weaver is filing this capture…" />
-      )}
-      {job?.status === "queued" && (
-        <div className="inbox-job-progress" role="status" aria-live="polite">
-          <div className="inbox-job-progress-h">
-            <span className="status-badge" data-state="queued">
-              <span className="pulse-dot" /> queued
-            </span>
-            Waiting for a worker
-          </div>
-          <p>
-            This capture is safely queued. It will keep its place if Loom
-            restarts.
-          </p>
-          <Button size="md" onClick={onCancelJob} disabled={jobBusy}>
-            {jobBusy ? "cancelling…" : "cancel job"}
-          </Button>
-        </div>
-      )}
-      {job?.status === "retrying" && (
-        <div className="inbox-job-progress" role="status" aria-live="polite">
-          <div className="inbox-job-progress-h">
-            <span className="status-badge" data-state="retrying">
-              <span className="pulse-dot" /> retrying
-            </span>
-            Attempt {job.attempts + 1} of {job.max_attempts}
-          </div>
-          <p>
-            Loom will retry automatically
-            {job.next_attempt_at
-              ? ` after ${formatDateTime(job.next_attempt_at)}`
-              : " shortly"}
-            .
-          </p>
-          {job.error && <p className="inbox-job-error">{job.error}</p>}
-          <Button size="md" onClick={onCancelJob} disabled={jobBusy}>
-            {jobBusy ? "cancelling…" : "cancel retry"}
-          </Button>
-        </div>
-      )}
-      {needsReview && (
-        <div className="inbox-review" role="alert">
-          <div className="inbox-review-h">Needs review</div>
-          <p>
-            Sentinel kept this capture in Inbox because it could not safely
-            publish it. Review the reason, then retry the idempotent pipeline or
-            skip it to archive the source capture.
-          </p>
-          {capture.validationReasons &&
-            capture.validationReasons.length > 0 && (
-              <ul>
-                {capture.validationReasons.map((reason) => (
-                  <li key={reason}>{reason}</li>
-                ))}
-              </ul>
+    <article
+      aria-labelledby="capture-title"
+      className="flex min-h-0 flex-1 flex-col"
+    >
+      {/* Focusable so keyboard users can scroll a long capture. */}
+      <div
+        tabIndex={0}
+        aria-label="Capture details"
+        role="region"
+        className="min-h-0 flex-1 overflow-y-auto focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+      >
+        <div className="mx-auto flex max-w-3xl flex-col gap-5 px-6 py-6">
+          <CaptureHeader capture={c} />
+          <blockquote
+            aria-label="Capture content"
+            className={cn(
+              "border-l-2 border-border-strong pl-4 font-mono text-xs leading-relaxed whitespace-pre-wrap text-secondary-foreground",
+              long &&
+                !full &&
+                "max-h-72 overflow-hidden [mask-image:linear-gradient(to_bottom,black_70%,transparent)]",
             )}
-          {job?.error && <p className="inbox-review-error">{job.error}</p>}
-          <div className="inbox-suggest-actions">
-            {onOpenDraft && (
-              <Button size="md" onClick={onOpenDraft}>
-                open draft note
-              </Button>
-            )}
-            <Button
-              variant="amber"
-              size="md"
-              onClick={onRetryJob}
-              disabled={jobBusy}
-            >
-              {jobBusy ? "queueing…" : "retry processing"}
-            </Button>
-            <Button size="md" onClick={onSkip}>
-              skip
-            </Button>
-          </div>
-        </div>
-      )}
-      {failed && (
-        <div className="inbox-review" role="alert">
-          <div className="inbox-review-h">Processing failed</div>
-          <p>
-            Loom left this capture in the Inbox. You can retry the pipeline or
-            archive the capture if it is not useful.
-          </p>
-          {(job?.error || capture.lastError) && (
-            <p className="inbox-review-error">
-              {job?.error || capture.lastError}
-            </p>
-          )}
-          {job?.recommended_action && (
-            <p className="inbox-review-guidance">
-              <strong>Next:</strong> {job.recommended_action}
-            </p>
-          )}
-          <div className="inbox-suggest-actions">
-            <Button
-              variant="amber"
-              size="md"
-              onClick={onRetryJob}
-              disabled={jobBusy}
-            >
-              {jobBusy ? "queueing…" : "retry processing"}
-            </Button>
-            <Button size="md" onClick={onSkip}>
-              skip
-            </Button>
-          </div>
-        </div>
-      )}
-      {cancelled && (
-        <div className="inbox-job-progress" role="status">
-          <div className="inbox-job-progress-h">Processing cancelled</div>
-          <p>The capture is still in your Inbox and can be queued again.</p>
-          <Button
-            variant="amber"
-            size="md"
-            onClick={onEnqueue}
-            disabled={jobBusy}
           >
-            {jobBusy ? "queueing…" : "queue again"}
-          </Button>
-        </div>
-      )}
-      {completed && (
-        <div
-          className="inbox-suggest inbox-filed"
-          role="status"
-          aria-live="polite"
-        >
-          <div className="inbox-suggest-h inbox-filed-h">
-            ✓ processing complete
-          </div>
-          <div className="inbox-filed-body">
-            {job.note_title
-              ? `Filed as ${job.note_title}.`
-              : "Loom finished this capture. The Inbox will refresh shortly."}
-          </div>
-        </div>
-      )}
-      {triaging && canQueue && !cancelled && (
-        <>
-          <div className="inbox-queue-option">
-            <div>
-              <div className="inbox-queue-option-h">Background processing</div>
-              <p>Queue the full Loom pipeline and keep working.</p>
-            </div>
+            {c.body || "Empty capture."}
+          </blockquote>
+          {long && (
             <Button
-              variant="amber"
-              size="md"
-              onClick={onEnqueue}
-              disabled={jobBusy}
+              variant="link"
+              size="xs"
+              className="-mt-3 h-auto self-start p-0"
+              onClick={() => setFull((v) => !v)}
             >
-              {jobBusy ? "queueing…" : "queue processing"}
+              {full ? "Show less" : "Show the whole capture"}
             </Button>
-          </div>
-          {renderSuggestion()}
-        </>
-      )}
-      {triaging && (!canQueue || cancelled) && renderSuggestion()}
-      {capture.status === "done" && (
-        <div className="inbox-suggest inbox-filed">
-          <div className="inbox-suggest-h inbox-filed-h">✓ filed</div>
-          <div className="inbox-filed-body">
-            This capture has been processed.
-          </div>
+          )}
+          {c.sourceCoverage?.complete === false && (
+            <p
+              role="alert"
+              className="rounded-md border border-warning-border bg-warning p-3 text-sm text-warning-foreground"
+            >
+              This capture is larger than Weaver's safe extraction limit. The
+              original source is kept, and nothing past the limit was dropped
+              silently.
+            </p>
+          )}
+          <JobStateCard
+            capture={c}
+            job={job}
+            busy={p.jobBusy}
+            onCancel={p.onCancelJob}
+            onRetry={p.onRetryJob}
+            onEnqueue={p.onEnqueue}
+            onDiscard={p.onDiscard}
+            onOpenDraft={p.onOpenDraft}
+          />
+          {triaging && (
+            <ProposalCard
+              capture={c}
+              preview={p.preview}
+              proposal={p.proposal}
+              onRetry={p.onRetryPreview}
+              onMerged={p.onMerged}
+              onSeparate={p.onApprove}
+            />
+          )}
+          {triaging && p.canQueue && job?.status !== "cancelled" && (
+            <div className="flex items-center gap-3 rounded-lg border border-dashed border-border p-3 text-sm">
+              <p className="flex-1 text-secondary-foreground">
+                Or run the full pipeline in the background and keep working.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={p.onEnqueue}
+                disabled={p.jobBusy}
+              >
+                {p.jobBusy ? "Queueing…" : "Queue processing"}
+              </Button>
+            </div>
+          )}
         </div>
+      </div>
+      {triaging && (
+        <footer className="flex flex-wrap items-center gap-2 border-t border-border px-6 py-3">
+          <Button
+            onClick={p.onApprove}
+            disabled={!ready}
+            aria-keyshortcuts="Enter"
+          >
+            <Check aria-hidden="true" />
+            Approve and file
+          </Button>
+          <Button
+            variant="outline"
+            onClick={p.onEdit}
+            disabled={!ready}
+            aria-keyshortcuts="E"
+          >
+            <Pencil aria-hidden="true" />
+            Edit first
+          </Button>
+          <span className="hidden text-xs text-muted-foreground sm:inline">
+            <Kbd>j</Kbd> <Kbd>k</Kbd> move · <Kbd>↵</Kbd> file · <Kbd>e</Kbd>{" "}
+            edit
+          </span>
+          <Button
+            variant="destructive"
+            className="ml-auto"
+            onClick={p.onDiscard}
+          >
+            Discard
+          </Button>
+        </footer>
       )}
-    </div>
+    </article>
   );
 }

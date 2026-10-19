@@ -3,8 +3,19 @@ import type { ReactNode } from "react";
 import { createCapture } from "../api/captures";
 import { clipUrl, importPdf } from "../api/imports";
 import { useApp } from "../context/app-ctx";
-import { useFocusTrap } from "./useFocusTrap";
-import "../styles/components/revisions.css";
+import { Button } from "./ui/button";
+import { Checkbox } from "./ui/checkbox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Textarea } from "./ui/textarea";
 
 interface QuickCaptureProps {
   onClose: () => void;
@@ -77,12 +88,6 @@ export function QuickCapture({ onClose }: QuickCaptureProps): ReactNode {
   };
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useFocusTrap<HTMLDivElement>({
-    onEscape: () => {
-      if (!saving) onClose();
-    },
-    skipInitialFocus: true,
-  });
 
   const submit = async () => {
     if ((!body.trim() && !file) || saving) return;
@@ -134,13 +139,9 @@ export function QuickCapture({ onClose }: QuickCaptureProps): ReactNode {
   };
 
   return (
-    <div className="settings-modal-backdrop" role="presentation">
-      <div
-        ref={dialogRef}
-        className="settings-modal quick-capture"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="quick-capture-title"
+    <Dialog open onOpenChange={(open) => !open && !saving && onClose()}>
+      <DialogContent
+        className="sm:max-w-lg"
         onKeyDown={(event) => {
           if ((event.metaKey || event.ctrlKey) && event.key === "Enter") {
             event.preventDefault();
@@ -148,47 +149,50 @@ export function QuickCapture({ onClose }: QuickCaptureProps): ReactNode {
           }
         }}
       >
-        <div className="settings-kicker">Inbox</div>
-        <h2 id="quick-capture-title" className="settings-modal-title">
-          Quick capture
-        </h2>
-        <label className="note-modal-field">
-          <span className="note-modal-label">Thought or URL</span>
-          <textarea
+        <DialogHeader>
+          <DialogTitle>Quick capture</DialogTitle>
+          <DialogDescription>
+            A thought, a link or a PDF, straight to the Inbox.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="quick-capture-body">Thought or URL</Label>
+          <Textarea
+            id="quick-capture-body"
             autoFocus
-            className="input quick-capture-body"
             aria-label="Capture content"
             value={body}
             onChange={(event) => changeDraft({ body: event.target.value })}
             disabled={saving || Boolean(file)}
             placeholder="Paste a link or write a thought…"
+            className="min-h-28"
           />
-        </label>
-        <label className="note-modal-field">
-          <span className="note-modal-label">Title (optional)</span>
-          <input
-            className="input"
+        </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="quick-capture-title">Title (optional)</Label>
+          <Input
+            id="quick-capture-title"
             aria-label="Capture title"
             value={title}
             onChange={(event) => changeDraft({ title: event.target.value })}
             disabled={saving}
             placeholder="A short handle for later"
           />
-        </label>
+        </div>
         {urlFromText(body) && !file && (
-          <label>
-            <input
-              type="checkbox"
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox
               checked={fetchPage}
-              onChange={(event) => setFetchPage(event.target.checked)}
+              onCheckedChange={(v) => setFetchPage(v === true)}
               disabled={saving}
-            />{" "}
+            />
             Fetch page text and preserve the original
           </label>
         )}
-        <label className="note-modal-field">
-          <span className="note-modal-label">Or import a PDF</span>
-          <input
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="quick-capture-pdf">Or import a PDF</Label>
+          <Input
+            id="quick-capture-pdf"
             type="file"
             accept="application/pdf,.pdf"
             disabled={saving}
@@ -203,49 +207,48 @@ export function QuickCapture({ onClose }: QuickCaptureProps): ReactNode {
               setError(null);
             }}
           />
-        </label>
+        </div>
         {file && (
-          <p>
-            {file.name} ·{" "}
-            <button
-              type="button"
+          <p className="flex items-center gap-2 text-sm">
+            {file.name}
+            <Button
+              variant="link"
+              size="xs"
+              className="h-auto p-0"
               disabled={saving}
               onClick={() => setFile(null)}
             >
               Remove file
-            </button>
+            </Button>
           </p>
         )}
-        <p className="settings-copy">
+        <p className="text-xs text-muted-foreground">
           Imports support public web pages and text-based PDFs up to 8 MiB / 100
           pages. Scans need OCR. Text drafts stay in this browser until
           captured.
         </p>
-        {storageError && <p role="alert">{storageError}</p>}
-        {error && (
-          <div className="settings-test-result fail" role="alert">
-            {error}
-          </div>
+        {storageError && (
+          <p role="alert" className="text-sm text-warning-foreground">
+            {storageError}
+          </p>
         )}
-        <div className="settings-actions">
-          <button
-            className="btn btn-md"
-            type="button"
-            disabled={saving}
-            onClick={onClose}
-          >
+        {error && (
+          <p role="alert" className="text-sm text-danger-foreground">
+            {error}
+          </p>
+        )}
+        <DialogFooter>
+          <Button variant="outline" disabled={saving} onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-md btn-amber"
-            type="button"
+          </Button>
+          <Button
             disabled={(!body.trim() && !file) || saving}
             onClick={() => void submit()}
           >
             {saving ? "Capturing…" : "Capture"}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Dispatch, SetStateAction } from "react";
 import type { Tab } from "../data/types";
 import { GRAPH_DISPLAY_DEFAULTS } from "./app-ctx";
+import { DEFAULT_NODE_FILTER } from "../graph/nodeFilter";
 import { useGraphNavigation } from "./useGraphNavigation";
 
 describe("useGraphNavigation", () => {
@@ -19,7 +20,7 @@ describe("useGraphNavigation", () => {
 
     act(() => {
       result.current.flyToNode("thr_target");
-      result.current.toggleGraphFilter("topic");
+      result.current.setGraphFilter({ folder: "topics", createdBefore: 5 });
       result.current.setGraphDisplay({
         nodeSizeScale: 99,
         labelSize: -1,
@@ -29,15 +30,19 @@ describe("useGraphNavigation", () => {
 
     expect(setTab).toHaveBeenCalledWith("graph");
     expect(result.current.graphFlyTo).toEqual({ id: "thr_target", nonce: 1 });
-    expect(result.current.graphFilters).toEqual(new Set(["topic"]));
+    expect(result.current.graphFilter).toMatchObject({
+      folder: "topics",
+      createdBefore: 5,
+    });
     expect(result.current.graphDisplay.nodeSizeScale).toBe(2);
     expect(result.current.graphDisplay.labelSize).toBe(8);
     expect(result.current.graphDisplay.layout).toBe("galaxy");
 
     act(() => vi.advanceTimersByTime(301));
+    // The timeline position is a view of the moment; it isn't persisted.
     expect(
-      JSON.parse(localStorage.getItem("loom.graphFilters") ?? "[]"),
-    ).toEqual(["topic"]);
+      JSON.parse(localStorage.getItem("loom.graphFilter.v2") ?? "{}"),
+    ).toEqual({ folder: "topics", community: null, showSuperseded: false });
     expect(
       JSON.parse(localStorage.getItem("loom.graphDisplay") ?? "{}").layout,
     ).toBe("galaxy");
@@ -45,8 +50,13 @@ describe("useGraphNavigation", () => {
 
   it("loads valid persisted settings and migrates orbitAutoCycle", () => {
     localStorage.setItem(
-      "loom.graphFilters",
-      JSON.stringify(["daily", "bogus"]),
+      "loom.graphFilter.v2",
+      JSON.stringify({
+        folder: "projects",
+        community: 9,
+        showSuperseded: true,
+        createdBefore: 5,
+      }),
     );
     localStorage.setItem(
       "loom.graphDisplay",
@@ -57,13 +67,19 @@ describe("useGraphNavigation", () => {
       useGraphNavigation(null, vi.fn() as never),
     );
 
-    expect(result.current.graphFilters).toEqual(new Set(["daily"]));
+    expect(result.current.graphFilter).toEqual({
+      folder: "projects",
+      community: null,
+      showSuperseded: true,
+      createdBefore: null,
+    });
     expect(result.current.graphDisplay.layout).toBe("wave");
     expect(result.current.graphDisplay.layoutAutoCycle).toBe(true);
   });
 
   it("keeps disposable fixture runs isolated from user preferences", () => {
-    localStorage.setItem("loom.graphFilters", JSON.stringify(["topic"]));
+    const stored = JSON.stringify({ folder: "topics" });
+    localStorage.setItem("loom.graphFilter.v2", stored);
     localStorage.setItem(
       "loom.graphDisplay",
       JSON.stringify({ layout: "wave" }),
@@ -73,14 +89,12 @@ describe("useGraphNavigation", () => {
       useGraphNavigation(2000, vi.fn() as never),
     );
 
-    expect(result.current.graphFilters.size).toBe(0);
+    expect(result.current.graphFilter).toEqual(DEFAULT_NODE_FILTER);
     expect(result.current.graphDisplay).toEqual(GRAPH_DISPLAY_DEFAULTS);
     act(() => {
-      result.current.toggleGraphFilter("project");
+      result.current.setGraphFilter({ folder: "projects" });
       vi.advanceTimersByTime(500);
     });
-    expect(localStorage.getItem("loom.graphFilters")).toBe(
-      JSON.stringify(["topic"]),
-    );
+    expect(localStorage.getItem("loom.graphFilter.v2")).toBe(stored);
   });
 });

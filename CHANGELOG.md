@@ -7,7 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-18
+
+Loom 1.2: a new interface. The frontend is rebuilt on shadcn/ui and Tailwind v4
+with one app shell, seven views and six themes, each one keyboard-reachable,
+checked for WCAG AA contrast, and screenshot-tested with axe in every theme. The
+backend is unchanged for the UI; where a screen needs data the API doesn't serve
+yet, the browser derives it or a typed mock stands in behind `VITE_LOOM_MOCKS`
+([docs/ui-backend-gaps.md](docs/ui-backend-gaps.md)). This release also ships
+the read-only Google, Outlook, GitHub and Email connectors, optional keychain
+storage, and release-quality gates added since 1.1.
+
 ### Added
+- **New interface** — React Router app shell with Graph, Notes, Board, Inbox and
+  Threads tabs, search, agent status, a light/dark toggle, Settings and New note;
+  real URLs (`/graph`, `/notes/<folder>/<slug>`, `/board`, `/inbox`,
+  `/threads/:id`, `/settings/:section`, old `?view=` links redirect); `g`-chord
+  view switching, ⌘K, ⌘N, ⌘⇧C, ⌘B; Sonner toasts. Fonts (Geist, Geist Mono,
+  Newsreader) are bundled; nothing loads from a CDN at runtime.
+- **Six themes** — Graphite (default), Paper, Midnight, Forest, Linen and High
+  contrast as CSS variables, painted before the bundle loads (no flash), with
+  follow-system, accent overrides, a serif editor font, a colorblind graph
+  palette, and text size, density and motion settings. A unit test holds every
+  theme and accent to WCAG AA.
+- **Graph** — nodes colored by community (seeded client-side Louvain), a folder
+  and community sidebar, a creation-date timeline with play, Local only and
+  Superseded toggles, zoom/fit controls, and the selected note open beside the
+  graph with Archivist's warnings and undoable recent commits.
+- **Notes** — a Plate editor over a lossless Markdown bridge (unchanged blocks
+  are written back byte for byte), raw-Markdown mode, properties, tag chips,
+  `[[` link picker, slash menu, Spider suggestion cards, a supersession banner,
+  a context rail (local graph, related notes, agent activity) and a History
+  sheet with git diffs and undo.
+- **Search palette** — cmdk palette with notes, actions (capture, ask the
+  Council, run Spider) and agents, community filter chips, a note preview with
+  "Why it matched", and an offline title/tag fallback.
+- **Board and Council** — stat cards (actions today, Sentinel pass rate, open
+  flags, next run), Running/Idle/Scheduled/Watching agent states, an activity
+  table where each row is an undoable commit, and Council replies that end in a
+  summary card.
+- **Inbox** — a triage list with source badges and statuses beside the capture
+  and Weaver's proposal (path, type, tags, community, links, close-match merge,
+  Sentinel pre-check), inline quick capture, and the Jobs ledger.
+- **Threads** — Scribe's daily logs with each day's new notes, flags and links,
+  Standup recaps, saved Council chats, a week of agent activity and vault stats.
+- **Screenshots** — `npm run screenshots` captures every view in every theme
+  into `docs/screenshots/` and fails on serious axe violations.
 - **Optional OS-keychain master-key storage** — source installs with the
   `keychain` extra can set `LOOM_SECRET_STORAGE=keyring` to migrate Loom's
   Fernet master key into the native credential store. Unavailable keychains
@@ -90,8 +135,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   updated to match, so the LLM no longer re-litigates them.
 
 ### Changed
-- **Frontend delivery and ownership** — Graph, Thread, Inbox, Board, Settings,
-  palette, and note modal load as independent chunks. Custom-agent registry
+- **Settings, onboarding and dialogs rebuilt** — every Settings section uses a
+  shared kit; the Integrations, Providers and Vault pages are split into
+  focused components. Archiving a vault and overwriting one on import confirm
+  in dialogs instead of browser prompts. A view that crashes now shows its
+  error in place instead of covering the app.
+- **Today removed** — `/graph` is home; Threads covers the daily view.
+- **Frontend delivery and ownership** — each view, the palette and the note
+  dialog load as independent chunks. Custom-agent registry
   state and Council history/streaming moved out of `AppContext` into directly
   tested hooks. The audited frontend toolchain was updated to patched versions.
 - **Inbox recovery guidance** — failed jobs are classified as transient provider,
@@ -109,6 +160,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   run goes quiet past 420s, it dumps all asyncio task stacks to the log
   before the 900s cap fires. Slow-step stalls previously left no trace
   ids and no changelog, making them impossible to diagnose after the fact.
+
+### Removed
+- The legacy stylesheets, old token aliases and the retired themes (saved
+  choices migrate to the new six), plus unused frontend modules and API client
+  functions left behind by the rebuild.
 
 ### Fixed
 - **`/process-all` timeout parity** — bulk processing now bounds each
@@ -408,7 +464,8 @@ layer — safe on localhost, do not expose the port as-is).
   in-app and in the README; OS-keychain support is not yet implemented.
 - No authentication on the API. Intended for local use only.
 
-[Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/Mpawlowski5467/Loom/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.2.0
 [1.1.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.1.0
 [1.0.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v1.0.0
 [0.5.0]: https://github.com/Mpawlowski5467/Loom/releases/tag/v0.5.0

@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import AxeBuilder from "@axe-core/playwright";
+import { expectView, openSettings, viewTab } from "../nav";
 
 const initialConfig = {
   active_vault: "",
@@ -152,20 +153,26 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     .getByRole("button", { name: "Skip for now" })
     .click();
 
-  await expect(page.getByRole("tab", { name: "Inbox" })).toBeVisible();
-  await page.getByRole("tab", { name: "Inbox" }).click();
+  await expect(viewTab(page, "Inbox")).toBeVisible();
+  await viewTab(page, "Inbox").click();
   await page
+    .getByRole("list", { name: "Captures" })
     .getByRole("button", { name: /Sigma 3 nodeReducer interpolation trick/ })
     .click();
-  await expect(page.getByText("Weaver suggestion")).toBeVisible();
-  await page.getByRole("button", { name: "accept & file" }).click();
-
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
   await expect(
-    page.getByText("Sigma reducer pattern", { exact: true }),
+    page.getByRole("region", { name: "Weaver's proposal" }),
+  ).toBeVisible();
+  const inboxAxe = await new AxeBuilder({ page }).analyze();
+  expect(
+    inboxAxe.violations.filter(({ impact }) =>
+      ["serious", "critical"].includes(impact ?? ""),
+    ),
+  ).toEqual([]);
+  await page.getByRole("button", { name: "Approve and file" }).click();
+
+  await expectView(page, "Notes");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Sigma reducer pattern" }),
   ).toBeVisible();
 
   await page
@@ -180,7 +187,8 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     }),
   ).toBeVisible();
 
-  await page.getByRole("button", { name: "Archive note" }).click();
+  await page.getByRole("button", { name: "More note actions" }).click();
+  await page.getByRole("menuitem", { name: "Archive note" }).click();
   await expect(
     page.getByRole("dialog", {
       name: 'Archive "Sigma reducer pattern — verified"?',
@@ -192,13 +200,30 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     })
     .getByRole("button", { name: "Archive" })
     .click();
-  await expect(page.getByRole("tab", { name: "Graph" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Graph");
 
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: "Archived", exact: true }).click();
+  await viewTab(page, "Threads").click();
+  await expectView(page, "Threads");
+  await expect(
+    page.getByRole("heading", { level: 1, name: /May 16, 2026/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: /^New notes/ })).toBeVisible();
+  await page
+    .getByRole("region", { name: /^Council chats/ })
+    .getByRole("link")
+    .first()
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Council summary" }).first(),
+  ).toBeVisible();
+  const threadsAxe = await new AxeBuilder({ page }).analyze();
+  expect(
+    threadsAxe.violations.filter(({ impact }) =>
+      ["serious", "critical"].includes(impact ?? ""),
+    ),
+  ).toEqual([]);
+
+  await openSettings(page, "Vault");
   await expect(page.getByRole("heading", { name: "Archived" })).toBeVisible();
   await expect(
     page.getByText("Sigma reducer pattern — verified", { exact: true }),
@@ -309,8 +334,7 @@ test("surfaces an AI provider connection failure in Settings", async ({
     sessionStorage.setItem("loom.splash.seen", "1");
   });
   await page.goto("/", { waitUntil: "domcontentloaded" });
-  await page.getByRole("button", { name: "Open settings" }).click();
-  await page.getByRole("button", { name: "Providers", exact: true }).click();
+  await openSettings(page, "Models & providers");
 
   const openAI = page.getByRole("article").filter({ hasText: "OpenAI" });
   await openAI.getByRole("button", { name: "Test", exact: true }).click();

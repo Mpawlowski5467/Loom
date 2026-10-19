@@ -8,20 +8,27 @@ export type NodeType =
   | "capture"
   | "custom";
 
-export type NoteStatus = "active" | "archived";
+/** `superseded`: replaced by a newer note (see data/supersession.ts). */
+export type NoteStatus = "active" | "archived" | "superseded";
 
-export type Tab = "today" | "graph" | "thread" | "inbox" | "board" | "settings";
+/** Top-level views; each maps to a route (see app/routes.ts). */
+export type Tab =
+  | "graph"
+  | "notes"
+  | "board"
+  | "inbox"
+  | "threads"
+  | "settings";
 
+/** Settings sections, in nav order; each is `/settings/<section>`. */
 export type SettingsSection =
+  | "general"
   | "appearance"
-  | "providers"
-  | "connections"
-  | "hardware"
-  | "policy"
-  | "vault"
-  | "archived"
-  | "about"
-  | "danger";
+  | "agents"
+  | "models"
+  | "privacy"
+  | "integrations"
+  | "vault";
 
 export type GraphLayout =
   | "force"
@@ -30,9 +37,6 @@ export type GraphLayout =
   | "arms"
   | "galaxy"
   | "wave";
-
-// Cards is the agent dashboard; pulse is an alternate viz of the same agents.
-export type BoardMode = "cards" | "pulse";
 
 export type AgentLayer = "loom" | "shuttle";
 
@@ -44,7 +48,8 @@ export type HistoryAction =
   | "linked"
   | "archived"
   | "flagged"
-  | "validated";
+  | "validated"
+  | "superseded";
 
 export type ActorTag = "you" | `agent:${string}`;
 
@@ -78,6 +83,9 @@ export interface Note {
   contentVersion?: string;
   status: NoteStatus;
   source: string;
+  author?: string;
+  /** Frontmatter fields Loom doesn't model explicitly (valid_from, …). */
+  extra?: Record<string, unknown>;
 }
 
 export type CaptureStatus =
@@ -175,6 +183,8 @@ export interface CouncilMessage {
   pending?: boolean;
   /** Per-agent contributions for ``who === "agent:council"`` messages. */
   contributions?: CouncilContribution[];
+  /** Vault commits this reply made (gap 10: the Council doesn't write yet). */
+  commits?: { sha: string; subject: string }[];
 }
 
 export interface Toast {

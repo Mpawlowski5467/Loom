@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { Clipboard, ExternalLink, RotateCcw } from "lucide-react";
-import { API_BASE } from "../../api/client";
-import { resetOnboarding } from "../../api/onboarding";
-import { ConfirmModal } from "../../components/ConfirmModal";
-import { useApp } from "../../context/app-ctx";
+import { RotateCcw } from "lucide-react";
+import { resetOnboarding } from "@/api/onboarding";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { Button } from "@/components/ui/button";
+import { useApp } from "@/context/app-ctx";
 import {
   getDiagnostics,
   getHealth,
@@ -12,8 +12,17 @@ import {
   type DiagnosticsResponse,
   type HealthResponse,
   type IndexStats,
-} from "../../api/diagnostics";
+} from "@/api/diagnostics";
+import { SettingsGroup } from "./kit/SettingsGroup";
+import { StatusLine } from "./kit/StatusLine";
+import { ApiLinks } from "./general/ApiLinks";
+import { BackendCard } from "./general/BackendCard";
+import { IndexStatsGroup } from "./general/IndexStatsGroup";
+import { InfoGrid, InfoRow } from "./general/InfoGrid";
+import { SecurityGroup } from "./general/SecurityGroup";
+import { describeApiError } from "@/api/client";
 
+/** Settings → General: diagnostics, access boundary, index and setup. */
 export function AboutSection(): ReactNode {
   const { refreshConfig } = useApp();
   const [diagnostics, setDiagnostics] = useState<DiagnosticsResponse | null>(
@@ -43,7 +52,7 @@ export function AboutSection(): ReactNode {
       })
       .catch((err) => {
         if (cancelled) return;
-        setMessage(err instanceof Error ? err.message : "Diagnostics failed");
+        setMessage(describeApiError(err, "Diagnostics failed"));
       });
     return () => {
       cancelled = true;
@@ -60,209 +69,70 @@ export function AboutSection(): ReactNode {
     (import.meta.env.VITE_APP_VERSION as string | undefined) ?? "dev";
 
   return (
-    <div className="settings-panel">
-      <div className="settings-kicker">About</div>
-      <h1 className="settings-title">Diagnostics</h1>
-      <div className="settings-diagnostics-grid">
-        <InfoRow label="Version" value={diagnostics?.app_version ?? "…"} />
-        <InfoRow label="Frontend" value={frontendVersion} />
-        <InfoRow label="Python" value={diagnostics?.python_version ?? "…"} />
-        <InfoRow
-          label="Started"
-          value={
-            diagnostics
-              ? new Date(diagnostics.started_at).toLocaleString()
-              : "…"
-          }
-        />
-        <InfoRow
-          label="Built"
-          value={
-            diagnostics?.build_date
-              ? new Date(diagnostics.build_date).toLocaleString()
-              : diagnostics
-                ? "Unknown"
+    <>
+      <SettingsGroup level={1} title="Diagnostics">
+        <InfoGrid>
+          <InfoRow
+            label="Version"
+            value={diagnostics?.app_version ?? "…"}
+            mono
+          />
+          <InfoRow label="Frontend" value={frontendVersion} mono />
+          <InfoRow
+            label="Python"
+            value={diagnostics?.python_version ?? "…"}
+            mono
+          />
+          <InfoRow
+            label="Started"
+            value={
+              diagnostics
+                ? new Date(diagnostics.started_at).toLocaleString()
                 : "…"
-          }
+            }
+            mono
+          />
+          <InfoRow
+            label="Built"
+            value={
+              diagnostics?.build_date
+                ? new Date(diagnostics.build_date).toLocaleString()
+                : diagnostics
+                  ? "Unknown"
+                  : "…"
+            }
+            mono
+          />
+          <InfoRow
+            label="Providers"
+            value={diagnostics?.providers_configured.join(", ") || "None"}
+          />
+        </InfoGrid>
+        <BackendCard
+          health={health}
+          vaultPath={diagnostics?.vault_path}
+          logPath={diagnostics?.log_path}
+          onCopyPath={diagnostics ? () => void copyVaultPath() : null}
         />
-        <InfoRow
-          label="Providers"
-          value={diagnostics?.providers_configured.join(", ") || "None"}
-        />
-      </div>
-      <div className="settings-kicker">Security</div>
-      <h1 className="settings-title">Local access boundary</h1>
-      <div className="settings-diagnostics-grid">
-        <InfoRow
-          label="Network scope"
-          value={
-            diagnostics
-              ? diagnostics.local_only
-                ? "Localhost only"
-                : "Custom hosts enabled"
-              : "…"
-          }
-        />
-        <InfoRow
-          label="API token"
-          value={
-            diagnostics?.api_token_configured ? "Configured" : "Not configured"
-          }
-        />
-        <InfoRow label="Secrets" value={diagnostics?.secret_storage ?? "…"} />
-        <InfoRow
-          label="Allowed hosts"
-          value={diagnostics?.allowed_hosts.join(", ") ?? "…"}
-        />
-      </div>
-      {diagnostics?.security_warnings.map((warning) => (
-        <div className="settings-security-warning" role="status" key={warning}>
-          {warning}
-        </div>
-      ))}
-      <div className="settings-about-card">
-        <div>
-          <div className="settings-field-label">Backend</div>
-          <span
-            className={`settings-health-pill ${health?.ok ? "ok" : "warn"}`}
+        {message && <StatusLine>{message}</StatusLine>}
+        <ApiLinks />
+      </SettingsGroup>
+      <SecurityGroup diagnostics={diagnostics} />
+      <IndexStatsGroup stats={indexStats} />
+      <SettingsGroup
+        title="Setup"
+        description="Re-run the first-run wizard. Your vault and provider settings are kept."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setConfirmRerun(true)}
           >
-            {health?.ok ? "Ready" : "Limited"}
-          </span>
-          {health && (
-            <ul className="settings-health-components">
-              {Object.entries(health.components).map(([name, c]) => (
-                <li key={name} className="settings-health-component">
-                  <span
-                    className={`settings-health-dot ${c.ready ? "ok" : "warn"}`}
-                    aria-hidden="true"
-                  />
-                  <span className="settings-health-component-name">{name}</span>
-                  <span className="settings-health-component-detail">
-                    {c.ready
-                      ? c.count !== undefined
-                        ? `${c.count}`
-                        : "ready"
-                      : (c.details ?? "not ready")}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-        <div>
-          <div className="settings-field-label">Vault path</div>
-          <div className="settings-vault-path">
-            {diagnostics?.vault_path ?? "Loading…"}
-          </div>
-        </div>
-        <div>
-          <div className="settings-field-label">Logs</div>
-          <div className="settings-vault-path">
-            {diagnostics?.log_path ?? "Loading…"}
-          </div>
-        </div>
-        <button
-          className="btn btn-md"
-          type="button"
-          onClick={() => void copyVaultPath()}
-          disabled={!diagnostics}
-        >
-          <Clipboard size={14} aria-hidden="true" />
-          Copy path
-        </button>
-      </div>
-      <div className="settings-about-card">
-        <div>
-          <div className="settings-field-label">Setup</div>
-          <p className="settings-copy settings-copy-tight">
-            Re-run the first-run wizard. Your vault and provider settings are
-            kept.
-          </p>
-        </div>
-        <button
-          className="btn btn-md"
-          type="button"
-          onClick={() => setConfirmRerun(true)}
-        >
-          <RotateCcw size={14} aria-hidden="true" />
-          Re-run onboarding
-        </button>
-      </div>
-      <div className="settings-kicker">Search index</div>
-      <h1 className="settings-title">Vector index</h1>
-      {indexStats && !indexStats.ready ? (
-        <p className="settings-copy settings-copy-tight">
-          No vector index yet. Configure an embed provider and reindex (Settings
-          → Providers) so semantic search has data.
-          {indexStats.unindexed_count > 0 &&
-            ` ${indexStats.unindexed_count} note(s) await indexing.`}
-        </p>
-      ) : (
-        <>
-          <div className="settings-diagnostics-grid">
-            <InfoRow
-              label="Chunks"
-              value={indexStats?.total_chunks.toString() ?? "…"}
-            />
-            <InfoRow
-              label="Notes indexed"
-              value={indexStats?.distinct_notes.toString() ?? "…"}
-            />
-            <InfoRow
-              label="Unindexed"
-              value={indexStats?.unindexed_count.toString() ?? "…"}
-            />
-            <InfoRow
-              label="Avg chunks / note"
-              value={indexStats?.avg_chunks_per_note.toFixed(1) ?? "…"}
-            />
-          </div>
-          {indexStats && Object.keys(indexStats.type_breakdown).length > 0 && (
-            <div className="settings-about-card">
-              <div>
-                <div className="settings-field-label">Chunks by type</div>
-                <ul className="settings-health-components">
-                  {Object.entries(indexStats.type_breakdown)
-                    .sort((a, b) => b[1] - a[1])
-                    .map(([type, count]) => (
-                      <li key={type} className="settings-health-component">
-                        <span className="settings-health-component-name">
-                          {type}
-                        </span>
-                        <span className="settings-health-component-detail">
-                          {count}
-                        </span>
-                      </li>
-                    ))}
-                </ul>
-              </div>
-            </div>
-          )}
-        </>
-      )}
-      <div className="settings-link-row">
-        <a href={`${API_BASE}/api/health`} target="_blank" rel="noreferrer">
-          Health <ExternalLink size={13} aria-hidden="true" />
-        </a>
-        <a
-          href={`${API_BASE}/api/diagnostics`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Diagnostics <ExternalLink size={13} aria-hidden="true" />
-        </a>
-        <a href={`${API_BASE}/api/traces`} target="_blank" rel="noreferrer">
-          LLM traces <ExternalLink size={13} aria-hidden="true" />
-        </a>
-        <a
-          href={`${API_BASE}/api/index/stats`}
-          target="_blank"
-          rel="noreferrer"
-        >
-          Index stats <ExternalLink size={13} aria-hidden="true" />
-        </a>
-      </div>
-      {message && <div className="settings-inline-status">{message}</div>}
+            <RotateCcw aria-hidden="true" />
+            Re-run onboarding
+          </Button>
+        }
+      />
       {confirmRerun && (
         <ConfirmModal
           title="Re-run the onboarding wizard?"
@@ -273,15 +143,6 @@ export function AboutSection(): ReactNode {
           onClose={() => setConfirmRerun(false)}
         />
       )}
-    </div>
-  );
-}
-
-function InfoRow(props: { label: string; value: string }): ReactNode {
-  return (
-    <div className="settings-info-row">
-      <span>{props.label}</span>
-      <strong>{props.value}</strong>
-    </div>
+    </>
   );
 }

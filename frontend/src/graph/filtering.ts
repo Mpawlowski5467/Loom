@@ -1,42 +1,11 @@
 import type Graph from "graphology";
-import type { Note, NodeType } from "../data/types";
-
-/** Canonical runtime list for every graph-visible note type. */
-export const NODE_TYPES: readonly NodeType[] = [
-  "project",
-  "topic",
-  "people",
-  "daily",
-  "capture",
-  "custom",
-] as const;
-
-const NODE_TYPE_SET: ReadonlySet<string> = new Set(NODE_TYPES);
-
-/**
- * Validate graph-filter data loaded from storage. Older versions used the
- * singular `person`; migrate it while discarding malformed and unknown values.
- */
-export function sanitizeGraphFilters(value: unknown): Set<NodeType> {
-  const filters = new Set<NodeType>();
-  if (!Array.isArray(value)) return filters;
-
-  for (const raw of value) {
-    if (typeof raw !== "string") continue;
-    const normalized = raw.trim().toLowerCase();
-    const migrated = normalized === "person" ? "people" : normalized;
-    if (NODE_TYPE_SET.has(migrated)) filters.add(migrated as NodeType);
-  }
-  return filters;
-}
-
-/** Empty filters mean "all types"; otherwise the set is an inclusion list. */
-export function isNodeTypeVisible(
-  type: string,
-  filters: ReadonlySet<string>,
-): boolean {
-  return filters.size === 0 || filters.has(type);
-}
+import type { Note } from "../data/types";
+import {
+  filterIsNarrowed,
+  nodePassesFilter,
+  notePassesFilter,
+  type GraphNodeFilter,
+} from "./nodeFilter";
 
 /** Read the materialized visibility used by physics, layouts, and exports. */
 export function isGraphNodeVisible(graph: Graph, id: string): boolean {
@@ -44,7 +13,7 @@ export function isGraphNodeVisible(graph: Graph, id: string): boolean {
 }
 
 export interface GraphVisibilityOptions {
-  typeFilters: ReadonlySet<string>;
+  filter: GraphNodeFilter;
   selectedId?: string | null;
   isolateNeighbors?: boolean;
 }
@@ -56,16 +25,9 @@ export interface GraphVisibilityResult {
   restricted: boolean;
 }
 
-function nodePassesTypeFilters(
-  attributes: Record<string, unknown>,
-  filters: ReadonlySet<string>,
-): boolean {
-  return isNodeTypeVisible(String(attributes["noteType"] ?? "custom"), filters);
-}
-
 /**
- * Materialize the graph's complete visibility state in one pass. Type filters
- * are applied first; optional neighborhood isolation then retains the selected
+ * Materialize the graph's complete visibility state in one pass. The node
+ * filter (folder, community, superseded, timeline) is applied first; optional neighborhood isolation then retains the selected
  * visible node and its direct visible in/out neighbors. Keeping both reasons
  * on attributes prevents a later filter update from accidentally erasing the
  * isolation boundary (or vice versa).
@@ -74,11 +36,11 @@ export function applyGraphVisibility(
   graph: Graph,
   options: GraphVisibilityOptions,
 ): GraphVisibilityResult {
-  const { typeFilters, selectedId = null, isolateNeighbors = false } = options;
+  const { filter, selectedId = null, isolateNeighbors = false } = options;
   const selectedVisible = Boolean(
     selectedId &&
     graph.hasNode(selectedId) &&
-    nodePassesTypeFilters(graph.getNodeAttributes(selectedId), typeFilters),
+    nodePassesFilter(graph.getNodeAttributes(selectedId), filter),
   );
   const isolationActive = Boolean(
     isolateNeighbors && selectedId && selectedVisible,
@@ -87,7 +49,7 @@ export function applyGraphVisibility(
   if (isolationActive && selectedId) {
     neighborhood.add(selectedId);
     graph.forEachNeighbor(selectedId, (neighbor, attributes) => {
-      if (nodePassesTypeFilters(attributes, typeFilters)) {
+      if (nodePassesFilter(attributes, filter)) {
         neighborhood.add(neighbor);
       }
     });
@@ -96,19 +58,19 @@ export function applyGraphVisibility(
   let visibleCount = 0;
   graph.updateEachNodeAttributes(
     (id, attributes) => {
-      const hiddenByType = !nodePassesTypeFilters(attributes, typeFilters);
+      const hiddenByFilter = !nodePassesFilter(attributes, filter);
       const hiddenByIsolation = isolationActive && !neighborhood.has(id);
-      const hidden = hiddenByType || hiddenByIsolation;
+      const hidden = hiddenByFilter || hiddenByIsolation;
       if (!hidden) visibleCount += 1;
       return {
         ...attributes,
-        hiddenByType,
+        hiddenByFilter,
         hiddenByIsolation,
         hidden,
       };
     },
     {
-      attributes: ["hidden", "hiddenByType", "hiddenByIsolation", "noteType"],
+      attributes: ["hidden", "hiddenByFilter", "hiddenByIsolation"],
     },
   );
 
@@ -116,20 +78,9 @@ export function applyGraphVisibility(
     visibleCount,
     selectedVisible,
     isolationActive,
-    restricted: typeFilters.size > 0 || isolationActive,
+    restricted:
+      filterIsNarrowed(filter) || isolationActive || visibleCount < graph.order,
   };
-}
-
-/**
- * Materialize type filters on Graphology nodes. Reducer-only visibility is not
- * enough: simulations and non-Sigma renderers read graph attributes directly.
- * Returns the number of visible nodes.
- */
-export function applyGraphFilters(
-  graph: Graph,
-  filters: ReadonlySet<string>,
-): number {
-  return applyGraphVisibility(graph, { typeFilters: filters }).visibleCount;
 }
 
 /** True when any filter/isolation rule currently hides at least one node. */
@@ -159,16 +110,17 @@ export interface VisibleGraphStats {
   edges: number;
 }
 
-/** Direct incoming/outgoing neighbors that survive the active type filters. */
+/** Direct incoming/outgoing neighbors that survive the active filter. */
 export function computeVisibleNeighborIds(
   notes: readonly Note[],
-  filters: ReadonlySet<string>,
+  filter: GraphNodeFilter,
   selectedId: string | null,
+  slotOf: ReadonlyMap<string, number | null> = new Map(),
 ): Set<string> {
   if (!selectedId) return new Set();
   const visibleIds = new Set(
     notes
-      .filter((note) => isNodeTypeVisible(note.type, filters))
+      .filter((note) => notePassesFilter(note, filter, slotOf))
       .map((note) => note.id),
   );
   if (!visibleIds.has(selectedId)) return new Set();
@@ -246,20 +198,25 @@ export function computeVisibleGraphBBox(
  */
 export function computeVisibleGraphStats(
   notes: readonly Note[],
-  filters: ReadonlySet<string>,
+  filter: GraphNodeFilter,
   scope?: { selectedId?: string | null; isolateNeighbors?: boolean },
+  slotOf: ReadonlyMap<string, number | null> = new Map(),
 ): VisibleGraphStats {
-  const typeVisibleIds = new Set(
+  const filterVisibleIds = new Set(
     notes
-      .filter((note) => isNodeTypeVisible(note.type, filters))
+      .filter((note) => notePassesFilter(note, filter, slotOf))
       .map((note) => note.id),
   );
-  let visibleIds = typeVisibleIds;
+  let visibleIds = filterVisibleIds;
   const selectedId = scope?.selectedId ?? null;
-  if (scope?.isolateNeighbors && selectedId && typeVisibleIds.has(selectedId)) {
+  if (
+    scope?.isolateNeighbors &&
+    selectedId &&
+    filterVisibleIds.has(selectedId)
+  ) {
     visibleIds = new Set([
       selectedId,
-      ...computeVisibleNeighborIds(notes, filters, selectedId),
+      ...computeVisibleNeighborIds(notes, filter, selectedId, slotOf),
     ]);
   }
   const seen = new Map<string, Set<string>>();

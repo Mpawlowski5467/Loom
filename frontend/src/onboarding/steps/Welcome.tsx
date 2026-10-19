@@ -1,40 +1,45 @@
 import type { ReactNode } from "react";
-import { LoomMark } from "../../components/primitives/LoomMark";
+import { LoomMark } from "@/components/primitives/LoomMark";
+import { Button } from "@/components/ui/button";
+import { Step, StepActions } from "../StepLayout";
 
 interface Props {
   onNext: () => void;
 }
 
+const POINTS = [
+  "Everything stays on this machine. No cloud, no telemetry.",
+  "Bring your own AI provider — OpenAI, Anthropic, xAI, or local Ollama.",
+  "You can always re-run this setup from Settings later.",
+];
+
 export function Welcome({ onNext }: Props): ReactNode {
   return (
-    <div className="onb-step onb-welcome">
-      <div className="onb-mark">
-        <LoomMark size={96} dur={2.6} loop color="var(--ink)" />
+    <Step className="items-center">
+      <div className="mb-2 text-foreground">
+        <LoomMark size={96} dur={2.6} loop />
       </div>
-      <h1 className="onb-h1">Welcome to Loom</h1>
-      <p className="onb-lede">
+      <h1 className="text-center font-serif text-3xl font-medium tracking-tight text-foreground">
+        Welcome to Loom
+      </h1>
+      <p className="text-center font-serif text-base/relaxed text-muted-foreground">
         A local-first memory system. Your notes live as plain markdown on disk —
         Loom's agents read and link them on your behalf.
       </p>
-      <ul className="onb-points">
-        <li>
-          <span className="onb-points-mark">·</span>
-          Everything stays on this machine. No cloud, no telemetry.
-        </li>
-        <li>
-          <span className="onb-points-mark">·</span>
-          Bring your own AI provider — OpenAI, Anthropic, xAI, or local Ollama.
-        </li>
-        <li>
-          <span className="onb-points-mark">·</span>
-          You can always re-run this setup from Settings later.
-        </li>
+      <ul className="flex flex-col gap-2 self-stretch text-sm/relaxed text-secondary-foreground">
+        {POINTS.map((point) => (
+          <li key={point} className="flex items-start gap-2.5">
+            <span
+              aria-hidden="true"
+              className="mt-2 size-1.5 shrink-0 rounded-full bg-brand"
+            />
+            {point}
+          </li>
+        ))}
       </ul>
-      <div className="onb-actions">
-        <button className="btn btn-md btn-active" onClick={onNext}>
-          Begin →
-        </button>
-      </div>
-    </div>
+      <StepActions className="self-stretch">
+        <Button onClick={onNext}>Begin →</Button>
+      </StepActions>
+    </Step>
   );
 }

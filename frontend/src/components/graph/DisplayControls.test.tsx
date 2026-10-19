@@ -83,6 +83,9 @@ describe("DisplayControls — depth toggle", () => {
   it("reflects and toggles depthEnabled", async () => {
     const user = userEvent.setup();
     const { setGraphDisplay } = renderControls({ depthEnabled: true });
+    await user.click(
+      screen.getByRole("button", { name: "Advanced presentation" }),
+    );
     const toggle = screen.getByRole("switch", { name: "Depth" });
     expect(toggle).toHaveAttribute("aria-checked", "true");
     await user.click(toggle);

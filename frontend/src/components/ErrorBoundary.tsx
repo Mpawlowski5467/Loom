@@ -1,11 +1,16 @@
 import { Component } from "react";
 import type { ErrorInfo, ReactNode } from "react";
+import { TriangleAlert } from "lucide-react";
+import { BootError } from "./BootScreen";
 
 interface ErrorBoundaryProps {
   children: ReactNode;
-  /** Optional label for the fallback ("the graph", "this view"). */
+  /**
+   * What failed ("the graph", "this view"). A labelled boundary's fallback
+   * fills only its own area; the unlabelled root one covers the window.
+   */
   label?: string;
-  /** Render-prop fallback; overrides the default boot-style screen. */
+  /** Render-prop fallback; overrides the default full-screen fallback. */
   fallback?: (error: Error, reset: () => void) => ReactNode;
   /**
    * Changing this value resets the boundary — pass the active tab so switching
@@ -62,17 +67,18 @@ export class ErrorBoundary extends Component<
 
     const what = this.props.label ?? "the app";
     return (
-      <div className="boot-screen boot-screen-error" role="alert">
-        <div className="boot-mark" aria-hidden="true" />
-        <span className="boot-label">loom</span>
-        <p className="boot-error-body">
-          Something went wrong rendering {what}. The error was contained — your
-          notes are safe on disk.
-        </p>
-        <button type="button" className="boot-retry" onClick={this.reset}>
-          Try again
-        </button>
-      </div>
+      <BootError
+        icon={TriangleAlert}
+        message={
+          <>
+            Something went wrong rendering {what}. The error was contained —
+            your notes are safe on disk.
+          </>
+        }
+        actionLabel="Try again"
+        onAction={this.reset}
+        contained={this.props.label !== undefined}
+      />
     );
   }
 }

@@ -1,21 +1,28 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import { Loader2, Pencil, Play, Trash2 } from "lucide-react";
-import { useFocusTrap } from "../../components/useFocusTrap";
-import { StatusBadge } from "../../components/primitives/StatusBadge";
-import { AgentBlob } from "../../components/primitives/AgentBlob";
+import { useEffect, useState } from "react";
 import {
   getAgentRegistry,
   type AgentRegistryRecord,
-} from "../../api/agentsRegistry";
-import type { AgentActivity } from "../../api/activity";
-import type { Agent } from "../../data/types";
-import { boardStatus } from "./boardHelpers";
+} from "@/api/agentsRegistry";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import type { Agent } from "@/data/types";
 import { AgentActivityPanel } from "./AgentActivityPanel";
+import { AgentStateBadge } from "./AgentStateBadge";
+import { agentDisplayName } from "./boardHelpers";
+import type { AgentBoardState } from "./boardStats";
 
 interface AgentDetailModalProps {
   agent: Agent;
-  live: AgentActivity | undefined;
+  state: AgentBoardState;
   isCustom: boolean;
   runnable: boolean;
   running: boolean;
@@ -26,141 +33,115 @@ interface AgentDetailModalProps {
   pollMs?: number;
 }
 
-/**
- * Full-page inspector for one agent: identity + live status, its registry
- * instructions (persona prompt for built-ins), and recent activity (runs +
- * LLM calls). Opened by clicking an agent card's body.
- */
-export function AgentDetailModal({
-  agent,
-  live,
-  isCustom,
-  runnable,
-  running,
-  onRun,
-  onEdit,
-  onDelete,
-  onClose,
-  pollMs,
-}: AgentDetailModalProps): ReactNode {
+const heading =
+  "font-mono text-[11px] tracking-wider text-muted-foreground uppercase";
+
+/** One agent's logs: identity and state, its instructions, runs and LLM calls. */
+export function AgentDetailModal(p: AgentDetailModalProps) {
+  const { agent } = p;
   const [record, setRecord] = useState<AgentRegistryRecord | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const dialogRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
-  const status = boardStatus(agent, live);
+  const name = agentDisplayName(agent);
 
   useEffect(() => {
     let cancelled = false;
-    getAgentRegistry(agent.id)
-      .then((r) => {
-        if (!cancelled) setRecord(r);
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "Failed to load agent");
-        }
-      });
+    getAgentRegistry(agent.id).then(
+      (r) => !cancelled && setRecord(r),
+      (e: unknown) =>
+        !cancelled &&
+        setError(e instanceof Error ? e.message : "Failed to load agent"),
+    );
     return () => {
       cancelled = true;
     };
   }, [agent.id]);
 
-  const hasOverride = Boolean(record?.provider || record?.chat_model);
-
+  const override = record && (record.provider || record.chat_model);
   return (
-    <div
-      className="settings-modal-backdrop"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        className="settings-modal agent-detail"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="agent-detail-title"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog open onOpenChange={(open) => !open && p.onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[85vh] flex-col gap-5 overflow-y-auto sm:max-w-3xl"
       >
-        <div className="agent-detail-head">
-          <AgentBlob agent={agent.id} state={status.state} size={40} />
-          <div className="agent-detail-id">
-            <h2 id="agent-detail-title" className="agent-detail-name">
-              {agent.name}
-            </h2>
-            <div className="agent-detail-meta">
-              <span className="agent-detail-layer">{agent.layer} layer</span>
-              <span className="agent-detail-badge">
-                {isCustom ? "custom" : "🔒 system"}
-              </span>
-            </div>
+        <DialogHeader className="flex-row items-center gap-3 space-y-0 text-left">
+          <AgentAvatar actor={agent.id} size="lg" />
+          <div className="min-w-0 flex-1">
+            <DialogTitle>{name}</DialogTitle>
+            <DialogDescription>
+              {agent.layer === "shuttle" ? "Shuttle layer" : "Loom layer"} ·{" "}
+              {p.isCustom ? "custom agent" : "system agent"}
+            </DialogDescription>
           </div>
-          <StatusBadge state={status.state} label={status.label} />
+          <AgentStateBadge state={p.state} />
+        </DialogHeader>
+        <div className="flex flex-col gap-1 text-sm">
+          <p className="text-secondary-foreground">{agent.role}</p>
+          {override && (
+            <p className="font-mono text-xs text-muted-foreground">
+              model: {record.provider || "default provider"} ·{" "}
+              {record.chat_model || "default model"}
+            </p>
+          )}
         </div>
-
-        <div className="agent-detail-role">{agent.role}</div>
-        {hasOverride && (
-          <div className="agent-detail-model">
-            model: {record?.provider || "default provider"} ·{" "}
-            {record?.chat_model || "default model"}
-          </div>
-        )}
-
-        <div className="agent-detail-subhead">Instructions</div>
-        {error && (
-          <div className="settings-test-result fail" role="status">
-            {error}
-          </div>
-        )}
-        <pre className="agent-detail-instructions">
-          {record ? record.system_prompt || "(none)" : error ? "—" : "Loading…"}
-        </pre>
-
-        <div className="agent-detail-subhead">Activity</div>
-        <AgentActivityPanel agentId={agent.id} pollMs={pollMs} />
-
-        <div className="settings-actions">
-          {isCustom && (
+        <section className="flex flex-col gap-2">
+          <h3 className={heading}>Instructions</h3>
+          {error && (
+            <p role="status" className="text-sm text-danger-foreground">
+              {error}
+            </p>
+          )}
+          <pre className="max-h-56 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap text-secondary-foreground">
+            {record
+              ? record.system_prompt || "(none)"
+              : error
+                ? "—"
+                : "Loading…"}
+          </pre>
+        </section>
+        <section className="flex flex-col gap-2">
+          <h3 className={heading}>Activity</h3>
+          <AgentActivityPanel agentId={agent.id} pollMs={p.pollMs} />
+        </section>
+        <DialogFooter className="gap-2">
+          {p.isCustom && (
             <>
-              <button
-                className="btn btn-md"
-                type="button"
-                onClick={onEdit}
-                aria-label={`Edit ${agent.name}`}
+              <Button
+                variant="ghost"
+                onClick={p.onEdit}
+                aria-label={`Edit ${name}`}
               >
-                <Pencil size={13} aria-hidden="true" />
-                <span>edit</span>
-              </button>
-              <button
-                className="btn btn-md"
-                type="button"
-                onClick={onDelete}
-                aria-label={`Delete ${agent.name}`}
+                <Pencil aria-hidden="true" />
+                Edit
+              </Button>
+              <Button
+                variant="ghost"
+                onClick={p.onDelete}
+                aria-label={`Delete ${name}`}
               >
-                <Trash2 size={13} aria-hidden="true" />
-                <span>delete</span>
-              </button>
+                <Trash2 aria-hidden="true" />
+                Delete
+              </Button>
             </>
           )}
-          <button className="btn btn-md" type="button" onClick={onClose}>
+          <Button variant="outline" onClick={p.onClose}>
             Close
-          </button>
-          {runnable && (
-            <button
-              className="btn btn-md btn-active"
-              type="button"
-              onClick={onRun}
-              disabled={running}
-              aria-label={`Run ${agent.name}`}
+          </Button>
+          {p.runnable && (
+            <Button
+              onClick={p.onRun}
+              disabled={p.running}
+              aria-label={`Run ${name} now`}
             >
-              {running ? (
-                <Loader2 size={13} aria-hidden="true" className="spin" />
+              {p.running ? (
+                <Loader2 aria-hidden="true" className="animate-spin" />
               ) : (
-                <Play size={13} aria-hidden="true" />
+                <Play aria-hidden="true" />
               )}
-              <span>run</span>
-            </button>
+              Run now
+            </Button>
           )}
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

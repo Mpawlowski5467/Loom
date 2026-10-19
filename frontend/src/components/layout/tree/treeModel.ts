@@ -40,10 +40,6 @@ export const FOLDER_ORDER: { folder: string; type: NodeType }[] = [
   { folder: "agents", type: "people" },
 ];
 
-export const FOLDER_TYPE_BY_NAME = new Map(
-  FOLDER_ORDER.map((f) => [f.folder, f.type] as const),
-);
-
 export const FOLDER_NAME_RE = /^[A-Za-z0-9_-]+(?:\/[A-Za-z0-9_-]+)*$/;
 export const SAFE_NAME_RE = /^[A-Za-z0-9_-]+$/;
 export const RESERVED_FOLDERS = new Set([
@@ -213,16 +209,4 @@ export function useFolderTree(
     () => buildFolderTree(notes, extraFolders, filterLower),
     [notes, extraFolders, filterLower],
   );
-}
-
-/** Per-note connection counts (outgoing + incoming links). */
-export function useLinkCount(notes: Note[]): Map<string, number> {
-  return useMemo(() => {
-    const m = new Map<string, number>();
-    for (const n of notes) {
-      m.set(n.id, (m.get(n.id) ?? 0) + n.links.length);
-      for (const l of n.links) m.set(l, (m.get(l) ?? 0) + 1);
-    }
-    return m;
-  }, [notes]);
 }

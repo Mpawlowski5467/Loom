@@ -1,4 +1,5 @@
-import { apiClient } from "./client";
+import { ApiError, apiClient } from "./client";
+import { MOCKS_ENABLED, mockDelay } from "./mocks";
 
 export interface ConnectionEvidence {
   direction: "incoming" | "outgoing";
@@ -30,4 +31,25 @@ export function getConnections(
   noteId: string,
 ): Promise<{ note_id: string; connections: ConnectionEvidence[] }> {
   return apiClient.get(`/api/connections/${encodeURIComponent(noteId)}`);
+}
+
+/**
+ * Dismiss a suggested link so later scans don't offer it again.
+ *
+ * BACKEND GAP (docs/ui-backend-gaps.md §6): `POST /api/connections/dismiss`
+ * doesn't exist. Resolves `false` when the backend can't record it, so the
+ * caller can remember the dismissal locally instead.
+ */
+export async function dismissConnection(
+  payload: Pick<ConnectionEvidence, "source_id" | "target_id">,
+): Promise<boolean> {
+  if (MOCKS_ENABLED) return mockDelay(true);
+  try {
+    await apiClient.post("/api/connections/dismiss", payload);
+    return true;
+  } catch (err) {
+    if (err instanceof ApiError && (err.status === 404 || err.status === 405))
+      return false;
+    throw err;
+  }
 }

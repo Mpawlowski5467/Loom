@@ -294,32 +294,68 @@ describe("ConnectionsSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("saves schedule and private feed settings", async () => {
+  it("saves the schedule from the Standup card", async () => {
+    const user = userEvent.setup();
+    vi.mocked(updateStandupAutomation).mockResolvedValue({
+      ...automation,
+      schedule: { enabled: true, run_time: "07:30", timezone: "Europe/Warsaw" },
+    });
+    renderSection();
+    const timezone = await screen.findByDisplayValue("America/Chicago");
+    await user.click(
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
+    );
+    await user.clear(screen.getByLabelText("Run time"));
+    await user.type(screen.getByLabelText("Run time"), "07:30");
+    await user.clear(timezone);
+    await user.type(timezone, "Europe/Warsaw");
+    await user.clear(screen.getByLabelText("Calendar name"));
+    await user.type(screen.getByLabelText("Calendar name"), "Work");
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
+
+    await user.click(
+      screen.getByRole("button", { name: "Save Standup schedule" }),
+    );
+
+    expect(await screen.findByText("Schedule saved.")).toBeInTheDocument();
+    expect(updateStandupAutomation).toHaveBeenCalledTimes(1);
+    expect(updateStandupAutomation).toHaveBeenCalledWith({
+      schedule: { enabled: true, run_time: "07:30", timezone: "Europe/Warsaw" },
+    });
+    expect(screen.queryByText("Unsaved changes")).not.toBeInTheDocument();
+    // The calendar card's unsaved edit is neither sent nor reset.
+    expect(screen.getByLabelText("Calendar name")).toHaveValue("Work");
+  });
+
+  it("saves the private feed and keeps unsaved schedule edits", async () => {
     const user = userEvent.setup();
     renderSection();
     await screen.findByDisplayValue("America/Chicago");
     await user.click(
-      screen.getByRole("checkbox", { name: "Schedule daily Standup" }),
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
     );
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable calendar connection" }),
+      screen.getByRole("switch", { name: "Enable calendar connection" }),
     );
     await user.type(
       screen.getByPlaceholderText("webcal://… or https://…"),
       "https://calendar.example/private.ics",
     );
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(updateStandupAutomation).toHaveBeenCalledWith(
-        expect.objectContaining({
-          schedule: expect.objectContaining({ enabled: true }),
-          calendar: expect.objectContaining({
-            enabled: true,
-            feed_url: "https://calendar.example/private.ics",
-          }),
-        }),
-      ),
+    await user.click(
+      screen.getByRole("button", { name: "Save calendar feed settings" }),
     );
+    await waitFor(() =>
+      expect(updateStandupAutomation).toHaveBeenCalledWith({
+        calendar: expect.objectContaining({
+          enabled: true,
+          feed_url: "https://calendar.example/private.ics",
+        }),
+      }),
+    );
+    expect(
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
+    ).toBeChecked();
+    expect(screen.getByText("Unsaved changes")).toBeInTheDocument();
   });
 
   it("tests the feed and renders its event preview", async () => {
@@ -415,7 +451,7 @@ describe("ConnectionsSection", () => {
       await screen.findByPlaceholderText(/octocat\/hello-world/);
     await user.type(reposInput, "{enter}mpawlowski/loom");
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable GitHub connection" }),
+      screen.getByRole("switch", { name: "Enable GitHub connection" }),
     );
     await user.click(
       screen.getByRole("button", { name: "Save GitHub settings" }),
@@ -466,10 +502,12 @@ describe("ConnectionsSection", () => {
       await screen.findByText("1 of 2 repos reachable"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("✓ octocat/hello-world — Hello World"),
+      screen.getByText("octocat/hello-world — Hello World"),
     ).toBeInTheDocument();
+    expect(screen.getByText("octocat/missing — Not Found")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Reachable" })).toBeInTheDocument();
     expect(
-      screen.getByText("✗ octocat/missing — Not Found"),
+      screen.getByRole("img", { name: "Unreachable" }),
     ).toBeInTheDocument();
     expect(testGitHub).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
@@ -560,7 +598,7 @@ describe("ConnectionsSection", () => {
     await screen.findByDisplayValue("imap.example.com");
     await user.type(screen.getByPlaceholderText("App password"), "s3cret");
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable email connection" }),
+      screen.getByRole("switch", { name: "Enable email connection" }),
     );
     await user.click(
       screen.getByRole("button", { name: "Save email settings" }),
@@ -855,10 +893,10 @@ describe("ConnectionsSection", () => {
       await within(card).findByText("Connected as ada@gmail.com"),
     ).toBeInTheDocument();
     expect(
-      within(card).getByRole("checkbox", { name: "Enable Google Calendar" }),
+      within(card).getByRole("switch", { name: "Enable Google Calendar" }),
     ).toBeInTheDocument();
     expect(
-      within(card).getByRole("checkbox", { name: "Enable Gmail" }),
+      within(card).getByRole("switch", { name: "Enable Gmail" }),
     ).toBeInTheDocument();
     expect(
       within(card).getByPlaceholderText(/team@group\.calendar\.google\.com/),
@@ -894,7 +932,7 @@ describe("ConnectionsSection", () => {
     ).closest("section") as HTMLElement;
     await within(card).findByText("Connected as ada@gmail.com");
     await user.click(
-      within(card).getByRole("checkbox", { name: "Enable Google Calendar" }),
+      within(card).getByRole("switch", { name: "Enable Google Calendar" }),
     );
     await user.type(
       within(card).getByPlaceholderText(/team@group\.calendar\.google\.com/),

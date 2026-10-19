@@ -6,6 +6,7 @@ import {
 } from "../api/revisions";
 import { TextDiff } from "./TextDiff";
 import { ConfirmModal } from "./ConfirmModal";
+import { Button } from "./ui/button";
 
 export function RunUndo({
   runId,
@@ -20,9 +21,11 @@ export function RunUndo({
   const [confirm, setConfirm] = useState(false);
   const [undone, setUndone] = useState(false);
   return (
-    <div className="run-undo">
-      <button
-        className="btn btn-sm"
+    <div className="flex flex-col gap-2 px-3 pb-3">
+      <Button
+        variant="outline"
+        size="xs"
+        className="self-start"
         disabled={busy || disabled || undone}
         onClick={async () => {
           setBusy(true);
@@ -39,39 +42,45 @@ export function RunUndo({
         }}
       >
         {undone ? "Run undone" : "Preview undo of vault changes"}
-      </button>
-      {error && <p role="alert">{error}</p>}
+      </Button>
+      {error && (
+        <p role="alert" className="text-xs text-danger-foreground">
+          {error}
+        </p>
+      )}
       {preview && !undone && (
-        <div className="revision-panel">
+        <div className="flex flex-col gap-2 rounded-md border border-border p-2 text-xs text-secondary-foreground">
           <p>
             {preview.files.length} affected files. New notes will move to the
             archive. Existing notes and source captures will return to their
             earlier versions.
           </p>
           {preview.conflicts.length > 0 && (
-            <p role="alert">
+            <p role="alert" className="text-danger-foreground">
               Undo blocked: changed since this run:{" "}
               {preview.conflicts.join(", ")}
             </p>
           )}
           {preview.files.map((file) => (
             <details key={file.path}>
-              <summary>
+              <summary className="cursor-pointer font-mono">
                 {file.path}
                 {file.conflict ? " · conflict" : ""}
               </summary>
               <TextDiff before={file.after ?? ""} after={file.before ?? ""} />
             </details>
           ))}
-          <button
-            className="btn btn-sm"
+          <Button
+            variant="outline"
+            size="xs"
+            className="self-start"
             disabled={
               disabled || preview.conflicts.length > 0 || !preview.files.length
             }
             onClick={() => setConfirm(true)}
           >
             Undo all vault changes in this run
-          </button>
+          </Button>
         </div>
       )}
       {confirm && preview && (

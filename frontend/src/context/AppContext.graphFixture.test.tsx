@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { UseLoomConfigResult } from "./useLoomConfig";
 import { AppProvider } from "./AppContext";
 import { useApp } from "./app-ctx";
+import { MemoryRouter } from "react-router";
 
 const { mockConfig } = vi.hoisted(() => ({
   mockConfig: {
@@ -32,8 +33,8 @@ function FixtureProbe(): ReactNode {
     treeVisible,
     offline,
     configLoading,
-    graphFilters,
-    toggleGraphFilter,
+    graphFilter,
+    setGraphFilter,
     graphDisplay,
     setGraphDisplay,
   } = useApp();
@@ -52,10 +53,10 @@ function FixtureProbe(): ReactNode {
       <dt>config loading</dt>
       <dd>{String(configLoading)}</dd>
       <dt>filters</dt>
-      <dd>{graphFilters.size}</dd>
+      <dd>{graphFilter.folder ?? "all folders"}</dd>
       <dt>layout</dt>
       <dd>{graphDisplay.layout}</dd>
-      <button type="button" onClick={() => toggleGraphFilter("daily")}>
+      <button type="button" onClick={() => setGraphFilter({ folder: "daily" })}>
         Change filters
       </button>
       <button type="button" onClick={() => setGraphDisplay({ layout: "wave" })}>
@@ -69,7 +70,10 @@ describe("AppProvider graph fixture mode", () => {
   beforeEach(() => {
     localStorage.clear();
     localStorage.setItem("loom.treeVisible", "true");
-    localStorage.setItem("loom.graphFilters", JSON.stringify(["topic"]));
+    localStorage.setItem(
+      "loom.graphFilter.v2",
+      JSON.stringify({ folder: "topics" }),
+    );
     localStorage.setItem(
       "loom.graphDisplay",
       JSON.stringify({ layout: "spiral", nodeSizeScale: 2 }),
@@ -83,19 +87,21 @@ describe("AppProvider graph fixture mode", () => {
   });
 
   it("loads deterministic defaults without reading or changing real preferences", async () => {
-    const storedFilters = localStorage.getItem("loom.graphFilters");
+    const storedFilters = localStorage.getItem("loom.graphFilter.v2");
     const storedDisplay = localStorage.getItem("loom.graphDisplay");
     render(
-      <AppProvider>
-        <FixtureProbe />
-      </AppProvider>,
+      <MemoryRouter>
+        <AppProvider>
+          <FixtureProbe />
+        </AppProvider>
+      </MemoryRouter>,
     );
 
     expect(screen.getByText("500")).toBeInTheDocument();
     expect(screen.getByText("perf-500-0000")).toBeInTheDocument();
     expect(screen.getAllByText("true")).toHaveLength(2);
     expect(screen.getAllByText("false")).toHaveLength(2);
-    expect(screen.getByText("0")).toBeInTheDocument();
+    expect(screen.getByText("all folders")).toBeInTheDocument();
     expect(screen.getByText("force")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Change filters" }));
@@ -103,7 +109,7 @@ describe("AppProvider graph fixture mode", () => {
 
     await waitFor(() => expect(screen.getByText("wave")).toBeInTheDocument());
     expect(localStorage.getItem("loom.treeVisible")).toBe("true");
-    expect(localStorage.getItem("loom.graphFilters")).toBe(storedFilters);
+    expect(localStorage.getItem("loom.graphFilter.v2")).toBe(storedFilters);
     expect(localStorage.getItem("loom.graphDisplay")).toBe(storedDisplay);
     expect(localStorage.getItem("loom.demoMode")).toBeNull();
   });

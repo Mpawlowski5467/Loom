@@ -1,6 +1,13 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
-import { useFocusTrap } from "./useFocusTrap";
+import { useState, type ReactNode } from "react";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 interface ConfirmModalProps {
   title: string;
@@ -8,18 +15,14 @@ interface ConfirmModalProps {
   confirmLabel: string;
   onConfirm: () => Promise<void> | void;
   onClose: () => void;
-  /** Style the confirm button as destructive (amber). Defaults to true. */
+  /** Style the confirm button as destructive. Defaults to true. */
   destructive?: boolean;
 }
 
 /**
- * A lightweight, keyboard- and screen-reader-accessible confirmation dialog.
- *
- * Reuses the settings-modal markup/classes (``role="dialog"``, ``aria-modal``,
- * Enter/Escape handling, busy/error states) but drops TypedConfirmModal's
- * typed-phrase gate — appropriate for ordinary confirmations like discarding
- * edits or archiving a note. A thrown ``onConfirm`` keeps the dialog open with
- * the error shown so the user can retry.
+ * A confirmation dialog for ordinary actions (discard edits, archive a note,
+ * undo a commit). Enter confirms and Escape cancels unless it's working; a
+ * thrown `onConfirm` keeps it open with the error so the user can retry.
  */
 export function ConfirmModal({
   title,
@@ -31,9 +34,6 @@ export function ConfirmModal({
 }: ConfirmModalProps): ReactNode {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Cancel carries autoFocus; Escape stays inline (it must respect `busy`), so
-  // the hook only provides Tab-trapping and focus restore.
-  const dialogRef = useFocusTrap<HTMLDivElement>({ skipInitialFocus: true });
 
   const confirm = async () => {
     if (busy) return;
@@ -48,56 +48,55 @@ export function ConfirmModal({
     }
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && !busy) {
-      e.preventDefault();
-      void confirm();
-    } else if (e.key === "Escape" && !busy) {
-      e.preventDefault();
-      onClose();
-    }
-  };
-
   return (
-    <div className="settings-modal-backdrop" role="presentation">
-      <div
-        ref={dialogRef}
-        className="settings-modal"
-        role="dialog"
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent
         aria-modal="true"
-        aria-labelledby="confirm-modal-title"
-        onKeyDown={onKeyDown}
+        showCloseButton={false}
+        className="sm:max-w-md"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || busy) return;
+          e.preventDefault();
+          void confirm();
+        }}
+        onEscapeKeyDown={(e) => busy && e.preventDefault()}
+        onInteractOutside={(e) => busy && e.preventDefault()}
+        onOpenAutoFocus={(e) => {
+          // Cancel is the safe default focus.
+          e.preventDefault();
+          (e.currentTarget as HTMLElement)
+            .querySelector<HTMLButtonElement>("[data-cancel]")
+            ?.focus();
+        }}
       >
-        <div className="settings-kicker">Confirm</div>
-        <h2 id="confirm-modal-title" className="settings-modal-title">
-          {title}
-        </h2>
-        <p className="settings-copy">{body}</p>
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+          <DialogDescription>{body}</DialogDescription>
+        </DialogHeader>
         {error && (
-          <div className="settings-test-result fail" role="alert">
+          <p role="alert" className="text-sm text-danger-foreground">
             {error}
-          </div>
+          </p>
         )}
-        <div className="settings-actions">
-          <button
-            className="btn btn-md"
-            type="button"
+        <DialogFooter>
+          <Button
+            data-cancel
+            variant="outline"
             disabled={busy}
             onClick={onClose}
-            autoFocus
           >
             Cancel
-          </button>
-          <button
-            className={`btn btn-md ${destructive ? "btn-amber" : ""}`}
-            type="button"
+          </Button>
+          <Button
+            variant={destructive ? "destructive" : "default"}
+            className={destructive ? "border border-border" : undefined}
             disabled={busy}
             onClick={() => void confirm()}
           >
             {busy ? "Working…" : error ? "Retry" : confirmLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

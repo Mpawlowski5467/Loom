@@ -1,8 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
-import { Sparkles } from "lucide-react";
-import { vaultExists } from "../../api/vault";
-import type { VaultExistsResponse } from "../../api/types";
+import { Loader2 } from "lucide-react";
+import { vaultExists } from "@/api/vault";
+import type { VaultExistsResponse } from "@/api/types";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Field, Step, StepActions, StepHeader } from "../StepLayout";
+import { DemoVaultToggle } from "./vault/DemoVaultToggle";
+import {
+  ExistingVaultOptions,
+  type VaultMode,
+} from "./vault/ExistingVaultOptions";
 
 interface Props {
   vaultName: string;
@@ -17,8 +25,6 @@ interface Props {
   onBack: () => void;
 }
 
-type VaultMode = "create" | "adopt" | "reset";
-
 export function VaultSetup({
   vaultName,
   overwriteExisting,
@@ -30,6 +36,8 @@ export function VaultSetup({
   const [probe, setProbe] = useState<VaultExistsResponse | null>(null);
   const [probing, setProbing] = useState(false);
   const [probeError, setProbeError] = useState<string | null>(null);
+  const inputId = useId();
+  const hintId = useId();
 
   useEffect(() => {
     const trimmed = vaultName.trim();
@@ -77,10 +85,10 @@ export function VaultSetup({
       ? "reset"
       : "adopt";
 
-  const setMode = (next: VaultMode) => {
-    if (next === "reset") onChange({ overwriteExisting: true });
-    else if (next === "adopt") onChange({ overwriteExisting: false });
-    else onChange({ overwriteExisting: false });
+  // "Use a different name" clears the field rather than picking a mode.
+  const selectMode = (next: VaultMode) => {
+    if (next === "create") onChange({ vaultName: "" });
+    else onChange({ overwriteExisting: next === "reset" });
   };
 
   const toggleDemo = () => {
@@ -96,122 +104,60 @@ export function VaultSetup({
   };
 
   return (
-    <div className="onb-step">
-      <h2 className="onb-h2">Pick a vault</h2>
-      <p className="onb-sub">
-        Loom stores everything inside a vault folder. You can have many — start
-        with the default for now.
-      </p>
+    <Step>
+      <StepHeader
+        title="Pick a vault"
+        description="Loom stores everything inside a vault folder. You can have many — start with the default for now."
+      />
 
-      <label className="onb-field">
-        <span className="onb-field-label">Vault name</span>
-        <input
-          className="input"
+      <Field id={inputId} label="Vault name">
+        <Input
+          id={inputId}
           type="text"
           value={vaultName}
           onChange={(e) => onChange({ vaultName: e.target.value })}
           placeholder="default"
+          aria-describedby={hintId}
           autoFocus
         />
-        <span className="onb-field-hint mono">
+        <p
+          id={hintId}
+          className="font-mono text-xs wrap-break-word text-muted-foreground"
+        >
           Path: ~/.loom/vaults/{vaultName.trim() || "…"}
-        </span>
-      </label>
+        </p>
+      </Field>
 
-      {probing && <div className="onb-probe muted">Checking…</div>}
+      {probing && (
+        <p className="flex items-center gap-2 font-mono text-xs text-muted-foreground">
+          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          Checking…
+        </p>
+      )}
       {probeError && (
-        <div className="onb-probe onb-probe-warn">{probeError}</div>
+        <p className="font-mono text-xs text-warning-foreground">
+          {probeError}
+        </p>
       )}
 
       {existingScaffolded && (
-        <div className="onb-existing">
-          <div className="onb-existing-h">We found an existing vault.</div>
-          <div className="onb-existing-body">
-            <label className="onb-radio">
-              <input
-                type="radio"
-                name="vault-mode"
-                checked={mode === "adopt"}
-                onChange={() => setMode("adopt")}
-              />
-              <div>
-                <div className="onb-radio-label">Adopt it</div>
-                <div className="onb-radio-help">
-                  Keep your notes, agents, and rules. Recommended.
-                </div>
-              </div>
-            </label>
-            <label className="onb-radio">
-              <input
-                type="radio"
-                name="vault-mode"
-                checked={mode === "reset"}
-                onChange={() => setMode("reset")}
-              />
-              <div>
-                <div className="onb-radio-label">Reset it</div>
-                <div className="onb-radio-help">
-                  Archive the existing vault to{" "}
-                  <span className="mono">{vaultName}.archived-…</span> and start
-                  fresh.
-                </div>
-              </div>
-            </label>
-            <label className="onb-radio">
-              <input
-                type="radio"
-                name="vault-mode"
-                checked={mode === "create"}
-                onChange={() => onChange({ vaultName: "" })}
-              />
-              <div>
-                <div className="onb-radio-label">Use a different name</div>
-                <div className="onb-radio-help">
-                  Clears the field above. Pick something unused.
-                </div>
-              </div>
-            </label>
-          </div>
-          {mode === "reset" && (
-            <div className="onb-warn">
-              ⚠ Reset cannot be undone from the wizard — the old vault will be
-              archived to a sibling folder but its files won't move back
-              automatically.
-            </div>
-          )}
-        </div>
+        <ExistingVaultOptions
+          vaultName={vaultName}
+          mode={mode}
+          onSelect={selectMode}
+        />
       )}
 
-      <button
-        type="button"
-        className={`onb-demo ${seedDemo ? "active" : ""}`}
-        onClick={toggleDemo}
-        aria-pressed={seedDemo}
-      >
-        <Sparkles size={18} aria-hidden="true" />
-        <span className="onb-demo-text">
-          <span className="onb-demo-label">Try the demo vault</span>
-          <span className="onb-demo-help">
-            Seed this vault with example notes so you start on a populated graph
-            instead of an empty one — explore it, then delete what you don't
-            need.
-          </span>
-        </span>
-        <span className="onb-demo-check mono">{seedDemo ? "On" : "Off"}</span>
-      </button>
+      <DemoVaultToggle pressed={seedDemo} onToggle={toggleDemo} />
 
-      <div className="onb-actions">
-        <button className="btn btn-md" onClick={onBack}>
+      <StepActions>
+        <Button variant="ghost" onClick={onBack}>
           ← Back
-        </button>
-        <button
-          className="btn btn-md btn-active"
-          onClick={onNext}
-          disabled={!vaultName.trim()}
-        >
+        </Button>
+        <Button onClick={onNext} disabled={!vaultName.trim()}>
           Next →
-        </button>
-      </div>
-    </div>
+        </Button>
+      </StepActions>
+    </Step>
   );
 }

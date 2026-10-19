@@ -1,5 +1,14 @@
 import { useMemo } from "react";
-import "../styles/components/revisions.css";
+import { cn } from "@/lib/utils";
+
+const PRE =
+  "max-h-[400px] overflow-auto rounded-md bg-muted p-3 font-mono text-xs leading-relaxed break-words whitespace-pre-wrap text-secondary-foreground";
+
+const ROW = {
+  same: "",
+  added: "bg-ok text-ok-foreground",
+  removed: "bg-danger-foreground/10 text-danger-foreground",
+} as const;
 
 /** A bounded line diff; very large documents use a complete side-by-side view. */
 export function TextDiff({ before, after }: { before: string; after: string }) {
@@ -36,21 +45,21 @@ export function TextDiff({ before, after }: { before: string; after: string }) {
   }, [before, after]);
   if (!rows)
     return (
-      <div className="revision-columns">
-        <section>
-          <h4>Before</h4>
-          <pre>{before}</pre>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <section className="flex min-w-0 flex-col gap-1.5">
+          <h4 className="text-xs font-medium text-muted-foreground">Before</h4>
+          <pre className={PRE}>{before}</pre>
         </section>
-        <section>
-          <h4>After</h4>
-          <pre>{after}</pre>
+        <section className="flex min-w-0 flex-col gap-1.5">
+          <h4 className="text-xs font-medium text-muted-foreground">After</h4>
+          <pre className={PRE}>{after}</pre>
         </section>
       </div>
     );
   return (
-    <pre className="text-diff" aria-label="Changes: minus removed, plus added">
+    <pre className={PRE} aria-label="Changes: minus removed, plus added">
       {rows.map((row, i) => (
-        <span key={i} className={`diff-${row.kind}`}>
+        <span key={i} className={cn("block", ROW[row.kind])}>
           {row.kind === "added" ? "+ " : row.kind === "removed" ? "− " : "  "}
           {row.text}
           {"\n"}

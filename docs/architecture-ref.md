@@ -34,7 +34,7 @@ agent mutates the vault it reads vault configuration, `prime.md`, its memory,
 the relevant index, and related notes. Shuttle agents write only captures; Loom
 agents can publish reviewed notes.
 
-Revision history records mutations. The Thread view can inspect and restore a
+Revision history records mutations. The Notes History sheet can inspect and restore a
 version through a version-checked operation, so restoring a revision does not
 silently replace a newer note. Pending and rejected capture drafts remain out
 of normal note listings, graph construction, and retrieval until publication.
@@ -78,7 +78,7 @@ history` snapshot.
   notes are reindexed (metadata now, embeddings queued).
 - **API**: `GET /api/history?path=&agent=&group=&limit=`,
   `GET /api/history/status`, `GET /api/history/{sha}/diff`, and the revert
-  endpoint. The Thread view's *Change history* lists a note's commits with
+  endpoint. The Notes History sheet lists a note's commits with
   diffs and undo. Board *Recent activity* links each changelog entry to its
   commit (via a `History:` group id in the changelog) and offers Undo.
 
@@ -98,28 +98,59 @@ Vault lists load note metadata first. A selected note body is fetched on demand
 and is marked `bodyLoaded` only after hydration, which keeps large-vault
 navigation responsive without treating an empty metadata body as a real note.
 
-The editor uses `react-markdown` with the project's wikilink handling for its
-preview. It stores unsaved text in browser storage by **vault ID and note ID**,
-including the original content fingerprint (with timestamp compatibility for older clients). A draft survives a Thread view
-unmount, reload, and vault switch; it is never used to replace a newer body
-silently. The editor makes discard explicit, warns if local persistence fails,
+Notes are edited in a Plate (Slate) editor, with a raw-markdown mode beside
+it. Markdown stays the source of truth: each top-level block is loaded on its
+own, and on save every block whose content is unchanged is written back from
+its original source byte for byte, so opening a note never rewrites it and an
+edit only reformats the block it touched. Blocks the rich editor can't
+round-trip (reference definitions, HTML blocks, footnotes, reference links)
+are kept as read-only raw markdown. `[[wikilinks]]` are inline chips parsed
+and written back verbatim. Read-only previews elsewhere still use
+`react-markdown`.
+
+The editor stores unsaved text in browser storage by **vault ID and note ID**,
+including the original content fingerprint (with timestamp compatibility for
+older clients). A draft survives leaving the note, a reload, and a vault
+switch; it is never used to replace a newer body silently. The editor makes discard explicit, warns if local persistence fails,
 and retains version-conflicted text while offering compare, reload, or an
 explicit overwrite. Tag edits and accessible wikilink completion use the same
 version-checked note APIs.
 
-Today is a user-selectable home alongside Graph. It gathers recent notes,
-pinned projects, outstanding captures and jobs, and the latest Standup. Quick
-Capture is available from the shell shortcut and sends text or a URL through
-the shared capture ingress, so it has the same provenance, limits, and durable
-job behavior as other capture sources.
+Navigation is URL-based (React Router): `/graph` (home), `/notes/<folder>/<slug>`,
+`/board`, `/inbox`, `/threads/:id?` and `/settings/:section?`; older
+`?view=` links redirect. Quick Capture is available from the shell shortcut and
+sends text or a URL through the shared capture ingress, so it has the same
+provenance, limits, and durable job behavior as other capture sources.
+
+Threads (`/threads/:id?`) reads Scribe's daily logs, Standup recaps (Inbox
+captures from `agent:standup` and filed notes tagged `standup`), and saved
+Council chats (`/api/chat/sessions` and `/api/chat/history/{date}`). A day's
+New notes, Flags and Links rows, the week's actions per day, and the vault
+stats are derived in the browser from loaded notes, captures and the
+changelog window until the backend has a structured summary (see
+[UI backend gaps](ui-backend-gaps.md) 12 and 13).
+
+Appearance (theme, accent, fonts, graph palette) is a set of CSS variables
+keyed by `data-*` attributes on `<html>`, owned by the frontend's
+`ThemeProvider`. It is cached in browser storage and painted by an inline boot
+script before the bundle loads; per-vault persistence through
+`/api/settings/appearance` is designed but not yet implemented by the backend
+(see [UI backend gaps](ui-backend-gaps.md)).
 
 ## Search, graph, and links
 
-The metadata index holds note summaries and supports the file tree, Today,
-and fast navigation. LanceDB stores chunk embeddings. Search combines keyword
+The metadata index holds note summaries and supports the vault tree and fast
+navigation. LanceDB stores chunk embeddings. Search combines keyword
 and semantic candidate ranks with reciprocal-rank fusion (RRF). Type/tag filters
 apply during candidate retrieval, with an optional graph-context boost afterward. Without an embedding
 provider, keyword retrieval remains available.
+
+The ⌘K palette searches through `/api/search`, sending the open note as
+graph context. The API reports neither its per-signal scores nor its timing
+yet, so the palette times requests in the browser and labels its "Why it
+matched" breakdown as an estimate; superseded notes are hidden in the browser
+by default. When the API is unreachable, the palette matches titles and tags
+over the loaded notes instead.
 
 Wikilinks are canonicalized against note IDs, paths, aliases, and slugs. The
 graph is derived from published notes and renders with Sigma.js. One graph
@@ -129,21 +160,35 @@ their neighbors and settling only those, so the camera and the rest of the
 layout stay put. ForceAtlas2 runs on the main thread only for a fresh build;
 a large batch in the force layout (more new nodes than survivors, or over 50)
 also gets a bounded ForceAtlas2 run in a web worker with the survivors pinned
-(`graph/batchSettle.ts`). Spider can
-write deterministic link evidence: source and target identities, method/score,
-bounded excerpts, timestamp/run/agent, and a state such as `suggested`,
-`applied`, or `user_accepted`. Clicking a graph edge, using a neighbor's Evidence button, or opening Thread context exposes this evidence and its
-explicitly labeled legacy fallback; a suggested relation is only accepted by a
-version-checked, locked write.
+(`graph/batchSettle.ts`).
+
+The Graph view colors nodes by community. Louvain runs in the browser over the
+link graph with a fixed seed (`graph/communities.ts`), so a vault always groups
+the same way; the four largest communities get a theme color and the rest a
+neutral tone. The backend has no community data yet (see
+`docs/ui-backend-gaps.md` §3). A single node filter (folder, community,
+superseded, creation-date cutoff) drives visibility for rendering, physics,
+hit-testing and export alike. Selecting a node opens the note beside the graph
+in a compact editor with Archivist's warnings and its recent commits; undo
+there is the same Sentinel-checked revert as the Thread history.
+
+Spider can write deterministic link evidence: source and target identities,
+method/score, bounded excerpts, timestamp/run/agent, and a state such as
+`suggested`, `applied`, or `user_accepted`. The note's History sheet and
+context rail expose this evidence and its explicitly labeled legacy fallback; a
+suggested relation is only accepted by a version-checked, locked write.
 
 ## Captures and agents
 
 All capture producers call `core.capture_ingress.ingest_capture`. It validates
 provenance, deduplicates external sources, writes the capture, indexes it, and
 creates a per-vault SQLite job. Inbox exposes active, review, failed, and
-history states with retry and cancellation. Capture review can compare proposed
-text, identify duplicate candidates using deterministic similarity evidence,
-and perform an explicitly approved, version-checked merge.
+history states with retry and cancellation. Selecting a capture shows Weaver's
+proposal (a lazy, cached preview), the links Spider would add, and a pre-check
+estimated in the browser until the backend stores proposals with Sentinel's
+own pre-check. Capture review can compare proposed text, identify duplicate
+candidates using deterministic similarity evidence, and perform an explicitly
+approved, version-checked merge.
 
 The Loom layer contains Weaver, Spider, Archivist, Scribe, and Sentinel. The
 Shuttle layer contains Researcher and Standup plus user-defined Shuttle agents.
@@ -155,8 +200,10 @@ Weaver → Sentinel → enforce publication → Spider → Scribe
 
 It retries a failed Sentinel draft once; only an accepted review state can
 publish downstream work. Researcher and Standup have their own state graphs.
-Council responses stream over SSE; their individual contributions can be
-expanded while the summarized response remains the default view.
+Council responses stream over SSE. The Board shows each agent's contribution
+(long ones clamped) followed by a Summary card with the consolidated answer;
+the Council doesn't write to the vault, so its Open diff / Undo actions appear
+only if a reply reports commits.
 
 ## Providers, policy, and trace data
 

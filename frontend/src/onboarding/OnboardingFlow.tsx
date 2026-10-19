@@ -5,7 +5,9 @@ import type {
   OnboardingCompleteRequest,
   OnboardingProviderPayload,
 } from "../api/types";
-import type { ThemeName } from "../theme/themes";
+import { cn } from "@/lib/utils";
+import { useAppearance } from "../theme/appearance-ctx";
+import { backendThemeName } from "../theme/backendTheme";
 import { Welcome } from "./steps/Welcome";
 import { VaultSetup } from "./steps/VaultSetup";
 import { ThemePicker } from "./steps/ThemePicker";
@@ -15,7 +17,6 @@ type StepName = "welcome" | "vault" | "theme" | "provider";
 const STEP_ORDER: StepName[] = ["welcome", "vault", "theme", "provider"];
 
 interface OnboardingDraft {
-  theme: ThemeName;
   vaultName: string;
   overwriteExistingVault: boolean;
   seedDemo: boolean;
@@ -25,10 +26,10 @@ interface OnboardingDraft {
 }
 
 export function OnboardingFlow(): ReactNode {
-  const { theme, completeOnboarding } = useApp();
+  const { completeOnboarding } = useApp();
+  const { resolvedTheme } = useAppearance();
   const [step, setStep] = useState<StepName>("welcome");
   const [draft, setDraft] = useState<OnboardingDraft>({
-    theme,
     vaultName: "default",
     overwriteExistingVault: false,
     seedDemo: false,
@@ -60,7 +61,8 @@ export function OnboardingFlow(): ReactNode {
     setSubmitting(true);
     try {
       const payload: OnboardingCompleteRequest = {
-        theme: draft.theme,
+        // The backend only knows the old theme names; see backendTheme.ts.
+        theme: backendThemeName(resolvedTheme),
         vault_name: draft.vaultName.trim() || "default",
         overwrite_existing_vault: draft.overwriteExistingVault,
         seed_demo: draft.seedDemo,
@@ -77,69 +79,71 @@ export function OnboardingFlow(): ReactNode {
     } finally {
       setSubmitting(false);
     }
-  }, [completeOnboarding, draft]);
+  }, [completeOnboarding, draft, resolvedTheme]);
 
   return (
-    <div className="onb-root" role="dialog" aria-labelledby="onb-title">
-      <div className="onb-card">
-        <div className="onb-progress" aria-label="Step progress">
-          {STEP_ORDER.map((s, idx) => (
-            <span
-              key={s}
-              className={`onb-progress-dot ${idx <= stepIndex ? "active" : ""}`}
-              aria-hidden="true"
+    <div
+      className="fixed inset-0 overflow-y-auto bg-background"
+      role="dialog"
+      aria-labelledby="onboarding-title"
+    >
+      <div className="flex min-h-full items-center justify-center px-4 py-6 sm:px-6 sm:py-10">
+        <div className="w-full max-w-xl animate-in rounded-xl border border-border bg-card px-5 pt-6 pb-5 text-card-foreground shadow-overlay duration-300 ease-[cubic-bezier(.2,.7,.3,1)] fade-in slide-in-from-bottom-2 sm:px-9 sm:pt-9 sm:pb-8">
+          {/* Decorative: the sr-only title below says which step this is. */}
+          <div className="mb-6 flex gap-2" aria-hidden="true">
+            {STEP_ORDER.map((s, idx) => (
+              <span
+                key={s}
+                className={cn(
+                  "h-1 flex-1 rounded-full bg-border transition-colors duration-200 ease-[cubic-bezier(.2,.7,.3,1)]",
+                  idx <= stepIndex && "bg-foreground",
+                )}
+              />
+            ))}
+          </div>
+          <div id="onboarding-title" className="sr-only">
+            Loom onboarding — step {stepIndex + 1} of {STEP_ORDER.length}
+          </div>
+          {step === "welcome" && <Welcome onNext={next} />}
+          {step === "vault" && (
+            <VaultSetup
+              vaultName={draft.vaultName}
+              overwriteExisting={draft.overwriteExistingVault}
+              seedDemo={draft.seedDemo}
+              onChange={(patch) =>
+                updateDraft({
+                  vaultName:
+                    patch.vaultName !== undefined
+                      ? patch.vaultName
+                      : draft.vaultName,
+                  overwriteExistingVault:
+                    patch.overwriteExisting !== undefined
+                      ? patch.overwriteExisting
+                      : draft.overwriteExistingVault,
+                  seedDemo:
+                    patch.seedDemo !== undefined
+                      ? patch.seedDemo
+                      : draft.seedDemo,
+                })
+              }
+              onNext={next}
+              onBack={back}
             />
-          ))}
+          )}
+          {step === "theme" && <ThemePicker onNext={next} onBack={back} />}
+          {step === "provider" && (
+            <ProviderConfig
+              providers={draft.providers}
+              chatProvider={draft.chatProvider}
+              embedProvider={draft.embedProvider}
+              onChange={(patch) => updateDraft(patch)}
+              onSubmit={submit}
+              onBack={back}
+              submitting={submitting}
+              submitError={submitError}
+            />
+          )}
         </div>
-        <div id="onb-title" className="sr-only">
-          Loom onboarding — step {stepIndex + 1} of {STEP_ORDER.length}
-        </div>
-        {step === "welcome" && <Welcome onNext={next} />}
-        {step === "vault" && (
-          <VaultSetup
-            vaultName={draft.vaultName}
-            overwriteExisting={draft.overwriteExistingVault}
-            seedDemo={draft.seedDemo}
-            onChange={(patch) =>
-              updateDraft({
-                vaultName:
-                  patch.vaultName !== undefined
-                    ? patch.vaultName
-                    : draft.vaultName,
-                overwriteExistingVault:
-                  patch.overwriteExisting !== undefined
-                    ? patch.overwriteExisting
-                    : draft.overwriteExistingVault,
-                seedDemo:
-                  patch.seedDemo !== undefined
-                    ? patch.seedDemo
-                    : draft.seedDemo,
-              })
-            }
-            onNext={next}
-            onBack={back}
-          />
-        )}
-        {step === "theme" && (
-          <ThemePicker
-            selected={draft.theme}
-            onChange={(t) => updateDraft({ theme: t })}
-            onNext={next}
-            onBack={back}
-          />
-        )}
-        {step === "provider" && (
-          <ProviderConfig
-            providers={draft.providers}
-            chatProvider={draft.chatProvider}
-            embedProvider={draft.embedProvider}
-            onChange={(patch) => updateDraft(patch)}
-            onSubmit={submit}
-            onBack={back}
-            submitting={submitting}
-            submitError={submitError}
-          />
-        )}
       </div>
     </div>
   );

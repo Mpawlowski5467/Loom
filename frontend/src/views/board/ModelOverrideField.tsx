@@ -1,7 +1,12 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
-import { ChevronDown } from "lucide-react";
-import { ModelCombobox } from "../settings/ModelCombobox";
+import { ChevronRight } from "lucide-react";
+import { useId, useState } from "react";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   PROVIDERS,
   PROVIDER_BY_NAME,
@@ -16,64 +21,67 @@ interface ModelOverrideFieldProps {
 }
 
 /**
- * Optional per-agent chat binding, collapsed behind a "Model" row. Empty
- * provider/model strings mean "use the vault default"; the model combobox
- * suggests the static catalog for the chosen provider but accepts free text.
+ * Optional per-agent chat model, collapsed by default. Empty values mean
+ * "use the vault default"; known models are suggested but any name works.
  */
-export function ModelOverrideField({
-  provider,
-  chatModel,
-  onProviderChange,
-  onModelChange,
-}: ModelOverrideFieldProps): ReactNode {
-  const [open, setOpen] = useState(Boolean(provider || chatModel));
-  const meta = PROVIDER_BY_NAME.get(provider as ProviderName);
+export function ModelOverrideField(p: ModelOverrideFieldProps) {
+  const ids = { provider: useId(), model: useId(), list: useId() };
+  const [open, setOpen] = useState(Boolean(p.provider || p.chatModel));
+  const meta = PROVIDER_BY_NAME.get(p.provider as ProviderName);
   const summary =
-    provider || chatModel
-      ? `${meta?.label ?? provider ?? "default provider"} · ${chatModel || "default model"}`
+    p.provider || p.chatModel
+      ? `${meta?.label ?? p.provider ?? "default provider"} · ${p.chatModel || "default model"}`
       : "vault default";
-
   return (
-    <div className="model-override">
-      <button
-        type="button"
-        className="model-override-toggle"
-        aria-expanded={open}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span className="settings-field-label">Model</span>
-        <span className="model-override-summary">{summary}</span>
-        <ChevronDown
-          size={14}
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="group/model flex flex-col gap-3"
+    >
+      <CollapsibleTrigger className="flex items-center gap-2 rounded-sm text-left text-sm font-medium focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none">
+        <ChevronRight
           aria-hidden="true"
-          className={`model-override-chevron${open ? " is-open" : ""}`}
+          className="size-4 transition-transform group-data-[state=open]/model:rotate-90"
         />
-      </button>
-      {open && (
-        <div className="settings-field-row model-override-body">
-          <label className="settings-field">
-            <span className="settings-field-label">Provider</span>
-            <select
-              className="input"
-              value={provider}
-              onChange={(e) => onProviderChange(e.target.value)}
-            >
-              <option value="">vault default</option>
-              {PROVIDERS.map((p) => (
-                <option key={p.name} value={p.name}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <ModelCombobox
-            label="Chat model"
-            value={chatModel}
-            options={meta?.chatModels ?? []}
-            onChange={onModelChange}
-          />
+        Model
+        <span className="font-mono text-xs font-normal text-muted-foreground">
+          {summary}
+        </span>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="grid gap-3 sm:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={ids.provider}>Provider</Label>
+          <select
+            id={ids.provider}
+            value={p.provider}
+            onChange={(e) => p.onProviderChange(e.target.value)}
+            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+          >
+            <option value="">vault default</option>
+            {PROVIDERS.map((x) => (
+              <option key={x.name} value={x.name}>
+                {x.label}
+              </option>
+            ))}
+          </select>
         </div>
-      )}
-    </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor={ids.model}>Chat model</Label>
+          <Input
+            id={ids.model}
+            list={ids.list}
+            value={p.chatModel}
+            placeholder="model name"
+            onChange={(e) => p.onModelChange(e.target.value)}
+            className="font-mono text-xs"
+          />
+          <datalist id={ids.list}>
+            {(meta?.chatModels ?? []).map((m) => (
+              <option key={m} value={m} />
+            ))}
+          </datalist>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

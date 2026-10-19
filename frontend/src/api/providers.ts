@@ -3,11 +3,8 @@ import type {
   CodexAuthStatus,
   CodexLoginStartResponse,
   ModelsResponse,
-  ProviderConfigPublic,
   ProviderTestRequest,
-  ProviderUpsert,
   ProviderOAuthStartResponse,
-  ProvidersResponse,
   TestProviderResponse,
 } from "./types";
 
@@ -36,24 +33,6 @@ export function startOpenRouterOAuth(
   return apiClient.post<ProviderOAuthStartResponse>(
     "/api/providers/openrouter/oauth/start",
     {},
-    signal,
-  );
-}
-
-export function listProviders(
-  signal?: AbortSignal,
-): Promise<ProvidersResponse> {
-  return apiClient.get<ProvidersResponse>("/api/providers", signal);
-}
-
-export function upsertProvider(
-  name: string,
-  payload: ProviderUpsert,
-  signal?: AbortSignal,
-): Promise<ProviderConfigPublic> {
-  return apiClient.put<ProviderConfigPublic>(
-    `/api/providers/${encodeURIComponent(name)}`,
-    payload,
     signal,
   );
 }

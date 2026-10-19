@@ -21,7 +21,7 @@ export function LoomMark({
   dur = 6,
   loop = true,
   color = "currentColor",
-  accent = "#a83a2c",
+  accent = "var(--brand)",
 }: LoomMarkProps): ReactNode {
   const repeat = loop ? "indefinite" : "1";
   const sw = 7;

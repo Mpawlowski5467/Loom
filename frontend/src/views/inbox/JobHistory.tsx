@@ -1,10 +1,10 @@
 import { useId, useMemo, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 import { ConfirmModal } from "../../components/ConfirmModal";
-import { Button } from "../../components/primitives/Button";
+import { JobFilters } from "./JobFilters";
+import { JobRow } from "./JobRow";
 import type { CaptureJob, CaptureJobStatus } from "../../api/captures";
 import type { Capture } from "../../data/types";
-import { formatDateTime } from "../../data/formatDate";
 
 type JobSegment = "active" | "review" | "history";
 
@@ -161,15 +161,23 @@ export function JobHistory({
       : `completed and cancelled processing history older than ${retentionDays} days`;
 
   return (
-    <section className="inbox-job-ledger" aria-labelledby={`${idPrefix}-title`}>
-      <div className="inbox-job-ledger-head">
-        <div>
-          <h2 id={`${idPrefix}-title`}>Processing jobs</h2>
-          <p>Durable activity for this vault, including archived captures.</p>
-        </div>
-      </div>
+    <section
+      aria-labelledby={`${idPrefix}-title`}
+      className="mx-auto flex max-w-4xl flex-col gap-4 px-6 py-6"
+    >
+      <header>
+        <h2
+          id={`${idPrefix}-title`}
+          className="text-base font-semibold text-foreground"
+        >
+          Processing jobs
+        </h2>
+        <p className="text-sm text-muted-foreground">
+          Durable activity for this vault, including archived captures.
+        </p>
+      </header>
 
-      <div className="inbox-job-tabs" role="tablist" aria-label="Job views">
+      <div role="tablist" aria-label="Job views" className="flex gap-1">
         {SEGMENTS.map((item, index) => (
           <button
             key={item.id}
@@ -182,210 +190,68 @@ export function JobHistory({
             tabIndex={segment === item.id ? 0 : -1}
             onClick={() => selectSegment(item.id)}
             onKeyDown={(event) => onTabKeyDown(event, index)}
+            className="flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm text-secondary-foreground hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none aria-selected:bg-nav-active aria-selected:text-nav-active-foreground"
           >
             <span>{item.label}</span>
-            <span className="inbox-job-tab-count">{counts[item.id]}</span>
+            <span className="font-mono text-[11px] text-muted-foreground">
+              {counts[item.id]}
+            </span>
           </button>
         ))}
       </div>
 
-      <div className="inbox-job-filters">
-        <label>
-          <span>Status</span>
-          <select
-            aria-label="Filter jobs by status"
-            value={effectiveStatus}
-            onChange={(event) =>
-              setStatusFilter(event.target.value as "all" | CaptureJobStatus)
-            }
-          >
-            <option value="all">All {segmentConfig.label.toLowerCase()}</option>
-            {segmentConfig.statuses.map((status) => (
-              <option key={status} value={status}>
-                {statusLabel(status)}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Source</span>
-          <select
-            aria-label="Filter jobs by source"
-            value={sourceFilter}
-            onChange={(event) => setSourceFilter(event.target.value)}
-          >
-            <option value="all">All sources</option>
-            {sources.map((source) => (
-              <option key={source} value={source}>
-                {source}
-              </option>
-            ))}
-          </select>
-        </label>
-        {segment === "history" && counts.history > 0 && (
-          <div className="inbox-job-retention">
-            <label>
-              <span>Retain</span>
-              <select
-                aria-label="History retention window"
-                value={retention}
-                onChange={(event) => setRetention(event.target.value)}
-              >
-                <option value="7">Last 7 days</option>
-                <option value="30">Last 30 days</option>
-                <option value="90">Last 90 days</option>
-                <option value="all">Clear all</option>
-              </select>
-            </label>
-            <Button size="sm" onClick={() => setConfirmPrune(true)}>
-              Remove older
-            </Button>
-          </div>
-        )}
-      </div>
+      <JobFilters
+        segmentLabel={segmentConfig.label}
+        statuses={segmentConfig.statuses}
+        status={effectiveStatus}
+        onStatusChange={setStatusFilter}
+        sources={sources}
+        source={sourceFilter}
+        onSourceChange={setSourceFilter}
+        showRetention={segment === "history" && counts.history > 0}
+        retention={retention}
+        onRetentionChange={setRetention}
+        onPrune={() => setConfirmPrune(true)}
+      />
 
       {error && (
-        <div className="inbox-jobs-error inbox-job-ledger-error" role="alert">
+        <p role="alert" className="text-sm text-danger-foreground">
           Job updates unavailable: {error}
-        </div>
+        </p>
       )}
       {pruneMessage && (
-        <div className="inbox-job-prune-result" role="status">
+        <p role="status" className="text-sm text-ok-foreground">
           {pruneMessage}
-        </div>
+        </p>
       )}
 
       <div
         id={`${idPrefix}-${segment}-panel`}
         role="tabpanel"
         aria-labelledby={`${idPrefix}-${segment}-tab`}
-        className="inbox-job-panel"
       >
         {!loaded ? (
-          <div className="inbox-empty" role="status">
+          <p role="status" className="text-sm text-muted-foreground">
             Loading jobs…
-          </div>
+          </p>
         ) : visibleJobs.length === 0 ? (
-          <div className="inbox-empty inbox-job-empty">
+          <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
             {emptyMessage(segment, effectiveStatus, sourceFilter)}
-          </div>
+          </p>
         ) : (
-          <ol className="inbox-job-list">
-            {visibleJobs.map((job) => {
-              const capture = captureById.get(job.capture_id);
-              const sourceAvailable = Boolean(capture);
-              const busy = busyJobs.has(job.id);
-              const retryable =
-                job.status === "failed" ||
-                job.status === "needs_review" ||
-                job.status === "cancelled";
-              const cancellable =
-                job.status === "queued" || job.status === "retrying";
-              return (
-                <li key={job.id}>
-                  <article className="inbox-job-row">
-                    <div className="inbox-job-row-head">
-                      <div>
-                        <h3>{capture?.title ?? captureName(job)}</h3>
-                        <div
-                          className="inbox-job-path"
-                          title={job.capture_path}
-                        >
-                          {displayPath(job.capture_path)}
-                        </div>
-                      </div>
-                      <span
-                        className="status-badge"
-                        data-state={badgeState(job.status)}
-                      >
-                        <span className="pulse-dot" />
-                        {statusLabel(job.status)}
-                      </span>
-                    </div>
-                    <dl className="inbox-job-facts">
-                      <div>
-                        <dt>Source</dt>
-                        <dd>{job.source || "unknown"}</dd>
-                      </div>
-                      <div>
-                        <dt>Attempts</dt>
-                        <dd>
-                          {job.attempts} of {job.max_attempts}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Updated</dt>
-                        <dd title={job.updated_at}>
-                          {formatDateTime(job.updated_at)} UTC
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>Outcome</dt>
-                        <dd>{job.outcome ? statusLabel(job.outcome) : "—"}</dd>
-                      </div>
-                    </dl>
-                    {job.note_title && (
-                      <div className="inbox-job-note-result">
-                        Filed as <strong>{job.note_title}</strong>
-                        {job.target_path && (
-                          <span title={job.target_path}>
-                            {displayPath(job.target_path)}
-                          </span>
-                        )}
-                      </div>
-                    )}
-                    {job.error && (
-                      <div className="inbox-job-row-error">{job.error}</div>
-                    )}
-                    {job.recommended_action && job.failure_kind !== "none" && (
-                      <div className="inbox-job-guidance">
-                        <strong>{failureLabel(job.failure_kind)}</strong>
-                        <span>{job.recommended_action}</span>
-                      </div>
-                    )}
-                    {actionErrors[job.id] && (
-                      <div className="inbox-job-row-error" role="alert">
-                        {actionErrors[job.id]}
-                      </div>
-                    )}
-                    <div className="inbox-job-row-actions">
-                      {job.note_id && (
-                        <Button
-                          size="sm"
-                          onClick={() => onOpenNote(job.note_id!)}
-                        >
-                          Open note
-                        </Button>
-                      )}
-                      {cancellable && (
-                        <Button
-                          size="sm"
-                          disabled={busy}
-                          onClick={() => void runAction(job, onCancel)}
-                        >
-                          {busy ? "Cancelling…" : "Cancel"}
-                        </Button>
-                      )}
-                      {retryable && sourceAvailable && (
-                        <Button
-                          size="sm"
-                          variant="amber"
-                          disabled={busy}
-                          onClick={() => void runAction(job, onRetry)}
-                        >
-                          {busy ? "Queueing…" : "Retry"}
-                        </Button>
-                      )}
-                      {retryable && !sourceAvailable && (
-                        <span className="inbox-job-source-gone">
-                          Source capture archived
-                        </span>
-                      )}
-                    </div>
-                  </article>
-                </li>
-              );
-            })}
+          <ol className="flex flex-col gap-2">
+            {visibleJobs.map((job) => (
+              <JobRow
+                key={job.id}
+                job={job}
+                capture={captureById.get(job.capture_id)}
+                busy={busyJobs.has(job.id)}
+                actionError={actionErrors[job.id]}
+                onOpenNote={onOpenNote}
+                onCancel={() => void runAction(job, onCancel)}
+                onRetry={() => void runAction(job, onRetry)}
+              />
+            ))}
           </ol>
         )}
       </div>
@@ -406,44 +272,6 @@ export function JobHistory({
       )}
     </section>
   );
-}
-
-function captureName(job: CaptureJob): string {
-  const filename = job.capture_path.replaceAll("\\", "/").split("/").pop();
-  return filename?.replace(/\.md$/i, "") || job.capture_id || "Capture";
-}
-
-function displayPath(path: string): string {
-  const normalized = path.replaceAll("\\", "/");
-  const marker = "/threads/";
-  const index = normalized.lastIndexOf(marker);
-  return index >= 0 ? normalized.slice(index + marker.length) : normalized;
-}
-
-function statusLabel(status: CaptureJobStatus | string): string {
-  if (status === "needs_review") return "needs review";
-  return status.replaceAll("_", " ");
-}
-
-function failureLabel(kind: CaptureJob["failure_kind"]): string {
-  if (kind === "provider_transient") return "Provider temporarily unavailable";
-  if (kind === "provider_configuration")
-    return "Provider setup needs attention";
-  if (kind === "schema_review") return "Draft needs review";
-  if (kind === "stalled") return "Interrupted step recovered";
-  if (kind === "source_missing") return "Source capture unavailable";
-  return "Recommended next action";
-}
-
-function badgeState(
-  status: CaptureJobStatus,
-): "queued" | "running" | "retrying" | "review" | "success" | "idle" {
-  if (status === "queued") return "queued";
-  if (status === "running") return "running";
-  if (status === "retrying") return "retrying";
-  if (status === "failed" || status === "needs_review") return "review";
-  if (status === "completed") return "success";
-  return "idle";
 }
 
 function emptyMessage(

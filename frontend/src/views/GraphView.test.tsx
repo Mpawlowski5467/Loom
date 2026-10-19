@@ -1,24 +1,27 @@
-import { render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import Graph from "graphology";
 import type { ReactNode } from "react";
 import type Sigma from "sigma";
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AppCtx,
   type AppContextValue,
   GRAPH_DISPLAY_DEFAULTS,
 } from "../context/app-ctx";
+import type { GraphLayout, Note } from "../data/types";
+import { detectCommunities } from "../graph/communities";
+import { DEFAULT_NODE_FILTER, type GraphNodeFilter } from "../graph/nodeFilter";
+import { TestAppearanceProvider } from "../test/appearance";
 import { GraphView } from "./GraphView";
-import type { GraphLayout, Note, NodeType } from "../data/types";
 
 // The graph is driven by Sigma through three hooks; GraphView's own job is the
-// overlay chrome (empty / loading / stats / scene caption). Mock the hooks so
-// no real Sigma instance or canvas is needed.
+// layout and chrome (sidebar, toolbar, overlays, panel). Mock the hooks so no
+// real Sigma instance or canvas is needed.
 const { mockInstance } = vi.hoisted(() => ({
   mockInstance: {
     building: false,
-    sigmaReady: true,
+    sigmaReady: 1,
     scene: "rings" as "rings" | "spiral" | "arms",
   },
 }));
@@ -30,9 +33,6 @@ let runtimeStopDragSim: (() => void) | null = null;
 let runtimeOrbitTargets = new Map<string, { x: number; y: number }>();
 
 function refs() {
-  // useGraphInstance returns a bag of refs + two booleans. The refs are only
-  // dereferenced inside effects that the mocked hooks replace, so empty refs
-  // are fine; GraphView itself reads .current in effects guarded by null checks.
   const r = { current: null };
   return {
     sigmaRef: { current: runtimeSigma },
@@ -45,10 +45,24 @@ function refs() {
     breathingRemoveRef: r,
     stopDragSimRef: { current: runtimeStopDragSim },
     sigmaReady: mockInstance.sigmaReady,
+    structureVersion: 0,
     building: mockInstance.building,
   };
 }
 
+vi.mock("@/theme/useThemeColors", () => ({
+  useThemeColors: () => ({
+    key: "graphite|theme|theme",
+    background: "#09090b",
+    foreground: "#fafafa",
+    secondaryForeground: "#d4d4d8",
+    mutedForeground: "#a1a1aa",
+    border: "#27272a",
+    borderStrong: "#3f3f46",
+    brand: "#60a5fa",
+    community: ["#60a5fa", "#f59e0b", "#2dd4bf", "#a78bfa"],
+  }),
+}));
 vi.mock("../graph/useGraphInstance", () => ({
   PERF_BUDGET_NODES: 500,
   useGraphInstance: () => refs(),
@@ -59,8 +73,7 @@ vi.mock("../graph/useGraphScene", () => ({
 vi.mock("../graph/useGraphDisplaySync", () => ({
   useGraphDisplaySync: () => {},
 }));
-// sigma-setup transitively loads Sigma, which touches WebGL at module scope
-// (undefined in jsdom). GraphView only uses readEdgePalette from it.
+// sigma-setup transitively loads Sigma, which touches WebGL at module scope.
 vi.mock("../graph/sigma-setup", () => ({
   readEdgePalette: () => ({
     edge: "",
@@ -70,19 +83,29 @@ vi.mock("../graph/sigma-setup", () => ({
     nodeDimmed: "",
   }),
 }));
-// The export helpers import Sigma types only; stub to avoid the WebGL load.
 vi.mock("../graph/export", () => ({
   exportGraphPng: vi.fn(),
   exportGraphSvg: vi.fn(),
   exportGraphJson: vi.fn(),
 }));
+// The panel has its own tests; here it only has to open and close.
+vi.mock("./graph/panel/GraphNotePanel", () => ({
+  GraphNotePanel: ({ note, onClose }: { note: Note; onClose: () => void }) => (
+    <aside aria-label="Open note">
+      {note.title}
+      <button type="button" onClick={onClose}>
+        Close note
+      </button>
+    </aside>
+  ),
+}));
 
-function mkNote(id: string, links: string[] = []): Note {
+function mkNote(id: string, links: string[] = [], folder = "topics"): Note {
   return {
     id,
     title: id,
     type: "topic",
-    folder: "topics",
+    folder,
     tags: [],
     body: "",
     links,
@@ -94,47 +117,53 @@ function mkNote(id: string, links: string[] = []): Note {
   };
 }
 
-function renderGraph(
-  notes: Note[],
-  layout: GraphLayout = "force",
-  notesLoaded = true,
-  graphFilters: Set<NodeType> = new Set(),
-  graphSelectedId: string | null = null,
-  notesError: string | null = null,
-) {
-  const openNote = vi.fn();
-  const setGraphSelectedId = vi.fn();
+interface Options {
+  layout?: GraphLayout;
+  notesLoaded?: boolean;
+  filter?: Partial<GraphNodeFilter>;
+  selected?: string | null;
+  notesError?: string | null;
+}
+
+function renderGraph(notes: Note[], o: Options = {}) {
   const value = {
     notes,
-    notesLoaded,
-    notesError,
-    openNote,
+    notesLoaded: o.notesLoaded ?? true,
+    notesError: o.notesError ?? null,
+    openNote: vi.fn(),
+    flyToNode: vi.fn(),
+    config: { active_vault: "demo" },
     graphFocusId: null,
     setGraphFocusId: vi.fn(),
-    graphSelectedId,
-    setGraphSelectedId,
+    graphSelectedId: o.selected ?? null,
+    setGraphSelectedId: vi.fn(),
     graphFlyTo: null,
-    graphFilters,
-    toggleGraphFilter: vi.fn(),
-    clearGraphFilters: vi.fn(),
-    graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS, layout },
-    theme: "paper",
+    graphFilter: { ...DEFAULT_NODE_FILTER, ...o.filter },
+    setGraphFilter: vi.fn(),
+    resetGraphFilter: vi.fn(),
+    communities: detectCommunities(notes),
+    graphDisplay: { ...GRAPH_DISPLAY_DEFAULTS, layout: o.layout ?? "force" },
+    treeVisible: true,
+    setTreeVisible: vi.fn(),
     pushToast: vi.fn(),
   } as unknown as AppContextValue;
 
   function Harness(): ReactNode {
     return (
-      <AppCtx.Provider value={value}>
-        <GraphView />
-      </AppCtx.Provider>
+      <TestAppearanceProvider>
+        <AppCtx.Provider value={value}>
+          <GraphView />
+        </AppCtx.Provider>
+      </TestAppearanceProvider>
     );
   }
-  return { ...render(<Harness />), openNote, setGraphSelectedId };
+  return { ...render(<Harness />), ctx: value };
 }
 
 beforeEach(() => {
+  localStorage.clear();
   mockInstance.building = false;
-  mockInstance.sigmaReady = true;
+  mockInstance.sigmaReady = 1;
   mockInstance.scene = "rings";
   runtimeSigma = null;
   runtimeGraph = null;
@@ -143,169 +172,197 @@ beforeEach(() => {
   runtimeOrbitTargets = new Map();
 });
 
-describe("GraphView", () => {
+describe("GraphView states", () => {
   it("shows the empty-graph prompt when there are no notes", () => {
     renderGraph([]);
-    expect(screen.getByText(/Your graph is empty/)).toBeInTheDocument();
-    // No stats line for an empty graph.
-    expect(screen.queryByText(/nodes ·/)).not.toBeInTheDocument();
+    expect(screen.getByText("Your graph is empty")).toBeInTheDocument();
+    expect(screen.queryByText(/notes? ·/)).not.toBeInTheDocument();
   });
 
   it("shows a loading state instead of the empty prompt during the initial fetch", () => {
-    renderGraph([], "force", false);
-    expect(screen.getByText(/loading your vault/)).toBeInTheDocument();
-    // Must NOT flash "empty" before the load settles.
-    expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
+    renderGraph([], { notesLoaded: false });
+    expect(screen.getByText(/Loading your vault/)).toBeInTheDocument();
+    expect(screen.queryByText("Your graph is empty")).not.toBeInTheDocument();
   });
 
   it("shows an error state instead of the empty prompt after a failed fetch", () => {
-    renderGraph([], "force", true, new Set(), null, "Network error");
+    renderGraph([], { notesError: "Network error" });
     const alert = screen.getByRole("alert");
-    expect(alert).toHaveTextContent("Couldn’t load your vault");
+    expect(alert).toHaveTextContent("Couldn't load your vault");
     expect(alert).toHaveTextContent(/Network error.*Check the backend/);
-    // A backend failure must NOT masquerade as an empty vault.
-    expect(screen.queryByText(/Your graph is empty/)).not.toBeInTheDocument();
-    // No stats line for a failed load either.
-    expect(screen.queryByText(/nodes ·/)).not.toBeInTheDocument();
+    expect(screen.queryByText("Your graph is empty")).not.toBeInTheDocument();
   });
 
-  it("renders the node and edge counts", () => {
+  it("renders the note and link counts", () => {
     renderGraph([mkNote("a", ["b"]), mkNote("b", ["a"]), mkNote("c")]);
     // Reciprocal note links collapse into one undirected visual edge.
-    expect(screen.getByText(/3 nodes · 1 edge/)).toBeInTheDocument();
+    expect(screen.getByText(/3 notes · 1 link$/)).toBeInTheDocument();
   });
 
   it("reports counts for the visible induced subgraph", () => {
-    const project = { ...mkNote("p", ["t"]), type: "project" as const };
-    const topic = mkNote("t", ["p"]);
-    renderGraph([project, topic], "force", true, new Set(["project"]));
-    expect(screen.getByText(/1 of 2 nodes · 0 edges/)).toBeInTheDocument();
+    renderGraph([mkNote("p", ["t"], "projects"), mkNote("t", ["p"])], {
+      filter: { folder: "projects" },
+    });
+    expect(screen.getByText(/1 of 2 notes · 0 links/)).toBeInTheDocument();
   });
 
-  it("offers to clear filters when no notes match", () => {
-    renderGraph([mkNote("t")], "force", true, new Set(["project"]));
-    const emptyState = screen.getByRole("status");
-    expect(emptyState).toHaveTextContent("No notes match these filters.");
-    expect(
-      within(emptyState).getByRole("button", { name: "Clear filters" }),
-    ).toBeInTheDocument();
+  it("offers to clear filters when no notes match", async () => {
+    const user = userEvent.setup();
+    const { ctx } = renderGraph([mkNote("t")], {
+      filter: { folder: "projects" },
+    });
+    const empty = screen.getByRole("status");
+    expect(empty).toHaveTextContent("No notes match these filters.");
+    await user.click(
+      within(empty).getByRole("button", { name: "Clear filters" }),
+    );
+    expect(ctx.resetGraphFilter).toHaveBeenCalled();
   });
 
   it("shows the building loader while the layout is arranging", () => {
     mockInstance.building = true;
     renderGraph([mkNote("a"), mkNote("b")]);
-    const status = screen.getByRole("status");
-    expect(status).toHaveTextContent(/arranging 2 nodes/);
+    expect(screen.getByRole("status")).toHaveTextContent(/Arranging 2 notes/);
   });
 
-  it("does not show the loader once the build settles", () => {
-    mockInstance.building = false;
-    renderGraph([mkNote("a")]);
-    expect(screen.queryByText(/arranging/)).not.toBeInTheDocument();
-  });
-
-  it("shows the layout caption for a scene layout", () => {
+  it("names the scene for a scene layout only", () => {
     mockInstance.scene = "spiral";
-    renderGraph([mkNote("a"), mkNote("b")], "spiral");
-    expect(screen.getByText("Layout")).toBeInTheDocument();
+    const { unmount } = renderGraph([mkNote("a")], { layout: "spiral" });
     expect(screen.getByText("Spiral")).toBeInTheDocument();
+    unmount();
+    renderGraph([mkNote("a")]);
+    expect(screen.queryByText("Spiral")).not.toBeInTheDocument();
   });
 
-  it("hides the layout caption for the force layout", () => {
-    renderGraph([mkNote("a")], "force");
-    expect(screen.queryByText("Layout")).not.toBeInTheDocument();
-  });
-
-  it("flags paused animations for a graph past the perf budget", () => {
-    const many = Array.from({ length: 501 }, (_, i) => mkNote(`n${i}`));
-    renderGraph(many);
+  it("flags paused animations only past the perf budget", () => {
+    const { unmount } = renderGraph([mkNote("a"), mkNote("b")]);
+    expect(screen.queryByText(/animations paused/)).not.toBeInTheDocument();
+    unmount();
+    renderGraph(Array.from({ length: 501 }, (_, i) => mkNote(`n${i}`)));
     expect(screen.getByText(/animations paused/)).toBeInTheDocument();
   });
+});
 
-  it("does not flag the perf note for a small graph", () => {
-    renderGraph([mkNote("a"), mkNote("b")]);
-    expect(screen.queryByText(/animations paused/)).not.toBeInTheDocument();
-  });
+describe("GraphView sidebar and toolbar", () => {
+  const vault = [
+    mkNote("a", ["b"], "projects"),
+    mkNote("b", ["a"], "projects"),
+    mkNote("c", [], "topics"),
+  ];
 
-  it("shows persistent details and visible direct-connection count", () => {
-    const selected = {
-      ...mkNote("a", ["b"]),
-      title: "Caching",
-      tags: ["systems"],
-    };
-    renderGraph(
-      [selected, mkNote("b"), mkNote("in", ["a"]), mkNote("far")],
-      "force",
-      true,
-      new Set(),
-      "a",
-    );
-
-    const card = screen.getByRole("complementary", {
-      name: "Node details: Caching",
-    });
-    expect(card).toHaveTextContent("2 connections");
-    expect(card).toHaveTextContent("#systems");
-  });
-
-  it("wires selected-node open, clear, and Escape actions", async () => {
+  it("lists folders with counts and filters by one", async () => {
     const user = userEvent.setup();
-    const { openNote, setGraphSelectedId } = renderGraph(
-      [mkNote("a")],
-      "force",
-      true,
-      new Set(),
-      "a",
-    );
-
-    await user.click(screen.getByRole("button", { name: "Open note" }));
-    expect(openNote).toHaveBeenCalledWith("a");
-
-    const graph = screen.getByRole("application", { name: "Knowledge graph" });
-    graph.focus();
-    await user.keyboard("{Escape}");
-    expect(setGraphSelectedId).toHaveBeenCalledWith(null);
-  });
-
-  it("returns focus to the graph when the selection card is cleared", async () => {
-    const user = userEvent.setup();
-    const { setGraphSelectedId } = renderGraph(
-      [mkNote("a")],
-      "force",
-      true,
-      new Set(),
-      "a",
-    );
-
-    await user.click(
-      screen.getByRole("button", { name: "Clear node selection" }),
-    );
-
+    const { ctx } = renderGraph(vault);
+    const nav = screen.getByRole("navigation", { name: "Graph filters" });
     expect(
-      screen.getByRole("application", { name: "Knowledge graph" }),
-    ).toHaveFocus();
-    expect(setGraphSelectedId).toHaveBeenCalledWith(null);
+      within(nav).getByRole("button", { name: /All notes 3/ }),
+    ).toHaveAttribute("aria-pressed", "true");
+    await user.click(within(nav).getByRole("button", { name: /projects 2/ }));
+    expect(ctx.setGraphFilter).toHaveBeenCalledWith({ folder: "projects" });
   });
 
-  it("centers the camera directly in orbit mode", async () => {
+  it("names communities after their most-linked note and filters by one", async () => {
     const user = userEvent.setup();
-    runtimeGraph = new Graph();
-    runtimeGraph.addNode("a", { x: 0, y: 0 });
-    const animate = vi.fn();
-    runtimeSigma = {
-      getCamera: () => ({ animate }),
-      getNodeDisplayData: () => ({ x: 0.2, y: 0.8 }),
-    } as unknown as Sigma;
-
-    renderGraph([mkNote("a")], "rings", true, new Set(), "a");
-    await user.click(screen.getByRole("button", { name: "Center" }));
-
-    expect(animate).toHaveBeenCalledWith(
-      { x: 0.2, y: 0.8, ratio: 0.45 },
-      expect.objectContaining({ duration: 500 }),
-    );
+    const { ctx } = renderGraph(vault);
+    const nav = screen.getByRole("navigation", { name: "Graph filters" });
+    await user.click(within(nav).getByRole("button", { name: /^a 2/ }));
+    expect(ctx.setGraphFilter).toHaveBeenCalledWith({ community: 0 });
+    await user.click(within(nav).getByRole("button", { name: /Other 1/ }));
+    expect(ctx.setGraphFilter).toHaveBeenCalledWith({ community: "other" });
   });
 
+  it("shows superseded notes on request", async () => {
+    const user = userEvent.setup();
+    const { ctx } = renderGraph(vault);
+    const toggle = screen.getByRole("button", { name: "Superseded" });
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    await user.click(toggle);
+    expect(ctx.setGraphFilter).toHaveBeenCalledWith({ showSuperseded: true });
+  });
+
+  it("remembers whether communities are colored", async () => {
+    const user = userEvent.setup();
+    renderGraph(vault);
+    const toggle = screen.getByRole("button", { name: "Communities" });
+    expect(toggle).toHaveAttribute("aria-pressed", "true");
+    await user.click(toggle);
+    expect(toggle).toHaveAttribute("aria-pressed", "false");
+    expect(localStorage.getItem("loom.graph.communities")).toBe("0");
+  });
+
+  it("puts the filter and the selected note in the breadcrumb", () => {
+    renderGraph(vault, { filter: { folder: "projects" }, selected: "a" });
+    const crumbs = screen.getByRole("navigation", { name: "breadcrumb" });
+    expect(crumbs).toHaveTextContent(/demo.*projects.*a/);
+  });
+
+  it("toggles the sidebar", async () => {
+    const user = userEvent.setup();
+    const { ctx } = renderGraph(vault);
+    await user.click(
+      screen.getByRole("button", { name: "Toggle graph sidebar" }),
+    );
+    expect(ctx.setTreeVisible).toHaveBeenCalledWith(false);
+  });
+});
+
+describe("GraphView selection", () => {
+  const chain = [mkNote("a", ["b"]), mkNote("b", ["far"]), mkNote("far")];
+
+  it("opens the selected note beside the graph and closes it", async () => {
+    const user = userEvent.setup();
+    const { ctx } = renderGraph(chain, { selected: "a" });
+    const panel = screen.getByRole("complementary", { name: "Open note" });
+    expect(panel).toHaveTextContent("a");
+    await user.click(within(panel).getByRole("button", { name: "Close note" }));
+    expect(ctx.setGraphSelectedId).toHaveBeenCalledWith(null);
+  });
+
+  it("shows no panel without a selection", () => {
+    renderGraph(chain);
+    expect(
+      screen.queryByRole("complementary", { name: "Open note" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Local only" })).toBeDisabled();
+  });
+
+  it("narrows the graph to the selection's direct links with Local only", async () => {
+    const user = userEvent.setup();
+    renderGraph(chain, { selected: "a" });
+    await user.click(screen.getByRole("button", { name: "Local only" }));
+    expect(
+      screen.getByText(/2 of 3 notes · 1 link · local to a/),
+    ).toBeInTheDocument();
+  });
+
+  it("clears the selection with Escape and opens the full editor with Enter", async () => {
+    const user = userEvent.setup();
+    const { ctx } = renderGraph(chain, { selected: "a" });
+    screen.getByRole("application", { name: "Knowledge graph" }).focus();
+    await user.keyboard("{Enter}");
+    expect(ctx.openNote).toHaveBeenCalledWith("a");
+    await user.keyboard("{Escape}");
+    expect(ctx.setGraphSelectedId).toHaveBeenCalledWith(null);
+  });
+
+  it("clears a selection the folder filter hides", () => {
+    const { ctx } = renderGraph([mkNote("p", [], "projects"), mkNote("t")], {
+      filter: { folder: "topics" },
+      selected: "p",
+    });
+    expect(ctx.setGraphSelectedId).toHaveBeenCalledWith(null);
+  });
+
+  it("keeps a selection the timeline hides", () => {
+    const { ctx } = renderGraph(chain, {
+      filter: { createdBefore: Date.parse("2026-04-01T00:00:00Z") },
+      selected: "a",
+    });
+    expect(ctx.setGraphSelectedId).not.toHaveBeenCalled();
+  });
+});
+
+describe("GraphView canvas controls", () => {
   it("settles active motion before fitting the visible graph", async () => {
     const user = userEvent.setup();
     runtimeGraph = new Graph();
@@ -319,6 +376,8 @@ describe("GraphView", () => {
       getCamera: () => ({ animate }),
       setCustomBBox,
       refresh,
+      on: vi.fn(),
+      off: vi.fn(),
     } as unknown as Sigma;
     const cancel = vi.fn();
     runtimeActiveTween = { cancel };
@@ -328,8 +387,8 @@ describe("GraphView", () => {
       ["b", { x: 10, y: 20 }],
     ]);
 
-    renderGraph([mkNote("a"), mkNote("b")], "rings");
-    await user.click(screen.getByRole("button", { name: "Fit visible nodes" }));
+    renderGraph([mkNote("a"), mkNote("b")], { layout: "rings" });
+    await user.click(screen.getByRole("button", { name: "Fit graph (F)" }));
 
     expect(runtimeStopDragSim).toHaveBeenCalledTimes(1);
     expect(cancel).toHaveBeenCalledTimes(1);
@@ -346,34 +405,31 @@ describe("GraphView", () => {
     );
   });
 
-  it("narrows stats to the selected one-hop neighborhood", async () => {
+  it("zooms the camera in and out", async () => {
     const user = userEvent.setup();
-    renderGraph(
-      [mkNote("a", ["b"]), mkNote("b", ["far"]), mkNote("far")],
-      "force",
-      true,
-      new Set(),
-      "a",
-    );
-
-    await user.click(
-      screen.getByRole("switch", {
-        name: "Show selected note and direct neighbors only",
-      }),
-    );
-    expect(screen.getByText(/2 of 3 nodes · 1 edge/)).toBeInTheDocument();
-    expect(screen.getByText(/neighborhood focus/)).toBeInTheDocument();
+    const animatedZoom = vi.fn();
+    const animatedUnzoom = vi.fn();
+    runtimeSigma = {
+      getCamera: () => ({ animatedZoom, animatedUnzoom }),
+      on: vi.fn(),
+      off: vi.fn(),
+    } as unknown as Sigma;
+    renderGraph([mkNote("a")]);
+    await user.click(screen.getByRole("button", { name: "Zoom in" }));
+    await user.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(animatedZoom).toHaveBeenCalledTimes(1);
+    expect(animatedUnzoom).toHaveBeenCalledTimes(1);
   });
 
-  it("clears a selection hidden by the active type filter", () => {
-    const project = { ...mkNote("p"), type: "project" as const };
-    const { setGraphSelectedId } = renderGraph(
-      [project, mkNote("t")],
-      "force",
-      true,
-      new Set(["topic"]),
-      "p",
-    );
-    expect(setGraphSelectedId).toHaveBeenCalledWith(null);
+  it("scrubs the timeline by creation date, back to today at the end", () => {
+    const { ctx } = renderGraph([mkNote("a")]);
+    const slider = screen.getByRole("slider", {
+      name: "Show notes created up to",
+    });
+    expect(slider).toHaveAttribute("aria-valuetext", "Today");
+    fireEvent.keyDown(slider, { key: "Home" });
+    expect(ctx.setGraphFilter).toHaveBeenLastCalledWith({
+      createdBefore: Date.parse("2026-05-01T00:00:00Z"),
+    });
   });
 });

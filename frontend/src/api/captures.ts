@@ -56,12 +56,6 @@ export interface ProcessResult {
   source_coverage?: Record<string, unknown>;
 }
 
-export function processCapture(capturePath: string): Promise<ProcessResult> {
-  return apiClient.post<ProcessResult>("/api/captures/process", {
-    capture_path: capturePath,
-  });
-}
-
 export function skipCapture(
   capturePath: string,
   reason?: string,

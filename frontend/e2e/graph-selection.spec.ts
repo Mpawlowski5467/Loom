@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import type { LoomGraphDebugHook } from "../src/graph/graphDebug";
+import { expectView } from "./nav";
 
 declare global {
   interface Window {
@@ -7,14 +8,19 @@ declare global {
   }
 }
 
-test("selects, isolates, keyboard-pivots, fits, clears, and opens a graph node", async ({
+const hiddenCount = () =>
+  window
+    .__loomGraph!.graph.nodes()
+    .filter((id) => window.__loomGraph!.graph.getNodeAttribute(id, "hidden"))
+    .length;
+
+test("opens a node beside the graph, isolates it, pivots, clears and opens it", async ({
   page,
 }) => {
   await page.addInitScript(() => {
     localStorage.removeItem("loom.graphDisplay");
-    localStorage.removeItem("loom.graphFilters");
+    localStorage.removeItem("loom.graphFilter.v2");
     localStorage.removeItem("loom.demoMode");
-    localStorage.setItem("loom.treeVisible", "false");
     sessionStorage.setItem("loom.splash.seen", "1");
   });
   await page.goto("/?graphFixture=500", { waitUntil: "domcontentloaded" });
@@ -30,68 +36,44 @@ test("selects, isolates, keyboard-pivots, fits, clears, and opens a graph node",
     )
     .toBe(true);
 
+  const graph = page.getByRole("application", { name: "Knowledge graph" });
   const nodePoint = await page.evaluate(() => {
-    const host = document.querySelector<HTMLElement>(".sigma-container");
+    const host = document.querySelector<HTMLElement>(
+      '[aria-label="Knowledge graph"]',
+    );
     const point = window.__loomGraph?.graphToViewport("perf-500-0000");
     const bounds = host?.getBoundingClientRect();
     return point && bounds
       ? { x: bounds.left + point.x, y: bounds.top + point.y }
       : null;
   });
-  expect(nodePoint).not.toBeNull();
   if (!nodePoint) throw new Error("fixture hub is not rendered");
 
   await page.mouse.click(nodePoint.x, nodePoint.y);
-  const card = page.getByRole("complementary", {
-    name: "Node details: Synthetic project 0000",
-  });
-  await expect(card).toBeVisible();
-  await expect(card).toContainText("66 connections");
-
-  const neighborsOnly = card.getByRole("switch", {
-    name: "Show selected note and direct neighbors only",
-  });
-  await neighborsOnly.check();
-  await expect(neighborsOnly).toBeChecked();
+  const panel = page.getByRole("complementary", { name: "Open note" });
   await expect(
-    page.getByText("neighborhood focus", { exact: false }),
+    panel.getByRole("heading", { name: "Synthetic project 0000" }),
   ).toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const debug = window.__loomGraph!;
-        return debug.graph
-          .nodes()
-          .filter((id) => debug.graph.getNodeAttribute(id, "hidden")).length;
-      }),
-    )
-    .toBeGreaterThan(400);
 
-  const graph = page.getByRole("application", { name: "Knowledge graph" });
+  const localOnly = page.getByRole("button", { name: "Local only" });
+  await localOnly.click();
+  await expect(localOnly).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    page.getByText("local to Synthetic project 0000", { exact: false }),
+  ).toBeVisible();
+  await expect.poll(() => page.evaluate(hiddenCount)).toBeGreaterThan(400);
+
   await graph.press("ArrowRight");
-  await expect(card).not.toBeVisible();
-  const pivotedCard = page.getByRole("complementary");
-  await expect(pivotedCard).toBeVisible();
-  await expect(pivotedCard).not.toContainText("Synthetic project 0000");
+  await expect(panel.getByRole("heading", { level: 2 })).not.toHaveText(
+    "Synthetic project 0000",
+  );
 
   await graph.press("f");
   await graph.press("Escape");
-  await expect(pivotedCard).not.toBeVisible();
-  await expect
-    .poll(() =>
-      page.evaluate(() => {
-        const debug = window.__loomGraph!;
-        return debug.graph
-          .nodes()
-          .filter((id) => debug.graph.getNodeAttribute(id, "hidden")).length;
-      }),
-    )
-    .toBe(0);
+  await expect(panel).not.toBeVisible();
+  await expect.poll(() => page.evaluate(hiddenCount)).toBe(0);
 
   await graph.press("ArrowRight");
   await graph.press("Enter");
-  await expect(page.getByRole("tab", { name: "Thread" })).toHaveAttribute(
-    "aria-selected",
-    "true",
-  );
+  await expectView(page, "Notes");
 });

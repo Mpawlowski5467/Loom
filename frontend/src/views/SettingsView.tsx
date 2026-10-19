@@ -1,99 +1,135 @@
 import type { ReactNode } from "react";
 import {
-  Archive,
+  Bot,
   Cpu,
   Info,
   Link2,
   Palette,
-  Server,
-  ShieldAlert,
   ShieldCheck,
   Vault,
 } from "lucide-react";
+import { NavLink } from "react-router";
 import { useApp } from "../context/app-ctx";
 import type { SettingsSection } from "../data/types";
+import { settingsPath } from "../app/routes";
+import { cn } from "@/lib/utils";
 import { AppearanceSection } from "./settings/AppearanceSection";
 import { AboutSection } from "./settings/AboutSection";
+import { AgentModelsCard } from "./settings/AgentModelsCard";
 import { ConnectionsSection } from "./settings/ConnectionsSection";
 import { ArchivedSection } from "./settings/ArchivedSection";
 import { DangerZoneSection } from "./settings/DangerZoneSection";
-import { HardwareSection } from "./settings/HardwareSection";
+import { HardwareScanCard } from "./settings/HardwareScanCard";
+import { ModelAdvisorCard } from "./settings/ModelAdvisorCard";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { VaultSection } from "./settings/VaultSection";
 import { PolicySection } from "./settings/PolicySection";
+import { SettingsPage } from "./settings/kit/SettingsPage";
+import { SettingsGroup } from "./settings/kit/SettingsGroup";
 
-const SECTIONS: {
-  id: SettingsSection;
-  label: string;
-  icon: ReactNode;
-}[] = [
-  { id: "appearance", label: "Appearance", icon: <Palette size={15} /> },
-  { id: "providers", label: "Providers", icon: <Server size={15} /> },
-  { id: "connections", label: "Connections", icon: <Link2 size={15} /> },
-  { id: "hardware", label: "Hardware & Models", icon: <Cpu size={15} /> },
-  {
-    id: "policy",
-    label: "Automation & Privacy",
-    icon: <ShieldCheck size={15} />,
-  },
-  { id: "vault", label: "Vault", icon: <Vault size={15} /> },
-  { id: "archived", label: "Archived", icon: <Archive size={15} /> },
-  { id: "about", label: "About", icon: <Info size={15} /> },
-  { id: "danger", label: "Danger", icon: <ShieldAlert size={15} /> },
+const SECTIONS: { id: SettingsSection; label: string; icon: ReactNode }[] = [
+  { id: "general", label: "General", icon: <Info /> },
+  { id: "appearance", label: "Appearance", icon: <Palette /> },
+  { id: "agents", label: "Agents", icon: <Bot /> },
+  { id: "models", label: "Models & providers", icon: <Cpu /> },
+  { id: "privacy", label: "Privacy", icon: <ShieldCheck /> },
+  { id: "integrations", label: "Integrations", icon: <Link2 /> },
+  { id: "vault", label: "Vault", icon: <Vault /> },
 ];
 
+/**
+ * Settings: a section nav routed by `/settings/:section`. Each page has one
+ * h1 (its first SettingsGroup) and h2 groups below it.
+ */
 export function SettingsView(): ReactNode {
-  const { settingsSection, setSettingsSection } = useApp();
-
+  const { settingsSection } = useApp();
   return (
-    <section className="settings-view" aria-label="Settings">
-      <aside className="settings-rail">
-        <div className="settings-rail-title">Settings</div>
-        <nav className="settings-nav" aria-label="Settings sections">
+    <section
+      aria-label="Settings"
+      className="flex min-h-0 flex-1 flex-col bg-background lg:flex-row"
+    >
+      <aside className="shrink-0 border-b border-border bg-sidebar p-3 lg:w-60 lg:border-r lg:border-b-0">
+        <h2 className="px-2 pb-2 font-mono text-[11px] tracking-wider text-muted-foreground uppercase">
+          Settings
+        </h2>
+        <nav
+          aria-label="Settings sections"
+          className="flex flex-wrap gap-1 lg:flex-col"
+        >
           {SECTIONS.map((section) => (
-            <button
+            <NavLink
               key={section.id}
-              className="settings-nav-item"
-              type="button"
-              aria-current={settingsSection === section.id ? "page" : undefined}
-              onClick={() => setSettingsSection(section.id)}
+              to={settingsPath(section.id)}
+              className={({ isActive }) =>
+                cn(
+                  "flex h-8 items-center gap-2 rounded-md px-2 text-sm text-secondary-foreground transition-colors [&_svg]:size-4 [&_svg]:text-muted-foreground",
+                  "hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                  isActive &&
+                    "bg-nav-active font-medium text-nav-active-foreground",
+                )
+              }
             >
-              <span className="settings-nav-icon" aria-hidden="true">
-                {section.icon}
-              </span>
-              <span>{section.label}</span>
-            </button>
+              <span aria-hidden="true">{section.icon}</span>
+              {section.label}
+            </NavLink>
           ))}
         </nav>
       </aside>
-      <main className="settings-content">{renderSection(settingsSection)}</main>
+      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
+        {settingsSection === "appearance" ? (
+          <AppearanceSection />
+        ) : (
+          <SettingsPage>{renderSection(settingsSection)}</SettingsPage>
+        )}
+      </div>
     </section>
   );
 }
 
 function renderSection(section: SettingsSection): ReactNode {
   switch (section) {
+    case "general":
+      return <AboutSection />;
     case "appearance":
       return <AppearanceSection />;
-    case "providers":
-      return <ProvidersSection />;
-    case "connections":
-      return <ConnectionsSection />;
-    case "hardware":
-      return <HardwareSection />;
-    case "policy":
+    case "agents":
+      return (
+        <SettingsGroup
+          level={1}
+          title="Agent models"
+          description="Choose the provider and model each of Loom's built-in agents uses."
+        >
+          <AgentModelsCard />
+        </SettingsGroup>
+      );
+    case "models":
+      return (
+        <>
+          <ProvidersSection />
+          <SettingsGroup
+            title="This machine"
+            description="Profile this machine and see which local models it can run comfortably."
+          >
+            <HardwareScanCard />
+            <ModelAdvisorCard />
+          </SettingsGroup>
+        </>
+      );
+    case "privacy":
       return <PolicySection />;
+    case "integrations":
+      return <ConnectionsSection />;
     case "vault":
-      return <VaultSection />;
-    case "archived":
-      return <ArchivedSection />;
-    case "about":
-      return <AboutSection />;
-    case "danger":
-      return <DangerZoneSection />;
+      return (
+        <>
+          <VaultSection />
+          <ArchivedSection />
+          <DangerZoneSection />
+        </>
+      );
     default:
-      // Exhaustiveness guard: adding a SettingsSection without a case here is
-      // a compile error, not a silent "Coming next" placeholder.
+      // Exhaustiveness guard: a new SettingsSection without a case here is a
+      // compile error, not a silent blank page.
       return assertNever(section);
   }
 }

@@ -1,21 +1,28 @@
 import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { useApp } from "../../context/app-ctx";
-import { StatusBadge } from "../../components/primitives/StatusBadge";
+import { AgentAvatar } from "@/components/AgentAvatar";
 import type { AgentState } from "../../data/types";
-import { boardStatus, liveAgentState } from "./boardHelpers";
+import { AgentStateBadge } from "./AgentStateBadge";
+import { agentDisplayName, liveAgentState } from "./boardHelpers";
+import { agentBoardState, type AgentStateContext } from "./boardStats";
 
 function strokeFor(state: AgentState, hasRecentActivity: boolean): string {
-  if (state === "running") return "var(--agent)";
-  if (hasRecentActivity) return "var(--ink-2)";
-  return "var(--ink-3)";
+  if (state === "running") return "var(--brand)";
+  if (hasRecentActivity) return "var(--secondary-foreground)";
+  return "var(--muted-foreground)";
 }
 
 const WIDTH = 600;
 const MIDLINE = 18;
 const AMPLITUDE = 14;
 
-export function PulseMode(): ReactNode {
+/** Live heartbeat lines per agent, from the activity pulse samples. */
+export function PulseMode({
+  stateCtx,
+}: {
+  stateCtx: AgentStateContext;
+}): ReactNode {
   const { agents, agentActivity } = useApp();
   const polylineRefs = useRef<Record<string, SVGPolylineElement | null>>({});
 
@@ -73,29 +80,29 @@ export function PulseMode(): ReactNode {
 
   if (agents.length === 0) {
     return (
-      <div className="board-empty">
+      <p className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
         No agents to chart. Add an agent or run one to see its pulse.
-      </div>
+      </p>
     );
   }
 
   return (
-    <div className="pulse-mode">
+    <ul
+      aria-label="Agent pulse"
+      className="flex flex-col divide-y divide-border rounded-lg border border-border"
+    >
       {agents.map((a) => {
         const live = agentActivity[a.id];
-        const status = boardStatus(a, live);
-        const recentActivity = (live?.pulse ?? []).some((v) => v > 0.05);
         const runs = live?.action_count ?? a.stats.runs;
         return (
-          <div key={a.id} className="pulse-row">
-            <div className="pulse-meta">
-              <span className="pulse-icon" aria-hidden="true">
-                {a.icon}
-              </span>
-              <span className="pulse-name">{a.name}</span>
-            </div>
+          <li key={a.id} className="flex items-center gap-3 px-4 py-2">
+            <span className="flex w-36 shrink-0 items-center gap-2 text-sm text-foreground">
+              <AgentAvatar actor={a.id} size="md" />
+              {agentDisplayName(a)}
+            </span>
             <svg
-              className="pulse-spark"
+              aria-hidden="true"
+              className="h-9 min-w-0 flex-1"
               viewBox="0 0 600 36"
               preserveAspectRatio="none"
             >
@@ -104,18 +111,19 @@ export function PulseMode(): ReactNode {
                   polylineRefs.current[a.id] = el;
                 }}
                 fill="none"
-                stroke={strokeFor(status.state, recentActivity)}
                 strokeWidth={1.3}
                 points=""
               />
             </svg>
-            <div className="pulse-stats">
-              <StatusBadge state={status.state} label={status.label} />
-              <div>{runs} runs</div>
-            </div>
-          </div>
+            <span className="flex w-40 shrink-0 items-center justify-end gap-2">
+              <AgentStateBadge state={agentBoardState(a.id, live, stateCtx)} />
+              <span className="font-mono text-xs text-muted-foreground tabular-nums">
+                {runs} runs
+              </span>
+            </span>
+          </li>
         );
       })}
-    </div>
+    </ul>
   );
 }

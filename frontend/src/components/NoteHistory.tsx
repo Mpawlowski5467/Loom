@@ -5,15 +5,22 @@ import {
   notePath,
   type HistoryEntry,
 } from "../api/history";
+import { describeApiError } from "../api/client";
 import { useApp } from "../context/app-ctx";
+import { formatRelative } from "../data/formatDate";
+import { actorLabel } from "../data/actors";
+import { AgentAvatar } from "./AgentAvatar";
 import { CommitDetail } from "./CommitDetail";
-import "../styles/components/revisions.css";
+import { Button } from "./ui/button";
+import { cn } from "@/lib/utils";
 
 interface NoteHistoryProps {
   noteId: string;
   folder: string;
   filename?: string;
   disabled?: boolean;
+  /** Render the list immediately (inside a sheet) instead of behind a toggle. */
+  alwaysOpen?: boolean;
 }
 
 async function fetchNoteHistory(
@@ -34,9 +41,11 @@ export function NoteHistory({
   folder,
   filename,
   disabled = false,
+  alwaysOpen = false,
 }: NoteHistoryProps) {
   const { config, reloadNoteBody } = useApp();
-  const [open, setOpen] = useState(false);
+  const [toggled, setOpen] = useState(false);
+  const open = alwaysOpen || toggled;
   const [items, setItems] = useState<HistoryEntry[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [message, setMessage] = useState("");
@@ -52,9 +61,7 @@ export function NoteHistory({
         },
         (err: unknown) => {
           if (!isCancelled())
-            setMessage(
-              err instanceof Error ? err.message : "Could not load history",
-            );
+            setMessage(describeApiError(err, "Could not load history"));
         },
       ),
     [path],
@@ -71,41 +78,61 @@ export function NoteHistory({
 
   if (!path) return null;
   return (
-    <section className="revision-history note-history">
-      <button
-        className="btn btn-sm"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
-      >
-        Change history
-      </button>
+    <section className="flex flex-col gap-3">
+      {!alwaysOpen && (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-fit"
+          aria-expanded={open}
+          onClick={() => setOpen(!open)}
+        >
+          Change history
+        </Button>
+      )}
       {open && (
-        <div className="revision-panel">
-          <p>
+        <div className="flex flex-col gap-3">
+          <p className="text-sm text-muted-foreground">
             Every agent and human change to this note is a commit. Undo adds a
             new commit; history is never rewritten.
           </p>
-          {message && <p role="status">{message}</p>}
-          <ol className="history-list">
+          {message && (
+            <p role="status" className="text-sm text-muted-foreground">
+              {message}
+            </p>
+          )}
+          <ol className="flex flex-col gap-1">
             {items.map((item) => (
               <li key={item.sha}>
                 <button
-                  className={`btn btn-sm history-entry${selected === item.sha ? " active" : ""}`}
+                  type="button"
                   aria-pressed={selected === item.sha}
                   onClick={() =>
                     setSelected(selected === item.sha ? null : item.sha)
                   }
+                  className={cn(
+                    "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                    selected === item.sha && "bg-accent",
+                  )}
                 >
-                  <span className="history-date">
-                    {new Date(item.date).toLocaleString()}
+                  <AgentAvatar actor={item.agents[0] ?? item.author} />
+                  <span className="min-w-0 flex-1 truncate text-secondary-foreground">
+                    <span className="font-medium text-foreground">
+                      {item.agents.map(actorLabel).join(", ") || item.author}
+                    </span>{" "}
+                    {item.action || item.subject}
                   </span>
-                  <span className="history-who">{item.agents.join(", ")}</span>
-                  <span>{item.action || item.subject}</span>
                   {item.sentinel && (
-                    <span className="history-sentinel">
+                    <span className="hidden text-xs text-muted-foreground sm:inline">
                       Sentinel {item.sentinel.split(" ")[0]}
                     </span>
                   )}
+                  <span
+                    className="font-mono text-[11px] whitespace-nowrap text-muted-foreground"
+                    title={new Date(item.date).toLocaleString()}
+                  >
+                    {item.short_sha} · {formatRelative(item.date)}
+                  </span>
                 </button>
               </li>
             ))}

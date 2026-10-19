@@ -10,7 +10,6 @@ function renderShell(
   render(
     <ConnectorFlowShell
       title="Google"
-      headingId="google-title"
       blurb="One sign-in for Calendar and Gmail."
       steps={[<>Create a project in the Google Cloud console.</>]}
       signInLabel="Sign in with Google"

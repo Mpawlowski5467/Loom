@@ -1,8 +1,17 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
 import type { Capture } from "../data/types";
-import { ConfirmModal } from "../components/ConfirmModal";
-import { useFocusTrap } from "../components/useFocusTrap";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   captureRelPath,
   commitCapture,
@@ -50,8 +59,8 @@ export function EditSuggestionModal({
   const [tagsInput, setTagsInput] = useState(initialTags);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Accessible confirm dialog (replaces window.confirm) for the dirty-discard
-  // guard below.
+  // Inline confirmation for the dirty-discard guard (a second modal can't
+  // take focus from inside this dialog).
   const [confirmDiscard, setConfirmDiscard] = useState(false);
 
   const trimmedTitle = title.trim();
@@ -63,9 +72,8 @@ export function EditSuggestionModal({
     folder !== initialFolder ||
     tagsInput !== initialTags;
 
-  // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist: route
-  // the discard confirmation through the accessible ConfirmModal instead of
-  // window.confirm. With no unsaved edits, close immediately.
+  // Guard accidental dismissal (backdrop / Cancel / Esc) once edits exist.
+  // With no unsaved edits, close immediately.
   const requestClose = () => {
     // While the discard confirm is up, its own Escape/Cancel owns dismissal —
     // don't let the focus-trap's window-level Escape re-open it.
@@ -76,12 +84,6 @@ export function EditSuggestionModal({
     }
     onClose();
   };
-
-  // Title input carries autoFocus; route Escape through the dirty-aware guard.
-  const dialogRef = useFocusTrap<HTMLDivElement>({
-    onEscape: requestClose,
-    skipInitialFocus: true,
-  });
 
   const submit = async () => {
     if (!canSubmit) return;
@@ -124,114 +126,105 @@ export function EditSuggestionModal({
   };
 
   const onKey = (e: React.KeyboardEvent) => {
-    // Escape is handled by useFocusTrap at the window level.
     if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) void submit();
   };
 
   return (
-    <>
-      <div
-        className="settings-modal-backdrop"
-        role="presentation"
-        onClick={requestClose}
-      >
-        <div
-          ref={dialogRef}
-          className="settings-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="edit-suggestion-title"
-          onClick={(e) => e.stopPropagation()}
-        >
-          <div className="settings-kicker">Capture</div>
-          <h2 id="edit-suggestion-title" className="settings-modal-title">
-            Edit suggestion
-          </h2>
-          <p className="settings-copy">
-            Override Weaver's classification before filing this capture. Weaver
-            regenerates the note body for your chosen type. ⌘↵ to submit.
-          </p>
-
-          <label className="settings-field">
-            <span className="settings-field-label">Title</span>
-            <input
-              className="input"
-              value={title}
-              autoFocus
-              onChange={(e) => setTitle(e.target.value)}
-              onKeyDown={onKey}
-            />
-          </label>
-
-          <div className="settings-field-row">
-            <label className="settings-field">
-              <span className="settings-field-label">Type</span>
-              <select
-                className="input mono"
-                value={type}
-                onChange={(e) => setType(e.target.value)}
-              >
-                {TYPE_OPTIONS.map((opt) => (
-                  <option key={opt.value} value={opt.value}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="settings-field">
-              <span className="settings-field-label">Folder</span>
-              <input
-                className="input mono"
-                value={folder}
-                onChange={(e) => setFolder(e.target.value)}
-                onKeyDown={onKey}
-              />
-            </label>
-          </div>
-
-          <label className="settings-field">
-            <span className="settings-field-label">Tags</span>
-            <input
-              className="input mono"
-              value={tagsInput}
-              placeholder="comma-separated, e.g. infra, perf"
-              onChange={(e) => setTagsInput(e.target.value)}
-              onKeyDown={onKey}
-            />
-          </label>
-
-          {error && (
-            <div className="settings-test-result fail" role="status">
-              {error}
-            </div>
-          )}
-
-          <div className="settings-actions">
-            <button className="btn btn-md" type="button" onClick={requestClose}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-md btn-active"
-              type="button"
-              disabled={!canSubmit}
-              onClick={() => void submit()}
+    <Dialog open onOpenChange={(open) => !open && requestClose()}>
+      <DialogContent className="sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle>Edit the proposal</DialogTitle>
+          <DialogDescription>
+            Override Weaver's classification before filing. Weaver regenerates
+            the note body for the type you choose. ⌘↵ files it.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="edit-title">Title</Label>
+          <Input
+            id="edit-title"
+            value={title}
+            autoFocus
+            onChange={(e) => setTitle(e.target.value)}
+            onKeyDown={onKey}
+          />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="edit-type">Type</Label>
+            <select
+              id="edit-type"
+              value={type}
+              onChange={(e) => setType(e.target.value)}
+              className="h-9 rounded-md border border-input bg-transparent px-3 text-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              {busy ? "Filing…" : "Accept & file"}
-            </button>
+              {TYPE_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="edit-folder">Folder</Label>
+            <Input
+              id="edit-folder"
+              value={folder}
+              onChange={(e) => setFolder(e.target.value)}
+              onKeyDown={onKey}
+              className="font-mono text-xs"
+            />
           </div>
         </div>
-      </div>
-
-      {confirmDiscard && (
-        <ConfirmModal
-          title="Discard your changes to this suggestion?"
-          body="Your edits to the title, type, folder, and tags will be lost."
-          confirmLabel="Discard"
-          destructive
-          onConfirm={onClose}
-          onClose={() => setConfirmDiscard(false)}
-        />
-      )}
-    </>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="edit-tags">Tags</Label>
+          <Input
+            id="edit-tags"
+            value={tagsInput}
+            placeholder="comma-separated, e.g. infra, perf"
+            onChange={(e) => setTagsInput(e.target.value)}
+            onKeyDown={onKey}
+            className="font-mono text-xs"
+          />
+        </div>
+        {error && (
+          <p role="status" className="text-sm text-danger-foreground">
+            {error}
+          </p>
+        )}
+        {confirmDiscard ? (
+          <section
+            aria-labelledby="discard-edits"
+            className="flex flex-col gap-2 rounded-md border border-warning-border bg-warning p-3 text-sm text-warning-foreground"
+          >
+            <h3 id="discard-edits" className="font-medium">
+              Discard your changes to this suggestion?
+            </h3>
+            <p>Your edits to the title, type, folder and tags will be lost.</p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Cancel
+              </Button>
+              <Button variant="destructive" size="sm" onClick={onClose}>
+                Discard
+              </Button>
+            </div>
+          </section>
+        ) : (
+          <DialogFooter>
+            <Button variant="outline" onClick={requestClose}>
+              Cancel
+            </Button>
+            <Button disabled={!canSubmit} onClick={() => void submit()}>
+              {busy ? "Filing…" : "Approve and file"}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

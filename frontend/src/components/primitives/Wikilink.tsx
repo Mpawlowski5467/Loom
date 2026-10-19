@@ -1,6 +1,15 @@
+import { ChevronDown } from "lucide-react";
 import { useState, type ReactNode } from "react";
+import { cn } from "@/lib/utils";
 import { useApp } from "../../context/app-ctx";
 import { wikilinkCandidates, linkTarget } from "../../data/wikilinks";
+
+/** Same chip as the editor's wikilink element (editor/plate/wikilink.tsx). */
+const CHIP =
+  "mx-px inline-flex items-center gap-0.5 rounded-sm px-1.5 py-px align-baseline font-sans text-[0.9em] leading-snug font-medium focus-visible:outline-2 focus-visible:outline-ring";
+const RESOLVED = "bg-chip text-chip-foreground hover:underline";
+const MISSING =
+  "border border-dashed border-chip-foreground/50 text-chip-foreground hover:bg-chip";
 
 interface Props {
   target: string;
@@ -9,6 +18,7 @@ interface Props {
   onOpen?: (target: string) => void;
 }
 
+/** A `[[wikilink]]` in a markdown preview: open it, pick a match, or create it. */
 export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
   const {
     resolveWikilink,
@@ -27,21 +37,26 @@ export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
 
   if (candidates.length > 1)
     return (
-      <span className="wikilink-choice">
+      <span className="inline-flex flex-wrap items-baseline gap-1">
         <button
-          className="wikilink"
+          className={cn(CHIP, MISSING)}
           aria-expanded={choosing}
           title="Several notes match this link"
           onClick={() => setChoosing(!choosing)}
         >
-          {text} ▾
+          {text}
+          <ChevronDown aria-hidden="true" className="size-3" />
         </button>
         {choosing && (
-          <span role="group" aria-label={`Choose note for ${text}`}>
+          <span
+            role="group"
+            aria-label={`Choose note for ${text}`}
+            className="inline-flex flex-wrap gap-1"
+          >
             {candidates.map((candidate) => (
               <button
                 key={candidate.id}
-                className="wikilink"
+                className={cn(CHIP, RESOLVED, "font-mono text-[0.8em]")}
                 onClick={() => {
                   openNote(candidate.id, heading);
                   setChoosing(false);
@@ -59,7 +74,7 @@ export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
     // Unresolved link — offer to create the missing note instead of dead-ending.
     return (
       <button
-        className={`wikilink wikilink-new ${block ? "backlink" : ""}`}
+        className={cn(CHIP, MISSING, block && "flex w-fit")}
         onClick={() => {
           setNewNoteTitle(
             target.split("|", 1)[0]!.split("#", 1)[0]!.trim() ||
@@ -77,7 +92,7 @@ export function Wikilink({ target, label, block, onOpen }: Props): ReactNode {
 
   return (
     <button
-      className={`wikilink ${block ? "backlink" : ""}`}
+      className={cn(CHIP, RESOLVED, block && "flex w-fit")}
       onClick={() => {
         onOpen?.(target);
         if (heading) openNote(id, heading);

@@ -11,6 +11,8 @@ import type { Note, NoteId } from "../data/types";
 import { createLens } from "./lens";
 import type { GraphTuning } from "./tuning";
 import type { XY } from "./layouts";
+import { DEFAULT_NODE_FILTER } from "./nodeFilter";
+import { typePaint } from "./graphModel";
 
 function stubSigma(ratio = 1): Sigma {
   return {
@@ -27,7 +29,9 @@ function makeTuning(overrides: Partial<GraphTuning> = {}): GraphTuning {
     isolateNeighbors: false,
     visibilityRestricted: false,
     dragging: false,
-    filters: new Set(),
+    filter: DEFAULT_NODE_FILTER,
+    nodeColor: typePaint(),
+    communityOf: new Map(),
     palette: {
       edge: "#000",
       edgeHover: "#000",

@@ -1,9 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type Graph from "graphology";
 import type Sigma from "sigma";
-import type { ThemeName } from "../theme/themes";
 import type { GraphDisplay } from "../context/app-ctx";
-import type { NodeType } from "../data/types";
 import { applyPaletteToGraph } from "./sigma-setup";
 import { easeInOutCubic } from "./layouts";
 import { spacingToCameraRatio } from "./reducers";
@@ -18,6 +16,12 @@ import {
   computeVisibleDegreeMap,
   isGraphNodeVisible,
 } from "./filtering";
+import type { NodePaint } from "./graphModel";
+import {
+  filterIsNarrowed,
+  filterKey,
+  type GraphNodeFilter,
+} from "./nodeFilter";
 
 interface Ref<T> {
   current: T;
@@ -37,10 +41,18 @@ export function useGraphDisplaySync(args: {
   tuningRef: Ref<GraphTuning>;
   graphDisplay: GraphDisplay;
   graphMode: GraphMode;
-  graphFilters: Set<NodeType>;
+  graphFilter: GraphNodeFilter;
+  /** Note id → community slot; mirrored onto node attributes. */
+  communityOf: ReadonlyMap<string, number | null>;
+  /** Changes when community membership changes. */
+  communityKey: string;
   selectedNodeId?: string | null;
   isolateNeighbors?: boolean;
-  theme: ThemeName;
+  /** Node fill colors (community or neutral, from the theme). */
+  nodeColor: NodePaint;
+  /** Changes whenever any node or edge color could have (theme, accent,
+   *  palette, communities on/off, membership). */
+  paintKey: string;
   sigmaReady: number;
   stopDragSimRef: Ref<(() => void) | null>;
 }): void {
@@ -52,10 +64,13 @@ export function useGraphDisplaySync(args: {
     tuningRef,
     graphDisplay,
     graphMode,
-    graphFilters,
+    graphFilter,
+    communityOf,
+    communityKey,
     selectedNodeId = null,
     isolateNeighbors = false,
-    theme,
+    nodeColor,
+    paintKey,
     sigmaReady,
     stopDragSimRef,
   } = args;
@@ -146,6 +161,11 @@ export function useGraphDisplaySync(args: {
   }, [selectedNodeId, isolateNeighbors, sigmaReady, tuningRef, sigmaRef]);
 
   const isolationSelectedId = isolateNeighbors ? selectedNodeId : null;
+  const key = filterKey(graphFilter);
+  // The timeline changes visibility continuously while dragging; only the
+  // other criteria refit the camera.
+  const fitKey = filterKey({ ...graphFilter, createdBefore: null });
+  const lastFitKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     // Visibility is shared state, not merely a paint effect: physics, orbit
@@ -153,12 +173,20 @@ export function useGraphDisplaySync(args: {
     // exist in the current view. Cancel an active/settling drag before changing
     // that participant set.
     stopDragSimRef.current?.();
-    tuningRef.current.filters = graphFilters;
+    tuningRef.current.filter = graphFilter;
+    tuningRef.current.communityOf = communityOf;
     const graph = graphRef.current;
     const sigma = sigmaRef.current;
     if (!graph || !sigma) return;
+    graph.updateEachNodeAttributes(
+      (id, attributes) => ({
+        ...attributes,
+        community: communityOf.get(id) ?? null,
+      }),
+      { attributes: ["community"] },
+    );
     const visibility = applyGraphVisibility(graph, {
-      typeFilters: graphFilters,
+      filter: graphFilter,
       selectedId: isolationSelectedId,
       isolateNeighbors,
     });
@@ -172,9 +200,15 @@ export function useGraphDisplaySync(args: {
     // Fit normalization to the visible subset while a filter is active. This
     // keeps a small result set from remaining compressed inside the full
     // vault's old bounds. Clearing filters restores Sigma's natural bbox.
-    sigma.setCustomBBox(
-      visibility.restricted ? computeVisibleGraphBBox(graph) : null,
-    );
+    const refit = lastFitKeyRef.current !== `${fitKey}|${isolationSelectedId}`;
+    lastFitKeyRef.current = `${fitKey}|${isolationSelectedId}`;
+    if (refit)
+      sigma.setCustomBBox(
+        filterIsNarrowed({ ...graphFilter, createdBefore: null }) ||
+          visibility.isolationActive
+          ? computeVisibleGraphBBox(graph)
+          : null,
+      );
     sigma.setSetting(
       "renderLabels",
       visibleNodeCount <= GRAPH_LABEL_BUDGET_NODES,
@@ -183,7 +217,7 @@ export function useGraphDisplaySync(args: {
     // edges. It is user-triggered and infrequent, so correctness wins over a
     // partial repaint here.
     sigma.refresh();
-    if (graphMode === "constellation") {
+    if (refit && graphMode === "constellation") {
       sigma.getCamera().animate(
         {
           ratio: spacingToCameraRatio(spacingScaleRef.current),
@@ -193,8 +227,12 @@ export function useGraphDisplaySync(args: {
         { duration: 450, easing: easeInOutCubic },
       );
     }
+    // graphFilter/communityOf are captured by `key`/`communityKey`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    graphFilters,
+    key,
+    fitKey,
+    communityKey,
     isolationSelectedId,
     isolateNeighbors,
     sigmaReady,
@@ -210,9 +248,12 @@ export function useGraphDisplaySync(args: {
   // settings in place rather than recreating the renderer. The tuning object
   // is passed in so its palette swaps before the reducers re-run inside.
   useEffect(() => {
+    tuningRef.current.nodeColor = nodeColor;
     const sigma = sigmaRef.current;
     const graph = graphRef.current;
     if (!sigma || !graph) return;
     applyPaletteToGraph(sigma, graph, tuningRef.current);
-  }, [theme, tuningRef, sigmaRef, graphRef]);
+    // nodeColor is captured by paintKey.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [paintKey, sigmaReady, tuningRef, sigmaRef, graphRef]);
 }

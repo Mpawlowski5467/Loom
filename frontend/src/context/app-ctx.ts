@@ -1,7 +1,6 @@
 import { createContext, useContext } from "react";
 import type { AgentActivity } from "../api/activity";
 import type { LoomConfigPublic, OnboardingCompleteRequest } from "../api/types";
-import type { ThemeName } from "../theme/themes";
 import type {
   Agent,
   AgentEvent,
@@ -11,11 +10,12 @@ import type {
   GraphLayout,
   Note,
   NoteId,
-  NodeType,
   SettingsSection,
   Tab,
   Toast,
 } from "../data/types";
+import type { CommunityResult } from "../graph/communities";
+import type { GraphNodeFilter } from "../graph/nodeFilter";
 
 export const GRAPH_LAYOUTS: readonly GraphLayout[] = [
   "force",
@@ -104,20 +104,15 @@ export interface AppContextValue {
   /** Bumped to ask the graph to fly its camera to a node (e.g. from search). */
   graphFlyTo: { id: NoteId; nonce: number } | null;
   flyToNode: (id: NoteId) => void;
-  graphFilters: Set<NodeType>;
-  toggleGraphFilter: (t: NodeType) => void;
-  clearGraphFilters: () => void;
+  graphFilter: GraphNodeFilter;
+  setGraphFilter: (patch: Partial<GraphNodeFilter>) => void;
+  resetGraphFilter: () => void;
+  /** Louvain communities over the vault's links (see graph/communities). */
+  communities: CommunityResult;
 
   graphDisplay: GraphDisplay;
   setGraphDisplay: (patch: Partial<GraphDisplay>) => void;
   resetGraphDisplay: () => void;
-
-  primaryOpen: boolean;
-  secondaryOpen: boolean;
-  editing: boolean;
-  setPrimaryOpen: (b: boolean) => void;
-  setSecondaryOpen: (b: boolean) => void;
-  setEditing: (b: boolean) => void;
 
   /** Left file-tree visibility (graph/board tabs only), persisted. */
   treeVisible: boolean;
@@ -128,9 +123,7 @@ export interface AppContextValue {
   quickCaptureOpen: boolean;
   setQuickCaptureOpen: (b: boolean) => void;
 
-  toasts: Toast[];
   pushToast: (toast: Omit<Toast, "id">) => void;
-  dismissToast: (id: string) => void;
 
   agents: Agent[];
   agentActivity: Record<string, AgentActivity>;
@@ -146,6 +139,9 @@ export interface AppContextValue {
   newNoteOpen: boolean;
   setNewNoteOpen: (open: boolean) => void;
   newNoteTitle: string | null;
+  /** Text to start the Council composer with (set by "Ask Council"). */
+  councilPrefill: string | null;
+  setCouncilPrefill: (text: string | null) => void;
   setNewNoteTitle: (t: string | null) => void;
   appendNote: (note: Note) => void;
   updateNote: (note: Note) => void;
@@ -163,10 +159,6 @@ export interface AppContextValue {
   setCaptureStatus: (id: string, s: CaptureStatus) => void;
   removeCapture: (id: string) => void;
 
-  theme: ThemeName;
-  setTheme: (t: ThemeName) => Promise<void>;
-  followOsTheme: boolean;
-  setFollowOsTheme: (on: boolean) => void;
   config: LoomConfigPublic | null;
   configLoading: boolean;
   configError: string | null;

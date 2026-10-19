@@ -6,7 +6,6 @@ import {
   titleMapFromNotes,
   titleMapFromRecords,
   notePathOf,
-  loadAllNotes,
   loadNoteSummaries,
   archiveNote,
   updateNote,
@@ -272,68 +271,5 @@ describe("note mutation requests", () => {
       "/api/notes/note%2Fwith%20spaces?base_modified=2026-07-14T12%3A34%3A56%2B00%3A00",
     );
     expect(del).toHaveBeenNthCalledWith(2, "/api/notes/plain");
-  });
-});
-
-describe("loadAllNotes", () => {
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("pages through the bulk endpoint, accumulating full notes", async () => {
-    const getSpy = vi.spyOn(apiClient, "get");
-    // Bulk page 1 returns 2 of 3 notes; page 2 returns the last.
-    getSpy.mockImplementation((path: string) => {
-      if (path.startsWith("/api/notes/bulk?offset=0")) {
-        return Promise.resolve({
-          notes: [mkRecord({ id: "a" }), mkRecord({ id: "b" })],
-          total: 3,
-          offset: 0,
-          limit: 500,
-        });
-      }
-      if (path.startsWith("/api/notes/bulk?offset=2")) {
-        return Promise.resolve({
-          notes: [mkRecord({ id: "c" })],
-          total: 3,
-          offset: 2,
-          limit: 500,
-        });
-      }
-      throw new Error(`unexpected path ${path}`);
-    });
-
-    const records = await loadAllNotes();
-    expect(records.map((r) => r.id).sort()).toEqual(["a", "b", "c"]);
-    // No per-note N+1 — only the two bulk page requests.
-    expect(getSpy).toHaveBeenCalledTimes(2);
-  });
-
-  it("stops when a page returns no notes", async () => {
-    const getSpy = vi.spyOn(apiClient, "get");
-    getSpy.mockResolvedValue({ notes: [], total: 99, offset: 0, limit: 500 });
-    const records = await loadAllNotes();
-    expect(records).toEqual([]);
-  });
-
-  it("returns whatever the bulk endpoint provides (server skips bad notes)", async () => {
-    const getSpy = vi.spyOn(apiClient, "get");
-    // The backend bulk endpoint drops an unreadable note server-side, so the
-    // client simply gets the survivors — no client-side per-note skipping.
-    getSpy.mockResolvedValue({
-      notes: [mkRecord({ id: "a" }), mkRecord({ id: "c" })],
-      total: 2,
-      offset: 0,
-      limit: 500,
-    });
-
-    const records = await loadAllNotes();
-    expect(records.map((r) => r.id).sort()).toEqual(["a", "c"]);
-  });
-
-  it("propagates an AbortError so a cancelled load surfaces", async () => {
-    const getSpy = vi.spyOn(apiClient, "get");
-    getSpy.mockRejectedValue(new DOMException("aborted", "AbortError"));
-    await expect(loadAllNotes()).rejects.toMatchObject({ name: "AbortError" });
   });
 });

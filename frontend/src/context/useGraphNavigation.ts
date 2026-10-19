@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useState } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { GraphFixtureSize } from "../data/graphFixtures";
-import type { NoteId, NodeType, Tab } from "../data/types";
-import { sanitizeGraphFilters } from "../graph/filtering";
+import type { NoteId, Tab } from "../data/types";
+import {
+  DEFAULT_NODE_FILTER,
+  sanitizeNodeFilter,
+  type GraphNodeFilter,
+} from "../graph/nodeFilter";
 import {
   GRAPH_DISPLAY_DEFAULTS,
   GRAPH_DISPLAY_RANGES,
@@ -11,7 +15,8 @@ import {
 import type { GraphDisplay } from "./app-ctx";
 
 const GRAPH_DISPLAY_KEY = "loom.graphDisplay";
-const GRAPH_FILTERS_KEY = "loom.graphFilters";
+/** v2: folder/community/superseded; the old type filters aren't migrated. */
+const GRAPH_FILTER_KEY = "loom.graphFilter.v2";
 const PERSIST_DEBOUNCE_MS = 300;
 
 function clamp(value: number, min: number, max: number): number {
@@ -19,14 +24,13 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function loadGraphFilters(): Set<NodeType> {
-  if (typeof window === "undefined") return new Set();
+function loadGraphFilter(): GraphNodeFilter {
+  if (typeof window === "undefined") return DEFAULT_NODE_FILTER;
   try {
-    const raw = window.localStorage.getItem(GRAPH_FILTERS_KEY);
-    if (!raw) return new Set();
-    return sanitizeGraphFilters(JSON.parse(raw));
+    const raw = window.localStorage.getItem(GRAPH_FILTER_KEY);
+    return raw ? sanitizeNodeFilter(JSON.parse(raw)) : DEFAULT_NODE_FILTER;
   } catch {
-    return new Set();
+    return DEFAULT_NODE_FILTER;
   }
 }
 
@@ -117,9 +121,11 @@ export interface GraphNavigationState {
   setGraphSelectedId: Dispatch<SetStateAction<NoteId | null>>;
   graphFlyTo: { id: NoteId; nonce: number } | null;
   flyToNode: (id: NoteId) => void;
-  graphFilters: Set<NodeType>;
-  toggleGraphFilter: (type: NodeType) => void;
-  clearGraphFilters: () => void;
+  /** What the graph shows (folder, community, superseded, timeline). */
+  graphFilter: GraphNodeFilter;
+  setGraphFilter: (patch: Partial<GraphNodeFilter>) => void;
+  /** Back to the defaults: everything except superseded notes. */
+  resetGraphFilter: () => void;
   graphDisplay: GraphDisplay;
   setGraphDisplay: (patch: Partial<GraphDisplay>) => void;
   resetGraphDisplay: () => void;
@@ -127,7 +133,7 @@ export interface GraphNavigationState {
 
 export function useGraphNavigation(
   graphFixture: GraphFixtureSize | null,
-  setTab: Dispatch<SetStateAction<Tab>>,
+  setTab: (tab: Tab) => void,
 ): GraphNavigationState {
   const [graphFocusId, setGraphFocusId] = useState<NoteId | null>(null);
   const [graphSelectedId, setGraphSelectedId] = useState<NoteId | null>(null);
@@ -143,32 +149,33 @@ export function useGraphNavigation(
     [setTab],
   );
 
-  const [graphFilters, setGraphFilters] = useState<Set<NodeType>>(() =>
-    graphFixture !== null ? new Set() : loadGraphFilters(),
+  const [graphFilter, setGraphFilterState] = useState<GraphNodeFilter>(() =>
+    graphFixture !== null ? DEFAULT_NODE_FILTER : loadGraphFilter(),
   );
-  const toggleGraphFilter = useCallback((type: NodeType) => {
-    setGraphFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(type)) next.delete(type);
-      else next.add(type);
-      return next;
-    });
-  }, []);
-  const clearGraphFilters = useCallback(() => setGraphFilters(new Set()), []);
+  const setGraphFilter = useCallback(
+    (patch: Partial<GraphNodeFilter>) =>
+      setGraphFilterState((prev) => ({ ...prev, ...patch })),
+    [],
+  );
+  const resetGraphFilter = useCallback(
+    () => setGraphFilterState(DEFAULT_NODE_FILTER),
+    [],
+  );
   useEffect(() => {
     if (graphFixture !== null || typeof window === "undefined") return;
     const timer = window.setTimeout(() => {
       try {
+        const { folder, community, showSuperseded } = graphFilter;
         window.localStorage.setItem(
-          GRAPH_FILTERS_KEY,
-          JSON.stringify([...graphFilters]),
+          GRAPH_FILTER_KEY,
+          JSON.stringify({ folder, community, showSuperseded }),
         );
       } catch {
         // ignore quota / serialization failures
       }
     }, PERSIST_DEBOUNCE_MS);
     return () => window.clearTimeout(timer);
-  }, [graphFilters, graphFixture]);
+  }, [graphFilter, graphFixture]);
 
   const [graphDisplay, setGraphDisplayState] = useState<GraphDisplay>(() =>
     graphFixture !== null ? GRAPH_DISPLAY_DEFAULTS : loadGraphDisplay(),
@@ -248,9 +255,9 @@ export function useGraphNavigation(
     setGraphSelectedId,
     graphFlyTo,
     flyToNode,
-    graphFilters,
-    toggleGraphFilter,
-    clearGraphFilters,
+    graphFilter,
+    setGraphFilter,
+    resetGraphFilter,
     graphDisplay,
     setGraphDisplay,
     resetGraphDisplay,

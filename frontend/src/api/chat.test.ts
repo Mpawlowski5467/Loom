@@ -88,6 +88,7 @@ describe("streamCouncilMessage — SSE parsing", () => {
       assistantText: "final answer",
       traceId: "trace-9",
       contributions: [],
+      commits: [],
     });
   });
 

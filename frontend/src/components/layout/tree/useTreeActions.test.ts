@@ -71,7 +71,6 @@ describe("useTreeActions.performDelete", () => {
   beforeEach(() => {
     archiveMock.mockClear();
     archiveMock.mockResolvedValue({ status: "ok", path: "x" });
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
   afterEach(() => {
     vi.restoreAllMocks();
@@ -143,19 +142,6 @@ describe("useTreeActions.performDelete", () => {
 
     expect(harness.removeNote).toHaveBeenCalledWith("thr_a");
     expect(harness.setTab).toHaveBeenCalledWith("graph");
-  });
-
-  it("does not remove anything or archive when the user cancels the confirm", async () => {
-    vi.spyOn(window, "confirm").mockReturnValue(false);
-    const notes = [
-      makeNote({ id: "thr_a", folder: "topics", filename: "caching.md" }),
-    ];
-    const { result, harness } = renderActions(notes);
-
-    await result.current.performDelete("topics/caching.md", "thr_a");
-
-    expect(archiveMock).not.toHaveBeenCalled();
-    expect(harness.removeNote).not.toHaveBeenCalled();
   });
 
   it("does not remove notes when the archive request fails", async () => {

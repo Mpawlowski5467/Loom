@@ -1,6 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { loadChatHistory, streamCouncilMessage } from "../api/chat";
+import {
+  loadChatHistory,
+  streamCouncilMessage,
+  type ChatMessageResponse,
+} from "../api/chat";
 import type { CouncilMessage, CouncilWho } from "../data/types";
+
+/** Saved Council chat as thread messages: your turns and the summaries. */
+export function historyToCouncil(
+  messages: readonly ChatMessageResponse[],
+): CouncilMessage[] {
+  return messages.map((message, index) => ({
+    id: `cm_hist_${index}_${message.timestamp}`,
+    who: message.role === "user" ? "you" : ("agent:council" as CouncilWho),
+    body: message.content,
+    at: message.timestamp,
+  }));
+}
 
 /** Own persisted history and the cancellable Council SSE conversation. */
 export function useCouncil(
@@ -26,15 +42,7 @@ export function useCouncil(
     void loadChatHistory("_council", 50)
       .then((response) => {
         if (cancelled || response.messages.length === 0) return;
-        setCouncil(
-          response.messages.map((message, index) => ({
-            id: `cm_hist_${index}_${message.timestamp}`,
-            who:
-              message.role === "user" ? "you" : ("agent:council" as CouncilWho),
-            body: message.content,
-            at: message.timestamp,
-          })),
-        );
+        setCouncil(historyToCouncil(response.messages));
       })
       .catch(() => {
         // Persisted history is best-effort; an empty conversation is safe.
@@ -124,6 +132,7 @@ export function useCouncil(
             updateReply({
               body: event.assistantText,
               traceId: event.traceId || undefined,
+              commits: event.commits.length > 0 ? event.commits : undefined,
               contributions:
                 contributions.length > 0 ? contributions : undefined,
               pending: false,

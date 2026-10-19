@@ -5,8 +5,13 @@ import {
   listArchivedNotes,
   restoreArchivedNote,
   type ArchivedNoteRecord,
-} from "../../api/archive";
-import { formatDate } from "../../data/formatDate";
+} from "@/api/archive";
+import { Button } from "@/components/ui/button";
+import { formatDate } from "@/data/formatDate";
+import { SettingsGroup } from "./kit/SettingsGroup";
+import { StatusLine } from "./kit/StatusLine";
+import { ListCard } from "./vault/ListCard";
+import { describeApiError } from "@/api/client";
 
 /**
  * Archived / Trash surface: lists notes that were archived (moved under
@@ -29,9 +34,7 @@ export function ArchivedSection(): ReactNode {
   useEffect(() => {
     void load()
       .catch((err) => {
-        setMessage(
-          err instanceof Error ? err.message : "Failed to load archive",
-        );
+        setMessage(describeApiError(err, "Failed to load archive"));
       })
       .finally(() => setLoaded(true));
   }, []);
@@ -44,55 +47,57 @@ export function ArchivedSection(): ReactNode {
       await load();
       setMessage(`Restored "${note.title}" to ${note.original_path}.`);
     } catch (err) {
-      setMessage(err instanceof Error ? err.message : "Restore failed");
+      setMessage(describeApiError(err, "Restore failed"));
     } finally {
       setBusyId(null);
     }
   };
 
   return (
-    <div className="settings-panel">
-      <div className="settings-kicker">Vault</div>
-      <h1 className="settings-title">Archived</h1>
-      <p className="settings-copy">
-        Archived notes are kept under <code>threads/.archive/</code> — never
-        deleted. Restore one to move it back to its original folder and the
-        graph.
-      </p>
-
+    <SettingsGroup
+      title="Archived"
+      description={
+        <>
+          Archived notes are kept under{" "}
+          <code className="font-mono text-xs">threads/.archive/</code> — never
+          deleted. Restore one to move it back to its original folder and the
+          graph.
+        </>
+      }
+    >
       {loaded && notes.length === 0 ? (
-        <div className="settings-inline-status">No archived notes.</div>
+        <p className="text-sm text-muted-foreground">No archived notes.</p>
       ) : (
-        <div className="settings-vault-list">
+        <div className="flex flex-col gap-2">
           {notes.map((note) => (
-            <article key={note.id} className="settings-vault-card">
-              <div>
-                <div className="settings-vault-name">
-                  <FileText size={15} aria-hidden="true" />
+            <ListCard key={note.id}>
+              <div className="flex min-w-0 flex-1 basis-56 flex-col gap-1">
+                <p className="flex items-center gap-2 font-medium text-foreground">
+                  <FileText
+                    aria-hidden="true"
+                    className="size-4 shrink-0 text-muted-foreground"
+                  />
                   {note.title || note.id}
-                </div>
-                <div className="settings-vault-path">
+                </p>
+                <p className="font-mono text-xs break-all text-muted-foreground">
                   {note.original_path} · {note.type} · archived{" "}
                   {formatDate(note.archived_at)}
-                </div>
+                </p>
               </div>
-              <div className="settings-vault-actions">
-                <button
-                  className="btn btn-md"
-                  type="button"
-                  onClick={() => void restore(note)}
-                  disabled={busyId !== null}
-                >
-                  <ArchiveRestore size={14} aria-hidden="true" />
-                  Restore
-                </button>
-              </div>
-            </article>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void restore(note)}
+                disabled={busyId !== null}
+              >
+                <ArchiveRestore aria-hidden="true" />
+                Restore
+              </Button>
+            </ListCard>
           ))}
         </div>
       )}
-
-      {message && <div className="settings-inline-status">{message}</div>}
-    </div>
+      {message && <StatusLine>{message}</StatusLine>}
+    </SettingsGroup>
   );
 }

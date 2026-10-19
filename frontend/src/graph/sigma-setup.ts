@@ -3,7 +3,7 @@ import Sigma from "sigma";
 import type { Settings } from "sigma/settings";
 import { readCssVar } from "../theme/readCssVar";
 import type { NodeType } from "../data/types";
-import { depthColorFor } from "./depth";
+import { depthColorFor, fadeAlpha } from "./depth";
 import { glColor } from "./glColor";
 import { typePaint, type NodePaint } from "./graphModel";
 
@@ -15,14 +15,16 @@ export interface EdgePalette {
   nodeDimmed: string;
 }
 
+/** Edge, label and dimmed-node colors: translucent ink from the theme. */
 export function readEdgePalette(): EdgePalette {
+  const ink = readCssVar("--foreground", "#1a1815");
   return {
-    edge: readCssVar("--edge-color", "rgba(26,24,21,0.18)"),
+    edge: fadeAlpha(ink, 0.18),
     // Edges of the hovered/selected node are drawn in the brand color.
     edgeHover: readCssVar("--brand", "#60a5fa"),
-    edgeFaint: readCssVar("--edge-color-faint", "rgba(26,24,21,0.05)"),
-    label: readCssVar("--label-color", "#5c5851"),
-    nodeDimmed: readCssVar("--node-dimmed", "rgba(140,135,125,0.18)"),
+    edgeFaint: fadeAlpha(ink, 0.06),
+    label: readCssVar("--secondary-foreground", "#5c5851"),
+    nodeDimmed: fadeAlpha(ink, 0.12),
   };
 }
 
@@ -32,7 +34,7 @@ export function defaultSettings(): Partial<Settings> {
     allowInvalidContainer: true,
     labelColor: { color: palette.label },
     labelSize: 11,
-    labelFont: readCssVar("--font", "Inter, system-ui, sans-serif"),
+    labelFont: readCssVar("--font-ui", "Geist Variable, system-ui, sans-serif"),
     labelWeight: "500",
     defaultEdgeColor: glColor(palette.edge),
     renderEdgeLabels: false,
@@ -79,7 +81,7 @@ export function applyPaletteToGraph(
   const paint = tuning?.nodeColor ?? typePaint();
   const edgePalette = readEdgePalette();
   if (tuning) tuning.palette = edgePalette;
-  const bg = readCssVar("--bg-base", "#f5f1e8");
+  const bg = readCssVar("--background", "#f5f1e8");
   graph.forEachNode((id) => {
     const noteType = graph.getNodeAttribute(id, "noteType") as
       | NodeType

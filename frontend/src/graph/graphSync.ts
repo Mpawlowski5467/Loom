@@ -201,7 +201,7 @@ function addNew(
     paint: tuning.nodeColor,
     communityOf: tuning.communityOf,
   };
-  const bg = readCssVar("--bg-base", "#f5f1e8");
+  const bg = readCssVar("--background", "#f5f1e8");
   const conn = connectionCounts(notes);
   const byId = new Map(notes.map((n) => [n.id, n]));
   for (const id of diff.addedNodes) {
@@ -231,7 +231,7 @@ function addNew(
 function restyleConnections(target: GraphSyncTarget, notes: Note[]): void {
   const { graph, tuning, nodeZ } = target;
   const baseSizes = target.baseSizesRef.current;
-  const bg = readCssVar("--bg-base", "#f5f1e8");
+  const bg = readCssVar("--background", "#f5f1e8");
   const conn = connectionCounts(notes);
   for (const n of notes) {
     if (!graph.hasNode(n.id)) continue;
@@ -279,7 +279,7 @@ export function patchGraphContent(
   notes: Note[],
   ctx: NodeContext,
 ): { changed: boolean; typeChanged: boolean } {
-  const bg = readCssVar("--bg-base", "#f5f1e8");
+  const bg = readCssVar("--background", "#f5f1e8");
   let changed = false;
   let typeChanged = false;
   for (const n of notes) {

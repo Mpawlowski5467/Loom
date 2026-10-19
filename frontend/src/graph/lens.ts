@@ -53,7 +53,7 @@ export function createLens(opts: {
   maskCircle.setAttribute("r", "0");
   // Surface fill is re-read from the active theme each visible frame (see
   // tick) so the disc never freezes the paper palette on a dark theme.
-  maskCircle.setAttribute("fill", readCssVar("--bg-base", "#f5f1e8"));
+  maskCircle.setAttribute("fill", readCssVar("--background", "#f5f1e8"));
   lensG.appendChild(maskCircle);
 
   const dashCircle = document.createElementNS(SVG_NS, "circle");
@@ -118,15 +118,15 @@ export function createLens(opts: {
       }
       if (firstNonHeadingLine && firstH2) break;
     }
-    const ink = readCssVar("--ink", "#1a1815");
-    const ink2 = readCssVar("--ink-2", "#5c5851");
-    const ink3 = readCssVar("--ink-3", "#8c877d");
+    const ink = readCssVar("--foreground", "#1a1815");
+    const ink2 = readCssVar("--secondary-foreground", "#5c5851");
+    const ink3 = readCssVar("--muted-foreground", "#8c877d");
     const typeColor = (graph.getNodeAttribute(id, "color") as string) ?? ink;
 
     content.textContent = "";
     const wrap = document.createElement("div");
     wrap.style.cssText =
-      `font-family: var(--serif); color: ${ink}; line-height: 1.4; ` +
+      `font-family: var(--editor-font); color: ${ink}; line-height: 1.4; ` +
       "padding: 12%; box-sizing: border-box; width: 100%; height: 100%; " +
       "display: flex; flex-direction: column; justify-content: center; " +
       "text-align: center; overflow: hidden;";
@@ -139,7 +139,7 @@ export function createLens(opts: {
 
     const metaEl = document.createElement("div");
     metaEl.style.cssText =
-      "font-family: var(--mono); font-size: 8px; " +
+      "font-family: var(--font-code); font-size: 8px; " +
       `color: ${ink3}; margin-bottom: 4px;`;
     metaEl.textContent = `${note.type} · ${connections} conn`;
     wrap.appendChild(metaEl);
@@ -241,7 +241,7 @@ export function createLens(opts: {
       const p = sigma.graphToViewport({ x: nx, y: ny });
       const typeColor =
         (graph.getNodeAttribute(desiredId, "color") as string) ??
-        readCssVar("--ink", "#1a1815");
+        readCssVar("--foreground", "#1a1815");
       lensG.setAttribute("display", "");
       lensG.setAttribute("transform", `translate(${p.x},${p.y})`);
       lensG.style.color = typeColor;
@@ -249,7 +249,7 @@ export function createLens(opts: {
       // Re-read the surface each visible frame so a runtime theme swap (which
       // updates colors in place without rebuilding the lens) repaints the disc
       // instead of leaving a frozen paper-cream circle on a dark theme.
-      maskCircle.setAttribute("fill", readCssVar("--bg-base", "#f5f1e8"));
+      maskCircle.setAttribute("fill", readCssVar("--background", "#f5f1e8"));
       maskCircle.setAttribute("r", String(r));
       clipCircle.setAttribute("r", String(r));
       dashCircle.setAttribute("r", String(r + 6));

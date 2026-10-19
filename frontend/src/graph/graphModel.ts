@@ -18,19 +18,19 @@ import { createdAt } from "./nodeFilter";
  */
 export function readNodePalette(): Record<NodeType, string> {
   return {
-    project: readCssVar("--node-project", "#2d4a7c"),
-    topic: readCssVar("--node-topic", "#4a6b3a"),
-    people: readCssVar("--node-people", "#6b3a6b"),
-    daily: readCssVar("--node-daily", "#8c877d"),
-    capture: readCssVar("--node-capture", "#a8722a"),
-    custom: readCssVar("--node-custom", "#2d6b6b"),
+    project: readCssVar("--community-1", "#2d4a7c"),
+    topic: readCssVar("--community-3", "#4a6b3a"),
+    people: readCssVar("--community-4", "#6b3a6b"),
+    daily: readCssVar("--muted-foreground", "#8c877d"),
+    capture: readCssVar("--community-2", "#a8722a"),
+    custom: readCssVar("--secondary-foreground", "#2d6b6b"),
   };
 }
 
 /** A node's fill color, given its id and note type. */
 export type NodePaint = (id: string, type: NodeType) => string;
 
-/** Color by note type from the legacy `--node-*` tokens (tests, fallback). */
+/** Color by note type from the community tokens (tests, fallback). */
 export function typePaint(): NodePaint {
   const palette = readNodePalette();
   return (_id, type) => palette[type];
@@ -128,7 +128,7 @@ export function buildGraph(
   const graph = new Graph({ multi: false, type: "directed" });
   const baseSizes = new Map<string, number>();
   const conn = connectionCounts(notes);
-  const bg = readCssVar("--bg-base", "#f5f1e8");
+  const bg = readCssVar("--background", "#f5f1e8");
   for (const n of notes) {
     const attrs = nodeAttributesFor(n, conn.get(n.id) ?? 0, ctx, bg);
     baseSizes.set(n.id, attrs.size);

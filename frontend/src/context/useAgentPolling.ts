@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { fetchAgentActivity, type AgentActivity } from "../api/activity";
-import { fetchChangelogFeed } from "../api/changelog";
+import { fetchChangelogFeed, toAgentEvent } from "../api/changelog";
 import type { AgentEvent } from "../data/types";
 
 /** Board cadence: live cards and pulse lines. */
@@ -66,19 +66,7 @@ export function useAgentPolling(
         try {
           const items = await fetchChangelogFeed(40);
           if (cancelled) return;
-          setChangelog(
-            items.map((e) => ({
-              id: e.id,
-              ts: e.ts,
-              agent: e.agent,
-              action: e.action,
-              target: e.target,
-              chain: e.chain === "ok" ? "ok" : "fail",
-              sentinel: e.sentinel as AgentEvent["sentinel"],
-              commit: e.commit ?? null,
-              reverted: e.reverted ?? false,
-            })),
-          );
+          setChangelog(items.map(toAgentEvent));
         } catch {
           // best-effort
         }

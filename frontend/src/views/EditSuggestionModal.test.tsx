@@ -96,6 +96,6 @@ describe("EditSuggestionModal discard guard", () => {
       screen.queryByText("Discard your changes to this suggestion?"),
     ).not.toBeInTheDocument();
     // The edit form is still mounted.
-    expect(screen.getByText("Edit suggestion")).toBeInTheDocument();
+    expect(screen.getByText("Edit the proposal")).toBeInTheDocument();
   });
 });

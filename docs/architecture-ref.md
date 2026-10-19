@@ -189,8 +189,10 @@ Weaver → Sentinel → enforce publication → Spider → Scribe
 
 It retries a failed Sentinel draft once; only an accepted review state can
 publish downstream work. Researcher and Standup have their own state graphs.
-Council responses stream over SSE; their individual contributions can be
-expanded while the summarized response remains the default view.
+Council responses stream over SSE. The Board shows each agent's contribution
+(long ones clamped) followed by a Summary card with the consolidated answer;
+the Council doesn't write to the vault, so its Open diff / Undo actions appear
+only if a reply reports commits.
 
 ## Providers, policy, and trace data
 

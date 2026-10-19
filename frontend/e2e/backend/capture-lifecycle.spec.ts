@@ -185,6 +185,20 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
       name: "Browser lifecycle filed edit",
     }),
   ).toBeVisible();
+
+  // The Board reflects the agent work this lifecycle produced.
+  await viewTab(page, "Board").click();
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Board" }),
+  ).toBeVisible();
+  const activity = page.getByRole("region", { name: "Activity" });
+  await expect(activity.getByRole("row").nth(1)).toBeVisible();
+  await expect(page.getByRole("article", { name: "Weaver" })).toContainText(
+    /actions? this week/,
+  );
+  await expect(
+    page.getByRole("complementary", { name: "Loom Council" }),
+  ).toBeVisible();
 });
 
 test("provider failure leaves the original capture reviewable", async ({

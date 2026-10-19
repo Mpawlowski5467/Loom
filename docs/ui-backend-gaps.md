@@ -27,8 +27,8 @@ rebuild phase, no client yet.
 | 6 | Dismiss a Spider link suggestion | Notes | mocked; remembered locally |
 | 7 | Weaver drafts a section | Notes slash menu | mocked |
 | 8 | Persisted Archivist findings per note | Graph note panel | mocked; superseded warning derived |
-| 9 | Agent stats and scheduled/watching states | Board | planned (derived where possible) |
-| 10 | Council with note context, proposed changes | Notes, Board | planned (Ask Council prefills the composer) |
+| 9 | Agent stats and scheduled/watching states | Board | derived |
+| 10 | Council with note context, proposed changes | Notes, Board | Ask Council prefills; diff/undo wired, waiting on `commits` |
 | 11 | Stored capture proposals with a Sentinel pre-check | Inbox | planned |
 | 12 | Structured daily summary | Threads | planned (derived from changelog) |
 | 13 | Vault stats and actions per day | Threads | planned (derived) |
@@ -178,15 +178,25 @@ stale/orphan findings derived from the note itself. Without mocks a 404 means
 - `scheduled` and `watching` states in `GET /api/agents/activity` (only
   `running`/`idle` exist).
 
-**Today:** these are derived on the client.
+**Today:** these are derived on the client
+(`frontend/src/views/board/boardStats.ts`).
 
-- Actions today and the pass rate come from `GET /api/changelog/feed`, a
-  7-day window capped at 200 rows.
-- Open flags come from `extra.flagged` on the loaded notes and captures.
+- Actions today, the weekly per-agent counts and the Sentinel pass rate come
+  from `GET /api/changelog/feed?limit=200`, which reads each agent's 7 most
+  recent day files. "Today" is the browser's local day; a full window shows
+  "200+".
+- The pass rate counts Sentinel's own changelog rows (passed / warning /
+  failed).
+- Open flags count loaded notes with `reviewRequired` or `extra.flagged`, and
+  unfinished captures that are flagged, need review, or are `needs_review`.
 - The next run comes from `GET /api/automations/standup` (Standup only).
+- States: Running comes from `/api/agents/activity`. Scheduled means Standup's
+  daily schedule is on (and not paused). Watching means Sentinel (it gates
+  every write) or Weaver while the capture processing policy isn't
+  `manual`. Everything else is Idle.
 
 Weaver and Sentinel have no standalone run endpoint (they're pipeline
-stages), so their "Run now" is disabled.
+stages), so their "Run now" is disabled with an explanation.
 
 ## 10. Council
 
@@ -197,8 +207,11 @@ stages), so their "Run now" is disabled.
 - Council-proposed changes. The Council never writes, so the spec's Summary
   card "Open diff / Undo" has nothing to act on.
 
-**Today:** the Council summary renders without diff/undo, and those buttons
-appear only for mocked responses that carry commit refs.
+**Today:** "Ask Council" from a note or the palette prefills the composer.
+The stream's `done` event is read for an optional
+`commits: [{sha, subject}]`; when a reply carries any, its Summary card
+shows Open diff (the commit's diff) and Undo (a Sentinel-checked revert).
+The backend sends none, so those buttons don't appear yet.
 
 ## 11. Capture proposals
 

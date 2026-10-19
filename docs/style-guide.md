@@ -72,7 +72,7 @@
 - Views go in `frontend/src/views/` — one entry file per view (GraphView, NotesView, BoardView, InboxView, ThreadsView); a rebuilt view's parts live in a folder beside it (`views/graph/`, `views/notes/`)
 - Reusable components go in `frontend/src/components/`
 - Sigma.js graph logic isolated in `frontend/src/graph/`; translucent colors handed to Sigma go through `glColor()` (its WebGL blending is premultiplied)
-- Markdown preview lives in `frontend/src/editor/Markdown.tsx` and uses `react-markdown`; editor-specific helpers live beside it
+- Markdown preview lives in `frontend/src/editor/Markdown.tsx` and uses `react-markdown`; style read-only previews with `MARKDOWN_PROSE` (`editor/markdownProse.ts`); editor-specific helpers live beside it
 - API calls go through clients in `frontend/src/api/` (one file per resource, shared error handling in `client.ts`)
 - Use `fetch` via the shared client — no axios
 

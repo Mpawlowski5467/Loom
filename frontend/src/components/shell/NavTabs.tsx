@@ -35,7 +35,7 @@ export function NavTabs() {
           }}
           className={({ isActive }) =>
             cn(
-              "flex h-8 items-center gap-1.5 rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors",
+              "flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-muted-foreground transition-colors sm:px-3",
               "hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
               isActive && "bg-nav-active text-nav-active-foreground",
             )

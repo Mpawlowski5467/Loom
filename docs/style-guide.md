@@ -66,7 +66,11 @@
 - Fonts: Geist (`font-sans`, UI), Geist Mono (`font-mono`, paths, hashes, keyboard hints, timestamps), and `font-editor` for note text (the user's editor font)
 - Icons from lucide-react; no emoji in the UI
 - Every control is keyboard-reachable with a visible `--ring` focus ring
-- `src/styles/views/*.css` and `legacy-tokens.css` exist only for screens not yet rebuilt; don't add new rules there
+- There are no view stylesheets: `src/styles/themes.css` holds the tokens and `src/index.css` the Tailwind setup, base layer and the few shared keyframes (`@theme`). Style components with utilities
+- Forms: wrap a control in its label (or use `Label htmlFor`); use `NativeSelect` (`@/components/ui/native-select`) for plain form selects and the Radix `Select` only for styled pickers; toggles are `Switch`
+- Dialogs are shadcn `Dialog`s; confirm an action with `ConfirmModal` (`@/components/ConfirmModal`), never `window.confirm`
+- Settings pages are built from the kit in `src/views/settings/kit/`: `SettingsGroup` (titled section; a page's first group is `level={1}`), `SettingsCard`, `Field`, `ToggleField`, `StatusLine`
+- Text on a tinted surface uses `text-foreground` (or the surface's own `*-foreground` token): `--community-*` and `--brand` are fill colors and don't reach AA as small text on every theme
 
 ### Project Patterns
 - Views go in `frontend/src/views/` — one entry file per view (GraphView, NotesView, BoardView, InboxView, ThreadsView); a rebuilt view's parts live in a folder beside it (`views/graph/`, `views/notes/`)

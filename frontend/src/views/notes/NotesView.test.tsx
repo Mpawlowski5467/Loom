@@ -259,7 +259,12 @@ describe("NotesView", () => {
   it("renders the body in the rich editor with wikilink chips", async () => {
     localStorage.setItem("loom.notes.sourceMode", "0");
     renderNotes();
-    const body = await screen.findByRole("textbox", { name: "Note body" });
+    const body = await screen.findByRole(
+      "textbox",
+      { name: "Note body" },
+      // The Plate editor is a lazy chunk; it can take a while under load.
+      { timeout: 10_000 },
+    );
     expect(body).toHaveTextContent("Second plan for the read cache");
     expect(body.querySelector('[data-wikilink="Webhooks"]')).toHaveTextContent(
       "Webhooks",

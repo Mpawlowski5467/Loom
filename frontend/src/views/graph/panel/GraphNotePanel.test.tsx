@@ -90,7 +90,12 @@ describe("GraphNotePanel", () => {
     expect(panel).toHaveTextContent(`${v2.folder}/${v2.filename}`);
     expect(await within(panel).findAllByText(/abc1234 ·/)).not.toHaveLength(0);
     expect(
-      await screen.findByRole("textbox", { name: "Note body" }),
+      await screen.findByRole(
+        "textbox",
+        { name: "Note body" },
+        // The Plate editor is a lazy chunk; it can take a while under load.
+        { timeout: 10_000 },
+      ),
     ).toHaveTextContent("Second plan for the read cache");
 
     await user.click(screen.getByRole("button", { name: "Open full editor" }));

@@ -120,6 +120,30 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     page.getByText(/Saved .*Browser lifecycle filed edit/),
   ).toBeVisible();
 
+  // Find the note again from the palette, against the real search API.
+  await viewTab(page, "Graph").click();
+  await page.keyboard.press("ControlOrMeta+K");
+  const palette = page.getByRole("dialog", { name: "Search" });
+  await palette
+    .getByRole("combobox", { name: "Search notes, actions and agents" })
+    .fill("lifecycle filed");
+  await expect(palette.getByText(/^(hybrid|keyword) · \d+ ms$/)).toBeVisible();
+  await expect(
+    palette.getByRole("option", { name: /^Browser lifecycle filed edit/ }),
+  ).toBeVisible();
+  await expect(
+    palette.getByRole("complementary", { name: "Preview" }),
+  ).toContainText("Why it matched");
+  await page.keyboard.press("Enter");
+  await expect(palette).toBeHidden();
+  await expectView(page, "Notes");
+  await expect(
+    page.getByRole("heading", {
+      level: 1,
+      name: "Browser lifecycle filed edit",
+    }),
+  ).toBeVisible();
+
   await page.getByRole("button", { name: "More note actions" }).click();
   await page.getByRole("menuitem", { name: "Archive note" }).click();
   const archiveDialog = page.getByRole("dialog", { name: /Archive .*\?/i });

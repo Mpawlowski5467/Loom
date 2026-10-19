@@ -42,7 +42,7 @@ beforeEach(() => {
 });
 
 describe("AddAgentModal create flow", () => {
-  it("creates an agent with a template prompt, picked icon, and model override", async () => {
+  it("creates an agent with a template prompt and a model override", async () => {
     const user = userEvent.setup();
     const { onSaved } = renderModal();
 
@@ -59,16 +59,10 @@ describe("AddAgentModal create flow", () => {
       screen.getByText(`${summarizer.prompt.length} chars`),
     ).toBeInTheDocument();
 
-    // Icon picker: pick a suggested glyph.
-    const glyph = screen.getByRole("button", { name: "Icon ⚡" });
-    await user.click(glyph);
-    expect(glyph).toHaveAttribute("aria-pressed", "true");
-
     // Model override: open the collapsed row, choose a provider + model.
     await user.click(screen.getByRole("button", { name: /Model/ }));
     await user.selectOptions(screen.getByLabelText("Provider"), "openai");
-    await user.click(screen.getByPlaceholderText("model name"));
-    await user.click(screen.getByRole("button", { name: "gpt-4o-mini" }));
+    await user.type(screen.getByLabelText("Chat model"), "gpt-4o-mini");
 
     await user.click(screen.getByRole("button", { name: "Add agent" }));
 
@@ -76,7 +70,7 @@ describe("AddAgentModal create flow", () => {
       expect(createCustomAgent).toHaveBeenCalledWith({
         name: "Scout",
         role: "finds things",
-        icon: "⚡",
+        icon: "✦",
         system_prompt: summarizer.prompt,
         provider: "openai",
         chat_model: "gpt-4o-mini",
@@ -140,7 +134,6 @@ describe("AddAgentModal edit flow", () => {
 
     expect(screen.getByLabelText("Name")).toHaveValue("My Agent");
     expect(screen.getByLabelText(/Role/)).toHaveValue("Finds things");
-    expect(screen.getByLabelText("Custom icon")).toHaveValue("⚡");
     expect(screen.getByLabelText("Instructions")).toHaveValue(
       "You are My Agent.",
     );

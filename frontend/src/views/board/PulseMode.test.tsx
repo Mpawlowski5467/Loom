@@ -44,7 +44,9 @@ function renderPulse(
   function Harness(): ReactNode {
     return (
       <AppCtx.Provider value={value}>
-        <PulseMode />
+        <PulseMode
+          stateCtx={{ standupScheduled: false, autoProcessing: false }}
+        />
       </AppCtx.Provider>
     );
   }
@@ -79,8 +81,7 @@ describe("PulseMode", () => {
     expect(screen.getByText("3 runs")).toBeInTheDocument();
     expect(screen.getByText("9 runs")).toBeInTheDocument();
 
-    // Both idle with no recent pulse -> "idle" badge label.
-    expect(screen.getAllByText("idle")).toHaveLength(2);
+    expect(screen.getAllByText("Idle")).toHaveLength(2);
   });
 
   it("prefers the live action_count over static stats for the run count", () => {
@@ -98,8 +99,8 @@ describe("PulseMode", () => {
       agt_scout: mkActivity({ state: "running" }),
     });
 
-    expect(screen.getByText("running")).toBeInTheDocument();
-    expect(screen.queryByText("idle")).not.toBeInTheDocument();
+    expect(screen.getByText("Running")).toBeInTheDocument();
+    expect(screen.queryByText("Idle")).not.toBeInTheDocument();
   });
 
   it("shows the idle label for an agent whose live state is idle", () => {
@@ -107,7 +108,7 @@ describe("PulseMode", () => {
       agt_scout: mkActivity({ state: "idle" }),
     });
 
-    expect(screen.getByText("idle")).toBeInTheDocument();
-    expect(screen.queryByText("running")).not.toBeInTheDocument();
+    expect(screen.getByText("Idle")).toBeInTheDocument();
+    expect(screen.queryByText("Running")).not.toBeInTheDocument();
   });
 });

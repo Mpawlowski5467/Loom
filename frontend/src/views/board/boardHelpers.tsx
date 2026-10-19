@@ -8,13 +8,6 @@ export function formatRelativeTime(iso: string): string {
   return formatRelative(iso);
 }
 
-/** Relative label from an "age in seconds" value (e.g. activity timestamps). */
-export function formatAge(ageSeconds: number): string {
-  return formatRelativeTime(
-    new Date(Date.now() - ageSeconds * 1000).toISOString(),
-  );
-}
-
 /** Render a changelog target, styling any `[[wikilink]]` (bare paths get wrapped). */
 export function renderTarget(target: string): ReactNode {
   const wrapped =
@@ -24,7 +17,11 @@ export function renderTarget(target: string): ReactNode {
   return wrapped.split(/(\[\[[^\]]+\]\])/g).map((p, i) => {
     if (p.startsWith("[[") && p.endsWith("]]")) {
       return (
-        <span key={i} className="board-wikilink">
+        <span
+          key={i}
+          data-wikilink=""
+          className="rounded-sm bg-chip px-1 text-chip-foreground"
+        >
           {p.slice(2, -2).split("|")[0]}
         </span>
       );
@@ -56,25 +53,9 @@ export function liveAgentState(
   return activity?.state === "running" ? "running" : agent.state;
 }
 
-export interface BoardStatus {
-  /** Drives StatusBadge dot color (a real AgentState). */
-  state: AgentState;
-  /** Display label — adds the "settling" nuance for recently-active agents. */
-  label: string;
-}
-
-/**
- * Single source of truth for how an agent's status reads across the board
- * (cards, pulse rows). "settling" = idle but with recent pulse
- * activity; it renders with the idle dot so the legend stays three-state.
- */
-export function boardStatus(
-  agent: Agent,
-  activity: AgentActivity | undefined,
-): BoardStatus {
-  const state = liveAgentState(agent, activity);
-  if (state === "running") return { state, label: "running" };
-  const recent = (activity?.pulse ?? []).some((v) => v > 0.05);
-  if (recent) return { state: "idle", label: "settling" };
-  return { state, label: state };
+/** Built-in ids ("weaver") read as names ("Weaver"); custom names stay as typed. */
+export function agentDisplayName(agent: Pick<Agent, "name">): string {
+  return /^[a-z]+$/.test(agent.name)
+    ? agent.name[0]!.toUpperCase() + agent.name.slice(1)
+    : agent.name;
 }

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays, Inbox, Loader2, Play, X } from "lucide-react";
+import { CalendarDays, Loader2, Play } from "lucide-react";
 import {
   generateStandup,
   getStandupAutomation,
@@ -8,23 +8,26 @@ import {
   type StandupAutomation,
   type StandupResult,
 } from "../../api/automations";
-import { useFocusTrap } from "../../components/useFocusTrap";
-import { AgentBlob } from "../../components/primitives/AgentBlob";
-import { useApp } from "../../context/app-ctx";
-import { Markdown } from "../../editor/Markdown";
+import { AgentAvatar } from "@/components/AgentAvatar";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useApp } from "@/context/app-ctx";
+import { StandupResultView } from "./StandupResultView";
+import { cn } from "@/lib/utils";
 
 interface StandupWorkspaceProps {
   onClose: () => void;
 }
 
-function today(): string {
-  const now = new Date();
-  return [
-    now.getFullYear(),
-    String(now.getMonth() + 1).padStart(2, "0"),
-    String(now.getDate()).padStart(2, "0"),
-  ].join("-");
-}
+/** Today as YYYY-MM-DD in local time (the en-CA date format). */
+const today = (): string => new Date().toLocaleDateString("en-CA");
 
 export function StandupWorkspace({
   onClose,
@@ -36,7 +39,6 @@ export function StandupWorkspace({
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const runAbort = useRef<AbortController | null>(null);
-  const dialogRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
 
   useEffect(() => {
     const controller = new AbortController();
@@ -101,134 +103,94 @@ export function StandupWorkspace({
     automation?.calendar.enabled && automation.calendar.feed_url_set;
 
   return (
-    <div
-      className="settings-modal-backdrop standup-workspace-backdrop"
-      role="presentation"
-      onClick={onClose}
-    >
-      <div
-        ref={dialogRef}
-        className="settings-modal standup-workspace"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="standup-workspace-title"
-        onClick={(event) => event.stopPropagation()}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton={false}
+        className="flex max-h-[90vh] flex-col gap-0 p-0 sm:max-w-2xl"
       >
-        <header className="researcher-workspace-head">
-          <AgentBlob
-            agent="standup"
-            state={running ? "running" : "idle"}
-            size={40}
-          />
-          <div>
-            <h2 id="standup-workspace-title">Standup</h2>
-            <p>Review one day of vault activity and calendar context.</p>
+        <header className="flex items-center gap-3 border-b border-border px-5 py-4">
+          <AgentAvatar actor="standup" size="lg" />
+          <div className="min-w-0 flex-1">
+            <DialogTitle>Standup</DialogTitle>
+            <DialogDescription>
+              Review one day of vault activity and calendar context.
+            </DialogDescription>
           </div>
-          <button
-            type="button"
-            className="icon-btn researcher-workspace-close"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
             aria-label="Close Standup workspace"
           >
-            <X size={18} aria-hidden="true" />
-          </button>
+            Close
+          </Button>
         </header>
-
-        <div className="standup-controls">
-          <label>
-            <span>Date</span>
-            <input
-              className="input"
+        <div className="flex flex-wrap items-end gap-3 px-5 py-4">
+          <div className="flex flex-col gap-2">
+            <Label htmlFor="standup-date">Date</Label>
+            <Input
+              id="standup-date"
               type="date"
               value={date}
               onChange={(event) => setDate(event.target.value)}
               disabled={running}
+              className="w-44"
             />
-          </label>
-          <button
-            className="btn btn-md btn-active"
-            type="button"
-            onClick={() => void run()}
-            disabled={running || !date}
-          >
+          </div>
+          <Button onClick={() => void run()} disabled={running || !date}>
             {running ? (
-              <Loader2 size={14} className="spin" aria-hidden="true" />
+              <Loader2 aria-hidden="true" className="animate-spin" />
             ) : (
-              <Play size={14} aria-hidden="true" />
+              <Play aria-hidden="true" />
             )}
             {running ? "Generating…" : "Generate Standup"}
-          </button>
+          </Button>
         </div>
-
-        <div className="standup-automation-strip">
+        <div className="flex flex-wrap gap-x-4 gap-y-1 border-y border-border bg-muted px-5 py-2 text-xs text-muted-foreground">
           <span>
             {automation?.schedule.enabled
               ? `Scheduled ${automation.schedule.run_time} · ${automation.schedule.timezone}`
               : "Daily schedule is off"}
           </span>
-          <span className={connected ? "is-connected" : undefined}>
-            <CalendarDays size={13} aria-hidden="true" />
+          <span
+            className={cn(
+              "flex items-center gap-1.5",
+              connected && "text-ok-foreground",
+            )}
+          >
+            <CalendarDays aria-hidden="true" className="size-3.5" />
             {connected
               ? `${automation?.calendar.name} connected`
               : "No calendar connected"}
           </span>
         </div>
-
-        <main className="standup-result" aria-live="polite" aria-busy={running}>
+        <main
+          className="min-h-48 flex-1 overflow-y-auto px-5 py-4"
+          aria-live="polite"
+          aria-busy={running}
+        >
           {running && (
-            <div className="standup-empty" role="status">
-              <Loader2 size={18} className="spin" aria-hidden="true" />
+            <p
+              role="status"
+              className="flex items-center gap-2 text-sm text-muted-foreground"
+            >
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
               Reading activity, notes, and calendar events…
-            </div>
+            </p>
           )}
-          {!running && !result && (
-            <div className="standup-empty">
-              <CalendarDays size={24} aria-hidden="true" />
-              <strong>Choose a date to prepare its recap.</strong>
-              <span>
-                The result is saved as one deduplicated Inbox capture.
-              </span>
-            </div>
-          )}
-          {!running && result && result.recap && (
-            <article className="standup-recap">
-              <div className="standup-result-meta">
-                <span>{result.notes_modified} notes touched</span>
-                <span>{result.calendar_events} calendar events</span>
-              </div>
-              {result.calendar_error && (
-                <div className="standup-warning" role="alert">
-                  Calendar: {result.calendar_error}
-                </div>
-              )}
-              <Markdown source={result.recap} bodyClass="researcher-answer" />
-              <button
-                className="btn btn-md btn-purple"
-                type="button"
-                onClick={openInbox}
-              >
-                <Inbox size={14} aria-hidden="true" /> Open in Inbox
-              </button>
-            </article>
-          )}
-          {!running && result && !result.recap && (
-            <div className="standup-empty">
-              <strong>No activity found for {result.date}.</strong>
-              <span>No capture was created.</span>
-              {result.calendar_error && (
-                <span className="standup-warning" role="alert">
-                  Calendar: {result.calendar_error}
-                </span>
-              )}
-            </div>
+          {!running && (
+            <StandupResultView result={result} onOpenInbox={openInbox} />
           )}
         </main>
         {error && (
-          <div className="researcher-error" role="alert">
+          <p
+            role="alert"
+            className="border-t border-border px-5 py-3 text-sm text-danger-foreground"
+          >
             {error}
-          </div>
+          </p>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -10,7 +10,7 @@ import { GraphToolbar } from "./graph/GraphToolbar";
 import { GraphNotePanel } from "./graph/panel/GraphNotePanel";
 import { useCommunitiesToggle } from "./graph/useCommunitiesToggle";
 import { useGraphCanvas } from "./graph/useGraphCanvas";
-import { useIsDesktop } from "./graph/useIsDesktop";
+import { useIsDesktop } from "@/lib/useIsDesktop";
 
 /**
  * Graph: vault sidebar (folders, communities) | canvas with zoom and the

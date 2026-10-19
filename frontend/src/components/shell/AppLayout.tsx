@@ -8,7 +8,6 @@ import { useApp } from "@/context/app-ctx";
 import type { Tab } from "@/data/types";
 import { useAppearance } from "@/theme/appearance-ctx";
 import { ErrorBoundary } from "../ErrorBoundary";
-import { Tree } from "../layout/Tree";
 import { UnindexedBanner } from "../UnindexedBanner";
 import { ViewFallback } from "../ViewFallback";
 import { Splash } from "../../views/Splash";
@@ -59,10 +58,8 @@ export function AppLayout(): ReactNode {
   const { mode } = useAppearance();
   const navigate = useNavigate();
   const [showSplash, setShowSplash] = useState(shouldShowSplash);
-  // Graph draws its own sidebar; the legacy tree stays beside Board until
-  // that view is rebuilt. ⌘B toggles either.
-  const treeAvailable = tab === "graph" || tab === "board";
-  const legacyTree = tab === "board";
+  // ⌘B hides the Graph's vault sidebar.
+  const treeAvailable = tab === "graph";
 
   useGlobalShortcuts({
     togglePalette: () => app.setPaletteOpen(!app.paletteOpen),
@@ -106,11 +103,6 @@ export function AppLayout(): ReactNode {
           <UnindexedBanner count={unindexedCount} />
         )}
         <div className="flex min-h-0 flex-1">
-          {legacyTree && treeVisible && (
-            <ErrorBoundary label="the file tree">
-              <Tree />
-            </ErrorBoundary>
-          )}
           <main className="relative flex min-w-0 flex-1 flex-col">
             {/* Keyed by tab so a view that throws is contained, and switching
                 views recovers it without a reload. */}

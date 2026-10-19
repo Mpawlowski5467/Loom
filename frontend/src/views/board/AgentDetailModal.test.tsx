@@ -78,7 +78,7 @@ function renderModal(
   render(
     <AgentDetailModal
       agent={AGENT}
-      live={undefined}
+      state="idle"
       isCustom
       runnable
       running={false}
@@ -119,8 +119,10 @@ describe("AgentDetailModal", () => {
     expect(getAgentRegistry).toHaveBeenCalledWith("my-agent");
     expect(screen.getByText("Instructions")).toBeInTheDocument();
     expect(screen.getByText(/model: openai · gpt-4o-mini/)).toBeInTheDocument();
-    expect(screen.getByText("custom")).toBeInTheDocument();
-    expect(screen.getByText(/shuttle layer/)).toBeInTheDocument();
+    expect(
+      screen.getByText("Shuttle layer · custom agent"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Idle")).toBeInTheDocument();
   });
 
   it("hides the model line when the record has no override", async () => {
@@ -180,7 +182,7 @@ describe("AgentDetailModal", () => {
     const { onRun, onEdit, onDelete } = renderModal();
     await screen.findByText("You are My Agent, a careful scout.");
 
-    await user.click(screen.getByRole("button", { name: "Run My Agent" }));
+    await user.click(screen.getByRole("button", { name: "Run My Agent now" }));
     expect(onRun).toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Edit My Agent" }));
     expect(onEdit).toHaveBeenCalled();
@@ -193,12 +195,14 @@ describe("AgentDetailModal", () => {
     await screen.findByText("You are My Agent, a careful scout.");
 
     expect(
-      screen.queryByRole("button", { name: "Run My Agent" }),
+      screen.queryByRole("button", { name: "Run My Agent now" }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Edit My Agent" }),
     ).not.toBeInTheDocument();
-    expect(screen.getByText("🔒 system")).toBeInTheDocument();
+    expect(
+      screen.getByText("Shuttle layer · system agent"),
+    ).toBeInTheDocument();
   });
 
   it("closes from the Close button", async () => {

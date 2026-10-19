@@ -1,5 +1,7 @@
-import { useState } from "react";
-import type { ReactNode } from "react";
+import { useId, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { PROMPT_TEMPLATES, type PromptTemplate } from "./promptTemplates";
 
 interface PromptFieldProps {
@@ -9,81 +11,71 @@ interface PromptFieldProps {
 }
 
 /**
- * Instructions editor: starter-template chips above a large textarea with a
- * live character count. Inserting a template into a non-empty field asks for
- * confirmation inline instead of silently overwriting.
+ * Instructions: starter templates above the text, with a live count.
+ * Inserting a template over your own text asks first.
  */
-export function PromptField({
-  value,
-  onChange,
-  onKeyDown,
-}: PromptFieldProps): ReactNode {
+export function PromptField({ value, onChange, onKeyDown }: PromptFieldProps) {
+  const id = useId();
   const [pending, setPending] = useState<PromptTemplate | null>(null);
-
-  const applyTemplate = (template: PromptTemplate) => {
-    if (value.trim() && value !== template.prompt) {
-      setPending(template);
-      return;
-    }
+  const apply = (template: PromptTemplate) => {
+    if (value.trim() && value !== template.prompt) return setPending(template);
     setPending(null);
     onChange(template.prompt);
   };
-
   return (
-    <div className="settings-field">
-      <span className="settings-field-label">Instructions</span>
+    <div className="flex flex-col gap-2">
+      <Label htmlFor={id}>Instructions</Label>
       <div
-        className="prompt-templates"
+        className="flex flex-wrap gap-1.5"
         role="group"
         aria-label="Starter templates"
       >
         {PROMPT_TEMPLATES.map((t) => (
-          <button
+          <Button
             key={t.name}
-            type="button"
-            className="prompt-chip"
-            onClick={() => applyTemplate(t)}
+            variant="outline"
+            size="xs"
+            className="rounded-full"
+            onClick={() => apply(t)}
           >
             {t.name}
-          </button>
+          </Button>
         ))}
       </div>
       {pending && (
-        <div className="prompt-overwrite" role="status">
-          <span>
+        <div
+          role="status"
+          className="flex flex-wrap items-center gap-2 rounded-md border border-border bg-muted p-2 text-sm"
+        >
+          <span className="flex-1">
             Replace the current instructions with the {pending.name} template?
           </span>
-          <button
-            type="button"
-            className="btn btn-md"
+          <Button
+            size="xs"
             onClick={() => {
               onChange(pending.prompt);
               setPending(null);
             }}
           >
             Replace
-          </button>
-          <button
-            type="button"
-            className="btn btn-md"
-            onClick={() => setPending(null)}
-          >
+          </Button>
+          <Button variant="ghost" size="xs" onClick={() => setPending(null)}>
             Keep mine
-          </button>
+          </Button>
         </div>
       )}
-      <textarea
-        className="input prompt-textarea"
-        aria-label="Instructions"
+      <Textarea
+        id={id}
         value={value}
         rows={10}
         placeholder="You are…"
         onChange={(e) => onChange(e.target.value)}
         onKeyDown={onKeyDown}
+        className="min-h-48 font-mono text-xs"
       />
-      <div className="prompt-count" aria-live="off">
+      <p className="self-end font-mono text-[11px] text-muted-foreground">
         {value.length} chars
-      </div>
+      </p>
     </div>
   );
 }

@@ -1,67 +1,73 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import type { Agent } from "../../data/types";
+import type { Agent } from "@/data/types";
 import { AgentCard } from "./AgentCard";
 
-const agent: Agent = {
-  id: "researcher",
-  name: "Researcher",
-  layer: "shuttle",
-  role: "Finds evidence",
-  icon: "🔭",
+const spider: Agent = {
+  id: "spider",
+  name: "spider",
+  layer: "loom",
+  role: "auto-links across the vault",
+  icon: "",
   state: "idle",
-  stats: { runs: 3, lastRun: "never" },
-  lastAction: "Collected sources",
+  stats: { runs: 0, lastRun: "never" },
+  lastAction: "",
 };
 
-function setup(overrides: { running?: boolean; isCustom?: boolean } = {}) {
-  const callbacks = {
+function renderCard(over: Partial<Parameters<typeof AgentCard>[0]> = {}) {
+  const props = {
+    agent: spider,
+    state: "idle" as const,
+    lastEvent: undefined,
+    weekActions: 4,
+    running: false,
     onRun: vi.fn(),
-    onEdit: vi.fn(),
-    onDelete: vi.fn(),
-    onWorkspace: vi.fn(),
-    onOpen: vi.fn(),
+    onLogs: vi.fn(),
+    ...over,
   };
-  render(
-    <AgentCard
-      agent={agent}
-      live={undefined}
-      lastEvent={undefined}
-      isCustom={overrides.isCustom ?? true}
-      runnable
-      running={overrides.running ?? false}
-      {...callbacks}
-    />,
-  );
-  return callbacks;
+  render(<AgentCard {...props} />);
+  return props;
 }
 
 describe("AgentCard", () => {
-  it("opens from the card keyboard target without double-firing actions", async () => {
-    const user = userEvent.setup();
-    const callbacks = setup();
-    const card = screen.getByRole("button", { name: "Researcher details" });
-
-    card.focus();
-    await user.keyboard("{Enter}");
-    await user.click(screen.getByRole("button", { name: "Run Researcher" }));
-
-    expect(callbacks.onOpen).toHaveBeenCalledTimes(1);
-    expect(callbacks.onRun).toHaveBeenCalledTimes(1);
+  it("shows the agent, its state, last action and weekly count", () => {
+    renderCard({
+      state: "running",
+      lastEvent: {
+        id: "e1",
+        ts: "2026-05-16T09:00:00Z",
+        agent: "spider",
+        action: "linked",
+        target: "[[Webhooks]]",
+        chain: "ok",
+        sentinel: "ok",
+      },
+    });
+    const card = screen.getByRole("article", { name: "Spider" });
+    expect(card).toHaveTextContent("auto-links across the vault");
+    expect(card).toHaveTextContent("Running");
+    expect(card).toHaveTextContent(/linked Webhooks/);
+    expect(card).toHaveTextContent("4 actions this week");
   });
 
-  it("disables run while active and exposes custom actions", () => {
-    setup({ running: true });
+  it("opens logs and runs the agent", async () => {
+    const user = userEvent.setup();
+    const p = renderCard();
+    expect(screen.getByText("No actions yet.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Spider logs" }));
+    expect(p.onLogs).toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Run Spider now" }));
+    expect(p.onRun).toHaveBeenCalled();
+  });
 
-    expect(
-      screen.getByRole("button", { name: "Run Researcher" }),
-    ).toBeDisabled();
-    expect(
-      screen.getByRole("button", { name: "Edit Researcher" }),
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Delete Researcher" }),
-    ).toBeVisible();
+  it("disables Run now for pipeline-only agents and says why", () => {
+    renderCard({ runBlocked: "Runs as a step of the capture pipeline." });
+    const run = screen.getByRole("button", { name: "Run Spider now" });
+    expect(run).toBeDisabled();
+    expect(run.parentElement).toHaveAttribute(
+      "title",
+      "Runs as a step of the capture pipeline.",
+    );
   });
 });

@@ -3,8 +3,7 @@ import type { CaptureProcessingPolicy } from "@/api/captures";
 import type { AgentActivity } from "@/api/activity";
 import type { AgentEvent, Capture, Note } from "@/data/types";
 
-/** The changelog feed's deepest window (rows); see gap 9. */
-export const FEED_WINDOW = 200;
+import { FEED_WINDOW } from "@/context/useChangelogWindow";
 
 export interface SentinelTally {
   reviewed: number;

@@ -204,6 +204,12 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
   await expect(
     page.getByRole("complementary", { name: "Loom Council" }),
   ).toBeVisible();
+
+  // Threads counts the same week of agent actions.
+  await viewTab(page, "Threads").click();
+  await expectView(page, "Threads");
+  await expect(page.getByRole("navigation", { name: "Threads" })).toBeVisible();
+  await expect(page.getByText(/^[1-9]\d*\+? this week$/)).toBeVisible();
 });
 
 test("provider failure leaves the original capture reviewable", async ({

@@ -202,6 +202,27 @@ test("onboards without a provider and files a reviewed demo capture", async ({
     .click();
   await expectView(page, "Graph");
 
+  await viewTab(page, "Threads").click();
+  await expectView(page, "Threads");
+  await expect(
+    page.getByRole("heading", { level: 1, name: /May 16, 2026/ }),
+  ).toBeVisible();
+  await expect(page.getByRole("region", { name: /^New notes/ })).toBeVisible();
+  await page
+    .getByRole("region", { name: /^Council chats/ })
+    .getByRole("link")
+    .first()
+    .click();
+  await expect(
+    page.getByRole("region", { name: "Council summary" }).first(),
+  ).toBeVisible();
+  const threadsAxe = await new AxeBuilder({ page }).analyze();
+  expect(
+    threadsAxe.violations.filter(({ impact }) =>
+      ["serious", "critical"].includes(impact ?? ""),
+    ),
+  ).toEqual([]);
+
   await openSettings(page, "Vault");
   await expect(page.getByRole("heading", { name: "Archived" })).toBeVisible();
   await expect(

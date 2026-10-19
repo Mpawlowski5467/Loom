@@ -30,8 +30,8 @@ rebuild phase, no client yet.
 | 9 | Agent stats and scheduled/watching states | Board | derived |
 | 10 | Council with note context, proposed changes | Notes, Board | Ask Council prefills; diff/undo wired, waiting on `commits` |
 | 11 | Stored capture proposals with a Sentinel pre-check | Inbox | mocked; pre-check estimated in the browser otherwise |
-| 12 | Structured daily summary | Threads | planned (derived from changelog) |
-| 13 | Vault stats and actions per day | Threads | planned (derived) |
+| 12 | Structured daily summary | Threads | derived (notes, captures, changelog window) |
+| 13 | Vault stats and actions per day | Threads | derived |
 | 14 | Per-note agent activity feed | Notes | derived |
 | 15 | Theme names in the config enum | Onboarding | workaround in place |
 
@@ -250,16 +250,25 @@ map the real `source` strings (`manual:clipper` → Web clip,
 [...], links: [...], written_by, written_at}`. Scribe's daily log is
 free-form markdown today.
 
-**Today:** the Threads day view derives rows from the changelog feed for that
-date and renders the daily note's markdown.
+**Today:** `views/threads/threadModel.ts` derives the day's rows on the
+client. New notes are the notes created that local date; Flags are Sentinel
+`warn`/`fail` rows from the changelog plus captures received that day that
+need review; Links are Spider's link rows. The changelog window is the last
+200 rows (about a week), so older days show new notes and captures only. The
+byline names the note's creator (its `created` history entry), and the
+summary paragraph is the log's "Summary" section, else its first paragraph or
+list. The full markdown stays one click away.
 
 ## 13. Vault stats and actions per day
 
 **Missing:** `GET /api/stats/vault` → `{notes, links, superseded,
 undone_by_user, actions_per_day: [{date, count}]}`.
 
-**Today:** derived from `/api/index/stats`, the graph's edges, and the
-changelog feed (`reverted`). Superseded stays 0 until gap 2 closes.
+**Today:** derived on the client. Notes and links come from the loaded notes
+(each wikilink between two live notes counted once), superseded from
+`status: superseded` (gap 2), "undone by you" from changelog rows marked
+`reverted`, and actions per day from the same changelog window. The chart
+shows "+" when the window is full and the week may have more.
 
 ## 14. Per-note agent activity
 

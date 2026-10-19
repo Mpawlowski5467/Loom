@@ -122,6 +122,14 @@ Navigation is URL-based (React Router): `/graph` (home), `/notes/<folder>/<slug>
 sends text or a URL through the shared capture ingress, so it has the same
 provenance, limits, and durable job behavior as other capture sources.
 
+Threads (`/threads/:id?`) reads Scribe's daily logs, Standup recaps (Inbox
+captures from `agent:standup` and filed notes tagged `standup`), and saved
+Council chats (`/api/chat/sessions` and `/api/chat/history/{date}`). A day's
+New notes, Flags and Links rows, the week's actions per day, and the vault
+stats are derived in the browser from loaded notes, captures and the
+changelog window until the backend has a structured summary (see
+[UI backend gaps](ui-backend-gaps.md) 12 and 13).
+
 Appearance (theme, accent, fonts, graph palette) is a set of CSS variables
 keyed by `data-*` attributes on `<html>`, owned by the frontend's
 `ThemeProvider`. It is cached in browser storage and painted by an inline boot

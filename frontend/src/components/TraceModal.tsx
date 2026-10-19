@@ -2,13 +2,20 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import { fetchTrace } from "../api/traces";
 import type { TraceDetail } from "../api/traces";
-import { useFocusTrap } from "./useFocusTrap";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogTitle,
+} from "./ui/dialog";
+import { cn } from "@/lib/utils";
 
 interface Props {
   traceId: string;
   onClose: () => void;
 }
 
+/** The raw-call inspector: one traced LLM call's prompt, messages, reply. */
 export function TraceModal({ traceId, onClose }: Props): ReactNode {
   // Tag the result with its traceId so a stale fetch never renders against a
   // newer id — lets us avoid resetting state synchronously inside the effect.
@@ -42,39 +49,28 @@ export function TraceModal({ traceId, onClose }: Props): ReactNode {
   const trace = current?.trace ?? null;
   const error = current?.error ?? null;
 
-  // Trap focus, restore it on close, and handle Escape at the window level.
-  const dialogRef = useFocusTrap<HTMLDivElement>({ onEscape: onClose });
-
   return (
-    <div onClick={onClose} className="trace-modal-overlay">
-      <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        onClick={(e) => e.stopPropagation()}
-        className="trace-modal"
-      >
-        <header className="trace-modal-header">
-          <h3>LLM call</h3>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label="Close"
-            className="trace-modal-close"
-          >
-            ×
-          </button>
-        </header>
-
-        {error && <div className="trace-modal-error">Error: {error}</div>}
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="flex max-h-[85vh] flex-col gap-4 overflow-y-auto sm:max-w-3xl">
+        <DialogTitle>LLM call</DialogTitle>
+        <DialogDescription className="sr-only">
+          The prompt, messages and response of one model call.
+        </DialogDescription>
+        {error && (
+          <p role="alert" className="text-sm text-danger-foreground">
+            Error: {error}
+          </p>
+        )}
         {!trace && !error && (
-          <div className="trace-modal-loading">Loading…</div>
+          <p role="status" className="text-sm text-muted-foreground">
+            Loading…
+          </p>
         )}
         {trace && (
-          <div className="trace-modal-body">
+          <div className="flex flex-col gap-4">
             <Meta trace={trace} />
             {trace.content_retained === false && (
-              <p className="settings-copy">
+              <p className="text-sm text-muted-foreground">
                 Prompt and response content was withheld by the privacy policy.
                 Only call metadata was retained.
               </p>
@@ -94,8 +90,8 @@ export function TraceModal({ traceId, onClose }: Props): ReactNode {
             />
           </div>
         )}
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -108,14 +104,18 @@ function Meta({ trace }: { trace: TraceDetail }): ReactNode {
     ["at", new Date(trace.timestamp).toLocaleString()],
   ];
   return (
-    <div className="trace-meta">
+    <dl className="grid grid-cols-2 gap-3 sm:grid-cols-5">
       {items.map(([k, v]) => (
-        <div key={k}>
-          <div className="trace-meta-key">{k}</div>
-          <div className="trace-meta-val">{v}</div>
+        <div key={k} className="min-w-0">
+          <dt className="font-mono text-[11px] text-muted-foreground uppercase">
+            {k}
+          </dt>
+          <dd className="truncate text-sm text-foreground" title={v}>
+            {v}
+          </dd>
         </div>
       ))}
-    </div>
+    </dl>
   );
 }
 
@@ -129,11 +129,18 @@ function Section({
   danger?: boolean;
 }): ReactNode {
   return (
-    <div>
-      <div className="trace-section-label">{label}</div>
-      <pre className={`trace-section-body${danger ? " danger" : ""}`}>
+    <section className="flex flex-col gap-1">
+      <h4 className="font-mono text-[11px] text-muted-foreground uppercase">
+        {label}
+      </h4>
+      <pre
+        className={cn(
+          "max-h-72 overflow-auto rounded-md bg-muted p-3 font-mono text-xs whitespace-pre-wrap",
+          danger ? "text-danger-foreground" : "text-secondary-foreground",
+        )}
+      >
         {body}
       </pre>
-    </div>
+    </section>
   );
 }

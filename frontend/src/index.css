@@ -20,6 +20,52 @@
   --color-*: initial;
   --color-black: #000000;
   --color-white: #ffffff;
+
+  /* Splash motion (views/Splash.tsx); data-motion="off" stills it. */
+  --animate-word-reveal: word-reveal 800ms cubic-bezier(0.2, 0.7, 0.3, 1) 1100ms
+    both;
+  --animate-late-fade: late-fade 500ms cubic-bezier(0.2, 0.7, 0.3, 1) 1500ms
+    both;
+  --animate-rail: rail 2.2s cubic-bezier(0.2, 0.7, 0.3, 1) infinite;
+  --animate-blink: blink 1.4s ease-in-out infinite;
+
+  @keyframes word-reveal {
+    from {
+      letter-spacing: 12px;
+      transform: scale(0.96);
+      opacity: 0;
+    }
+    to {
+      letter-spacing: -0.01em;
+      transform: none;
+      opacity: 1;
+    }
+  }
+  @keyframes late-fade {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+  @keyframes rail {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(380%);
+    }
+  }
+  @keyframes blink {
+    0%,
+    100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.15;
+    }
+  }
 }
 
 @theme inline {

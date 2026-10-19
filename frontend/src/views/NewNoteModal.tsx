@@ -1,12 +1,32 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
 import {
-  createNote,
-  getTree,
-  type NoteRecord,
-  type TreeNode,
-} from "../api/notes";
-import { useFocusTrap } from "../components/useFocusTrap";
+  CalendarDays,
+  FolderKanban,
+  Hash,
+  Inbox,
+  User,
+  type LucideIcon,
+} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { Kbd } from "@/components/shell/Kbd";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { NativeSelect } from "@/components/ui/native-select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
+import { createNote, getTree, type NoteRecord } from "../api/notes";
+import { NewNoteTags } from "./newnote/NewNoteTags";
+import {
+  cleanTag,
+  collectFolderPaths,
+  FOLDER_AUTO,
+  TYPE_OPTIONS,
+} from "./newnote/noteTypes";
 
 interface Props {
   onClose: () => void;
@@ -14,109 +34,17 @@ interface Props {
   initialTitle?: string;
 }
 
-interface TypeOption {
-  value: string;
-  label: string;
-  /** Backend folder this type lands in when "auto" is selected. */
-  defaultFolder: string;
-  /** Dot swatch suffix — the backend type is "person" but the palette class
-   * is `dot-people`, so the two can't be derived from each other. */
-  dot: string;
-}
+const TYPE_ICON: Record<string, LucideIcon> = {
+  topic: Hash,
+  project: FolderKanban,
+  person: User,
+  daily: CalendarDays,
+  capture: Inbox,
+};
 
-const TYPE_OPTIONS: TypeOption[] = [
-  { value: "topic", label: "Topic", defaultFolder: "topics", dot: "topic" },
-  {
-    value: "project",
-    label: "Project",
-    defaultFolder: "projects",
-    dot: "project",
-  },
-  { value: "person", label: "Person", defaultFolder: "people", dot: "people" },
-  { value: "daily", label: "Daily", defaultFolder: "daily", dot: "daily" },
-  {
-    value: "capture",
-    label: "Capture",
-    defaultFolder: "captures",
-    dot: "capture",
-  },
-];
+const LABEL = "text-sm font-medium text-foreground";
 
-// Sentinel value for "no override — use the type's default folder".
-const FOLDER_AUTO = "__auto__";
-
-/** Depth-first folder paths (nested included, alpha per level, dot-dirs out). */
-function collectFolderPaths(node: TreeNode, prefix = ""): string[] {
-  const dirs = (node.children ?? [])
-    .filter((c) => c.is_dir && !c.name.startsWith("."))
-    .sort((a, b) => a.name.localeCompare(b.name));
-  const out: string[] = [];
-  for (const child of dirs) {
-    const path = prefix ? `${prefix}/${child.name}` : child.name;
-    out.push(path, ...collectFolderPaths(child, path));
-  }
-  return out;
-}
-
-function cleanTag(raw: string): string {
-  return raw.trim().replace(/^#/, "");
-}
-
-interface TagEditorProps {
-  tags: string[];
-  draft: string;
-  onDraftChange: (value: string) => void;
-  onCommit: () => void;
-  onRemove: (tag: string) => void;
-  onRemoveLast: () => void;
-}
-
-function TagEditor({
-  tags,
-  draft,
-  onDraftChange,
-  onCommit,
-  onRemove,
-  onRemoveLast,
-}: TagEditorProps): ReactNode {
-  const onKey = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    // Plain Enter / comma commits a chip; ⌘/Ctrl+Enter bubbles up to submit.
-    if ((e.key === "Enter" || e.key === ",") && !(e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      onCommit();
-    } else if (e.key === "Backspace" && draft === "" && tags.length > 0) {
-      e.preventDefault();
-      onRemoveLast();
-    }
-  };
-
-  return (
-    <div className="note-modal-tags">
-      {tags.map((t) => (
-        <span key={t} className="note-modal-tag-chip">
-          #{t}
-          <button
-            type="button"
-            className="note-modal-tag-remove"
-            aria-label={`Remove tag ${t}`}
-            onClick={() => onRemove(t)}
-          >
-            ×
-          </button>
-        </span>
-      ))}
-      <input
-        className="note-modal-tag-input"
-        aria-label="Tags"
-        value={draft}
-        placeholder={tags.length === 0 ? "type a tag, Enter to add" : ""}
-        onChange={(e) => onDraftChange(e.target.value)}
-        onKeyDown={onKey}
-      />
-    </div>
-  );
-}
-
+/** Create a note: title, type, folder and tags; ⌘↵ creates it. */
 export function NewNoteModal({
   onClose,
   onCreated,
@@ -130,11 +58,6 @@ export function NewNoteModal({
   const [folders, setFolders] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Title input carries autoFocus, so skip the hook's initial focus.
-  const dialogRef = useFocusTrap<HTMLDivElement>({
-    onEscape: onClose,
-    skipInitialFocus: true,
-  });
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +66,7 @@ export function NewNoteModal({
         if (!cancelled) setFolders(collectFolderPaths(tree));
       })
       .catch(() => {
-        // Tree unreachable — fall back to type-default folder, no options.
+        // Tree unreachable: fall back to the type's default folder.
       });
     return () => {
       cancelled = true;
@@ -166,14 +89,14 @@ export function NewNoteModal({
     setBusy(true);
     setError(null);
     try {
-      // A tag still sitting in the draft box counts — ⌘↵ mustn't drop it.
+      // A tag still sitting in the draft box counts: ⌘↵ mustn't drop it.
       const draft = cleanTag(tagDraft);
       const allTags = draft && !tags.includes(draft) ? [...tags, draft] : tags;
       const note = await createNote({
         title: trimmedTitle,
         type,
         tags: allTags,
-        // FOLDER_AUTO → empty string → backend picks default for type.
+        // FOLDER_AUTO → empty string → the backend picks the type's folder.
         folder: folder === FOLDER_AUTO ? "" : folder,
       });
       onCreated(note);
@@ -185,72 +108,66 @@ export function NewNoteModal({
     }
   };
 
-  const onDialogKey = (e: React.KeyboardEvent) => {
-    // Escape is handled by useFocusTrap at the window level.
-    if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-      e.preventDefault();
-      void submit();
-    }
-  };
-
   return (
-    <div className="note-modal-backdrop" role="presentation" onClick={onClose}>
-      <div
-        ref={dialogRef}
-        className="note-modal"
-        role="dialog"
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
         aria-modal="true"
-        aria-labelledby="new-note-title"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={onDialogKey}
+        aria-describedby={undefined}
+        className="gap-5 sm:max-w-lg"
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            void submit();
+          }
+        }}
       >
-        <header>
-          <div className="note-modal-kicker">New note</div>
-          <h2 id="new-note-title" className="note-modal-title">
-            Create a note
-          </h2>
-        </header>
+        <DialogHeader>
+          <DialogTitle>Create a note</DialogTitle>
+        </DialogHeader>
 
-        <label className="note-modal-field">
-          <span className="note-modal-label">Title</span>
-          <input
-            className="input"
+        <label className="flex flex-col gap-1.5">
+          <span className={LABEL}>Title</span>
+          <Input
             value={title}
-            autoFocus
             placeholder="A short, declarative name"
             onChange={(e) => setTitle(e.target.value)}
           />
         </label>
 
-        <div className="note-modal-field">
-          <span className="note-modal-label" id="new-note-type-label">
+        <div className="flex flex-col gap-1.5">
+          <span className={LABEL} id="new-note-type-label">
             Type
           </span>
-          <div
-            className="note-modal-types"
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
             role="radiogroup"
             aria-labelledby="new-note-type-label"
+            value={type}
+            onValueChange={(v) => v && setType(v)}
+            className="flex-wrap"
           >
-            {TYPE_OPTIONS.map((opt) => (
-              <button
-                key={opt.value}
-                type="button"
-                role="radio"
-                aria-checked={type === opt.value}
-                className="note-modal-type"
-                onClick={() => setType(opt.value)}
-              >
-                <span className={`dot dot-${opt.dot}`} aria-hidden="true" />
-                {opt.label}
-              </button>
-            ))}
-          </div>
+            {TYPE_OPTIONS.map((opt) => {
+              const Icon = TYPE_ICON[opt.value] ?? Hash;
+              return (
+                <ToggleGroupItem
+                  key={opt.value}
+                  value={opt.value}
+                  className="gap-1.5 px-3 text-xs"
+                >
+                  <Icon aria-hidden="true" />
+                  {opt.label}
+                </ToggleGroupItem>
+              );
+            })}
+          </ToggleGroup>
         </div>
 
-        <label className="note-modal-field">
-          <span className="note-modal-label">Folder</span>
-          <select
-            className="input mono"
+        <label className="flex flex-col gap-1.5">
+          <span className={LABEL}>Folder</span>
+          <NativeSelect
+            className="font-mono"
             value={folder}
             onChange={(e) => setFolder(e.target.value)}
           >
@@ -262,12 +179,12 @@ export function NewNoteModal({
                 {f}
               </option>
             ))}
-          </select>
+          </NativeSelect>
         </label>
 
-        <div className="note-modal-field">
-          <span className="note-modal-label">Tags</span>
-          <TagEditor
+        <div className="flex flex-col gap-1.5">
+          <span className={LABEL}>Tags</span>
+          <NewNoteTags
             tags={tags}
             draft={tagDraft}
             onDraftChange={setTagDraft}
@@ -278,28 +195,25 @@ export function NewNoteModal({
         </div>
 
         {error && (
-          <div className="note-modal-error" role="status">
+          <p role="status" className="text-sm text-danger-foreground">
             {error}
-          </div>
+          </p>
         )}
 
-        <div className="note-modal-actions">
-          <p className="note-modal-hint">
-            Weaver files it into the vault — ⌘↵ to create.
+        <DialogFooter className="items-center sm:justify-between">
+          <p className="text-xs text-muted-foreground">
+            Weaver files it into the vault · <Kbd>⌘</Kbd> <Kbd>↵</Kbd> to create
           </p>
-          <button className="btn btn-md" type="button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="btn btn-md btn-active"
-            type="button"
-            disabled={!canSubmit}
-            onClick={() => void submit()}
-          >
-            {busy ? "Creating…" : "Create note"}
-          </button>
-        </div>
-      </div>
-    </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button disabled={!canSubmit} onClick={() => void submit()}>
+              {busy ? "Creating…" : "Create note"}
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

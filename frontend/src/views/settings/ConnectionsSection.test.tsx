@@ -299,10 +299,10 @@ describe("ConnectionsSection", () => {
     renderSection();
     await screen.findByDisplayValue("America/Chicago");
     await user.click(
-      screen.getByRole("checkbox", { name: "Schedule daily Standup" }),
+      screen.getByRole("switch", { name: "Schedule daily Standup" }),
     );
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable calendar connection" }),
+      screen.getByRole("switch", { name: "Enable calendar connection" }),
     );
     await user.type(
       screen.getByPlaceholderText("webcal://… or https://…"),
@@ -415,7 +415,7 @@ describe("ConnectionsSection", () => {
       await screen.findByPlaceholderText(/octocat\/hello-world/);
     await user.type(reposInput, "{enter}mpawlowski/loom");
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable GitHub connection" }),
+      screen.getByRole("switch", { name: "Enable GitHub connection" }),
     );
     await user.click(
       screen.getByRole("button", { name: "Save GitHub settings" }),
@@ -466,10 +466,12 @@ describe("ConnectionsSection", () => {
       await screen.findByText("1 of 2 repos reachable"),
     ).toBeInTheDocument();
     expect(
-      screen.getByText("✓ octocat/hello-world — Hello World"),
+      screen.getByText("octocat/hello-world — Hello World"),
     ).toBeInTheDocument();
+    expect(screen.getByText("octocat/missing — Not Found")).toBeInTheDocument();
+    expect(screen.getByRole("img", { name: "Reachable" })).toBeInTheDocument();
     expect(
-      screen.getByText("✗ octocat/missing — Not Found"),
+      screen.getByRole("img", { name: "Unreachable" }),
     ).toBeInTheDocument();
     expect(testGitHub).toHaveBeenCalledWith(expect.any(AbortSignal));
   });
@@ -560,7 +562,7 @@ describe("ConnectionsSection", () => {
     await screen.findByDisplayValue("imap.example.com");
     await user.type(screen.getByPlaceholderText("App password"), "s3cret");
     await user.click(
-      screen.getByRole("checkbox", { name: "Enable email connection" }),
+      screen.getByRole("switch", { name: "Enable email connection" }),
     );
     await user.click(
       screen.getByRole("button", { name: "Save email settings" }),
@@ -855,10 +857,10 @@ describe("ConnectionsSection", () => {
       await within(card).findByText("Connected as ada@gmail.com"),
     ).toBeInTheDocument();
     expect(
-      within(card).getByRole("checkbox", { name: "Enable Google Calendar" }),
+      within(card).getByRole("switch", { name: "Enable Google Calendar" }),
     ).toBeInTheDocument();
     expect(
-      within(card).getByRole("checkbox", { name: "Enable Gmail" }),
+      within(card).getByRole("switch", { name: "Enable Gmail" }),
     ).toBeInTheDocument();
     expect(
       within(card).getByPlaceholderText(/team@group\.calendar\.google\.com/),
@@ -894,7 +896,7 @@ describe("ConnectionsSection", () => {
     ).closest("section") as HTMLElement;
     await within(card).findByText("Connected as ada@gmail.com");
     await user.click(
-      within(card).getByRole("checkbox", { name: "Enable Google Calendar" }),
+      within(card).getByRole("switch", { name: "Enable Google Calendar" }),
     );
     await user.type(
       within(card).getByPlaceholderText(/team@group\.calendar\.google\.com/),

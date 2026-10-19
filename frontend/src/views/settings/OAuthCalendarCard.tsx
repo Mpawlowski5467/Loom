@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
 import type { ReactNode } from "react";
-import { CalendarDays } from "lucide-react";
 import type {
   OAuthCalendarConnectResult,
   OAuthCalendarConnection,
@@ -8,14 +7,13 @@ import type {
   OAuthCalendarSyncResult,
   OAuthCalendarTestResult,
   OAuthCalendarUpdate,
-} from "../../api/automations";
-import { useApp } from "../../context/app-ctx";
-import {
-  ConnectorFlowShell,
-  ServiceSection,
-  type ServiceSectionValues,
-} from "./connector-flow";
+} from "@/api/automations";
+import { useApp } from "@/context/app-ctx";
+import { ConnectorFlowShell } from "./connector-flow";
+import { ServiceSection } from "./connections/ServiceSection";
+import type { ServiceSectionValues } from "./connections/types";
 import { useConnectPoll } from "./useConnectPoll";
+import { describeApiError } from "@/api/client";
 
 /**
  * Settings card for the OAuth calendar bridge (currently Outlook Calendar).
@@ -55,7 +53,6 @@ export interface OAuthCalendarCardApi {
 interface OAuthCalendarCardProps {
   provider: string;
   title: string;
-  headingId: string;
   blurb: string;
   steps: ReactNode[];
   signInLabel: string;
@@ -67,14 +64,13 @@ interface OAuthCalendarCardProps {
 export function OAuthCalendarCard({
   provider,
   title,
-  headingId,
   blurb,
   steps,
   signInLabel,
   clientIdPlaceholder,
   calendarIdsPlaceholder,
   api,
-}: OAuthCalendarCardProps): ReactNode {
+}: OAuthCalendarCardProps) {
   const { pushToast } = useApp();
   const [automation, setAutomation] = useState<OAuthCalendarState | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -90,9 +86,7 @@ export function OAuthCalendarCard({
       .then(apply)
       .catch((err: unknown) => {
         if (err instanceof DOMException && err.name === "AbortError") return;
-        setLoadError(
-          err instanceof Error ? err.message : `${title} could not be loaded`,
-        );
+        setLoadError(describeApiError(err, `${title} could not be loaded`));
       });
     return () => controller.abort();
   }, [api, apply, title]);
@@ -157,51 +151,42 @@ export function OAuthCalendarCard({
   const connected = automation?.connection.connected ?? false;
 
   return (
-    <section className="settings-connection-card" aria-labelledby={headingId}>
-      <ConnectorFlowShell
-        title={title}
-        headingId={headingId}
-        icon={<CalendarDays size={17} aria-hidden="true" />}
-        blurb={blurb}
-        steps={steps}
-        signInLabel={signInLabel}
-        clientIdPlaceholder={clientIdPlaceholder}
-        savedClientId={automation?.config.client_id ?? ""}
-        clientSecretSet={automation?.config.client_secret_set ?? false}
-        connected={connected}
-        account={automation?.connection.account ?? ""}
-        loaded={automation !== null}
-        onSaveCreds={saveCreds}
-        onConnect={connect}
-        onDisconnect={disconnect}
-        builtinApp={automation?.builtinApp ?? false}
-      >
-        {automation && (
-          <ServiceSection
-            title="Calendar"
-            blurb="Events from your calendars become Inbox captures."
-            headingId={`${provider}-calendar-service-title`}
-            serviceLabel={title}
-            savedEnabled={automation.config.enabled}
-            savedIntervalMinutes={automation.config.interval_minutes}
-            savedLookbackDays={automation.config.lookback_days}
-            savedCalendarIdsText={
-              automation.config.calendar_ids?.join("\n") ?? ""
-            }
-            status={automation.status}
-            calendarIdsPlaceholder={calendarIdsPlaceholder}
-            disabled={false}
-            onSave={saveService}
-            onTest={testService}
-            onSync={syncService}
-          />
-        )}
-      </ConnectorFlowShell>
-      {loadError && (
-        <p className="settings-test-result fail" role="alert">
-          {loadError}
-        </p>
+    <ConnectorFlowShell
+      title={title}
+      blurb={blurb}
+      steps={steps}
+      signInLabel={signInLabel}
+      clientIdPlaceholder={clientIdPlaceholder}
+      savedClientId={automation?.config.client_id ?? ""}
+      clientSecretSet={automation?.config.client_secret_set ?? false}
+      connected={connected}
+      account={automation?.connection.account ?? ""}
+      loaded={automation !== null}
+      loadError={loadError}
+      onSaveCreds={saveCreds}
+      onConnect={connect}
+      onDisconnect={disconnect}
+      builtinApp={automation?.builtinApp ?? false}
+    >
+      {automation && (
+        <ServiceSection
+          title="Calendar"
+          blurb="Events from your calendars become Inbox captures."
+          serviceLabel={title}
+          savedEnabled={automation.config.enabled}
+          savedIntervalMinutes={automation.config.interval_minutes}
+          savedLookbackDays={automation.config.lookback_days}
+          savedCalendarIdsText={
+            automation.config.calendar_ids?.join("\n") ?? ""
+          }
+          status={automation.status}
+          calendarIdsPlaceholder={calendarIdsPlaceholder}
+          disabled={false}
+          onSave={saveService}
+          onTest={testService}
+          onSync={syncService}
+        />
       )}
-    </section>
+    </ConnectorFlowShell>
   );
 }

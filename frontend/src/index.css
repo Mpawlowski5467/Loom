@@ -1,6 +1,6 @@
-/* Cascade order: Tailwind theme → preflight → legacy view CSS → utilities.
+/* Cascade order: Tailwind theme → preflight → components → utilities.
    Theme tokens (themes.css) are unlayered custom properties. */
-@layer theme, base, legacy, components, utilities;
+@layer theme, base, components, utilities;
 
 @import "tailwindcss/theme.css" layer(theme);
 @import "tailwindcss/preflight.css" layer(base);
@@ -8,8 +8,6 @@
 @import "tw-animate-css";
 
 @import "./styles/themes.css";
-@import "./styles/legacy-tokens.css";
-@import "./styles/legacy.css" layer(legacy);
 
 /* `dark:` follows the active theme's mode, not the OS. */
 @custom-variant dark (&:where([data-theme-mode="dark"], [data-theme-mode="dark"] *));
@@ -148,11 +146,56 @@
     background-color: var(--background);
     color: var(--foreground);
     font-family: var(--font-ui);
+    /* 13px at the default text size; the root font-size carries the scale. */
+    font-size: 0.8125rem;
+    line-height: 1.6;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+  button:not(:disabled),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
   }
   :focus-visible {
     outline: 2px solid var(--ring);
     outline-offset: 2px;
   }
+}
+
+/* Appearance → Motion (data-motion on <html>, set by ThemeProvider):
+   "auto" follows the OS reduced-motion preference, "on" keeps motion even
+   when the OS asks to reduce it, "off" stills everything. */
+@media (prefers-reduced-motion: reduce) {
+  html[data-motion="auto"] * {
+    animation-duration: 0.001ms !important;
+    transition-duration: 0.001ms !important;
+  }
+  html[data-motion="on"] *,
+  html[data-motion="on"] *::before,
+  html[data-motion="on"] *::after {
+    animation-duration: revert !important;
+    transition-duration: revert !important;
+  }
+}
+html[data-motion="off"] *,
+html[data-motion="off"] *::before,
+html[data-motion="off"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
 }

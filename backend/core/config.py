@@ -220,10 +220,11 @@ settings = LoomSettings()
 
 
 class ThemeName(StrEnum):
-    """Final public themes shipped with Loom. Paper is the default.
+    """Theme names the config and onboarding accept.
 
-    Keep in sync with ``frontend/src/theme/themes.ts`` and the ``.theme-*``
-    blocks in ``frontend/src/styles/tokens.css``.
+    These are the pre-1.2 themes. The frontend's six themes map onto them in
+    ``frontend/src/theme/backendTheme.ts`` until the backend stores the new
+    ids (docs/ui-backend-gaps.md §15).
     """
 
     paper = "paper"

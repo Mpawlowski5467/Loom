@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AppCtx, type AppContextValue } from "../../context/app-ctx";
 import { CardsMode } from "./CardsMode";
 import type { Agent } from "../../data/types";
+import { MemoryRouter } from "react-router";
 
 const { deleteCustomAgent, getAgentRegistry, runAgent } = vi.hoisted(() => ({
   deleteCustomAgent: vi.fn(),
@@ -55,7 +56,7 @@ function mkAgent(over: Partial<Agent> = {}): Agent {
   };
 }
 
-function renderCards(custom: Agent[], builtIn: Agent[] = []) {
+function renderCards(custom: Agent[], builtIn: Agent[] = [], url = "/board") {
   const refreshCustomAgents = vi.fn().mockResolvedValue(undefined);
   const pushToast = vi.fn();
   const value = {
@@ -73,7 +74,11 @@ function renderCards(custom: Agent[], builtIn: Agent[] = []) {
       </AppCtx.Provider>
     );
   }
-  render(<Harness />);
+  render(
+    <MemoryRouter initialEntries={[url]}>
+      <Harness />
+    </MemoryRouter>,
+  );
   return { refreshCustomAgents, pushToast };
 }
 
@@ -217,5 +222,12 @@ describe("CardsMode running agents", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Run scribe" }));
     await waitFor(() => expect(runAgent).toHaveBeenCalledWith("scribe"));
+  });
+});
+
+describe("CardsMode deep link", () => {
+  it("opens the agent named in ?agent= (from the palette)", () => {
+    renderCards([mkAgent()], [], "/board?agent=my-agent");
+    expect(screen.getByTestId("agent-detail")).toHaveTextContent("My Agent");
   });
 });

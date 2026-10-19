@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "react-router";
 import type { ReactNode } from "react";
 import { Plus } from "lucide-react";
 import { useApp } from "../../context/app-ctx";
@@ -42,6 +43,25 @@ export function CardsMode(): ReactNode {
   const [editing, setEditing] = useState<AgentRegistryRecord | null>(null);
   const [runningAgents, setRunningAgents] = useState<Set<string>>(new Set());
   const [detailId, setDetailId] = useState<string | null>(null);
+  // `/board?agent=<id>` (from the palette) opens that agent's details once.
+  const [params, setParams] = useSearchParams();
+  const requested = params.get("agent");
+  const [handled, setHandled] = useState<string | null>(null);
+  if (requested !== handled) {
+    setHandled(requested);
+    if (requested) setDetailId(requested);
+  }
+  useEffect(() => {
+    if (!requested) return;
+    setParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("agent");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [requested, setParams]);
   const [researcherOpen, setResearcherOpen] = useState(false);
   const [standupOpen, setStandupOpen] = useState(false);
   // Accessible confirm dialog (replaces window.confirm) for deleting an agent.

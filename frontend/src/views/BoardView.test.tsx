@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import { BoardView } from "./BoardView";
+import { MemoryRouter } from "react-router";
 
 // BoardView is a layout shell: its own responsibility is the cards/pulse mode
 // toggle. The heavy children (each context-bound + API-driven) are units of
@@ -18,20 +19,20 @@ vi.mock("../components/Council", () => ({
 
 describe("BoardView", () => {
   it("renders the cards view by default", () => {
-    render(<BoardView />);
+    render(<BoardView />, { wrapper: MemoryRouter });
     expect(screen.getByTestId("cards-mode")).toBeInTheDocument();
     expect(screen.queryByTestId("pulse-mode")).not.toBeInTheDocument();
   });
 
   it("marks the cards toggle as checked by default", () => {
-    render(<BoardView />);
+    render(<BoardView />, { wrapper: MemoryRouter });
     expect(screen.getByRole("radio", { name: /cards/ })).toBeChecked();
     expect(screen.getByRole("radio", { name: /pulse/ })).not.toBeChecked();
   });
 
   it("switches to the pulse view when the pulse toggle is clicked", async () => {
     const user = userEvent.setup();
-    render(<BoardView />);
+    render(<BoardView />, { wrapper: MemoryRouter });
 
     await user.click(screen.getByRole("radio", { name: /pulse/ }));
 
@@ -42,7 +43,7 @@ describe("BoardView", () => {
 
   it("switches back to cards from pulse", async () => {
     const user = userEvent.setup();
-    render(<BoardView />);
+    render(<BoardView />, { wrapper: MemoryRouter });
 
     await user.click(screen.getByRole("radio", { name: /pulse/ }));
     await user.click(screen.getByRole("radio", { name: /cards/ }));
@@ -52,7 +53,7 @@ describe("BoardView", () => {
   });
 
   it("renders the status legend and the council panel without a trace sidebar", () => {
-    const { container } = render(<BoardView />);
+    const { container } = render(<BoardView />, { wrapper: MemoryRouter });
     expect(screen.getByLabelText("Status key")).toBeInTheDocument();
     expect(screen.getByText("running")).toBeInTheDocument();
     expect(screen.getByText("settling")).toBeInTheDocument();

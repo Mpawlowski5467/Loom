@@ -51,7 +51,6 @@ describe("VaultImport", () => {
 
   it("retries with overwrite after a 409 when the user confirms", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(true);
     importVault
       .mockRejectedValueOnce(new ApiError("exists", 409))
       .mockResolvedValueOnce({
@@ -64,6 +63,9 @@ describe("VaultImport", () => {
     const file = mkFile();
     await user.upload(screen.getByLabelText(/choose file/i), file);
     await user.click(screen.getByRole("button", { name: "Import" }));
+    await user.click(
+      await screen.findByRole("button", { name: "Replace vault" }),
+    );
 
     await waitFor(() =>
       expect(importVault).toHaveBeenLastCalledWith("demo", file, true),
@@ -73,12 +75,12 @@ describe("VaultImport", () => {
 
   it("does not overwrite when the user declines the 409 confirm", async () => {
     const user = userEvent.setup();
-    vi.spyOn(window, "confirm").mockReturnValue(false);
     importVault.mockRejectedValueOnce(new ApiError("exists", 409));
     render(<VaultImport onImported={vi.fn()} />);
 
     await user.upload(screen.getByLabelText(/choose file/i), mkFile());
     await user.click(screen.getByRole("button", { name: "Import" }));
+    await user.click(await screen.findByRole("button", { name: "Cancel" }));
 
     await waitFor(() =>
       expect(screen.getByText("Import cancelled.")).toBeInTheDocument(),

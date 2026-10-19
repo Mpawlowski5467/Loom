@@ -161,7 +161,7 @@ test("real backend capture preview, edit, file, archive, restore, and reload", a
     page.getByText("Browser lifecycle filed edit", { exact: true }),
   ).toBeVisible();
   await page
-    .locator("article.settings-vault-card")
+    .getByRole("article")
     .filter({ hasText: "Browser lifecycle filed edit" })
     .getByRole("button", { name: "Restore" })
     .click();

@@ -1,16 +1,20 @@
 import { useState } from "react";
 import type { ChangeEvent, ReactNode } from "react";
 import { Upload } from "lucide-react";
-import { ApiError } from "../../api/client";
-import { importVault } from "../../api/vault";
+import { ApiError, describeApiError } from "@/api/client";
+import { importVault } from "@/api/vault";
+import { ConfirmModal } from "@/components/ConfirmModal";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
+import { SettingsGroup } from "./kit/SettingsGroup";
+import { StatusLine } from "./kit/StatusLine";
+import { VAULT_NAME_RE } from "./vault/vaultName";
 
 interface VaultImportProps {
   /** Called after a successful import so the caller can refresh its list. */
   onImported: () => void | Promise<void>;
 }
-
-// Mirrors backend/core/vault.py _NAME_RE.
-const VAULT_NAME_RE = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 /** Derive a sensible vault name from an export filename like
  * ``demo-export-20260101T000000Z.tar.gz`` → ``demo``. */
@@ -24,9 +28,9 @@ function nameFromFile(filename: string): string {
 }
 
 /**
- * "Import a vault" card: pick an exported ``.tar.gz`` backup, choose a
+ * "Import a vault": pick an exported ``.tar.gz`` backup, choose a
  * destination name, and restore it through the existing import endpoint. A
- * name collision prompts for an explicit overwrite confirmation rather than
+ * name collision asks for an explicit overwrite confirmation rather than
  * silently clobbering an existing vault.
  */
 export function VaultImport({ onImported }: VaultImportProps): ReactNode {
@@ -34,6 +38,8 @@ export function VaultImport({ onImported }: VaultImportProps): ReactNode {
   const [file, setFile] = useState<File | null>(null);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  /** The name that collided, while the overwrite dialog is open. */
+  const [collision, setCollision] = useState<string | null>(null);
 
   const pickFile = (e: ChangeEvent<HTMLInputElement>) => {
     const picked = e.target.files?.[0] ?? null;
@@ -68,23 +74,9 @@ export function VaultImport({ onImported }: VaultImportProps): ReactNode {
       await run(false);
       setMessage(`Imported "${trimmed}". Switch to it from the list above.`);
     } catch (err) {
-      if (err instanceof ApiError && err.status === 409) {
-        const ok = window.confirm(
-          `A vault named "${trimmed}" already exists. Replace it with this backup? ` +
-            `This cannot be undone.`,
-        );
-        if (!ok) {
-          setMessage("Import cancelled.");
-          return;
-        }
-        try {
-          await run(true);
-          setMessage(`Imported "${trimmed}" (replaced the existing vault).`);
-        } catch (err2) {
-          setMessage(err2 instanceof Error ? err2.message : "Import failed");
-        }
-      } else {
-        setMessage(err instanceof Error ? err.message : "Import failed");
+      if (err instanceof ApiError && err.status === 409) setCollision(trimmed);
+      else {
+        setMessage(describeApiError(err, "Import failed"));
       }
     } finally {
       setBusy(false);
@@ -92,41 +84,72 @@ export function VaultImport({ onImported }: VaultImportProps): ReactNode {
   };
 
   return (
-    <div className="settings-import">
-      <div className="settings-subhead">Import a vault</div>
-      <p className="settings-copy settings-copy-tight">
-        Restore a vault from an exported <span className="mono">.tar.gz</span>{" "}
-        backup.
-      </p>
-      <div className="settings-create-row">
-        <input
-          className="input"
+    <SettingsGroup
+      title="Import a vault"
+      description={
+        <>
+          Restore a vault from an exported{" "}
+          <code className="font-mono text-xs">.tar.gz</code> backup.
+        </>
+      }
+    >
+      <div className="flex flex-wrap gap-2">
+        <Input
+          aria-label="Imported vault name"
+          className="h-8 min-w-0 flex-1 basis-40"
           type="text"
           value={name}
           placeholder="vault name"
           onChange={(e) => setName(e.target.value)}
         />
-        <label className="btn btn-md">
-          <Upload size={14} aria-hidden="true" />
+        {/* The file input stays focusable (sr-only, not hidden) so the
+            picker opens from the keyboard; the label shows its focus ring. */}
+        <label
+          className={cn(
+            buttonVariants({ variant: "outline", size: "sm" }),
+            "relative cursor-pointer has-[input:focus-visible]:ring-2 has-[input:focus-visible]:ring-ring",
+          )}
+        >
+          <Upload aria-hidden="true" />
           {file ? "Change file" : "Choose file"}
           <input
             type="file"
             accept=".gz,.tgz,.tar.gz,application/gzip"
-            hidden
+            className="sr-only"
             onChange={pickFile}
           />
         </label>
-        <button
-          className="btn btn-md btn-active"
-          type="button"
+        <Button
+          size="sm"
           onClick={() => void doImport()}
           disabled={busy || !name.trim() || !file}
         >
           Import
-        </button>
+        </Button>
       </div>
-      {file && <div className="settings-vault-path">Selected: {file.name}</div>}
-      {message && <div className="settings-inline-status">{message}</div>}
-    </div>
+      {file && (
+        <p className="font-mono text-xs break-all text-muted-foreground">
+          Selected: {file.name}
+        </p>
+      )}
+      {message && <StatusLine>{message}</StatusLine>}
+      {collision && (
+        <ConfirmModal
+          title={`Replace the vault "${collision}"?`}
+          body="A vault with this name already exists. Replacing it with this backup can't be undone."
+          confirmLabel="Replace vault"
+          onConfirm={async () => {
+            await run(true);
+            setMessage(
+              `Imported "${collision}" (replaced the existing vault).`,
+            );
+          }}
+          onClose={() => {
+            setCollision(null);
+            setMessage((m) => m ?? "Import cancelled.");
+          }}
+        />
+      )}
+    </SettingsGroup>
   );
 }

@@ -1,6 +1,17 @@
 import { useState } from "react";
 import type { ReactNode } from "react";
-import { useFocusTrap } from "../../components/useFocusTrap";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Field } from "./kit/Field";
+import { describeApiError } from "@/api/client";
 
 interface Props {
   phrase: string;
@@ -10,6 +21,11 @@ interface Props {
   onClose: () => void;
 }
 
+/**
+ * A confirmation for destructive vault actions, gated on typing `phrase`
+ * exactly. Enter confirms once it matches; Escape and Cancel close unless
+ * it's working. Outside clicks never dismiss it.
+ */
 export function TypedConfirmModal({
   phrase,
   body,
@@ -21,9 +37,6 @@ export function TypedConfirmModal({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const matches = value === phrase;
-  // Input carries autoFocus; Escape stays inline (must respect `busy`), so the
-  // hook only provides Tab-trapping and focus restore.
-  const dialogRef = useFocusTrap<HTMLDivElement>({ skipInitialFocus: true });
 
   const confirm = async () => {
     if (!matches || busy) return;
@@ -35,70 +48,66 @@ export function TypedConfirmModal({
       // with the typed phrase intact so the user can retry.
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Action failed.");
+      setError(describeApiError(err, "Action failed."));
       setBusy(false);
     }
   };
 
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter" && matches && !busy) {
-      e.preventDefault();
-      void confirm();
-    } else if (e.key === "Escape" && !busy) {
-      e.preventDefault();
-      onClose();
-    }
-  };
-
+  // The phrase input is the first focusable element, so the dialog's
+  // default open focus lands there.
   return (
-    <div className="settings-modal-backdrop" role="presentation">
-      <div
-        ref={dialogRef}
-        className="settings-modal"
-        role="dialog"
+    <Dialog open onOpenChange={(open) => !open && !busy && onClose()}>
+      <DialogContent
         aria-modal="true"
-        aria-labelledby="typed-confirm-title"
-        onKeyDown={onKeyDown}
+        showCloseButton={false}
+        className="sm:max-w-md"
+        onKeyDown={(e) => {
+          if (e.key !== "Enter" || !matches || busy) return;
+          e.preventDefault();
+          void confirm();
+        }}
+        onEscapeKeyDown={(e) => busy && e.preventDefault()}
+        onInteractOutside={(e) => e.preventDefault()}
       >
-        <div className="settings-kicker">Confirm</div>
-        <h2 id="typed-confirm-title" className="settings-modal-title">
-          {destructiveLabel}
-        </h2>
-        <p className="settings-copy">{body}</p>
-        <label className="settings-field">
-          <span className="settings-field-label">Type {phrase}</span>
-          <input
-            className="input mono"
+        <DialogHeader>
+          <DialogTitle>{destructiveLabel}</DialogTitle>
+          <DialogDescription>{body}</DialogDescription>
+        </DialogHeader>
+        <Field
+          label={
+            <>
+              Type <span className="font-mono">{phrase}</span>
+            </>
+          }
+        >
+          <Input
+            className="font-mono"
             value={value}
-            autoFocus
             disabled={busy}
+            autoComplete="off"
+            spellCheck={false}
             onChange={(e) => setValue(e.target.value)}
           />
-        </label>
+        </Field>
         {error && (
-          <div className="settings-test-result fail" role="alert">
+          <p role="alert" className="text-sm text-danger-foreground">
             {error}
-          </div>
+          </p>
         )}
-        <div className="settings-actions">
-          <button
-            className="btn btn-md"
-            type="button"
-            disabled={busy}
-            onClick={onClose}
-          >
+        <DialogFooter>
+          <Button variant="outline" disabled={busy} onClick={onClose}>
             Cancel
-          </button>
-          <button
-            className="btn btn-md btn-amber"
-            type="button"
+          </Button>
+          <Button
+            variant="destructive"
+            className="border border-danger-foreground/40"
             disabled={!matches || busy}
             onClick={() => void confirm()}
           >
             {busy ? "Working…" : error ? "Retry" : destructiveLabel}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

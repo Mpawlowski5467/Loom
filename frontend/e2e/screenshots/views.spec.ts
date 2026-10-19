@@ -111,6 +111,20 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
+/** No serious or critical axe violations on the page as it stands. */
+async function expectAccessible(page: Page) {
+  const axe = await new AxeBuilder({ page }).analyze();
+  const serious = axe.violations
+    .filter(({ impact }) => ["serious", "critical"].includes(impact ?? ""))
+    .map((v) => ({
+      id: v.id,
+      nodes: v.nodes
+        .slice(0, 3)
+        .map((n) => `${n.target.join(" ")} ${n.html.slice(0, 160)}`),
+    }));
+  expect(serious).toEqual([]);
+}
+
 for (const theme of THEMES)
   for (const view of VIEWS)
     test(`${view.name} in ${theme}`, async ({ page }) => {
@@ -120,14 +134,18 @@ for (const theme of THEMES)
       await page.screenshot({
         path: `../docs/screenshots/${view.name}-${theme}.png`,
       });
-      const axe = await new AxeBuilder({ page }).analyze();
-      const serious = axe.violations
-        .filter(({ impact }) => ["serious", "critical"].includes(impact ?? ""))
-        .map((v) => ({
-          id: v.id,
-          nodes: v.nodes
-            .slice(0, 3)
-            .map((n) => `${n.target.join(" ")} ${n.html.slice(0, 160)}`),
-        }));
-      expect(serious).toEqual([]);
+      await expectAccessible(page);
     });
+
+// One extra capture for the getting-started guide's connections section.
+test("integrations settings in graphite", async ({ page }) => {
+  await page.goto("/settings/integrations?demo=1&theme=graphite");
+  await expect(
+    page.getByRole("heading", { level: 1, name: "Accounts & Automations" }),
+  ).toBeVisible();
+  await page.waitForTimeout(300);
+  await page.screenshot({
+    path: "../docs/screenshots/integrations-graphite.png",
+  });
+  await expectAccessible(page);
+});

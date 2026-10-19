@@ -36,7 +36,7 @@ Prefer to run from source? See the **Run from source** section in the
 ## 2. First-run onboarding
 
 On first launch a four-step wizard appears. You can re-run it any time from
-**Settings → About → re-run onboarding**.
+**Settings → General → Re-run onboarding**.
 
 1. **Welcome** — a quick orientation. Everything stays on this machine; you bring
    your own AI provider. Click **Begin →**.
@@ -44,9 +44,11 @@ On first launch a four-step wizard appears. You can re-run it any time from
    (`~/.loom/vaults/<name>`). Keep the default name to start. If a vault with
    that name already exists, you can **adopt** it (keep your notes), **reset** it
    (archive and start fresh), or pick a different name.
-3. **Pick a look** — choose a theme. Paper (warm cream) is the default; light and
-   dark variants are grouped for you. Hover to preview, click to apply. Change it
-   later in **Settings → Appearance**.
+3. **Pick a look**: choose one of six themes. Graphite (dark) is the default;
+   Paper and Linen are light, and Midnight, Forest and High contrast are dark.
+   Each card previews its theme. Change it later in **Settings → Appearance**,
+   where you can also follow your system's light/dark setting, pick an accent,
+   switch the editor to a serif font, or use a colorblind-safe graph palette.
 4. **Hook up AI providers** — pick where Loom's intelligence comes from (see
    below). You can **Skip for now** and add a provider later — but agents,
    search, and graph linking stay offline until you do.
@@ -97,98 +99,116 @@ You don't have to use captures — you can also create finished notes directly
 
 ## 4. The main views
 
-Loom has **Today**, **Graph**, **Board**, and **Inbox** in the top nav, with a
-**Thread** reader when you open a note.
+The header has five views: **Graph**, **Notes**, **Board**, **Inbox** and
+**Threads**. Switch with a click or press **g** then **g**, **n**, **b**, **i**
+or **t**. Search (**Cmd/Ctrl+K**), the agent status, a light/dark toggle,
+Settings and **New note** sit on the right.
 
-### Today — start with active work
+Use **Quick Capture** (**Cmd/Ctrl+Shift+C**) to save a thought or URL
+immediately; it enters the same durable Inbox path as every other capture
+source. For a URL, enable **Fetch page text and preserve the original** to
+extract the page; otherwise Loom captures the link. Quick Capture also accepts
+a PDF with embedded text. Imports preserve the original and provenance, are
+limited to 8 MiB, and do not run OCR.
 
-Today is a useful default home for recent notes, vault-scoped pinned projects,
-captures and failed jobs needing review, and the latest Standup. You can choose
-Today or Graph as the default home in settings. Use **Quick Capture** from the
-**Cmd/Ctrl+Shift+C** shortcut to save a thought or URL immediately; it enters the same durable
-Inbox path as every other capture source.
+### Graph: see your knowledge
 
-For a URL, enable **Fetch page text and preserve the original** to extract the page; otherwise Loom
-captures the link. Quick Capture also accepts a PDF with embedded text. Imports
-preserve the original and provenance, are limited to 8 MiB, and do not run OCR.
+The home view: an interactive map of your vault. Nodes are notes and edges are
+`[[wikilinks]]`. Notes are colored by **community**, the clusters your links
+form, each named after its most-linked note.
 
-### Graph — see your knowledge
+![Graph view showing a connected vault](screenshots/graph-graphite.png)
 
-An interactive map of your vault. Nodes are notes (colored by type: project,
-topic, people, daily, capture, custom); edges are `[[wikilinks]]`.
+- **Pan** by dragging, **zoom** by scrolling or with the +/− buttons, **F** to
+  fit. Click a node to open the note beside the graph in a compact editor, with
+  Archivist's warnings and its recent commits; **Open full editor** goes to
+  Notes.
+- The sidebar lists folders and communities; click either to filter.
+  **Local only** shows just the selected note's neighbors, and **Superseded**
+  shows or hides replaced notes.
+- Scrub or play the **timeline** at the bottom to watch the vault grow by
+  creation date.
+- **Display** switches between the force layout and five orbit scenes, and
+  tunes labels, sizes, depth and edge "travelers".
+- **Export** the current view as PNG, SVG or JSON.
+- Keyboard: arrow keys select nearby notes, **Enter** opens the full editor,
+  **I** toggles Local only, **Esc** closes the note.
 
-![Graph view showing a connected vault](screenshots/graph-view.png)
-
-- **Pan** by dragging, **zoom** by scrolling, **hover** to highlight a node and
-  its neighbors, **click** a node to open it in the Thread reader.
-- Two layouts: **constellation** (force-directed, everything in view) and
-  **orbit** (focus a node and let the camera circle it).
-- **Filter** by type with the toolbar buttons; tune labels, sizes, spacing, and
-  motion (breathing, edge "travelers") from the **⚙ display** panel — settings
-  persist locally.
-- **Export** the current view as PNG, SVG, or JSON.
-
-Empty vault? You'll see *"Your graph is empty — capture a note to start
+Empty vault? You'll see *"Your graph is empty. Capture a note to start
 weaving."*
 
-### Inbox — triage captures
+### Notes: read and edit
+
+Opens when you pick a note in the graph, the vault tree, or search.
+
+![Notes view with the vault tree, editor and context rail](screenshots/notes-graphite.png)
+
+- The vault tree on the left creates notes and folders, moves notes by drag,
+  and renames or archives from each row's menu.
+- The editor is rich text, but Markdown stays the source of truth: blocks you
+  don't touch are saved byte for byte. Toggle **raw Markdown** with the `<>`
+  button. Type `[[` to link a note and `/` for the block menu.
+- Above the text, **properties** show the note's status and tags. Spider's
+  suggested links appear as cards you can accept or dismiss; a superseded note
+  shows a banner pointing to its replacement.
+- The rail on the right shows a local graph, related notes and recent agent
+  activity.
+- **History** opens git-backed diffs with undo, saved revisions, the original
+  capture and link evidence. Unsaved drafts survive reloads, and a conflicting
+  save keeps your text for compare, reload, or an explicit overwrite.
+- **Archive** (from the ⋯ menu) moves the note to `threads/.archive/`. Loom
+  never hard-deletes.
+
+### Inbox: triage captures
 
 Where raw captures become notes.
 
-![Inbox review lane with Sentinel feedback](screenshots/inbox-view.png)
+![Inbox triage list beside a capture and Weaver's proposal](screenshots/inbox-graphite.png)
 
-- The left panel lists pending captures with a search box and bulk
-  **Process** / **Skip** actions.
-- Select a capture to see its content and **Weaver's suggestion** on the right:
-  the proposed type, folder, title, tags, and links.
-- **Accept** validates and files it before Spider maintains its links, **Edit**
-  lets you tweak the suggestion first, and **Skip** archives the capture.
-- Compare the original and proposed text, or review duplicate candidates and
-  explicitly approve an append/merge into an existing note. A stale target
-  preserves your edit and requires comparison before rebasing.
-- A failed validation keeps the source in Inbox for retry or skip. The draft
-  stays out of ordinary search and graph results until publication succeeds.
-- Keyboard: **j/k** to move between captures, **e** to edit, **Enter** to accept.
+- The list shows each capture's source, age and status, with All / Needs
+  review / Filed tabs, search, and bulk **Skip** or **Queue**. Type in the box
+  at the top to capture something on the spot.
+- Select a capture to see its content and **Weaver's proposal**: the file
+  path, type, tags, community and the links Spider would add, plus Sentinel's
+  pre-check.
+- **Approve and file** files it, **Edit first** lets you change the proposal,
+  and **Discard** archives the capture. A close match offers an explicit merge
+  into the existing note instead.
+- A failed validation keeps the source in the Inbox for retry or discard. The
+  draft stays out of ordinary search and graph results until it's published.
+- The **Jobs** tab is the durable processing ledger, and the header's
+  **Auto-process** control decides which captures run without you.
+- Keyboard: **j/k** to move, **e** to edit, **Enter** to approve.
 
-### Board — watch (and run) the agents
+### Board: watch (and run) the agents
 
-A live view of Loom's agent activity.
+![Board with stat cards, agents, activity and the Council](screenshots/board-graphite.png)
 
-![Agent Board with activity and Council chat](screenshots/board-view.png)
-
-- **Loom Layer** cards (Weaver, Spider, Archivist, Scribe, Sentinel) manage your
-  vault. Each card shows run counts and its last action; **Run** triggers it.
-- **Shuttle Layer** is where your **custom agents** live. Click **Add agent** to
-  define one (name, role, icon, and a system prompt). Running a custom agent
-  gathers vault context, calls your chat provider with that prompt, and writes a
-  capture to your Inbox for triage.
-- **Recent activity** is a timeline of every agent action, with Sentinel's
-  verdict (✓ / ⚠ / ✕).
-- The default view leads with pending decisions, failures, and recent results.
-  **Advanced visuals** contains the optional Pulse presentation.
-- A run's **Undo** control previews every affected file and refuses to replace
-  later edits. Run-created notes move to the archive so they remain recoverable.
+- Stat cards show actions today, Sentinel's pass rate this week, open flags and
+  the next scheduled run.
+- Each **Loom agent** card (Weaver, Spider, Archivist, Scribe, Sentinel) shows
+  its state (Running, Idle, Scheduled, Watching), last action and weekly count.
+  **Logs** opens its instructions, recent runs and LLM calls; **Run now**
+  triggers the agents that can run on their own.
+- The **Shuttle agents** card opens the Researcher and Standup workspaces and
+  your **custom agents**. **Add agent** defines one (name, icon, prompt, and an
+  optional model); running it writes a capture to your Inbox.
+- **Activity** lists recent agent actions with Sentinel's verdict. Each row is
+  a git commit you can **Undo**: Loom previews every affected file and refuses
+  to replace later edits.
+- **Pulse** switches the agents to a live animated view.
 - The right side hosts the **Loom Council** chat (below).
 
-### Thread — read and edit a note
+### Threads: what happened, day by day
 
-Opens when you click a note in the graph, the file tree, or search.
+![Threads view with daily logs and a day's digest](screenshots/threads-graphite.png)
 
-![Thread reader with note details and backlinks](screenshots/thread-view.png)
-
-- Read rendered Markdown with clickable `[[wikilinks]]`.
-- Click **✎ edit** for a source/preview editor; **Cmd/Ctrl+S** saves. Unsaved
-  drafts persist per vault and note, and version conflicts retain your text for
-  comparison, reload, or an explicit overwrite.
-- **details** shows edit history, backlinks, and tags; **context** shows a 1-hop
-  local graph, the heading outline, and related notes.
-- **Revision history** compares and restores saved versions. **Original capture**
-  reveals the complete source of a filed note. Recorded connection evidence is
-  also available by clicking an edge in Graph.
-- The trash icon **archives** the note (it moves to `threads/.archive/` — Loom
-  never hard-deletes).
-
----
+- The list holds Scribe's **daily logs** (with how many notes each day made),
+  **Standup** recaps, and saved **Council chats**.
+- A daily log shows who wrote it, its summary, and that day's **new notes**,
+  **flags** and **links**; the full log is one click away.
+- The right side charts agent actions per day this week and counts your notes,
+  links, superseded notes and the agent actions you undid.
 
 ### Automation and privacy
 
@@ -207,10 +227,11 @@ backups; revision and usage databases currently have no automatic pruning.
 
 ## 5. Creating notes directly
 
-Press **Cmd/Ctrl+N** anywhere to open the **new note** modal: give it a title,
-pick a type (topic / project / person / daily / capture) and folder, add optional
-comma-separated tags, and **Create note**. Weaver files it through the
-read-before-write chain and opens it in the editor, ready to type.
+Press **Cmd/Ctrl+N** anywhere (or **New note** in the header) to create a note:
+give it a title, pick a type (topic, project, person, daily, capture) and a
+folder, add tags (Enter adds each one), and press **Create note** or
+**Cmd/Ctrl+Enter**. Weaver files it through the read-before-write chain and
+opens it in the editor, ready to type.
 
 ---
 
@@ -221,8 +242,16 @@ search** — semantic and keyword result ranks are combined with reciprocal-rank
 fusion, then type/tag filters and graph context apply. It falls back to
 keyword-only if you haven't configured an embedding provider.
 
-- **Arrow keys** to move through results, **Enter** to open a note.
-- **Alt+Enter** to *reveal in graph* — the camera flies to that node.
+![Search palette with grouped results and a preview](screenshots/palette-graphite.png)
+
+- Results are grouped into **notes**, **actions** (capture the text, ask the
+  Council, run Spider on a note) and **agents**. Chips narrow them to one kind
+  or one community.
+- The preview shows the note and **why it matched** (keyword, semantic and
+  graph signals).
+- **Arrow keys** move, **Enter** opens, **Alt+Enter** shows the note in the
+  graph, **Shift+Enter** captures your text, and **Alt+S** includes superseded
+  notes.
 
 ---
 
@@ -231,8 +260,9 @@ keyword-only if you haven't configured an embedding provider.
 The **Loom Council** chat (on the Board view) lets you address all five Loom
 agents at once. Ask about your vault ("what projects mention deployment?"),
 request actions, or ask for a summary. The agents respond in a transparent,
-streamed thread — and each reply has a **raw call** link that opens the exact
-provider request/response, so nothing is a black box.
+streamed thread that ends in a **summary** card; each agent's answer sits
+above it, and **raw call** links open the exact provider request and response,
+so nothing is a black box. Past Council chats are kept in **Threads**.
 
 For one-on-one work, the Shuttle agents (Researcher, Standup) have their own
 1:1 chats.
@@ -241,10 +271,10 @@ For one-on-one work, the Shuttle agents (Researcher, Standup) have their own
 
 ## 8. Connecting read-only sources
 
-Open **Settings → Connections** to bring external context into the same durable
+Open **Settings → Integrations** to bring external context into the same durable
 Inbox pipeline. Connections are opt-in and read-only:
 
-![Connections settings with Google and Outlook setup](screenshots/connections-settings.png)
+![Integrations settings with the Standup schedule and Google setup](screenshots/integrations-graphite.png)
 
 - **Calendar feed** reads a private iCalendar URL for Standup context and
   idempotent event captures.

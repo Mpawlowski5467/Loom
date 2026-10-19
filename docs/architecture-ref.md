@@ -34,7 +34,7 @@ agent mutates the vault it reads vault configuration, `prime.md`, its memory,
 the relevant index, and related notes. Shuttle agents write only captures; Loom
 agents can publish reviewed notes.
 
-Revision history records mutations. The Thread view can inspect and restore a
+Revision history records mutations. The Notes History sheet can inspect and restore a
 version through a version-checked operation, so restoring a revision does not
 silently replace a newer note. Pending and rejected capture drafts remain out
 of normal note listings, graph construction, and retrieval until publication.
@@ -78,7 +78,7 @@ history` snapshot.
   notes are reindexed (metadata now, embeddings queued).
 - **API**: `GET /api/history?path=&agent=&group=&limit=`,
   `GET /api/history/status`, `GET /api/history/{sha}/diff`, and the revert
-  endpoint. The Thread view's *Change history* lists a note's commits with
+  endpoint. The Notes History sheet lists a note's commits with
   diffs and undo. Board *Recent activity* links each changelog entry to its
   commit (via a `History:` group id in the changelog) and offers Undo.
 

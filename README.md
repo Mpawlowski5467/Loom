@@ -22,48 +22,67 @@ Loom is a personal knowledge system that stores everything as **plain Markdown**
 
 You write captures; agents do the structuring, linking, summarizing, and validating. The whole stack runs locally — your files, your provider keys, your machine.
 
-> **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, Today and the main views, and the capture → note → graph loop.
+> **New here?** The [Getting Started guide](docs/getting-started.md) walks you from install through onboarding, the main views, and the capture → note → graph loop.
 
 ## See Loom
 
 <p align="center">
-  <a href="https://cdn.jsdelivr.net/gh/Mpawlowski5467/Loom@5e0c104fa46016db0710d550af86aac703e4bfcc/docs/trailer/loom-trailer.mp4">
-    <img src="docs/trailer/title-card.png" alt="Play the 30-second Loom product trailer" width="720">
-  </a>
+  <img src="docs/screenshots/graph-graphite.png" alt="Loom's Graph view in the Graphite theme: a vault sidebar with folders and communities, the note graph colored by community, and a creation-date timeline" width="100%" />
 </p>
 
-<p align="center">
-  <a href="https://cdn.jsdelivr.net/gh/Mpawlowski5467/Loom@5e0c104fa46016db0710d550af86aac703e4bfcc/docs/trailer/loom-trailer.mp4">▶ Play the 30-second trailer</a>
-  ·
-  <a href="docs/trailer/loom-trailer.mp4?raw=1">Download MP4</a>
-</p>
-
-Open the full-size captures below for a closer look at each view.
+Loom 1.2 rebuilt the interface on [shadcn/ui](https://ui.shadcn.com): one app
+shell, seven views and six themes, every one of them keyboard-reachable and
+checked for WCAG AA contrast. These captures use the fictional demo vault.
 
 <table>
   <tr>
-    <td width="50%"><img src="docs/screenshots/graph-view.png" alt="Loom Graph view showing a connected Markdown vault" width="100%" /></td>
-    <td width="50%"><img src="docs/screenshots/thread-view.png" alt="Loom Thread reader with backlinks and note details" width="100%" /></td>
+    <td width="50%"><img src="docs/screenshots/notes-graphite.png" alt="Notes view with the vault tree, a note open in the editor with its properties, and a context rail with a local graph, related notes and agent activity" width="100%" /></td>
+    <td width="50%"><img src="docs/screenshots/palette-graphite.png" alt="Search palette with grouped results, a note preview and a Why it matched breakdown" width="100%" /></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Graph</b> — explore the vault as a living knowledge network</sub></td>
-    <td align="center"><sub><b>Thread</b> — read notes with history, context, and backlinks</sub></td>
+    <td align="center"><sub><b>Notes</b>: edit Markdown with a lossless editor, properties and Spider's link suggestions</sub></td>
+    <td align="center"><sub><b>Search</b> (⌘K): notes, actions and agents, with why each note matched</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/inbox-view.png" alt="Loom Inbox review lane with Sentinel feedback" width="100%" /></td>
-    <td><img src="docs/screenshots/board-view.png" alt="Loom Board showing agent cards, recent activity, and Council chat" width="100%" /></td>
+    <td><img src="docs/screenshots/board-graphite.png" alt="Board with stat cards, agent cards, an activity log and the Council chat" width="100%" /></td>
+    <td><img src="docs/screenshots/inbox-graphite.png" alt="Inbox triage list beside a capture and Weaver's proposal" width="100%" /></td>
   </tr>
   <tr>
-    <td align="center"><sub><b>Inbox</b> — triage captures and review agent decisions</sub></td>
-    <td align="center"><sub><b>Board</b> — inspect agents, runs, activity, and Council chat</sub></td>
+    <td align="center"><sub><b>Board</b>: agents, this week's numbers, undoable activity and the Council</sub></td>
+    <td align="center"><sub><b>Inbox</b>: triage captures against Weaver's proposal and Sentinel's pre-check</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/threads-graphite.png" alt="Threads view with daily logs, a day's new notes, flags and links, and a weekly activity chart" width="100%" /></td>
+    <td><img src="docs/screenshots/settings-graphite.png" alt="Settings, Appearance: theme cards, accent swatches, editor font and graph colors" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Threads</b>: daily logs, Standups and saved Council chats</sub></td>
+    <td align="center"><sub><b>Settings</b>: six themes, accents, editor font and a colorblind graph palette</sub></td>
   </tr>
 </table>
+
+<table>
+  <tr>
+    <td width="33%"><img src="docs/screenshots/notes-paper.png" alt="Notes view in the Paper theme" width="100%" /></td>
+    <td width="33%"><img src="docs/screenshots/board-linen.png" alt="Board in the Linen theme" width="100%" /></td>
+    <td width="33%"><img src="docs/screenshots/graph-forest.png" alt="Graph view in the Forest theme" width="100%" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub>Paper</sub></td>
+    <td align="center"><sub>Linen</sub></td>
+    <td align="center"><sub>Forest</sub></td>
+  </tr>
+</table>
+
+Every view in every theme is in [docs/screenshots](docs/screenshots/README.md).
+The [30-second trailer](https://cdn.jsdelivr.net/gh/Mpawlowski5467/Loom@5e0c104fa46016db0710d550af86aac703e4bfcc/docs/trailer/loom-trailer.mp4)
+shows the 1.1 interface.
 
 ## Why Loom?
 
 - **Local-first.** Notes live as readable Markdown in `~/.loom/vaults/`. No lock-in, no cloud sync, no proprietary database.
 - **Multi-agent, not single-prompt.** Seven specialized agents in two tiers (Loom Layer manages the vault; Shuttle Layer produces content) — plus any custom agents you add — collaborate via a shared *read-before-write* discipline.
-- **Visual by default.** A `Sigma.js` + `graphology` canvas shows your notes as a living network — drag, zoom, filter by type or tag.
+- **Visual by default.** A `Sigma.js` + `graphology` canvas shows your notes as a living network, colored by the communities they form. Drag, zoom, scrub a timeline, or isolate a note's neighbors.
 - **Provider-agnostic.** Connect OpenAI, Anthropic, Moonshot/Kimi, xAI, OpenRouter, Gemini, Groq, DeepSeek, Together, Mistral, or a local Ollama model. Chat and embedding providers are independent, and every model call is recorded as an inspectable trace.
 
 ## Architecture at a glance
@@ -302,30 +321,36 @@ flowchart LR
 
 ## Features
 
+### Interface
+- One app shell: Graph, Notes, Board, Inbox and Threads tabs, search, agent status, a light/dark toggle, Settings and **New note**
+- Keyboard first: ⌘K search, `g` then `g`/`n`/`b`/`i`/`t` to switch views, ⌘N new note, ⌘⇧C quick capture, ⌘B to hide the sidebar
+- Six themes (Graphite, Paper, Midnight, Forest, Linen, High contrast), optional follow-system with a theme per mode, accent colors, a serif editor font, a colorblind-safe graph palette, and text size, density and motion settings
+- Every theme and accent passes WCAG AA contrast in a unit test, and a Playwright run screenshots every view in every theme with an axe check
+- Built on shadcn/ui (Radix + Tailwind v4) with bundled Geist, Geist Mono and Newsreader fonts: nothing loads from a CDN at runtime
+- Works down to phone width
+
 ### Knowledge graph
-- Force-directed Sigma.js 3 + graphology layout with drag, zoom, pan
-- Orbit mode: focus-first concentric scenes around a selected node (rings / spiral / arms / galaxy / wave)
-- Edge travelers: little dashes animate along edges so the graph reads as alive, not static
-- Display panel: tune label size & density, node size, spacing, edge thickness, breathing, and travelers — persisted to `localStorage` with one-click reset
-- Hover highlights neighbors; edge thickness scales with link density
-- Filter by note type or tag; click-to-select syncs with the file tree
-- ETags + `Last-Modified` for cheap refresh
+- Sigma.js 3 + graphology with drag, zoom and pan; a force layout plus five focus-first orbit scenes (rings, spiral, arms, galaxy, wave)
+- Nodes colored by **community** (seeded Louvain over your links, named after each group's most-linked note); a legend doubles as a filter
+- A creation-date **timeline** you can scrub or play, **Local only** to isolate a note's neighbors, and superseded notes hidden or shown
+- Select a node to open the note beside the graph in a compact editor, with Archivist's warnings and its recent commits (each undoable)
+- Structural changes are diffed into the live graph, so new notes settle in place without resetting the camera
+- Export the view as PNG, SVG or JSON
 
 ### Vault & notes
 - Multi-vault filesystem at `~/.loom/vaults/`
 - Fixed core folders (`daily`, `projects`, `topics`, `people`, `captures`) plus your own
 - Atomic Markdown writes with YAML frontmatter (`id`, `title`, `type`, `tags`, `created`, `modified`, `author`, `status`, `history`)
-- Metadata-first lists load bodies only for the selected note
-- Durable editor drafts are scoped to a vault and note, preserve their base version, and expose explicit conflict recovery
-- Edit history supports version-checked restore/undo
-- Deletion = move to `.archive/`, never destroyed
-- File watcher reflects external edits live
+- A Plate rich-text editor that keeps Markdown the source of truth: unchanged blocks are written back byte for byte, so opening a note never rewrites it. A raw-Markdown mode sits beside it
+- Properties, tags, inline `[[wikilink]]` chips with a picker, a slash menu, Spider's link suggestions, and a banner when a note is superseded
+- A context rail with a local graph, related notes and agent activity; a History sheet with git-backed diffs and undo
+- Durable drafts per vault and note, with explicit conflict compare, reload or overwrite
+- Deletion = move to `.archive/`, never destroyed; a file watcher reflects external edits live
 
 ### Search
-- Hybrid: semantic (LanceDB vectors) + keyword ranks fused with RRF, plus tag/type filters
-- Graph-aware boosting — linked notes rank higher
-- Keyword fallback when no embedding provider is configured
-- Global search bar (Cmd/Ctrl+K) plus a separate file-tree filter
+- Hybrid: semantic (LanceDB vectors) + keyword ranks fused with RRF, plus tag/type filters and graph-aware boosting
+- The ⌘K palette groups notes, actions (capture, ask the Council, run Spider) and agents, filters by community, previews the selected note and explains why it matched
+- Keyword fallback when no embedding provider is configured, and title/tag matching when the backend is unreachable
 
 ### Agents & chat
 - Loom Council chat streams its answer token-by-token over SSE, with each agent's contribution shown as its own bubble
@@ -334,11 +359,13 @@ flowchart LR
 - Per-agent `memory.md` summarized every 20 actions
 - Per-agent-per-day changelog at `.loom/changelog/<agent>/<date>.md`
 - Chat history persisted as Markdown: `agents/_council/chat/` for Council, `agents/<name>/chat/` for Shuttle
-- Captures inbox view for triaging raw input before Weaver structures it
+- The Board shows actions today, Sentinel's pass rate, open flags and the next scheduled run; agent cards show Running/Idle/Scheduled/Watching and open each agent's instructions, runs and LLM calls
+- Council replies end in a summary card; each agent's contribution expands from it
 - Spider records deterministic link evidence with source excerpts and explicit suggested/applied/user-accepted states
 
 ### Daily workflow
-- **Today** can be the default home and surfaces recent notes, pinned projects, pending captures/jobs, and the latest Standup
+- **Threads** collects Scribe's daily logs (with that day's new notes, flags and links), Standup recaps and saved Council chats, beside a week of agent activity and vault stats
+- **Inbox** triage: Weaver's proposal (path, type, tags, community, links), a close-match merge, Sentinel's pre-check, and j/k/e/↵ keys
 - **Quick Capture** is available from the shell shortcut and routes text or URLs through the same durable capture ingress as agents and connectors
 - **Recoverable editing** keeps local drafts across navigation/reloads, compares conflicting edits, and offers revision restore plus conflict-checked undo of an AI run
 - **Review with evidence** compares original/proposed text, suggests existing notes for an approved append/merge, and explains graph connections using recorded excerpts
@@ -357,7 +384,7 @@ flowchart LR
 
 ### Onboarding wizard
 - First-run multi-step flow: Welcome → Vault Setup → Theme Picker → Provider Config
-- Live previews for the final themes: Paper, Porcelain, Herbarium, Midnight Ink, Lagoon, and Ember
+- Live previews of the six themes: Graphite, Paper, Midnight, Forest, Linen and High contrast
 - Inline "Test connection" against the picked provider — **Finish** requires the selected chat and embedding providers to pass
 - Skip-friendly: a confirmation path completes onboarding without a provider, leaving AI features offline until one is added
 - Onboarding state lives in `~/.loom/config.yaml` under `onboarding.completed`
@@ -368,15 +395,16 @@ flowchart LR
 |---|---|
 | Backend | Python 3.12, FastAPI, Pydantic v2, Uvicorn |
 | Agent orchestration | LangGraph (`StateGraph`) — the capture pipeline and Shuttle agents run as graphs over Loom's own providers (no LangChain provider stack) |
-| Frontend | React 19, TypeScript 5.9, Vite |
+| Frontend | React 19, TypeScript 5.9, Vite, React Router |
+| UI | shadcn/ui (Radix + Tailwind v4), cmdk, lucide-react, Sonner |
 | Graph | Sigma.js 3 + graphology (force-atlas2 layout) |
-| Editor | `react-markdown` preview with `[[wikilink]]` handling and a version-checked textarea editor |
+| Editor | Plate with a lossless Markdown bridge, `react-markdown` previews, `[[wikilink]]` chips |
 | Vector DB | LanceDB + PyArrow |
 | AI | OpenAI / Anthropic SDKs, `httpx` for xAI / OpenRouter / Ollama |
 | Realtime | Server-Sent Events (SSE) for streamed Council replies |
 | File sync | `watchdog` |
 | Rate limit | `slowapi` |
-| Tests | `pytest` + `pytest-asyncio` (backend), `vitest` + Testing Library (frontend) |
+| Tests | `pytest` + `pytest-asyncio` (backend), `vitest` + Testing Library and Playwright + axe (frontend) |
 | Lint/format | `ruff` (Python), ESLint + Prettier (TS) |
 
 ## Quick start
@@ -498,17 +526,18 @@ Loom/
 │   └── tests/
 ├── frontend/
 │   ├── src/
-│   │   ├── views/        # Graph, Thread, Inbox, Board, Settings, Splash, Palette
-│   │   ├── components/   # AppShell, MainShell, layout/, primitives/, graph/
+│   │   ├── app/          # routes (URL model) and the route table
+│   │   ├── views/        # GraphView, notes/, BoardView, InboxView, ThreadsView, SettingsView (+ a folder of parts each)
+│   │   ├── components/   # ui/ (shadcn primitives), shell/ (header, layout), palette/, shared components
 │   │   ├── onboarding/   # First-run wizard: Welcome, VaultSetup, ThemePicker, ProviderConfig
-│   │   ├── theme/        # applyTheme, readCssVar, theme metadata
-│   │   ├── context/      # AppContext + useLoomConfig (config + onboarding state)
-│   │   ├── api/          # client.ts, chat.ts (SSE), traces.ts, agentsRegistry.ts, config.ts, …
-│   │   ├── graph/        # sigma setup, layouts, travelers, breathing, drag handlers
-│   │   ├── editor/       # markdown render + plain editing
-│   │   └── styles/       # tokens.css, base.css, views/*
+│   │   ├── theme/        # ThemeProvider, theme registry, appearance persistence, useThemeColors
+│   │   ├── context/      # AppContext and its hooks (config, vault content, Council, polling)
+│   │   ├── api/          # one typed client per resource; mocks/ for endpoints the backend lacks
+│   │   ├── graph/        # Sigma setup, communities, layouts, live sync, drag physics
+│   │   ├── editor/       # Plate editor + lossless Markdown bridge, react-markdown previews
+│   │   └── styles/       # themes.css: every theme token
 │   └── public/
-├── docs/                 # ARCHITECTURE.md, VISION.md, architecture-ref.md, getting-started.md, style-guide.md, wireframes/
+├── docs/                 # architecture-ref.md, getting-started.md, style-guide.md, ui-backend-gaps.md, screenshots/, wireframes/
 ├── examples/
 │   └── demo-vault/       # ready-to-use sample vault
 ├── scripts/              # seed and utility scripts
@@ -570,7 +599,10 @@ cd frontend
 npm run lint
 npm run test:run   # `npm run test` runs vitest in watch mode
 npm run test:browser:smoke
+npm run test:browser:backend   # Playwright against a real FastAPI fixture backend
+npm run screenshots            # every view in every theme into docs/screenshots/, axe-checked
 npm run build
+VITE_LOOM_MOCKS=1 npm run dev  # serve endpoints the backend lacks from fictional mocks
 ```
 
 CI runs on push via `.github/workflows/ci.yml`. A scheduled/manual release

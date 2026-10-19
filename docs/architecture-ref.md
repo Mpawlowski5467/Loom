@@ -137,6 +137,13 @@ and semantic candidate ranks with reciprocal-rank fusion (RRF). Type/tag filters
 apply during candidate retrieval, with an optional graph-context boost afterward. Without an embedding
 provider, keyword retrieval remains available.
 
+The ⌘K palette searches through `/api/search`, sending the open note as
+graph context. The API reports neither its per-signal scores nor its timing
+yet, so the palette times requests in the browser and labels its "Why it
+matched" breakdown as an estimate; superseded notes are hidden in the browser
+by default. When the API is unreachable, the palette matches titles and tags
+over the loaded notes instead.
+
 Wikilinks are canonicalized against note IDs, paths, aliases, and slugs. The
 graph is derived from published notes and renders with Sigma.js. One graph
 and renderer live for the whole view: adding or removing notes and links is

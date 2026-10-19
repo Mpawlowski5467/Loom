@@ -22,7 +22,7 @@ rebuild phase, no client yet.
 | 1 | Appearance settings per vault | Settings → Appearance | mocked |
 | 2 | Supersession fields and search filter | Notes, Graph, Palette, Threads | UI reads frontmatter; demo seed only (roadmap 3) |
 | 3 | Graph communities | Graph, Palette, Inbox, Threads | derived (client Louvain; roadmap 6) |
-| 4 | Search score breakdown and timing | Palette | planned |
+| 4 | Search score breakdown and timing | Palette | mocked; estimated in the browser otherwise |
 | 5 | Related notes for a note | Notes context rail | mocked; derived from search |
 | 6 | Dismiss a Spider link suggestion | Notes | mocked; remembered locally |
 | 7 | Weaver drafts a section | Notes slash menu | mocked |
@@ -115,8 +115,17 @@ clients.
 `score` is currently an RRF fusion with the graph and keyword boosts folded
 in (`index/searcher.py`).
 
-**Today:** the palette shows the response `mode` (semantic/keyword) and
-times the request on the client. Its "Why it matched" panel is mocked.
+**Today:** `searchVault` (`frontend/src/api/search.ts`) already reads
+`match` and `took_ms` when present. Until then the palette times the request
+in the browser and labels it with the response mode ("hybrid" for semantic,
+"keyword" otherwise). "Why it matched" is estimated in the browser and
+labelled as such: term overlap for keyword, the hit's score relative to the
+top hit (plus its heading) for the semantic chunk, and link distance from the
+open note for graph proximity. Under `VITE_LOOM_MOCKS` a mock adapter
+(`api/mocks/search.ts`) supplies `match` and `took_ms` so the server path of
+the UI is exercised. The palette also sends `include_superseded=true` when ⌥S
+is on (gap 2); today's backend ignores it, so superseded notes are filtered in
+the browser from the loaded note list.
 
 ## 5. Related notes
 

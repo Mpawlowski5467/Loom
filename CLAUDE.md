@@ -107,7 +107,7 @@ Style guide: @docs/style-guide.md
 - Multi-vault management via `/api/vaults`
 - Git-backed vault history (`core/history/`): every vault write is a commit (`<agent>: <action> <path>` + Agent/Action/Reason/Sentinel trailers; runs grouped into one commit; human edits committed after a quiet period); `/api/history` list/diff/revert where undo is a Sentinel-validated `git revert`-style commit, never a rewrite. Thread view *Change history* + Board activity Undo. Configured by `history:` in vault.yaml; the SQLite revision journal stays the crash-safe write path
 - Scribe daily-log generation; Sentinel AI-assisted validation (LLM path with a deterministic fallback, deterministic rules otherwise)
-- Cmd+K palette, file tree with filter bar, Sonner toasts
+- ⌘K palette (`components/palette/`, cmdk): hybrid search with a "hybrid · <ms>" readout, filter chips (All / Notes / Actions / Agents / each community), grouped results (notes with highlighted matches, actions — capture ⇧↵, Ask Council, Run Spider behind a confirm — and agents, which open on Board via `/board?agent=<id>`), a preview with "Why it matched" (estimated in the browser until the API reports it) and Open / Show in graph (⌥↵), superseded hidden by default (⌥S); falls back to title/tag matching offline. Sonner toasts
 - Optional `LOOM_API_TOKEN` shared-token gate on `/api/*` (`Authorization: Bearer` or `X-Loom-Token`, constant-time; off by default, so health/ready and the localhost posture are unchanged)
 - Strict `mypy` gates CI (type backlog at zero, Python 3.12 target); router-level end-to-end API test (capture → process → graph → search) with stubbed providers
 - CI in `.github/workflows/`, LICENSE present

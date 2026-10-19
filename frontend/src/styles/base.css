@@ -96,11 +96,9 @@ button:focus:not(:focus-visible),
    focus stays visible without showing a ring on mouse click. */
 .input:focus-visible,
 .tree-filter-input:focus-visible,
-.palette-input:focus-visible,
 .thread-title-input:focus-visible,
 .editor-textarea:focus-visible,
 .inbox-search:focus-visible,
-.graph-display-range:focus-visible,
 [role="button"]:focus-visible {
   outline: 2px solid var(--ring);
   outline-offset: 2px;

@@ -3,8 +3,10 @@ import { backendNoteToFrontend, titleMapFromNotes } from "@/api/notes";
 import { useApp } from "@/context/app-ctx";
 import { ErrorBoundary } from "../ErrorBoundary";
 
-const Palette = lazy(() =>
-  import("../../views/Palette").then((m) => ({ default: m.Palette })),
+const CommandPalette = lazy(() =>
+  import("../palette/CommandPalette").then((m) => ({
+    default: m.CommandPalette,
+  })),
 );
 const NewNoteModal = lazy(() =>
   import("../../views/NewNoteModal").then((m) => ({ default: m.NewNoteModal })),
@@ -35,7 +37,7 @@ export function Overlays(): ReactNode {
       {paletteOpen && (
         <ErrorBoundary label="the command palette" resetKey={paletteOpen}>
           <Suspense fallback={null}>
-            <Palette />
+            <CommandPalette />
           </Suspense>
         </ErrorBoundary>
       )}

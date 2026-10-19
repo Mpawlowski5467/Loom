@@ -1,15 +1,9 @@
 import { Folder } from "lucide-react";
 import { useMemo } from "react";
+import { CommunityDot } from "@/components/CommunityDot";
 import { useApp } from "@/context/app-ctx";
 import { FOLDER_ORDER } from "@/components/layout/tree/treeModel";
 import { cn } from "@/lib/utils";
-
-const DOT = [
-  "bg-community-1",
-  "bg-community-2",
-  "bg-community-3",
-  "bg-community-4",
-];
 
 interface FolderCount {
   folder: string;
@@ -138,15 +132,7 @@ export function GraphSidebar({ communitiesOn }: { communitiesOn: boolean }) {
               }
               className={rowClass(active)}
             >
-              <span
-                aria-hidden="true"
-                className={cn(
-                  "size-2.5 shrink-0 rounded-full",
-                  c.slot !== null && communitiesOn
-                    ? DOT[c.slot]
-                    : "bg-muted-foreground",
-                )}
-              />
+              <CommunityDot slot={communitiesOn ? c.slot : null} />
               <span className="truncate">{c.label}</span>
               <span className="ml-auto font-mono text-[11px] tabular-nums text-muted-foreground">
                 {c.size}

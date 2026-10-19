@@ -67,6 +67,11 @@ export function noteHref(
   return `/notes/${path}${heading ? `?heading=${encodeURIComponent(heading)}` : ""}`;
 }
 
+/** A Threads entry: a daily log date, `standup-<id>` or `council-<date>`. */
+export function threadHref(id: string): string {
+  return `${TAB_PATHS.threads}/${encodeURIComponent(id)}`;
+}
+
 /** Fallback when only an id is known (notes not loaded yet). */
 export function noteIdHref(id: NoteId, heading = ""): string {
   const params = new URLSearchParams({ id });

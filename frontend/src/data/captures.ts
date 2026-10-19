@@ -67,6 +67,7 @@ Markdown serializer doesn't ship wikilink support — write a custom rule.`,
 - Mira available for design review later`,
     receivedAt: "2026-05-16T07:02:00Z",
     status: "pending",
+    source: "agent:standup",
     suggestion: {
       type: "daily",
       destFolder: "daily",

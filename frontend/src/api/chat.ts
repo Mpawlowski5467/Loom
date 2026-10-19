@@ -28,6 +28,30 @@ export function loadChatHistory(
   );
 }
 
+/** Dates (YYYY-MM-DD) that have a saved chat for an agent, newest first. */
+export async function listChatSessions(
+  agent: string = "_council",
+  signal?: AbortSignal,
+): Promise<string[]> {
+  const res = await apiClient.get<{ agent: string; sessions: string[] }>(
+    `/api/chat/sessions?agent=${encodeURIComponent(agent)}`,
+    signal,
+  );
+  return [...res.sessions].sort().reverse();
+}
+
+/** One day's saved chat for an agent. */
+export function loadChatDay(
+  date: string,
+  agent: string = "_council",
+  signal?: AbortSignal,
+): Promise<ChatHistoryResponse> {
+  return apiClient.get<ChatHistoryResponse>(
+    `/api/chat/history/${encodeURIComponent(date)}?agent=${encodeURIComponent(agent)}`,
+    signal,
+  );
+}
+
 /** A commit a Council reply produced, for Open diff / Undo. */
 export interface CouncilCommitRef {
   sha: string;

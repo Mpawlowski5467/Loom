@@ -137,7 +137,7 @@ export function VaultTree(props: VaultTreeProps) {
           }
           confirmLabel="Archive"
           onConfirm={() =>
-            actions.performDelete(archiving.path, archiving.noteId, true)
+            actions.performDelete(archiving.path, archiving.noteId)
           }
           onClose={() => setArchiving(null)}
         />

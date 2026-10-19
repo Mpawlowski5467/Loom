@@ -244,22 +244,11 @@ export function useTreeActions(inputRef: RefObject<HTMLInputElement | null>) {
     }
   };
 
-  /** Archive a note or folder; `confirmed` skips the browser prompt when the
-   *  caller already asked (the Notes tree uses its own dialog). */
-  const performDelete = async (
-    path: string,
-    noteId?: string,
-    confirmed = false,
-  ) => {
+  /** Archive a note or folder. Callers confirm first (the Notes tree uses
+   *  ConfirmModal). */
+  const performDelete = async (path: string, noteId?: string) => {
     setInteraction(null);
     const last = path.split("/").pop() ?? path;
-    if (
-      !confirmed &&
-      !window.confirm(
-        `Archive '${last}'?\n\nIt will move to threads/.archive/ and be removed from the workspace.`,
-      )
-    )
-      return;
     try {
       await archiveTreePath(path);
       // The backend moved the note(s) to threads/.archive/, but app state is

@@ -12,7 +12,6 @@ import { ApiError } from "../api/client";
 const {
   previewCapture,
   commitCapture,
-  processCapture,
   skipCapture,
   listCaptureJobs,
   enqueueCaptureJob,
@@ -25,7 +24,6 @@ const {
 } = vi.hoisted(() => ({
   previewCapture: vi.fn(),
   commitCapture: vi.fn(),
-  processCapture: vi.fn(),
   skipCapture: vi.fn(),
   listCaptureJobs: vi.fn(),
   enqueueCaptureJob: vi.fn(),
@@ -44,7 +42,6 @@ vi.mock("../api/captures", async (importOriginal) => {
     ...actual,
     previewCapture,
     commitCapture,
-    processCapture,
     skipCapture,
     listCaptureJobs,
     enqueueCaptureJob,
@@ -189,7 +186,6 @@ beforeEach(() => {
   window.localStorage.removeItem("loom.demoMode");
   previewCapture.mockReset();
   commitCapture.mockReset();
-  processCapture.mockReset();
   skipCapture.mockReset();
   listCaptureJobs.mockReset();
   enqueueCaptureJob.mockReset();

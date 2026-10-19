@@ -41,19 +41,6 @@ export interface LoomConfigPublic {
   onboarding: OnboardingState;
 }
 
-export interface ProvidersResponse {
-  default: string;
-  providers: Record<string, ProviderConfigPublic>;
-  known: string[];
-}
-
-export interface ProviderUpsert {
-  api_key?: string | null;
-  chat_model?: string | null;
-  embed_model?: string | null;
-  host?: string | null;
-}
-
 export interface ProviderTestRequest {
   api_key?: string | null;
   host?: string | null;

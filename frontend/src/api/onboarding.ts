@@ -1,15 +1,5 @@
 import { apiClient } from "./client";
-import type {
-  LoomConfigPublic,
-  OnboardingCompleteRequest,
-  OnboardingState,
-} from "./types";
-
-export function getOnboardingStatus(
-  signal?: AbortSignal,
-): Promise<OnboardingState> {
-  return apiClient.get<OnboardingState>("/api/onboarding/status", signal);
-}
+import type { LoomConfigPublic, OnboardingCompleteRequest } from "./types";
 
 export function completeOnboarding(
   payload: OnboardingCompleteRequest,

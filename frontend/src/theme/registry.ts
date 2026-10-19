@@ -60,7 +60,6 @@ export const THEMES: readonly ThemeMeta[] = [
   },
 ];
 
-export const THEME_IDS: readonly ThemeId[] = THEMES.map((t) => t.id);
 export const DEFAULT_THEME: ThemeId = "graphite";
 export const DEFAULT_DARK_THEME: ThemeId = "graphite";
 export const DEFAULT_LIGHT_THEME: ThemeId = "paper";

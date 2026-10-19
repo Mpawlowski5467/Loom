@@ -66,8 +66,3 @@ export async function putAppearance(
     throw err;
   }
 }
-
-/** Test hook: forget a previous 404. */
-export function resetAppearanceSupport(): void {
-  unsupported = false;
-}

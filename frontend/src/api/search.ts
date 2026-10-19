@@ -1,4 +1,4 @@
-import type { Note, NodeType } from "../data/types";
+import type { NodeType } from "../data/types";
 import { apiClient } from "./client";
 import { MOCKS_ENABLED } from "./mocks";
 import { withMockScoring } from "./mocks/search";
@@ -62,32 +62,6 @@ export async function searchNotesRemote(
     score: hit.score,
     type: narrowType(hit.type),
   }));
-}
-
-function snippetFor(body: string): string {
-  return body.replace(/\n+/g, " ").slice(0, 110);
-}
-
-function firstHeading(body: string): string {
-  for (const line of body.split("\n")) {
-    if (line.startsWith("## ")) return line.slice(3).trim();
-  }
-  return "";
-}
-
-export function recentNotes(notes: Note[], limit = 8): SearchResult[] {
-  return notes
-    .slice()
-    .sort((a, b) => b.modified.localeCompare(a.modified))
-    .slice(0, limit)
-    .map((n) => ({
-      note_id: n.id,
-      title: n.title,
-      heading: firstHeading(n.body),
-      snippet: snippetFor(n.body),
-      score: 0,
-      type: n.type,
-    }));
 }
 
 /**

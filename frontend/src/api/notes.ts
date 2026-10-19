@@ -30,13 +30,6 @@ export interface NoteListResponse {
   limit: number;
 }
 
-export interface BulkNotesResponse {
-  notes: NoteRecord[];
-  total: number;
-  offset: number;
-  limit: number;
-}
-
 export interface CreateNotePayload {
   title: string;
   type?: string;
@@ -65,51 +58,6 @@ export function getNote(id: string, signal?: AbortSignal): Promise<NoteRecord> {
     `/api/notes/${encodeURIComponent(id)}`,
     signal,
   );
-}
-
-/** Notes returned per bulk page. Comfortably under the backend read limit. */
-const BULK_PAGE_SIZE = 500;
-
-/**
- * Fetch a page of full notes (frontmatter + body) in a single request via the
- * bulk endpoint — no per-note round-trips.
- */
-export function listNotesBulk(
-  offset = 0,
-  limit = BULK_PAGE_SIZE,
-  signal?: AbortSignal,
-): Promise<BulkNotesResponse> {
-  return apiClient.get<BulkNotesResponse>(
-    `/api/notes/bulk?offset=${offset}&limit=${limit}`,
-    signal,
-  );
-}
-
-/**
- * Load every note in the active vault by paging the bulk endpoint.
- *
- * This replaces the old N+1 (one ``getNote`` per note) that fired hundreds of
- * requests and tripped the backend's per-IP read limiter at a few hundred
- * notes — silently dropping notes past the cap. One request per
- * ``BULK_PAGE_SIZE`` notes stays well under the limit. An ``AbortError`` from a
- * cancelled load still propagates so an in-flight load can be cancelled.
- */
-export async function loadAllNotes(
-  signal?: AbortSignal,
-): Promise<NoteRecord[]> {
-  const records: NoteRecord[] = [];
-  let offset = 0;
-  let total = Number.POSITIVE_INFINITY;
-
-  while (offset < total) {
-    const page = await listNotesBulk(offset, BULK_PAGE_SIZE, signal);
-    total = page.total;
-    if (page.notes.length === 0) break;
-    records.push(...page.notes);
-    offset += page.notes.length;
-  }
-
-  return records;
 }
 
 /** Navigation never downloads every Markdown body. Graph edges include body links. */

@@ -38,9 +38,6 @@ export type GraphLayout =
   | "galaxy"
   | "wave";
 
-// Cards is the agent dashboard; pulse is an alternate viz of the same agents.
-export type BoardMode = "cards" | "pulse";
-
 export type AgentLayer = "loom" | "shuttle";
 
 export type AgentState = "running" | "queued" | "idle";

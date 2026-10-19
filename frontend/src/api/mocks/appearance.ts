@@ -18,8 +18,3 @@ export function mockPutAppearance(
   stored = normalizeAppearance({ ...APPEARANCE_DEFAULTS, ...settings });
   return mockDelay(stored);
 }
-
-/** Test hook: forget anything a previous test saved. */
-export function resetMockAppearance(): void {
-  stored = null;
-}

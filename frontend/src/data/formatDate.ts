@@ -26,12 +26,6 @@ export function formatDate(iso: string | undefined | null): string {
   return v ? v.slice(0, 10) : PLACEHOLDER;
 }
 
-/** Month-day, e.g. "06-07". */
-export function formatMonthDay(iso: string | undefined | null): string {
-  const v = toIso(iso);
-  return v ? v.slice(5, 10) : PLACEHOLDER;
-}
-
 /** Time of day, e.g. "14:32". */
 export function formatTime(iso: string | undefined | null): string {
   const v = toIso(iso);

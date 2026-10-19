@@ -55,3 +55,17 @@ export function formatRunResult(
   }
   return `${name} finished`;
 }
+
+export interface SpiderScanResult {
+  notes_scanned: number;
+  total_auto_linked: number;
+  total_suggested: number;
+  total_skipped: number;
+}
+
+/** Ask Spider to find links for one note. Writes auto-links to the vault. */
+export function scanNoteWithSpider(noteId: string): Promise<SpiderScanResult> {
+  return apiClient.post<SpiderScanResult>(
+    `/api/agents/spider/scan?note_id=${encodeURIComponent(noteId)}`,
+  );
+}

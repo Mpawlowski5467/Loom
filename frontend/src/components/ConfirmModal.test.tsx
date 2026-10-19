@@ -26,11 +26,9 @@ function setup(over: Partial<Parameters<typeof ConfirmModal>[0]> = {}) {
 describe("ConfirmModal", () => {
   it("renders an accessible dialog with the title and body", () => {
     setup();
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveAttribute("aria-modal", "true");
-    expect(dialog).toHaveAttribute("aria-labelledby", "confirm-modal-title");
-    expect(screen.getByText("Archive this note?")).toBeInTheDocument();
-    expect(screen.getByText("It moves to the archive.")).toBeInTheDocument();
+    const dialog = screen.getByRole("dialog", { name: "Archive this note?" });
+    expect(dialog).toHaveAccessibleDescription("It moves to the archive.");
+    expect(screen.getByRole("button", { name: "Cancel" })).toHaveFocus();
   });
 
   it("calls onConfirm then onClose when the confirm button is clicked", async () => {

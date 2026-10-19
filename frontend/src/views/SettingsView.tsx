@@ -24,6 +24,8 @@ import { ModelAdvisorCard } from "./settings/ModelAdvisorCard";
 import { ProvidersSection } from "./settings/ProvidersSection";
 import { VaultSection } from "./settings/VaultSection";
 import { PolicySection } from "./settings/PolicySection";
+import { SettingsPage } from "./settings/kit/SettingsPage";
+import { SettingsGroup } from "./settings/kit/SettingsGroup";
 
 const SECTIONS: { id: SettingsSection; label: string; icon: ReactNode }[] = [
   { id: "general", label: "General", icon: <Info /> },
@@ -36,9 +38,8 @@ const SECTIONS: { id: SettingsSection; label: string; icon: ReactNode }[] = [
 ];
 
 /**
- * Settings: a section nav routed by `/settings/:section`. Appearance is
- * rebuilt on shadcn; the other sections are the existing panels, regrouped
- * under the new nav until they get their own rebuild.
+ * Settings: a section nav routed by `/settings/:section`. Each page has one
+ * h1 (its first SettingsGroup) and h2 groups below it.
  */
 export function SettingsView(): ReactNode {
   const { settingsSection } = useApp();
@@ -74,9 +75,13 @@ export function SettingsView(): ReactNode {
           ))}
         </nav>
       </aside>
-      <main className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
-        {renderSection(settingsSection)}
-      </main>
+      <div className="min-w-0 flex-1 overflow-y-auto px-4 py-8 sm:px-8 lg:px-12">
+        {settingsSection === "appearance" ? (
+          <AppearanceSection />
+        ) : (
+          <SettingsPage>{renderSection(settingsSection)}</SettingsPage>
+        )}
+      </div>
     </section>
   );
 }
@@ -89,28 +94,25 @@ function renderSection(section: SettingsSection): ReactNode {
       return <AppearanceSection />;
     case "agents":
       return (
-        <div className="settings-panel">
-          <div className="settings-kicker">Agents</div>
-          <h1 className="settings-title">Agent models</h1>
-          <p className="settings-copy">
-            Choose the provider and model each of Loom's built-in agents uses.
-          </p>
+        <SettingsGroup
+          level={1}
+          title="Agent models"
+          description="Choose the provider and model each of Loom's built-in agents uses."
+        >
           <AgentModelsCard />
-        </div>
+        </SettingsGroup>
       );
     case "models":
       return (
         <>
           <ProvidersSection />
-          <div className="settings-panel">
-            <h2 className="settings-title">This machine</h2>
-            <p className="settings-copy">
-              Profile this machine and see which local models it can run
-              comfortably.
-            </p>
+          <SettingsGroup
+            title="This machine"
+            description="Profile this machine and see which local models it can run comfortably."
+          >
             <HardwareScanCard />
             <ModelAdvisorCard />
-          </div>
+          </SettingsGroup>
         </>
       );
     case "privacy":

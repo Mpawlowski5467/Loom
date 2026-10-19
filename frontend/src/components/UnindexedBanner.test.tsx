@@ -20,8 +20,12 @@ describe("UnindexedBanner", () => {
     );
   });
 
-  it("carries the banner-unindexed variant class", () => {
-    const { container } = render(<UnindexedBanner count={2} />);
-    expect(container.querySelector(".banner-unindexed")).not.toBeNull();
+  it("is a single status region whose icon stays out of its text", () => {
+    render(<UnindexedBanner count={2} />);
+    const banners = screen.getAllByRole("status");
+    expect(banners).toHaveLength(1);
+    expect(banners[0]).toHaveTextContent(
+      /^2 notes not yet indexed — rebuilding search…$/,
+    );
   });
 });

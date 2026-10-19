@@ -30,8 +30,6 @@ describe("OnboardingFlow", () => {
       scaffolded: false,
     });
     completeOnboardingMock.mockResolvedValue(undefined);
-    // "Skip for now" now asks for confirmation before leaving providers unset.
-    vi.spyOn(window, "confirm").mockReturnValue(true);
   });
 
   it("renders Welcome first", () => {

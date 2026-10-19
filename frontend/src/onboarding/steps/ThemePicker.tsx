@@ -1,7 +1,9 @@
 import type { ReactNode } from "react";
 import { ThemeGrid } from "@/components/theme/ThemeGrid";
+import { Button } from "@/components/ui/button";
 import { useAppearance } from "@/theme/appearance-ctx";
 import { THEMES } from "@/theme/registry";
+import { Step, StepActions, StepHeader } from "../StepLayout";
 
 interface Props {
   onNext: () => void;
@@ -16,21 +18,23 @@ interface Props {
 export function ThemePicker({ onNext, onBack }: Props): ReactNode {
   const { resolvedTheme, setTheme } = useAppearance();
   return (
-    <div className="onb-step">
-      <h2 className="onb-h2">Pick a look</h2>
-      <p className="onb-sub">
-        Loom ships with {THEMES.length} themes. You can change this any time
-        from Settings.
-      </p>
-      <ThemeGrid value={resolvedTheme} onChange={setTheme} className="my-4" />
-      <div className="onb-actions">
-        <button className="btn btn-md" onClick={onBack}>
+    <Step>
+      <StepHeader
+        title="Pick a look"
+        description={
+          <>
+            Loom ships with {THEMES.length} themes. You can change this any time
+            from Settings.
+          </>
+        }
+      />
+      <ThemeGrid value={resolvedTheme} onChange={setTheme} />
+      <StepActions>
+        <Button variant="ghost" onClick={onBack}>
           ← Back
-        </button>
-        <button className="btn btn-md btn-active" onClick={onNext}>
-          Next →
-        </button>
-      </div>
-    </div>
+        </Button>
+        <Button onClick={onNext}>Next →</Button>
+      </StepActions>
+    </Step>
   );
 }

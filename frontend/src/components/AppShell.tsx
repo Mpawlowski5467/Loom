@@ -1,5 +1,7 @@
+import { CloudOff } from "lucide-react";
 import type { ReactNode } from "react";
 import { useApp } from "../context/app-ctx";
+import { BootError, BootScreen } from "./BootScreen";
 import { AppLayout } from "./shell/AppLayout";
 import { OnboardingFlow } from "../onboarding/OnboardingFlow";
 import { decidePhase, useBootTimeout } from "./useBootTimeout";
@@ -30,42 +32,22 @@ export function AppShell(): ReactNode {
     return <BootScreen />;
   }
   if (phase === "timeout") {
-    return <BootScreen timedOut onRetry={refreshConfig} />;
+    return (
+      <BootError
+        icon={CloudOff}
+        message={
+          <>
+            Couldn&rsquo;t reach the backend. Make sure it&rsquo;s running, then
+            retry.
+          </>
+        }
+        actionLabel="Retry"
+        onAction={refreshConfig}
+      />
+    );
   }
   if (phase === "onboarding") {
     return <OnboardingFlow />;
   }
   return <AppLayout />;
-}
-
-function BootScreen({
-  timedOut = false,
-  onRetry,
-}: {
-  timedOut?: boolean;
-  onRetry?: () => void;
-}): ReactNode {
-  if (timedOut) {
-    return (
-      <div className="boot-screen boot-screen-error" role="alert">
-        <div className="boot-mark" aria-hidden="true" />
-        <span className="boot-label">loom</span>
-        <p className="boot-error-body">
-          Couldn&rsquo;t reach the backend. Make sure it&rsquo;s running, then
-          retry.
-        </p>
-        {onRetry && (
-          <button type="button" className="boot-retry" onClick={onRetry}>
-            Retry
-          </button>
-        )}
-      </div>
-    );
-  }
-  return (
-    <div className="boot-screen" role="status" aria-live="polite">
-      <div className="boot-mark" aria-hidden="true" />
-      <span className="boot-label">loom</span>
-    </div>
-  );
 }

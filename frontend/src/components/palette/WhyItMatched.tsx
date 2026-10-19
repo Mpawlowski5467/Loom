@@ -16,27 +16,30 @@ export function WhyItMatched({
       </h4>
       <dl className="flex flex-col gap-2.5">
         {explanation.rows.map((row) => (
-          <div key={row.signal} className="flex flex-col gap-1">
-            <div className="flex items-baseline justify-between gap-2 text-xs">
-              <dt className="text-secondary-foreground">{row.label}</dt>
-              <dd className="font-mono text-muted-foreground tabular-nums">
-                {row.score === null ? "—" : row.score.toFixed(2)}
-              </dd>
-            </div>
-            <div
-              aria-hidden="true"
-              className="h-1 overflow-hidden rounded-full bg-muted"
-            >
+          <div
+            key={row.signal}
+            className="grid grid-cols-[1fr_auto] items-baseline gap-x-2 gap-y-1 text-xs"
+          >
+            <dt className="text-secondary-foreground">{row.label}</dt>
+            <dd className="font-mono text-muted-foreground tabular-nums">
+              {row.score === null ? "—" : row.score.toFixed(2)}
+            </dd>
+            <dd className="col-span-2 flex min-w-0 flex-col gap-1">
               <div
-                className="h-full rounded-full bg-brand"
-                style={{ width: `${Math.round((row.score ?? 0) * 100)}%` }}
-              />
-            </div>
-            <dd
-              className="truncate text-xs text-muted-foreground"
-              title={row.detail}
-            >
-              {row.detail}
+                aria-hidden="true"
+                className="h-1 overflow-hidden rounded-full bg-muted"
+              >
+                <div
+                  className="h-full rounded-full bg-brand"
+                  style={{ width: `${Math.round((row.score ?? 0) * 100)}%` }}
+                />
+              </div>
+              <span
+                className="truncate text-muted-foreground"
+                title={row.detail}
+              >
+                {row.detail}
+              </span>
             </dd>
           </div>
         ))}

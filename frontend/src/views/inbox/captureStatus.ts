@@ -52,10 +52,10 @@ export const STATUS_LABEL: Record<RowStatus, string> = {
 };
 
 export const STATUS_CLASS: Record<RowStatus, string> = {
-  proposal: "border-brand/40 text-brand",
+  proposal: "border-brand/50 bg-brand/10 text-foreground",
   new: "border-border text-muted-foreground",
   queued: "border-border text-secondary-foreground",
-  processing: "border-brand/40 text-brand",
+  processing: "border-brand/50 bg-brand/10 text-foreground",
   retrying: "border-warning-border text-warning-foreground",
   review: "border-warning-border bg-warning text-warning-foreground",
   failed: "border-danger-foreground/40 text-danger-foreground",

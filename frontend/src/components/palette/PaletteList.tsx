@@ -30,64 +30,67 @@ export function PaletteList({
   const headingClass =
     "[&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:pt-3 [&_[cmdk-group-heading]]:pb-1 [&_[cmdk-group-heading]]:font-mono [&_[cmdk-group-heading]]:text-[11px] [&_[cmdk-group-heading]]:tracking-wider [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group-heading]]:uppercase";
   return (
-    <CommandList className="max-h-none min-h-0 flex-1 px-2 pb-2">
+    <>
+      {/* Outside the listbox: a listbox may only hold options and groups. */}
       {status && (
-        <p role="status" className="px-2 pt-3 text-sm text-muted-foreground">
+        <p role="status" className="px-4 pt-3 text-sm text-muted-foreground">
           {status}
         </p>
       )}
-      <CommandEmpty className="py-8 text-center text-sm text-muted-foreground">
-        {query.trim() ? "No matches." : "Nothing here yet."}
-      </CommandEmpty>
-      {groups.notes.length > 0 && (
-        <CommandGroup
-          heading={query.trim() ? "Notes" : "Recent notes"}
-          className={headingClass}
-        >
-          {groups.notes.map((item) => (
-            <CommandItem
-              key={item.value}
-              value={item.value}
-              onSelect={() => onSelect(item)}
-              className={itemClass}
-            >
-              <NoteRow
-                item={item}
-                query={query}
-                communitiesOn={communitiesOn}
-              />
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      )}
-      {groups.actions.length > 0 && (
-        <CommandGroup heading="Actions" className={headingClass}>
-          {groups.actions.map((item) => (
-            <CommandItem
-              key={item.value}
-              value={item.value}
-              onSelect={() => onSelect(item)}
-              className={itemClass}
-            >
-              <ActionRow item={item} />
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      )}
-      {groups.agents.length > 0 && (
-        <CommandGroup heading="Agents" className={headingClass}>
-          {groups.agents.map((item) => (
-            <CommandItem
-              key={item.value}
-              value={item.value}
-              onSelect={() => onSelect(item)}
-              className={itemClass}
-            >
-              <AgentRow item={item} />
-            </CommandItem>
-          ))}
-        </CommandGroup>
-      )}
-    </CommandList>
+      <CommandList className="max-h-none min-h-0 flex-1 px-2 pb-2">
+        <CommandEmpty className="py-8 text-center text-sm text-muted-foreground">
+          {query.trim() ? "No matches." : "Nothing here yet."}
+        </CommandEmpty>
+        {groups.notes.length > 0 && (
+          <CommandGroup
+            heading={query.trim() ? "Notes" : "Recent notes"}
+            className={headingClass}
+          >
+            {groups.notes.map((item) => (
+              <CommandItem
+                key={item.value}
+                value={item.value}
+                onSelect={() => onSelect(item)}
+                className={itemClass}
+              >
+                <NoteRow
+                  item={item}
+                  query={query}
+                  communitiesOn={communitiesOn}
+                />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {groups.actions.length > 0 && (
+          <CommandGroup heading="Actions" className={headingClass}>
+            {groups.actions.map((item) => (
+              <CommandItem
+                key={item.value}
+                value={item.value}
+                onSelect={() => onSelect(item)}
+                className={itemClass}
+              >
+                <ActionRow item={item} />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+        {groups.agents.length > 0 && (
+          <CommandGroup heading="Agents" className={headingClass}>
+            {groups.agents.map((item) => (
+              <CommandItem
+                key={item.value}
+                value={item.value}
+                onSelect={() => onSelect(item)}
+                className={itemClass}
+              >
+                <AgentRow item={item} />
+              </CommandItem>
+            ))}
+          </CommandGroup>
+        )}
+      </CommandList>
+    </>
   );
 }

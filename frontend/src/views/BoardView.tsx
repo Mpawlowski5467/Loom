@@ -25,7 +25,7 @@ export function BoardView(): ReactNode {
 
   return (
     <div className="flex min-h-0 flex-1">
-      <main
+      <section
         aria-labelledby="board-title"
         className="min-w-0 flex-1 overflow-y-auto"
       >
@@ -80,7 +80,7 @@ export function BoardView(): ReactNode {
           )}
           <ActivityLog events={changelog} />
         </div>
-      </main>
+      </section>
       {desktop ? (
         <div className="flex w-[380px] shrink-0 border-l border-border">
           <CouncilPanel />

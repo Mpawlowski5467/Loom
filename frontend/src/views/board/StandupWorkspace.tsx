@@ -164,7 +164,7 @@ export function StandupWorkspace({
               : "No calendar connected"}
           </span>
         </div>
-        <main
+        <div
           className="min-h-48 flex-1 overflow-y-auto px-5 py-4"
           aria-live="polite"
           aria-busy={running}
@@ -181,7 +181,7 @@ export function StandupWorkspace({
           {!running && (
             <StandupResultView result={result} onOpenInbox={openInbox} />
           )}
-        </main>
+        </div>
         {error && (
           <p
             role="alert"

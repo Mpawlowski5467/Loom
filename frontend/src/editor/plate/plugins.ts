@@ -204,9 +204,10 @@ export const notePlugins = [
         query: ({ nodeProps }) =>
           !!nodeProps.element?.listStyleType &&
           !isOrderedList(nodeProps.element),
+        // Bullets come from display: list-item. No role="listitem": these
+        // blocks have no list parent, which is invalid ARIA (axe).
         transformProps: ({ props }) => ({
           ...props,
-          role: "listitem",
           style: { ...props.style, display: "list-item" },
         }),
       },

@@ -46,41 +46,43 @@ export function NoteProperties({
   const term = "text-xs text-muted-foreground";
 
   return (
-    <dl className="mb-8 border-y border-border py-2 text-sm">
-      <div className={row}>
-        <dt className={term}>Status</dt>
-        <dd>
-          <StatusBadge note={note} />
-        </dd>
-      </div>
-      {from && (
+    <div className="mb-8 border-y border-border py-2 text-sm">
+      <dl>
         <div className={row}>
-          <dt className={term}>Valid from</dt>
-          <dd className="font-mono text-xs text-secondary-foreground">
-            {from}
+          <dt className={term}>Status</dt>
+          <dd>
+            <StatusBadge note={note} />
           </dd>
         </div>
-      )}
-      <div className={row}>
-        <dt className={term}>Tags</dt>
-        <dd>
-          <TagEditor tags={note.tags} onChange={onTagsChange} />
-        </dd>
-      </div>
-      {shown.map((p) => (
-        <div key={p.key} className={row}>
-          <dt className={term}>{p.label}</dt>
-          <dd
-            className={
-              isDate(p.key)
-                ? "font-mono text-xs text-secondary-foreground"
-                : "truncate text-secondary-foreground"
-            }
-          >
-            {isDate(p.key) ? formatDate(p.value) : p.value}
+        {from && (
+          <div className={row}>
+            <dt className={term}>Valid from</dt>
+            <dd className="font-mono text-xs text-secondary-foreground">
+              {from}
+            </dd>
+          </div>
+        )}
+        <div className={row}>
+          <dt className={term}>Tags</dt>
+          <dd>
+            <TagEditor tags={note.tags} onChange={onTagsChange} />
           </dd>
         </div>
-      ))}
+        {shown.map((p) => (
+          <div key={p.key} className={row}>
+            <dt className={term}>{p.label}</dt>
+            <dd
+              className={
+                isDate(p.key)
+                  ? "font-mono text-xs text-secondary-foreground"
+                  : "truncate text-secondary-foreground"
+              }
+            >
+              {isDate(p.key) ? formatDate(p.value) : p.value}
+            </dd>
+          </div>
+        ))}
+      </dl>
       {rest.length > COLLAPSED && (
         <button
           type="button"
@@ -93,6 +95,6 @@ export function NoteProperties({
             : `Show ${rest.length - COLLAPSED} more`}
         </button>
       )}
-    </dl>
+    </div>
   );
 }

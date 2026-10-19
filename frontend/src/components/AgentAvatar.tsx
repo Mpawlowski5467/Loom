@@ -1,23 +1,31 @@
 import { actorName } from "@/data/actors";
 import { cn } from "@/lib/utils";
 
-/** Per-agent tint; static class names so Tailwind generates them. */
+/**
+ * Per-agent tint; static class names so Tailwind generates them. Community
+ * colors are dot colors: on light themes the initials use the foreground so
+ * they keep AA contrast on the tint.
+ */
 const TINTS: Record<string, string> = {
-  weaver: "bg-community-1/15 text-community-1",
-  spider: "bg-community-3/15 text-community-3",
-  archivist: "bg-community-2/15 text-community-2",
-  scribe: "bg-community-4/15 text-community-4",
+  weaver:
+    "bg-community-1/20 text-foreground dark:bg-community-1/15 dark:text-community-1",
+  spider:
+    "bg-community-3/20 text-foreground dark:bg-community-3/15 dark:text-community-3",
+  archivist:
+    "bg-community-2/20 text-foreground dark:bg-community-2/15 dark:text-community-2",
+  scribe:
+    "bg-community-4/20 text-foreground dark:bg-community-4/15 dark:text-community-4",
   sentinel: "bg-ok text-ok-foreground",
-  researcher: "bg-brand/15 text-brand",
+  researcher: "bg-brand/15 text-foreground dark:text-brand",
   standup: "bg-muted text-secondary-foreground",
 };
 const HUMAN = "bg-accent text-foreground";
 /** Custom agents get a stable tint from their name. */
 const CUSTOM = [
-  "bg-community-1/15 text-community-1",
-  "bg-community-2/15 text-community-2",
-  "bg-community-3/15 text-community-3",
-  "bg-community-4/15 text-community-4",
+  "bg-community-1/20 text-foreground dark:bg-community-1/15 dark:text-community-1",
+  "bg-community-2/20 text-foreground dark:bg-community-2/15 dark:text-community-2",
+  "bg-community-3/20 text-foreground dark:bg-community-3/15 dark:text-community-3",
+  "bg-community-4/20 text-foreground dark:bg-community-4/15 dark:text-community-4",
 ];
 
 function tintFor(name: string, human: boolean): string {

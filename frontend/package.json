@@ -19,7 +19,8 @@
     "test:browser:smoke": "playwright test --config playwright.smoke.config.ts",
     "test:browser:backend": "playwright test --config playwright.backend.config.ts",
     "benchmark:graph": "playwright test e2e/graph-drag.performance.spec.ts --project=chromium --workers=1",
-    "benchmark:vault-ui": "playwright test e2e/large-vault.performance.spec.ts --project=chromium --workers=1"
+    "benchmark:vault-ui": "playwright test e2e/large-vault.performance.spec.ts --project=chromium --workers=1",
+    "screenshots": "playwright test --config playwright.screenshots.config.ts"
   },
   "dependencies": {
     "@ariakit/react": "^0.4.42",

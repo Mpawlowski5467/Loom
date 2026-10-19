@@ -2,7 +2,8 @@ import { describe, expect, it } from "vitest";
 import type { VaultSearchHit } from "@/api/search";
 import { supersessionSeed } from "@/data/notesSupersession";
 import type { Note } from "@/data/types";
-import { buildPaletteGroups, plainText, type ItemInputs } from "./items";
+import { plainText } from "@/editor/plainText";
+import { buildPaletteGroups, type ItemInputs } from "./items";
 import { localSearch } from "./localSearch";
 
 const [v1, v2, budget] = supersessionSeed as [Note, Note, Note];

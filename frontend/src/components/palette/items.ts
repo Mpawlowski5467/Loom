@@ -1,5 +1,6 @@
 import type { VaultSearchHit } from "@/api/search";
 import type { Note } from "@/data/types";
+import { plainText } from "@/editor/plainText";
 import { queryTerms } from "./match";
 import type { PaletteAgent } from "./usePaletteAgents";
 
@@ -70,18 +71,6 @@ export interface ItemInputs {
 }
 
 const RECENT = 8;
-
-/** Markdown to readable one-line text: wikilinks, emphasis, list marks. */
-export function plainText(md: string): string {
-  return md
-    .replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "$2")
-    .replace(/\[\[([^\]]+)\]\]/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]*\)/g, "$1")
-    .replace(/(\*\*|__|`)/g, "")
-    .replace(/^\s*(?:[-*+]|\d+[.)]|#{1,6})\s+/gm, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
 
 function firstParagraph(body: string): string {
   const para = body
